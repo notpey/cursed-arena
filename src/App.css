@@ -1,0 +1,17 @@
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    text-align: center;
+  }
+  
+  .game-container h1 {
+    font-size: 3rem;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+  }
