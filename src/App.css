@@ -1,17 +1,402 @@
-.game-container {
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    min-height: 100vh;
+    color: white;
+  }
+  
+  .battle-container {
+    min-height: 100vh;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    text-align: center;
   }
   
-  .game-container h1 {
-    font-size: 3rem;
+  .battle-container h1 {
+    font-size: 2.5rem;
     background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    margin-bottom: 30px;
+  }
+  
+  .battlefield {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    width: 100%;
+    max-width: 1200px;
+    gap: 20px;
+  }
+  
+  .team {
+    flex: 1;
+    min-width: 200px;
+  }
+  
+  .team h2 {
+    text-align: center;
+    margin-bottom: 15px;
+    font-size: 1.3rem;
+  }
+  
+  .player-team h2 {
+    color: #48dbfb;
+  }
+  
+  .enemy-team h2 {
+    color: #ff6b6b;
+  }
+  
+  .character-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .character-card {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  
+  .character-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.02);
+  }
+  
+  .character-card.selected {
+    border-color: #feca57;
+    box-shadow: 0 0 20px rgba(254, 202, 87, 0.4);
+  }
+  
+  .character-card.dead {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .character-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.2rem;
+  }
+  
+  .rarity-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+  }
+  
+  .rarity-badge.ur {
+    background: linear-gradient(90deg, #ff6b6b, #feca57);
+    color: black;
+  }
+  
+  .rarity-badge.ssr {
+    background: #9b59b6;
+    color: white;
+  }
+  
+  .rarity-badge.sr {
+    background: #3498db;
+    color: white;
+  }
+  
+  .hp-bar-container {
+    height: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 5px;
+  }
+  
+  .hp-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #27ae60);
+    transition: width 0.3s ease;
+  }
+  
+  .hp-text {
+    font-size: 0.85rem;
+    color: #aaa;
+    margin: 5px 0;
+  }
+  
+  .battle-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    min-width: 300px;
+  }
+  
+  .attack-btn {
+    background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .attack-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(255, 107, 107, 0.5);
+  }
+  
+  .attack-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .battle-log {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 600px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 15px;
+  }
+  
+  .battle-log h3 {
     margin-bottom: 10px;
+    color: #feca57;
+  }
+  
+  .log-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  
+  .log-entries p {
+    font-size: 0.9rem;
+    color: #ccc;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .game-over-banner {
+    padding: 20px 40px;
+    border-radius: 12px;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
+  
+  .game-over-banner.win {
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+  }
+  
+  .game-over-banner.lose {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    color: white;
+  }
+  
+  .reset-btn {
+    background: white;
+    color: #333;
+    border: none;
+    padding: 10px 25px;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  
+  .reset-btn:hover {
+    transform: scale(1.05);
+  }
+  
+  .ability-panel {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 15px;
+    min-width: 280px;
+    max-width: 320px;
+  }
+  
+  .ability-panel h3 {
+    color: #feca57;
+    margin-bottom: 10px;
+    font-size: 1rem;
+    text-align: center;
+  }
+  
+  .ability-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .ability-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    color: white;
+    position: relative;
+  }
+  
+  .ability-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #feca57;
+  }
+  
+  .ability-btn.selected {
+    border-color: #feca57;
+    background: rgba(254, 202, 87, 0.2);
+  }
+  
+  .ability-btn.on-cooldown {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .ability-name {
+    display: block;
+    font-weight: bold;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+  }
+  
+  .ability-desc {
+    display: block;
+    font-size: 0.75rem;
+    color: #aaa;
+  }
+  
+  .cooldown-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #e74c3c;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: bold;
+  }
+  
+  .status-badge {
+    position: absolute;
+    top: 30px;
+    right: 10px;
+    font-size: 1.2rem;
+  }
+  
+  .status-badge.invincible {
+    animation: pulse 1s infinite;
+  }
+  
+  .status-badge.stunned {
+    animation: shake 0.5s infinite;
+  }
+  
+  .status-badge.burning {
+    animation: flicker 0.3s infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+  
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+  
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  
+  .passive-display {
+    margin-bottom: 8px;
+  }
+  
+  .passive-label {
+    font-size: 0.7rem;
+    color: #feca57;
+    font-style: italic;
+  }
+  
+  .passive-info {
+    background: rgba(254, 202, 87, 0.1);
+    border: 1px solid rgba(254, 202, 87, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+  
+  .passive-title {
+    display: block;
+    font-weight: bold;
+    color: #feca57;
+    font-size: 0.85rem;
+    margin-bottom: 4px;
+  }
+  
+  .passive-desc {
+    font-size: 0.75rem;
+    color: #aaa;
+  }
+  
+  .ultimate-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .ultimate-btn {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(254, 202, 87, 0.2)) !important;
+    border-color: #ff6b6b !important;
+  }
+  
+  .ultimate-btn:hover:not(:disabled) {
+    border-color: #feca57 !important;
+    box-shadow: 0 0 15px rgba(255, 107, 107, 0.4);
+  }
+  
+  .ultimate-btn.selected {
+    background: linear-gradient(135deg, rgba(255, 107, 107, 0.4), rgba(254, 202, 87, 0.4)) !important;
+  }
+.turn-counter {
+    font-size: 1.2rem;
+    color: #feca57;
+    margin-bottom: 20px;
+    font-weight: bold;
   }
