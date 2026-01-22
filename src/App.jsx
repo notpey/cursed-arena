@@ -52,6 +52,9 @@ function App() {
   const [storyBattleConfig, setStoryBattleConfig] = useState(null)
   const [storyResult, setStoryResult] = useState(null)
   const [storyRewardsClaimed, setStoryRewardsClaimed] = useState(false)
+  const [pvpMatch, setPvpMatch] = useState(null)
+  const [pvpStatus, setPvpStatus] = useState(null)
+  const [pvpChannel, setPvpChannel] = useState(null)
 
   const xpForLevel = (level) => 100 + level * 25
 
@@ -101,7 +104,17 @@ function App() {
     }
   }
 
+  const buildTeamSnapshot = (teamIds, useProgress = false) =>
+    teamIds
+      .map(id => characters.find(character => character.id === id))
+      .filter(Boolean)
+      .map(character =>
+        useProgress ? scaledCharacter(character, progressByCharacterId[character.id]) : deepCopy(character)
+      )
+
   const progressByCharacterId = useMemo(() => characterProgress, [characterProgress])
+  const isPvp = Boolean(pvpMatch)
+  const isMyTurn = isPvp && pvpMatch?.turn_owner === session?.user?.id
   const storyChapter = useMemo(
     () => storyChapters.find(chapter => chapter.id === storyState.chapterId) || storyChapters[0],
     [storyState.chapterId]
@@ -368,6 +381,31 @@ function App() {
     })
 
     return { team: newTeam, logs }
+  }
+
+  const tickTeamState = (team) => {
+    team.forEach(char => {
+      const cdReduction = char.passive?.type === 'cooldown-reduction' ? char.passive.value : 0
+      if (char.hp > 0) {
+        char.mana = Math.min(char.maxMana, char.mana + 25)
+      }
+      char.abilities.forEach(ab => {
+        if (ab.currentCooldown > 0) ab.currentCooldown = Math.max(0, ab.currentCooldown - 1 - cdReduction)
+      })
+      if (char.ultimate?.currentCooldown > 0) {
+        char.ultimate.currentCooldown = Math.max(0, char.ultimate.currentCooldown - 1 - cdReduction)
+      }
+      if (char.stunned) char.stunned--
+      if (char.invincible) char.invincible--
+      if (char.buffDuration) {
+        char.buffDuration--
+        if (char.buffDuration <= 0) char.attackBuff = 0
+      }
+      if (char.markedDuration) {
+        char.markedDuration--
+        if (char.markedDuration <= 0) char.marked = 0
+      }
+    })
   }
 
   const calculateDamage = (attacker, baseDamage) => {
@@ -688,6 +726,7 @@ function App() {
 
   const queueAbility = (characterIndex, abilityIndex, isUltimate, enemyIndex) => {
     if (gameOver) return
+    if (isPvp && !isMyTurn) return
     setQueuedActions(prev => [...prev, { characterIndex, abilityIndex, isUltimate, enemyIndex }])
     setActedCharacters(prev => [...prev, characterIndex])
     setPendingAbility(null)
@@ -870,11 +909,13 @@ function App() {
 
   const handleEndTurn = () => {
     if (gamePhase !== 'battle' || gameOver) return
+    if (isPvp && !isMyTurn) return
     setPendingAbility(null)
     
     let newEnemyTeam = deepCopy(enemyTeam)
     let newPlayerTeam = deepCopy(playerTeam)
     let newLog = []
+    const actionsSnapshot = [...queuedActions]
 
     queuedActions.forEach(action => {
       const result = applyAbilityToTeams(
@@ -910,6 +951,97 @@ function App() {
       return
     }
 
+    if (isPvp && pvpMatch && session) {
+      const isPlayer1 = pvpMatch.player1_id === session.user.id
+      const opponentId = isPlayer1 ? pvpMatch.player2_id : pvpMatch.player1_id
+      const baseLog = pvpMatch.state?.log || battleLog
+
+      const playerPassiveResult = applyPassives(newPlayerTeam, true, 'player')
+      newPlayerTeam = playerPassiveResult.team
+      newLog.push(...playerPassiveResult.logs)
+
+      const enemyPassiveResult = applyPassives(newEnemyTeam, true, 'enemy')
+      newEnemyTeam = enemyPassiveResult.team
+      newLog.push(...enemyPassiveResult.logs)
+
+      tickTeamState(newPlayerTeam)
+      tickTeamState(newEnemyTeam)
+
+      if (newEnemyTeam.every(e => e.hp <= 0)) {
+        const finalState = {
+          player1Team: isPlayer1 ? newPlayerTeam : newEnemyTeam,
+          player2Team: isPlayer1 ? newEnemyTeam : newPlayerTeam,
+          turn: pvpMatch.state?.turn || turn,
+          log: [...baseLog, ...newLog, '👑 VICTORY!'],
+        }
+        await supabase
+          .from('pvp_matches')
+          .update({
+            state: finalState,
+            status: 'completed',
+            winner_id: session.user.id,
+            turn_owner: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pvpMatch.id)
+        finalizeBattle('win', newPlayerTeam, [])
+        return
+      }
+
+      if (newPlayerTeam.every(e => e.hp <= 0)) {
+        const finalState = {
+          player1Team: isPlayer1 ? newPlayerTeam : newEnemyTeam,
+          player2Team: isPlayer1 ? newEnemyTeam : newPlayerTeam,
+          turn: pvpMatch.state?.turn || turn,
+          log: [...baseLog, ...newLog, '☠️ DEFEAT!'],
+        }
+        await supabase
+          .from('pvp_matches')
+          .update({
+            state: finalState,
+            status: 'completed',
+            winner_id: opponentId,
+            turn_owner: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pvpMatch.id)
+        finalizeBattle('lose', newPlayerTeam, [])
+        return
+      }
+
+      const nextTurn = (pvpMatch.state?.turn || turn) + 1
+      const nextState = {
+        player1Team: isPlayer1 ? newPlayerTeam : newEnemyTeam,
+        player2Team: isPlayer1 ? newEnemyTeam : newPlayerTeam,
+        turn: nextTurn,
+        log: [...baseLog, ...newLog],
+      }
+
+      setBattleLog(nextState.log)
+      setPlayerTeam(newPlayerTeam)
+      setEnemyTeam(newEnemyTeam)
+      setActedCharacters([])
+      setTurn(nextTurn)
+
+      await supabase.from('pvp_turns').insert({
+        match_id: pvpMatch.id,
+        user_id: session.user.id,
+        turn_number: nextTurn - 1,
+        actions: { queuedActions: actionsSnapshot },
+      })
+
+      await supabase
+        .from('pvp_matches')
+        .update({
+          state: nextState,
+          turn: nextTurn,
+          turn_owner: opponentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', pvpMatch.id)
+      return
+    }
+
     setBattleLog(prev => [...prev, ...newLog])
     endPlayerTurn(newPlayerTeam, newEnemyTeam)
   }
@@ -937,6 +1069,12 @@ function App() {
     setQueuedActions([])
     setMatchSummary(null)
     setStoryBattleConfig(null)
+    setPvpMatch(null)
+    setPvpStatus(null)
+    if (pvpChannel) {
+      pvpChannel.unsubscribe()
+      setPvpChannel(null)
+    }
   }
 
   const exitStoryBattle = () => {
@@ -973,6 +1111,138 @@ function App() {
     setQueuedActions([])
     setStoryBattleConfig(null)
   }
+
+  const syncBattleFromMatch = (match) => {
+    if (!match || !session) return
+    const isPlayer1 = match.player1_id === session.user.id
+    const state = match.state || {}
+    const player1Team = state.player1Team || buildTeamSnapshot(match.player1_team || [], false)
+    const player2Team = state.player2Team || buildTeamSnapshot(match.player2_team || [], false)
+    setPlayerTeam(deepCopy(isPlayer1 ? player1Team : player2Team))
+    setEnemyTeam(deepCopy(isPlayer1 ? player2Team : player1Team))
+    setBattleLog(state.log?.length ? state.log : ["PvP Match Start!"])
+    setTurn(state.turn || match.turn || 1)
+    setQueuedActions([])
+    setActedCharacters([])
+    setPendingAbility(null)
+    setGameOver(null)
+    setGamePhase('battle')
+    setStoryBattleConfig(null)
+  }
+
+  const subscribeToMatch = (matchId) => {
+    if (!matchId) return
+    if (pvpChannel) {
+      pvpChannel.unsubscribe()
+    }
+    const channel = supabase
+      .channel(`pvp-match-${matchId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pvp_matches', filter: `id=eq.${matchId}` },
+        (payload) => {
+          setPvpMatch(payload.new)
+          syncBattleFromMatch(payload.new)
+          if (payload.new.status === 'completed' && payload.new.winner_id && session) {
+            const result = payload.new.winner_id === session.user.id ? 'win' : 'lose'
+            finalizeBattle(result, playerTeam, [])
+          }
+        }
+      )
+      .subscribe()
+    setPvpChannel(channel)
+  }
+
+  const startPvpQueue = async (mode) => {
+    if (!session || selectedPlayerTeam.length < 3) return
+    setPvpStatus('searching')
+
+    const teamIds = selectedPlayerTeam.map(character => character.id)
+    const teamState = buildTeamSnapshot(teamIds, true)
+
+    const { data: opponentRows } = await supabase
+      .from('pvp_queue')
+      .select('*')
+      .eq('mode', mode)
+      .neq('user_id', session.user.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+
+    const opponent = opponentRows?.[0]
+
+    if (opponent) {
+      await supabase.from('pvp_queue').delete().eq('id', opponent.id)
+      await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+      const opponentTeam = Array.isArray(opponent.team_state) && opponent.team_state.length
+        ? opponent.team_state
+        : buildTeamSnapshot(opponent.team_ids || [], false)
+
+      const payload = {
+        mode,
+        player1_id: opponent.user_id,
+        player2_id: session.user.id,
+        player1_team: opponent.team_ids || [],
+        player2_team: teamIds,
+        state: {
+          player1Team: opponentTeam,
+          player2Team: teamState,
+          turn: 1,
+          log: ["PvP Match Start! Queue actions, then End Turn."],
+        },
+        turn: 1,
+        turn_owner: opponent.user_id,
+        status: 'active',
+        updated_at: new Date().toISOString(),
+      }
+
+      const { data: matchData } = await supabase
+        .from('pvp_matches')
+        .insert(payload)
+        .select()
+        .single()
+
+      if (matchData) {
+        setPvpMatch(matchData)
+        setPvpStatus(null)
+        syncBattleFromMatch(matchData)
+        subscribeToMatch(matchData.id)
+      }
+      return
+    }
+
+    await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+    await supabase.from('pvp_queue').insert({
+      user_id: session.user.id,
+      mode,
+      team_ids: teamIds,
+      team_state: teamState,
+    })
+
+    if (pvpChannel) {
+      pvpChannel.unsubscribe()
+      setPvpChannel(null)
+    }
+
+    const lobbyChannel = supabase
+      .channel(`pvp-lobby-${session.user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pvp_matches' }, (payload) => {
+        const match = payload.new
+        if (match.player1_id === session.user.id || match.player2_id === session.user.id) {
+          setPvpMatch(match)
+          setPvpStatus(null)
+          syncBattleFromMatch(match)
+          subscribeToMatch(match.id)
+          supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+          lobbyChannel.unsubscribe()
+        }
+      })
+      .subscribe()
+
+    setPvpChannel(lobbyChannel)
+  }
+
+  const startPvpQuick = () => startPvpQueue('quick')
+  const startPvpRanked = () => startPvpQueue('ranked')
 
   const saveTeamPreset = async (slot, name, characterIds) => {
     if (!session) return
@@ -1465,6 +1735,8 @@ function App() {
           matchSummary={matchSummary}
           combatEvents={combatEvents}
           battleShake={battleShake}
+          isPvp={isPvp}
+          isMyTurn={isMyTurn}
           storyBattle={storyBattleConfig}
           onExitStory={exitStoryBattle}
         />
@@ -1526,6 +1798,9 @@ function App() {
           selectedTeam={selectedPlayerTeam}
           onSelect={setSelectedPlayerTeam}
           onStartBattle={startBattle}
+          onStartPvpQuick={startPvpQuick}
+          onStartPvpRanked={startPvpRanked}
+          pvpStatus={pvpStatus}
           characterProgress={characterProgress}
           teamPresets={teamPresets}
           onSavePreset={saveTeamPreset}

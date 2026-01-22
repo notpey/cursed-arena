@@ -21,6 +21,8 @@ function BattleScreen({
   matchSummary,
   combatEvents,
   battleShake,
+  isPvp,
+  isMyTurn,
   storyBattle,
   onExitStory
 }) {
@@ -528,6 +530,8 @@ function BattleScreen({
   const playerName = profile?.display_name || 'Player'
   const playerAvatar = profile?.avatar_url || null
   const playerLevel = profile?.account_level || 1
+  const enemyName = isPvp ? 'Opponent' : 'Cursed AI'
+  const enemySubtitle = isPvp ? (isMyTurn ? 'Awaiting Turn' : 'Taking Turn') : 'Awaiting Turn'
   const queuedLabel = (action) => {
     const character = playerTeam[action.characterIndex]
     if (!character) return 'Unknown'
@@ -572,7 +576,13 @@ function BattleScreen({
             <span className="actions-label">ACTIONS LEFT</span>
             <span className="actions-number">{remainingActions}</span>
           </div>
-          <button className="end-turn-btn" onClick={endTurn}>End Turn</button>
+          <button
+            className="end-turn-btn"
+            onClick={endTurn}
+            disabled={isPvp && !isMyTurn}
+          >
+            {isPvp && !isMyTurn ? 'Waiting...' : 'End Turn'}
+          </button>
         </div>
 
         <div className="hud-side right">
@@ -580,11 +590,11 @@ function BattleScreen({
             <span>Enemy Team</span>
             <div className="team-indicator-meta">
               <div>
-                <div className="team-name">Cursed AI</div>
-                <div className="team-subtitle">Awaiting Turn</div>
+                <div className="team-name">{enemyName}</div>
+                <div className="team-subtitle">{enemySubtitle}</div>
               </div>
               <div className="team-avatar">
-                <span>AI</span>
+                <span>{isPvp ? 'VS' : 'AI'}</span>
               </div>
             </div>
           </div>
