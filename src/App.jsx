@@ -907,7 +907,7 @@ function App() {
     setTurn(prev => prev + 1)
   }
 
-  const handleEndTurn = () => {
+  const handleEndTurn = async () => {
     if (gamePhase !== 'battle' || gameOver) return
     if (isPvp && !isMyTurn) return
     setPendingAbility(null)
