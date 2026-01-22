@@ -6,6 +6,9 @@ function TeamSelect({
   selectedTeam,
   onSelect,
   onStartBattle,
+  onStartPvpQuick,
+  onStartPvpRanked,
+  pvpStatus,
   characterProgress,
   teamPresets,
   onSavePreset,
@@ -282,12 +285,26 @@ function TeamSelect({
           <section className="match-controls">
             <button
               className="match-primary-btn"
-              disabled={!canStart}
-              onClick={onStartBattle}
+              disabled={!canStart || pvpStatus === 'searching'}
+              onClick={onStartPvpQuick || onStartBattle}
             >
-              Start Match
+              {pvpStatus === 'searching' ? 'Searching...' : 'Quick PvP'}
             </button>
             <div className="match-secondary-buttons">
+              <button
+                className="match-secondary-btn"
+                disabled={!canStart || pvpStatus === 'searching'}
+                onClick={onStartPvpRanked}
+              >
+                Ranked PvP
+              </button>
+              <button
+                className="match-secondary-btn"
+                disabled={!canStart}
+                onClick={onStartBattle}
+              >
+                Vs AI
+              </button>
               <button className="match-secondary-btn" onClick={() => setShowPresets(prev => !prev)}>
                 {showPresets ? 'Hide Teams' : 'Saved Teams'}
               </button>
