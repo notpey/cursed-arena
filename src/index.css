@@ -1,12 +1,22 @@
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
-  
-  body {
-    font-family: 'Arial', sans-serif;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    min-height: 100vh;
-    color: white;
-  }
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Inter", "Avenir Next", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  background: radial-gradient(circle at top, #141823 0%, #0a0c12 60%);
+  min-height: 100vh;
+  color: #e7eaf0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
