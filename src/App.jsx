@@ -1355,6 +1355,7 @@ function App() {
     })
   }
 
+
   const endPlayerTurn = (startPlayerTeam = playerTeam, startEnemyTeam = enemyTeam) => {
     let newLog = []
     let newEnemyTeam = deepCopy(startEnemyTeam)
@@ -1501,7 +1502,7 @@ function App() {
     setTurn(prev => prev + 1)
   }
 
-  const handleEndTurn = async () => {
+  const handleEndTurn = async (overrideActions = null) => {
     if (gamePhase !== 'battle' || gameOver) return
     if (isPvp && !isMyTurn) return
     setPendingAbility(null)
@@ -1509,9 +1510,10 @@ function App() {
     let newEnemyTeam = deepCopy(enemyTeam)
     let newPlayerTeam = deepCopy(playerTeam)
     let newLog = []
-    const actionsSnapshot = [...queuedActions]
+    const actionsToRun = overrideActions ?? queuedActions
+    const actionsSnapshot = [...actionsToRun]
 
-    queuedActions.forEach(action => {
+    actionsToRun.forEach(action => {
       const result = applyAbilityToTeams(
         action.characterIndex,
         action.abilityIndex,
@@ -2080,12 +2082,20 @@ function App() {
 
     const soft = profile?.soft_currency ?? 0
     const premium = profile?.premium_currency ?? 0
-    if (soft < offer.cost_soft || premium < offer.cost_premium) return
 
-    const nextSoft = soft - offer.cost_soft
-    const nextPremium = premium - offer.cost_premium
+    // Validate can afford
+    if (soft < offer.cost_soft || premium < offer.cost_premium) {
+      console.error('Insufficient funds')
+      return
+    }
+
+    // Calculate new currency values
+    const nextSoft = soft - offer.cost_soft + (offer.item_type === 'currency' ? (offer.soft_currency || 0) : 0)
+    const nextPremium = premium - offer.cost_premium + (offer.item_type === 'currency' ? (offer.premium_currency || 0) : 0)
 
     const inventoryUpdates = []
+
+    // Handle shard purchases
     if (offer.item_type === 'shards' && offer.character_id && offer.shard_amount > 0) {
       const currentAmount = inventory[offer.character_id] || 0
       const nextAmount = currentAmount + offer.shard_amount
@@ -2095,30 +2105,11 @@ function App() {
         shard_amount: nextAmount,
         updated_at: new Date().toISOString(),
       })
-      setInventory(prev => ({
-        ...prev,
-        [offer.character_id]: nextAmount,
-      }))
     }
 
-    if (offer.item_type === 'currency') {
-      const addSoft = offer.soft_currency || 0
-      const addPremium = offer.premium_currency || 0
-      setProfile(prev => ({
-        ...(prev || {}),
-        soft_currency: nextSoft + addSoft,
-        premium_currency: nextPremium + addPremium,
-      }))
-      await supabase
-        .from('profiles')
-        .update({
-          soft_currency: nextSoft + addSoft,
-          premium_currency: nextPremium + addPremium,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', session.user.id)
-    } else {
-      await supabase
+    try {
+      // Update profile currency first
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           soft_currency: nextSoft,
@@ -2126,17 +2117,38 @@ function App() {
           updated_at: new Date().toISOString(),
         })
         .eq('id', session.user.id)
+
+      if (profileError) {
+        console.error('Failed to update profile:', profileError)
+        return
+      }
+
+      // Update inventory if shards purchased
+      if (inventoryUpdates.length > 0) {
+        const { error: inventoryError } = await supabase
+          .from('user_inventory')
+          .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
+
+        if (inventoryError) {
+          console.error('Failed to update inventory:', inventoryError)
+          return
+        }
+
+        // Update local inventory state
+        setInventory(prev => ({
+          ...prev,
+          [offer.character_id]: inventoryUpdates[0].shard_amount,
+        }))
+      }
+
+      // Update local profile state
       setProfile(prev => ({
         ...(prev || {}),
         soft_currency: nextSoft,
         premium_currency: nextPremium,
       }))
-    }
-
-    if (inventoryUpdates.length > 0) {
-      await supabase
-        .from('user_inventory')
-        .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
+    } catch (error) {
+      console.error('Purchase failed:', error)
     }
   }
 
@@ -2146,6 +2158,8 @@ function App() {
     const fragmentCount = userItems.finger_fragment || 0
     const pullCost = 100
     const useFragment = options.useFragment === true
+
+    // Validate currency/fragments before pull
     if (useFragment) {
       if (fragmentCount <= 0) return
     } else if (premium < pullCost) {
@@ -2155,6 +2169,7 @@ function App() {
     const items = bannerItems.filter(item => item.banner_id === bannerId)
     if (items.length === 0) return
 
+    // Weighted random selection
     const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
     let roll = Math.random() * totalWeight
     let selected = items[0]
@@ -2169,11 +2184,14 @@ function App() {
     const nextPremium = useFragment ? premium : premium - pullCost
     let nextSoft = profile?.soft_currency ?? 0
     const inventoryUpdates = []
+    const characterUnlockIds = []
 
+    // Handle currency rewards
     if (selected.item_type === 'currency') {
       nextSoft += selected.soft_currency || 0
     }
 
+    // Handle shard rewards
     if (selected.item_type === 'shards' && selected.character_id) {
       const currentAmount = inventory[selected.character_id] || 0
       const nextAmount = currentAmount + (selected.shard_amount || 0)
@@ -2189,6 +2207,7 @@ function App() {
       }))
     }
 
+    // Handle character rewards (FIXED: now unlocks character + gives shards)
     if (selected.item_type === 'character' && selected.character_id) {
       const currentAmount = inventory[selected.character_id] || 0
       const nextAmount = currentAmount + 30
@@ -2202,42 +2221,105 @@ function App() {
         ...prev,
         [selected.character_id]: nextAmount,
       }))
+
+      // Track character for unlock if not already unlocked
+      if (!progressByCharacterId[selected.character_id]) {
+        characterUnlockIds.push(selected.character_id)
+      }
     }
 
-    await supabase
-      .from('profiles')
-      .update({
+    try {
+      // Update profile currency (deduct cost, add soft currency if applicable)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          soft_currency: nextSoft,
+          premium_currency: nextPremium,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', session.user.id)
+
+      if (profileError) {
+        console.error('Failed to update profile:', profileError)
+        return
+      }
+
+      // Deduct fragment if used
+      if (useFragment) {
+        const nextFragments = Math.max(0, fragmentCount - 1)
+        const { error: fragmentError } = await supabase
+          .from('user_items')
+          .upsert({
+            user_id: session.user.id,
+            item_id: 'finger_fragment',
+            quantity: nextFragments,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,item_id' })
+
+        if (fragmentError) {
+          console.error('Failed to deduct fragment:', fragmentError)
+          return
+        }
+
+        setUserItems(prev => ({ ...prev, finger_fragment: nextFragments }))
+      }
+
+      // Update inventory with shards
+      if (inventoryUpdates.length > 0) {
+        const { error: inventoryError } = await supabase
+          .from('user_inventory')
+          .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
+
+        if (inventoryError) {
+          console.error('Failed to update inventory:', inventoryError)
+        }
+      }
+
+      // Unlock character if pulled (create character_progress entry)
+      if (characterUnlockIds.length > 0) {
+        const payload = characterUnlockIds.map(id => ({
+          user_id: session.user.id,
+          character_id: id,
+          level: 1,
+          xp: 0,
+          limit_break: 0,
+          updated_at: new Date().toISOString(),
+        }))
+
+        const { data: unlockData, error: unlockError } = await supabase
+          .from('character_progress')
+          .upsert(payload, { onConflict: 'user_id,character_id' })
+          .select('character_id, level, xp, limit_break')
+
+        if (unlockError) {
+          console.error('Failed to unlock character:', unlockError)
+        } else if (unlockData) {
+          setCharacterProgress(prev => {
+            const next = { ...prev }
+            unlockData.forEach(row => {
+              next[row.character_id] = {
+                level: row.level,
+                xp: row.xp,
+                limit_break: row.limit_break,
+              }
+            })
+            return next
+          })
+        }
+      }
+
+      // Update local profile state
+      setProfile(prev => ({
+        ...(prev || {}),
         soft_currency: nextSoft,
         premium_currency: nextPremium,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', session.user.id)
+      }))
 
-    if (useFragment) {
-      const nextFragments = Math.max(0, fragmentCount - 1)
-      await supabase
-        .from('user_items')
-        .upsert({
-          user_id: session.user.id,
-          item_id: 'finger_fragment',
-          quantity: nextFragments,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,item_id' })
-      setUserItems(prev => ({ ...prev, finger_fragment: nextFragments }))
+      // Show gacha result
+      setGachaResult(selected)
+    } catch (error) {
+      console.error('Gacha pull failed:', error)
     }
-
-    if (inventoryUpdates.length > 0) {
-      await supabase
-        .from('user_inventory')
-        .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
-    }
-
-    setProfile(prev => ({
-      ...(prev || {}),
-      soft_currency: nextSoft,
-      premium_currency: nextPremium,
-    }))
-    setGachaResult(selected)
   }
 
   const limitBreakCost = (nextLevel) => nextLevel * 25
@@ -2345,20 +2427,20 @@ function App() {
         </div>
       )}
       {gamePhase === 'battle' ? (
-        <BattleScreen
-          playerTeam={playerTeam}
-          enemyTeam={enemyTeam}
-          selectedEnemy={selectedEnemy}
-          setSelectedEnemy={setSelectedEnemy}
-          queueAbility={queueAbility}
-          queuedActions={queuedActions}
-          removeQueuedAction={removeQueuedAction}
-          battleLog={battleLog}
-          turn={turn}
-          gameOver={gameOver}
-          resetGame={resetGame}
-          actedCharacters={actedCharacters}
-          pendingAbility={pendingAbility}
+          <BattleScreen
+            playerTeam={playerTeam}
+            enemyTeam={enemyTeam}
+            selectedEnemy={selectedEnemy}
+            setSelectedEnemy={setSelectedEnemy}
+            queueAbility={queueAbility}
+            queuedActions={queuedActions}
+            removeQueuedAction={removeQueuedAction}
+            battleLog={battleLog}
+            turn={turn}
+            gameOver={gameOver}
+            resetGame={resetGame}
+            actedCharacters={actedCharacters}
+            pendingAbility={pendingAbility}
           setPendingAbility={setPendingAbility}
           setActedCharacters={setActedCharacters}
           endTurn={handleEndTurn}
@@ -2415,6 +2497,7 @@ function App() {
           onBack={() => setView('team')}
           onPull={pullGacha}
           result={gachaResult}
+          onClearResult={() => setGachaResult(null)}
         />
       ) : view === 'story' ? (
         <StoryMode
