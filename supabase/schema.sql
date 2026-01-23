@@ -439,3 +439,33 @@ with check (
       and (auth.uid() = pvp_matches.player1_id or auth.uid() = pvp_matches.player2_id)
   )
 );
+
+create table if not exists story_progress (
+  user_id uuid references auth.users on delete cascade,
+  chapter_id text not null,
+  active_node_id text,
+  completed_nodes jsonb not null default '[]'::jsonb,
+  rewards_claimed boolean not null default false,
+  updated_at timestamp with time zone default now(),
+  primary key (user_id, chapter_id)
+);
+
+alter table story_progress enable row level security;
+
+drop policy if exists "Story progress readable by owner" on story_progress;
+create policy "Story progress readable by owner"
+on story_progress for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Story progress insertable by owner" on story_progress;
+create policy "Story progress insertable by owner"
+on story_progress for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Story progress updatable by owner" on story_progress;
+create policy "Story progress updatable by owner"
+on story_progress for update
+to authenticated
+using (auth.uid() = user_id);
