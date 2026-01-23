@@ -66,6 +66,10 @@ const emptyCharacter = {
   max_hp: 80,
   max_mana: 100,
   attack: 20,
+  defense: 20,
+  cursed_output: 20,
+  cursed_resistance: 20,
+  crit_chance: 0.05,
   portrait_url: '',
   card_art_url: '',
 }
@@ -162,6 +166,10 @@ function AdminPanel({ profile, onBack, characters = [] }) {
       max_hp: match.max_hp ?? 80,
       max_mana: match.max_mana ?? 100,
       attack: match.attack ?? 20,
+      defense: match.defense ?? 20,
+      cursed_output: match.cursed_output ?? 20,
+      cursed_resistance: match.cursed_resistance ?? 20,
+      crit_chance: match.crit_chance ?? 0.05,
       portrait_url: match.portrait_url || '',
       card_art_url: match.card_art_url || '',
     })
@@ -334,6 +342,10 @@ function AdminPanel({ profile, onBack, characters = [] }) {
       max_hp: Number(characterDraft.max_hp) || 1,
       max_mana: Number(characterDraft.max_mana) || 1,
       attack: Number(characterDraft.attack) || 1,
+      defense: Number(characterDraft.defense) || 0,
+      cursed_output: Number(characterDraft.cursed_output) || 0,
+      cursed_resistance: Number(characterDraft.cursed_resistance) || 0,
+      crit_chance: Number(characterDraft.crit_chance) || 0,
       portrait_url: characterDraft.portrait_url?.trim() || null,
       card_art_url: characterDraft.card_art_url?.trim() || null,
     }
@@ -721,12 +733,28 @@ function AdminPanel({ profile, onBack, characters = [] }) {
                 <input type="number" value={characterDraft.max_hp} onChange={(event) => setCharacterDraft(prev => ({ ...prev, max_hp: event.target.value }))} />
               </label>
               <label>
-                <span>Max Mana</span>
+                <span>Max Cursed Energy</span>
                 <input type="number" value={characterDraft.max_mana} onChange={(event) => setCharacterDraft(prev => ({ ...prev, max_mana: event.target.value }))} />
               </label>
               <label>
                 <span>Attack</span>
                 <input type="number" value={characterDraft.attack} onChange={(event) => setCharacterDraft(prev => ({ ...prev, attack: event.target.value }))} />
+              </label>
+              <label>
+                <span>Defense</span>
+                <input type="number" value={characterDraft.defense} onChange={(event) => setCharacterDraft(prev => ({ ...prev, defense: event.target.value }))} />
+              </label>
+              <label>
+                <span>Cursed Energy Output</span>
+                <input type="number" value={characterDraft.cursed_output} onChange={(event) => setCharacterDraft(prev => ({ ...prev, cursed_output: event.target.value }))} />
+              </label>
+              <label>
+                <span>Cursed Resistance</span>
+                <input type="number" value={characterDraft.cursed_resistance} onChange={(event) => setCharacterDraft(prev => ({ ...prev, cursed_resistance: event.target.value }))} />
+              </label>
+              <label>
+                <span>Crit Chance</span>
+                <input type="number" step="0.01" value={characterDraft.crit_chance} onChange={(event) => setCharacterDraft(prev => ({ ...prev, crit_chance: event.target.value }))} />
               </label>
               <label>
                 <span>Portrait URL</span>
@@ -746,34 +774,41 @@ function AdminPanel({ profile, onBack, characters = [] }) {
 
             {characterDraft.id && (
               <div className="admin-subsection">
-                <h3>Skills</h3>
+                <h3>Techniques</h3>
                 <div className="admin-scroll">
-                  {skillRows.map(skill => (
-                    <button
-                      key={skill.id}
-                      className={`admin-list-item ${skillDraft.id === skill.id ? 'active' : ''}`}
-                      onClick={() => setSkillDraft({
-                        id: skill.id,
-                        skill_type: skill.skill_type,
-                        slot: skill.slot ?? 1,
-                        skill_key: skill.skill_key || '',
-                        name: skill.name || '',
-                        description: skill.description || '',
-                        payloadText: JSON.stringify(skill.payload || {}, null, 2),
-                        image_url: skill.image_url || '',
-                      })}
-                    >
-                      <strong>{skill.name || skill.skill_key}</strong>
-                      <span>{skill.skill_type}{skill.slot ? ` • Slot ${skill.slot}` : ''}</span>
-                    </button>
-                  ))}
+                  {skillRows.map(skill => {
+                    const typeLabel = skill.skill_type === 'ultimate'
+                      ? 'domain'
+                      : skill.skill_type === 'ability'
+                        ? 'technique'
+                        : skill.skill_type
+                    return (
+                      <button
+                        key={skill.id}
+                        className={`admin-list-item ${skillDraft.id === skill.id ? 'active' : ''}`}
+                        onClick={() => setSkillDraft({
+                          id: skill.id,
+                          skill_type: skill.skill_type,
+                          slot: skill.slot ?? 1,
+                          skill_key: skill.skill_key || '',
+                          name: skill.name || '',
+                          description: skill.description || '',
+                          payloadText: JSON.stringify(skill.payload || {}, null, 2),
+                          image_url: skill.image_url || '',
+                        })}
+                      >
+                        <strong>{skill.name || skill.skill_key}</strong>
+                        <span>{typeLabel}{skill.slot ? ` • Slot ${skill.slot}` : ''}</span>
+                      </button>
+                    )
+                  })}
                 </div>
                 <div className="admin-form">
                   <label>
-                    <span>Skill Type</span>
+                    <span>Technique Type</span>
                     <select value={skillDraft.skill_type} onChange={(event) => setSkillDraft(prev => ({ ...prev, skill_type: event.target.value }))}>
-                      <option value="ability">ability</option>
-                      <option value="ultimate">ultimate</option>
+                      <option value="ability">technique</option>
+                      <option value="ultimate">domain</option>
                       <option value="passive">passive</option>
                     </select>
                   </label>
@@ -784,7 +819,7 @@ function AdminPanel({ profile, onBack, characters = [] }) {
                     </label>
                   )}
                   <label>
-                    <span>Skill Key</span>
+                    <span>Technique Key</span>
                     <input value={skillDraft.skill_key} onChange={(event) => setSkillDraft(prev => ({ ...prev, skill_key: event.target.value }))} />
                   </label>
                   <label>
@@ -805,7 +840,7 @@ function AdminPanel({ profile, onBack, characters = [] }) {
                   </label>
                   {skillError && <div className="admin-error">{skillError}</div>}
                   <div className="admin-actions">
-                    <button className="admin-btn" onClick={saveSkill}>Save Skill</button>
+                    <button className="admin-btn" onClick={saveSkill}>Save Technique</button>
                     {skillDraft.id && (
                       <button className="admin-btn danger" onClick={() => deleteSkill(skillDraft.id)}>Delete</button>
                     )}

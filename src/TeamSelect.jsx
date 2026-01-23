@@ -91,7 +91,7 @@ function TeamSelect({
     )
   }
 
-  const skillCards = focusedCharacter
+  const techniqueCards = focusedCharacter
     ? [...focusedCharacter.abilities.slice(0, 3), focusedCharacter.ultimate].filter(Boolean)
     : []
 
@@ -129,22 +129,24 @@ function TeamSelect({
                 </div>
                 <div className="details-skills">
                   <div className="skills-grid">
-                    {skillCards.map(skill => (
-                      <div key={skill.id} className="skill-card">
+                    {techniqueCards.map(technique => {
+                      const isDomain = focusedCharacter?.ultimate?.id === technique.id
+                      return (
+                      <div key={technique.id} className="skill-card">
                         <span className="skill-icon">⚡</span>
-                        <span className="skill-name">{skill.name}</span>
-                        <span className="skill-cost">💧 {skill.manaCost ?? 0} · ⏱️ {skill.cooldown}</span>
+                        <span className="skill-name">{technique.name}</span>
+                        <span className="skill-cost">🌀 {technique.manaCost ?? 0} · ⏱️ {technique.cooldown}</span>
                         <div className="skill-tooltip">
-                          <div className="skill-tooltip-title">{skill.name}</div>
-                          <div className="skill-tooltip-desc">{skill.description}</div>
+                          <div className="skill-tooltip-title">{technique.name}</div>
+                          <div className="skill-tooltip-desc">{technique.description}</div>
                           <div className="skill-tooltip-meta">
-                            <span>Cost: {skill.manaCost ?? 0}</span>
-                            <span>Cooldown: {skill.cooldown}</span>
-                            <span>Type: {skill.type || 'Ability'}</span>
+                            <span>Cursed Energy: {technique.manaCost ?? 0}</span>
+                            <span>Cooldown: {technique.cooldown}</span>
+                            <span>Type: {isDomain ? 'Domain Expansion' : 'Technique'}</span>
                           </div>
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               </>

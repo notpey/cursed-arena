@@ -152,8 +152,8 @@ export const storyChapters = [
           enemyIds: ['fly-head', 'fly-head'],
           objective: 'Defeat all enemies.',
           prompts: [
-            'Tap an ability to queue it for this turn.',
-            'Abilities have mana costs. Manage your energy carefully.',
+            'Tap a technique to queue it for this turn.',
+            'Techniques cost cursed energy. Manage your reserves carefully.',
             'End your turn when you have selected your actions.',
           ],
         },
@@ -177,7 +177,7 @@ export const storyChapters = [
           enemyCannotDie: true,
           prompts: [
             'Some battles require survival, not victory.',
-            "Use defensive abilities to reduce incoming damage.",
+            "Use defensive techniques to reduce incoming damage.",
             "Megumi's Divine Dogs can attack and intercept.",
           ],
         },

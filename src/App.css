@@ -95,6 +95,24 @@ body {
   overflow: visible;
 }
 
+.battle-screen.targeting-active .enemy-side .character-row {
+  opacity: 0.55;
+  filter: grayscale(0.2);
+}
+
+.battle-screen.targeting-active .enemy-side .character-row.targetable {
+  opacity: 1;
+  filter: none;
+  border-color: rgba(224, 108, 117, 0.95);
+  box-shadow: 0 0 22px rgba(224, 108, 117, 0.45);
+  cursor: crosshair;
+}
+
+.battle-screen.targeting-active .enemy-side .character-row.targetable:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 0 28px rgba(224, 108, 117, 0.6);
+}
+
 .battle-screen.screen-shake {
   animation: screen-shake 0.2s ease;
 }
@@ -252,6 +270,11 @@ body {
  
 
 .targeting-prompt {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  z-index: 6;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -260,6 +283,9 @@ body {
   border-radius: 20px;
   border: 1px solid rgba(224, 108, 117, 0.6);
   animation: pulse-prompt 1s ease-in-out infinite;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  max-width: min(90vw, 520px);
+  text-align: center;
 }
 
 @keyframes pulse-prompt {
@@ -351,6 +377,28 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.14);
   font-size: 0.75rem;
   color: #e7eaf0;
+  max-width: 100%;
+}
+
+.queue-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(241, 195, 106, 0.2);
+  border: 1px solid rgba(241, 195, 106, 0.45);
+  color: var(--accent-strong);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.queue-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
 }
 
 .queue-remove {
@@ -765,6 +813,20 @@ body {
   gap: 10px;
 }
 
+.auth-currency {
+  display: flex;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.auth-currency span {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
 .auth-link {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -1009,6 +1071,15 @@ body {
   gap: 12px;
 }
 
+.shop-empty {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
 .shop-card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1083,6 +1154,12 @@ body {
   font-size: 0.8rem;
 }
 
+.gacha-empty {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
 .gacha-items {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1107,6 +1184,13 @@ body {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+}
+
+.gacha-card em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  opacity: 0.8;
 }
 
 .gacha-card::before {
@@ -1265,7 +1349,7 @@ body {
 
 .profile-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
 }
 
@@ -2118,6 +2202,41 @@ body {
   z-index: 2;
 }
 
+.ability-card.needs-target {
+  border-color: rgba(224, 108, 117, 0.35);
+}
+
+.ability-queue-order {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  background: rgba(241, 195, 106, 0.95);
+  color: #0a0c12;
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+  z-index: 5;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.ability-target-tag {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(224, 108, 117, 0.25);
+  border: 1px solid rgba(224, 108, 117, 0.55);
+  font-size: 0.7rem;
+  z-index: 4;
+}
+
 .ability-card::before {
   content: '';
   position: absolute;
@@ -2152,6 +2271,21 @@ body {
   box-shadow: 0 0 20px rgba(88, 193, 216, 0.5);
   animation: queued-pulse 1.4s ease-in-out infinite;
   z-index: 25;
+}
+
+.ability-card.queued::after {
+  content: 'Queued';
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: rgba(88, 193, 216, 0.9);
+  color: #081219;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @keyframes queued-pulse {
@@ -2567,8 +2701,8 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  max-height: 120px;
-  height: 110px;
+  max-height: 170px;
+  height: 160px;
 }
 
 .battle-queue {
@@ -2586,15 +2720,21 @@ body {
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.2em;
+  margin-bottom: 4px;
+}
+
+.battle-queue-meta {
+  font-size: 0.65rem;
+  color: rgba(231, 234, 240, 0.65);
   margin-bottom: 8px;
 }
 
 .battle-queue-items {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
+  overflow-y: auto;
 }
 
 .battle-log-center h3 {
@@ -2608,17 +2748,16 @@ body {
 .log-scroll-vertical {
   flex: 1;
   min-height: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
-  flex-direction: row;
-  gap: 8px;
-  padding-bottom: 6px;
-  white-space: nowrap;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
 }
 
 .log-scroll-vertical::-webkit-scrollbar {
-  height: 4px;
+  width: 4px;
 }
 
 .log-scroll-vertical::-webkit-scrollbar-track {
@@ -2639,7 +2778,9 @@ body {
   border-radius: 5px;
   border-left: 3px solid transparent;
   transition: all 0.2s ease;
-  white-space: nowrap;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .log-scroll-vertical p.latest {

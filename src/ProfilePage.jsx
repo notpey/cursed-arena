@@ -10,6 +10,8 @@ function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate, titles, o
   const xpPercent = Math.min(100, Math.floor((accountXp / xpNeeded) * 100))
   const wins = matchHistory.filter(match => match.result === 'win').length
   const losses = matchHistory.filter(match => match.result === 'lose').length
+  const totalMatches = wins + losses
+  const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0
   const initials = displayName.slice(0, 2).toUpperCase()
   const activeTitle = (titles || []).find(title => title.active)
   const fileInputRef = useRef(null)
@@ -107,6 +109,10 @@ function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate, titles, o
             <div>
               <span>Record</span>
               <strong>{wins}W / {losses}L</strong>
+            </div>
+            <div>
+              <span>Win Rate</span>
+              <strong>{winRate}%</strong>
             </div>
           </div>
           <div className="profile-xp">

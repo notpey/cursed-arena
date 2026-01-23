@@ -251,6 +251,10 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
         </div>
 
         <div className="auth-actions">
+          <div className="auth-currency">
+            <span>Soft {profile?.soft_currency ?? 0}</span>
+            <span>Premium {profile?.premium_currency ?? 0}</span>
+          </div>
           {!compact && (
             <button className="auth-link" onClick={handleSignOut}>Sign Out</button>
           )}
