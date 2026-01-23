@@ -61,6 +61,10 @@ create table if not exists characters (
   max_hp integer not null default 80,
   max_mana integer not null default 100,
   attack integer not null default 20,
+  defense integer not null default 15,
+  cursed_output integer not null default 20,
+  cursed_resistance integer not null default 15,
+  crit_chance numeric not null default 0.05,
   portrait_url text,
   card_art_url text,
   created_at timestamp with time zone default now(),
@@ -81,6 +85,11 @@ create table if not exists character_skills (
   updated_at timestamp with time zone default now(),
   unique (character_id, skill_key)
 );
+
+alter table characters add column if not exists defense integer not null default 15;
+alter table characters add column if not exists cursed_output integer not null default 20;
+alter table characters add column if not exists cursed_resistance integer not null default 15;
+alter table characters add column if not exists crit_chance numeric not null default 0.05;
 
 alter table characters enable row level security;
 alter table character_skills enable row level security;
@@ -506,6 +515,93 @@ insert into character_skills (character_id, skill_key, skill_type, slot, name, d
 select 6, 'jogo-ult', 'ultimate', null, 'Maximum Meteor', 'Deals 62 damage to all enemies',
   '{"type":"attack-all","damage":62,"manaCost":75,"cooldown":6}'::jsonb
 where not exists (select 1 from character_skills where character_id = 6 and skill_key = 'jogo-ult');
+
+insert into characters (id, name, rarity, max_hp, max_mana, attack, defense, cursed_output, cursed_resistance, crit_chance)
+select 7, 'Panda', 'SSR', 115, 100, 26, 20, 14, 18, 0.05
+where not exists (select 1 from characters where id = 7);
+
+insert into characters (id, name, rarity, max_hp, max_mana, attack, defense, cursed_output, cursed_resistance, crit_chance)
+select 8, 'Toge Inumaki', 'SSR', 88, 120, 16, 15, 30, 20, 0.05
+where not exists (select 1 from characters where id = 8);
+
+insert into characters (id, name, rarity, max_hp, max_mana, attack, defense, cursed_output, cursed_resistance, crit_chance)
+select 9, 'Maki Zen''in', 'SSR', 100, 80, 28, 22, 10, 16, 0.05
+where not exists (select 1 from characters where id = 9);
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 7, 'panda-passive', 'passive', null, 'Gorilla Core', 'After 3 techniques, awaken Gorilla Core for 2 turns',
+  '{"type":"gorilla-core"}'::jsonb
+where not exists (select 1 from character_skills where character_id = 7 and skill_key = 'panda-passive');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 7, 'panda-1', 'ability', 1, 'Drumming Beat', 'Deals 80 base damage + 120% Attack',
+  '{"type":"attack","damageBase":80,"scaling":1.2,"scalingStat":"attack","damageType":"physical","coreDefenseDebuffPercent":0.2,"coreDefenseDebuffDuration":2,"manaCost":30,"cooldown":2}'::jsonb
+where not exists (select 1 from character_skills where character_id = 7 and skill_key = 'panda-1');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 7, 'panda-2', 'ability', 2, 'Charging Tackle', 'Deals 60 base damage + 100% Attack and reinforces Defense',
+  '{"type":"attack","damageBase":60,"scaling":1.0,"scalingStat":"attack","damageType":"physical","selfDefenseBuffPercent":0.15,"selfDefenseBuffDuration":2,"coreAllEnemies":true,"manaCost":40,"cooldown":3}'::jsonb
+where not exists (select 1 from character_skills where character_id = 7 and skill_key = 'panda-2');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 7, 'panda-3', 'ability', 3, 'Sister Core''s Embrace', 'Heals self for 20% HP and cleanses one affliction',
+  '{"type":"heal-self","healPercent":0.2,"cleanseDebuff":true,"resetTechniqueCounter":true,"manaCost":50,"cooldown":4}'::jsonb
+where not exists (select 1 from character_skills where character_id = 7 and skill_key = 'panda-3');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 7, 'panda-ult', 'ultimate', null, 'Unblockable Drumming Beat', 'Deals 100 base damage to all enemies (Gorilla Core required)',
+  '{"type":"attack-all","damageBase":100,"scaling":1.5,"scalingStat":"attack","damageType":"physical","requiresGorillaCore":true,"coreDamageBase":150,"coreScaling":2.0,"coreBindDuration":1,"manaCost":100,"cooldown":5}'::jsonb
+where not exists (select 1 from character_skills where character_id = 7 and skill_key = 'panda-ult');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 8, 'inumaki-passive', 'passive', null, 'Cursed Speech Resonance', 'Cursed Speech techniques apply Speech Mark stacks',
+  '{"type":"speech-mark"}'::jsonb
+where not exists (select 1 from character_skills where character_id = 8 and skill_key = 'inumaki-passive');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 8, 'inumaki-1', 'ability', 1, 'Don''t Move', 'Deals 40 base damage + binds the target',
+  '{"type":"attack-stun","damageBase":40,"scaling":0.8,"scalingStat":"cursedOutput","damageType":"cursed","bindingDuration":1,"speechMarkStacks":1,"manaCost":35,"cooldown":2}'::jsonb
+where not exists (select 1 from character_skills where character_id = 8 and skill_key = 'inumaki-1');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 8, 'inumaki-2', 'ability', 2, 'Get Crushed', 'Deals 70 base damage + lowers Attack',
+  '{"type":"attack","damageBase":70,"scaling":1.1,"scalingStat":"cursedOutput","damageType":"cursed","attackDebuffPercent":0.25,"attackDebuffDuration":2,"speechMarkStacks":1,"manaCost":45,"cooldown":3}'::jsonb
+where not exists (select 1 from character_skills where character_id = 8 and skill_key = 'inumaki-2');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 8, 'inumaki-3', 'ability', 3, 'Explode', 'Deals 50 base damage to all enemies, marks the primary target',
+  '{"type":"attack-all-primary-mark","damageBase":50,"scaling":0.9,"scalingStat":"cursedOutput","damageType":"cursed","applySpeechMark":true,"manaCost":40,"cooldown":3}'::jsonb
+where not exists (select 1 from character_skills where character_id = 8 and skill_key = 'inumaki-3');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 8, 'inumaki-ult', 'ultimate', null, 'Blast Away', 'Deals 120 base damage, binds all enemies, recoil damage',
+  '{"type":"attack-all","damageBase":120,"scaling":1.8,"scalingStat":"cursedOutput","damageType":"cursed","bindingAllDuration":1,"speechMarkAllStacks":2,"recoilPercent":0.1,"manaCost":120,"cooldown":6}'::jsonb
+where not exists (select 1 from character_skills where character_id = 8 and skill_key = 'inumaki-ult');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 9, 'maki-passive', 'passive', null, 'Heavenly Restriction', 'No natural cursed energy regen, +20% crit chance',
+  '{"type":"heavenly-restriction","critBonus":0.2}'::jsonb
+where not exists (select 1 from character_skills where character_id = 9 and skill_key = 'maki-passive');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 9, 'maki-1', 'ability', 1, 'Cursed Tool Flurry', 'Deals 50 base damage + 100% Attack',
+  '{"type":"attack","damageBase":50,"scaling":1.0,"scalingStat":"attack","damageType":"physical","isBasic":true,"onCritCooldownReduction":true,"manaCost":25,"cooldown":1}'::jsonb
+where not exists (select 1 from character_skills where character_id = 9 and skill_key = 'maki-1');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 9, 'maki-2', 'ability', 2, 'Precision Thrust', 'Deals 90 base damage + 140% Attack with guaranteed crit',
+  '{"type":"attack","damageBase":90,"scaling":1.4,"scalingStat":"attack","damageType":"physical","guaranteedCrit":true,"damageAmp":0.15,"damageAmpDuration":2,"manaCost":40,"cooldown":3}'::jsonb
+where not exists (select 1 from character_skills where character_id = 9 and skill_key = 'maki-2');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 9, 'maki-3', 'ability', 3, 'Weapon Arsenal', 'Deals 40 base damage to 2 random enemies',
+  '{"type":"attack-random","damageBase":40,"scaling":0.8,"scalingStat":"attack","damageType":"physical","targetCount":2,"selfAttackBuffPercent":0.3,"selfAttackBuffDuration":3,"setNextBasicDouble":true,"manaCost":35,"cooldown":3}'::jsonb
+where not exists (select 1 from character_skills where character_id = 9 and skill_key = 'maki-3');
+
+insert into character_skills (character_id, skill_key, skill_type, slot, name, description, payload)
+select 9, 'maki-ult', 'ultimate', null, 'Three-Section Staff Maelstrom', 'Deals 110 base damage to all enemies and restores cursed energy',
+  '{"type":"attack-all","damageBase":110,"scaling":1.7,"scalingStat":"attack","damageType":"physical","energyRestorePerHit":15,"grantFlowStateTurns":3,"manaCost":80,"cooldown":5}'::jsonb
+where not exists (select 1 from character_skills where character_id = 9 and skill_key = 'maki-ult');
 
 -- Seed: Sukuna featured banner + shop offer
 insert into banners (name, description, starts_at, ends_at)

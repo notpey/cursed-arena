@@ -89,14 +89,40 @@ function App() {
     setTimeout(() => setBattleShake(false), 220)
   }
 
+  const ensureCombatState = (character) => {
+    const next = character
+    if (!next.effects) {
+      next.effects = { buffs: [], debuffs: [], dots: [], barriers: [] }
+    }
+    if (!next.states) {
+      next.states = { binding: 0, sleep: 0 }
+    }
+    if (!next.stacks) {
+      next.stacks = { speechMark: 0 }
+    }
+    if (!next.counters) {
+      next.counters = { techniqueCount: 0 }
+    }
+    if (!next.flags) {
+      next.flags = { gorillaCoreTurns: 0, flowStateTurns: 0, nextBasicDouble: false }
+    }
+    if (!next.barrier) {
+      next.barrier = { value: 0, duration: 0 }
+    }
+    return next
+  }
+
   const scaledCharacter = (character, progress) => {
     const level = progress?.level || 1
     const limitBreak = progress?.limit_break || 0
     const hpBonus = (level - 1) * 3 + limitBreak * 12
     const manaBonus = (level - 1) * 2 + limitBreak * 4
     const attackBonus = (level - 1) * 1 + limitBreak * 3
+    const defenseBonus = (level - 1) * 1 + limitBreak * 2
+    const outputBonus = (level - 1) * 1 + limitBreak * 3
+    const resistanceBonus = (level - 1) * 1 + limitBreak * 2
 
-    return {
+    const next = {
       ...deepCopy(character),
       level,
       xp: progress?.xp || 0,
@@ -106,7 +132,11 @@ function App() {
       maxMana: character.maxMana + manaBonus,
       mana: character.maxMana + manaBonus,
       attack: character.attack + attackBonus,
+      defense: (character.defense || 0) + defenseBonus,
+      cursedOutput: (character.cursedOutput || 0) + outputBonus,
+      cursedResistance: (character.cursedResistance || 0) + resistanceBonus,
     }
+    return ensureCombatState(next)
   }
 
   const buildTeamSnapshot = (teamIds, useProgress = false) =>
@@ -114,7 +144,9 @@ function App() {
       .map(id => characterCatalog.find(character => character.id === id))
       .filter(Boolean)
       .map(character =>
-        useProgress ? scaledCharacter(character, progressByCharacterId[character.id]) : deepCopy(character)
+        useProgress
+          ? scaledCharacter(character, progressByCharacterId[character.id])
+          : ensureCombatState(deepCopy(character))
       )
 
   const progressByCharacterId = useMemo(() => characterProgress, [characterProgress])
@@ -401,7 +433,7 @@ function App() {
     const loadCharacters = async () => {
       const { data: characterRows } = await supabase
         .from('characters')
-        .select('id, name, rarity, max_hp, max_mana, attack, portrait_url, card_art_url')
+        .select('id, name, rarity, max_hp, max_mana, attack, defense, cursed_output, cursed_resistance, crit_chance, portrait_url, card_art_url')
         .order('id')
       const { data: skillRows } = await supabase
         .from('character_skills')
@@ -441,7 +473,7 @@ function App() {
         const ultimateRow = skills.find(skill => skill.skill_type === 'ultimate')
         const passiveRow = skills.find(skill => skill.skill_type === 'passive')
 
-        return {
+        const next = {
           id: row.id,
           name: row.name,
           maxHp: row.max_hp,
@@ -449,6 +481,10 @@ function App() {
           maxMana: row.max_mana,
           mana: row.max_mana,
           attack: row.attack,
+          defense: row.defense ?? 0,
+          cursedOutput: row.cursed_output ?? 0,
+          cursedResistance: row.cursed_resistance ?? 0,
+          critChance: row.crit_chance ?? 0,
           rarity: row.rarity,
           portraitUrl: row.portrait_url,
           cardArtUrl: row.card_art_url,
@@ -463,6 +499,7 @@ function App() {
           abilities,
           ultimate: ultimateRow ? buildSkill(ultimateRow) : null,
         }
+        return ensureCombatState(next)
       })
 
       setCharacterCatalog(nextCatalog)
@@ -625,72 +662,244 @@ function App() {
     loadMatchHistory()
   }, [session])
 
-  const applyPassives = (team, isStartOfTurn = false, teamType = 'player') => {
-    const newTeam = deepCopy(team)
-    const logs = []
+  const getEffectsForStat = (character, stat) => {
+    const buffs = (character.effects?.buffs || []).filter(effect => effect.stat === stat)
+    const debuffs = (character.effects?.debuffs || []).filter(effect => effect.stat === stat)
+    return [...buffs, ...debuffs]
+  }
 
-    newTeam.forEach(char => {
-      if (char.hp <= 0 || !char.passive) return
+  const getStatValue = (character, stat) => {
+    const base = character[stat] || 0
+    const modifiers = getEffectsForStat(character, stat)
+    const percent = modifiers.filter(effect => effect.isPercent).reduce((sum, effect) => sum + effect.value, 0)
+    const flat = modifiers.filter(effect => !effect.isPercent).reduce((sum, effect) => sum + effect.value, 0)
+    return Math.max(0, Math.floor(base * (1 + percent) + flat))
+  }
 
-      if (isStartOfTurn) {
-        if (char.passive.type === 'regen') {
-          const healed = Math.min(char.passive.value, char.maxHp - char.hp)
-          if (healed > 0) {
-            char.hp = Math.min(char.maxHp, char.hp + char.passive.value)
-            logs.push(`💚 ${char.name}'s ${char.passive.name} heals ${healed} HP!`)
-            pushCombatEvent({ team: teamType, index: newTeam.findIndex(item => item.id === char.id), amount: healed, type: 'heal' })
-          }
-        }
-        
-        if (char.burning) {
-          char.hp = Math.max(0, char.hp - char.burning)
-          logs.push(`🔥 ${char.name} takes ${char.burning} burn damage!`)
-          pushCombatEvent({ team: teamType, index: newTeam.findIndex(item => item.id === char.id), amount: char.burning, type: 'damage' })
-          char.burning = 0
+  const getModifierPercent = (character, stat) => {
+    const modifiers = getEffectsForStat(character, stat)
+    return modifiers.reduce((sum, effect) => sum + effect.value, 0)
+  }
+
+  const addEffect = (character, bucket, effect) => {
+    ensureCombatState(character)
+    character.effects[bucket].push({
+      id: `${effect.stat}-${Date.now()}-${Math.random()}`,
+      duration: effect.duration ?? 1,
+      ...effect,
+    })
+  }
+
+  const removeOneDebuff = (character) => {
+    ensureCombatState(character)
+    if (character.effects.debuffs.length === 0) return false
+    character.effects.debuffs.shift()
+    return true
+  }
+
+  const getEnergyCost = (attacker, ability) => {
+    let cost = ability.manaCost || 0
+    if (attacker.passive?.manaReduction) {
+      cost = Math.floor(cost * (1 - attacker.passive.manaReduction))
+    }
+    if (attacker.flags?.flowStateTurns > 0) {
+      cost = Math.max(0, cost - 10)
+    }
+    return cost
+  }
+
+  const getRawDamage = (attacker, ability) => {
+    const baseDamage = ability.damageBase ?? ability.damage ?? 0
+    const scaling = ability.scaling || 0
+    const scalingStat =
+      ability.scalingStat || (ability.damageType === 'cursed' ? 'cursedOutput' : 'attack')
+    const statValue = getStatValue(attacker, scalingStat)
+    let raw = Math.floor(baseDamage + statValue * scaling)
+    if (attacker.passive?.type === 'damage-boost') {
+      raw = Math.floor(raw * (1 + attacker.passive.value))
+    }
+    return raw
+  }
+
+  const applyDamage = (attacker, target, ability, damageType, baseDamage, teamType, targetIndex, logs, options = {}) => {
+    const defenseStat = damageType === 'cursed' ? 'cursedResistance' : 'defense'
+    const defense = getStatValue(target, defenseStat)
+    let mitigated = Math.floor(baseDamage * (100 / (100 + defense)))
+    const amp = getModifierPercent(target, 'damageAmp')
+    const reduction = getModifierPercent(target, 'damageReduction')
+    mitigated = Math.floor(mitigated * Math.max(0, 1 + amp - reduction))
+    if (options.crit) {
+      mitigated = Math.floor(mitigated * (ability.critMultiplier || 1.5))
+    }
+
+    let remaining = mitigated
+    if (target.barrier?.value > 0) {
+      const absorbed = Math.min(target.barrier.value, remaining)
+      target.barrier.value -= absorbed
+      remaining -= absorbed
+      if (logs && absorbed > 0) {
+        logs.push(`🛡️ ${target.name}'s cursed barrier absorbs ${absorbed} damage.`)
+      }
+    }
+
+    if (remaining > 0) {
+      target.hp = Math.max(0, target.hp - remaining)
+      emitDamage(teamType, targetIndex, remaining, remaining >= 45)
+      if (logs) {
+        logs.push(`⚔️ ${attacker.name} → ${ability.name} → ${target.name} for ${remaining} damage${options.crit ? ' (CRIT)' : ''}!`)
+      }
+      if (target.states?.sleep > 0) {
+        target.states.sleep = 0
+        logs.push(`💥 ${target.name} is jolted awake!`)
+      }
+    }
+    return remaining
+  }
+
+  const applyDotEffects = (character, teamType, index, logs) => {
+    if (!character.effects?.dots?.length) return
+    character.effects.dots.forEach(dot => {
+      if (dot.type === 'burn' || dot.type === 'poison') {
+        const damage = Math.max(0, dot.damage || 0)
+        if (damage > 0 && character.hp > 0) {
+          character.hp = Math.max(0, character.hp - damage)
+          emitDamage(teamType, index, damage, false)
+          logs.push(`🔥 ${character.name} suffers ${damage} ${dot.type === 'burn' ? 'cursed burn' : 'cursed poison'} damage!`)
         }
       }
     })
-
-    return { team: newTeam, logs }
   }
 
-  const tickTeamState = (team) => {
-    team.forEach(char => {
+  const applySpeechMark = (target, stacks, logs) => {
+    ensureCombatState(target)
+    target.stacks.speechMark = Math.min(3, (target.stacks.speechMark || 0) + stacks)
+    if (target.stacks.speechMark >= 3) {
+      addEffect(target, 'debuffs', { stat: 'damageAmp', value: 0.3, isPercent: true, duration: 2 })
+      target.stacks.speechMark = 0
+      logs.push(`📣 ${target.name} is overwhelmed by Speech Mark!`)
+    } else {
+      logs.push(`📣 ${target.name} gains Speech Mark (${target.stacks.speechMark}/3).`)
+    }
+  }
+
+  const applyTargetEffects = (attacker, target, ability, logs) => {
+    if (ability.speechMarkStacks) {
+      applySpeechMark(target, ability.speechMarkStacks, logs)
+    }
+    if (ability.defenseDebuffPercent) {
+      addEffect(target, 'debuffs', {
+        stat: 'defense',
+        value: -ability.defenseDebuffPercent,
+        isPercent: true,
+        duration: ability.defenseDebuffDuration || 2,
+      })
+      logs.push(`🔻 ${target.name}'s Defense is weakened!`)
+    }
+    if (ability.attackDebuffPercent) {
+      addEffect(target, 'debuffs', {
+        stat: 'attack',
+        value: -ability.attackDebuffPercent,
+        isPercent: true,
+        duration: ability.attackDebuffDuration || 2,
+      })
+      logs.push(`🔻 ${target.name}'s Attack is lowered!`)
+    }
+    if (ability.damageAmp) {
+      addEffect(target, 'debuffs', {
+        stat: 'damageAmp',
+        value: ability.damageAmp,
+        isPercent: true,
+        duration: ability.damageAmpDuration || 2,
+      })
+      logs.push(`🎯 ${target.name} is exposed to curse amplification!`)
+    }
+    if (ability.selfDefenseBuffPercent) {
+      addEffect(attacker, 'buffs', {
+        stat: 'defense',
+        value: ability.selfDefenseBuffPercent,
+        isPercent: true,
+        duration: ability.selfDefenseBuffDuration || 2,
+      })
+      logs.push(`🛡️ ${attacker.name}'s Defense rises!`)
+    }
+    if (ability.selfAttackBuffPercent) {
+      addEffect(attacker, 'buffs', {
+        stat: 'attack',
+        value: ability.selfAttackBuffPercent,
+        isPercent: true,
+        duration: ability.selfAttackBuffDuration || 2,
+      })
+      logs.push(`💪 ${attacker.name}'s Attack surges!`)
+    }
+  }
+
+  const processTurnStart = (team, teamType) => {
+    const nextTeam = deepCopy(team)
+    const logs = []
+
+    nextTeam.forEach((char, idx) => {
+      ensureCombatState(char)
+      if (char.hp <= 0) return
+
+      applyDotEffects(char, teamType, idx, logs)
+
+      if (char.passive?.type === 'regen') {
+        const healed = Math.min(char.passive.value, char.maxHp - char.hp)
+        if (healed > 0) {
+          char.hp = Math.min(char.maxHp, char.hp + char.passive.value)
+          logs.push(`💚 ${char.name}'s ${char.passive.name} restores ${healed} HP!`)
+          emitHeal(teamType, idx, healed)
+        }
+      }
+
       const cdReduction = char.passive?.type === 'cooldown-reduction' ? char.passive.value : 0
-      if (char.hp > 0) {
+      if (char.hp > 0 && char.passive?.type !== 'heavenly-restriction') {
         char.mana = Math.min(char.maxMana, char.mana + 25)
       }
+
       char.abilities.forEach(ab => {
         if (ab.currentCooldown > 0) ab.currentCooldown = Math.max(0, ab.currentCooldown - 1 - cdReduction)
       })
       if (char.ultimate?.currentCooldown > 0) {
         char.ultimate.currentCooldown = Math.max(0, char.ultimate.currentCooldown - 1 - cdReduction)
       }
-      if (char.stunned) char.stunned--
-      if (char.invincible) char.invincible--
-      if (char.buffDuration) {
-        char.buffDuration--
-        if (char.buffDuration <= 0) char.attackBuff = 0
-      }
-      if (char.markedDuration) {
-        char.markedDuration--
-        if (char.markedDuration <= 0) char.marked = 0
-      }
-    })
-  }
 
-  const calculateDamage = (attacker, baseDamage) => {
-    let damage = baseDamage
-    
-    if (attacker.attackBuff) {
-      damage += attacker.attackBuff
-    }
-    
-    if (attacker.passive?.type === 'damage-boost') {
-      damage = Math.floor(damage * (1 + attacker.passive.value))
-    }
-    
-    return damage
+      if (char.states.binding) char.states.binding = Math.max(0, char.states.binding - 1)
+      if (char.states.sleep) char.states.sleep = Math.max(0, char.states.sleep - 1)
+
+      if (char.flags.gorillaCoreTurns > 0) {
+        char.flags.gorillaCoreTurns -= 1
+        if (char.flags.gorillaCoreTurns === 0) {
+          const healed = Math.floor(char.maxHp * 0.15)
+          char.hp = Math.min(char.maxHp, char.hp + healed)
+          logs.push(`🦍 ${char.name}'s Gorilla Core fades → +${healed} HP!`)
+          emitHeal(teamType, idx, healed)
+          char.counters.techniqueCount = 0
+        }
+      }
+
+      if (char.flags.flowStateTurns > 0) {
+        char.flags.flowStateTurns -= 1
+      }
+
+      if (char.barrier?.duration > 0) {
+        char.barrier.duration -= 1
+        if (char.barrier.duration <= 0) {
+          char.barrier.value = 0
+        }
+      }
+
+      const decrementBucket = (bucket) => {
+        char.effects[bucket] = char.effects[bucket]
+          .map(effect => ({ ...effect, duration: effect.duration - 1 }))
+          .filter(effect => effect.duration > 0)
+      }
+      decrementBucket('buffs')
+      decrementBucket('debuffs')
+      decrementBucket('dots')
+    })
+
+    return { team: nextTeam, logs }
   }
 
   const finalizeBattle = (result, teamSnapshot, newLog = []) => {
@@ -726,14 +935,20 @@ function App() {
     const attacker = newPlayerTeam[characterIndex]
     if (!attacker || attacker.hp <= 0) return { logs: [] }
 
-    if (attacker.stunned) {
-      return { logs: [`😵 ${attacker.name} is stunned and cannot act!`] }
+    ensureCombatState(attacker)
+    if (attacker.states.binding > 0 || attacker.states.sleep > 0) {
+      return { logs: [`⛓️ ${attacker.name} is bound and cannot act!`] }
     }
 
     const ability = isUltimate ? attacker.ultimate : attacker.abilities[abilityIndex]
     if (!ability) return { logs: [] }
 
     let newLog = []
+    const isGorillaCoreActive = attacker.flags.gorillaCoreTurns > 0
+
+    if (ability.requiresGorillaCore && !isGorillaCoreActive) {
+      return { logs: [`⛔ ${attacker.name} cannot use ${ability.name} without Gorilla Core.`] }
+    }
 
     // Put ability on cooldown
     if (isUltimate) {
@@ -742,59 +957,80 @@ function App() {
       newPlayerTeam[characterIndex].abilities[abilityIndex].currentCooldown = ability.cooldown
     }
 
-    // Deduct mana
-    let manaCost = ability.manaCost || 0
-    if (attacker.passive?.manaReduction) {
-      manaCost = Math.floor(manaCost * (1 - attacker.passive.manaReduction))
+    // Deduct cursed energy
+    const energyCost = getEnergyCost(attacker, ability)
+    if (attacker.mana < energyCost) {
+      return { logs: [`⛔ ${attacker.name} doesn't have enough cursed energy for ${ability.name}.`] }
     }
-    if (attacker.mana < manaCost) {
-      return { logs: [`⛔ ${attacker.name} doesn't have enough mana for ${ability.name}.`] }
-    }
-    newPlayerTeam[characterIndex].mana -= manaCost
+    newPlayerTeam[characterIndex].mana -= energyCost
 
-    // Execute ability based on type
+    const rollCrit = () => {
+      if (ability.guaranteedCrit) return true
+      const critChance = (attacker.critChance || 0) + (attacker.passive?.critBonus || 0) + getModifierPercent(attacker, 'critChance')
+      return Math.random() < critChance
+    }
+
     const shouldDodge = (target) =>
       target.passive?.type === 'dodge-chance' && Math.random() < target.passive.value
 
-    const isBlocked = (target) => target.invincible
-
     switch (ability.type) {
       case 'attack': {
+        if (ability.coreAllEnemies && isGorillaCoreActive) {
+          newLog.push(`🦍 ${attacker.name}'s Gorilla Core amplifies ${ability.name}!`)
+          const rawDamage = getRawDamage(attacker, ability)
+          newEnemyTeam.forEach((enemy, idx) => {
+            if (enemy.hp > 0) {
+              const crit = rollCrit()
+              applyDamage(attacker, enemy, ability, ability.damageType || 'physical', rawDamage, 'enemy', idx, newLog, { crit })
+              applyTargetEffects(attacker, enemy, ability, newLog)
+            }
+          })
+          break
+        }
+
         const target = newEnemyTeam[enemyIndex]
         if (!target || target.hp <= 0) break
         if (shouldDodge(target)) {
           newLog.push(`💨 ${target.name} DODGES ${attacker.name}'s ${ability.name}!`)
-        } else if (isBlocked(target)) {
-          newLog.push(`🛡️ ${target.name} blocks ${attacker.name}'s ${ability.name}!`)
         } else {
-          let damage = calculateDamage(attacker, ability.damage)
-          
-          if (attacker.passive?.type === 'execute' && target.hp / target.maxHp < attacker.passive.threshold) {
-            damage = Math.floor(damage * (1 + attacker.passive.value))
+          const crit = rollCrit()
+          const rawDamage = getRawDamage(attacker, ability)
+          applyDamage(attacker, target, ability, ability.damageType || 'physical', rawDamage, 'enemy', enemyIndex, newLog, { crit })
+          if (isGorillaCoreActive && ability.coreDefenseDebuffPercent) {
+            addEffect(target, 'debuffs', {
+              stat: 'defense',
+              value: -ability.coreDefenseDebuffPercent,
+              isPercent: true,
+              duration: ability.coreDefenseDebuffDuration || 2,
+            })
+            newLog.push(`🔻 ${target.name}'s Defense is shattered by Gorilla Core!`)
+          } else {
+            applyTargetEffects(attacker, target, ability, newLog)
           }
-
-          if (target.marked) damage += target.marked
-          
-          target.hp = Math.max(0, target.hp - damage)
-          newLog.push(`⚔️ ${attacker.name} → ${ability.name} → ${target.name} for ${damage} damage!`)
-          emitDamage('enemy', enemyIndex, damage, damage >= 45)
           if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
-          
+
           if (attacker.passive?.type === 'burn') {
-            target.burning = attacker.passive.value
-            newLog.push(`🔥 ${target.name} is burning!`)
-          }
-          
-          if (attacker.passive?.type === 'stacking-attack') {
-            newPlayerTeam[characterIndex].attack += attacker.passive.value
-            newLog.push(`💪 ${attacker.name}'s attack increases!`)
+            addEffect(target, 'dots', { stat: 'dot', type: 'burn', damage: attacker.passive.value, duration: 2 })
+            newLog.push(`🔥 ${target.name} is afflicted with Cursed Burn!`)
           }
 
-          if (attacker.passive?.type === 'double-hit' && Math.random() < attacker.passive.value) {
-            target.hp = Math.max(0, target.hp - damage)
-            newLog.push(`✨ Resonance! Hits again for ${damage}!`)
-            emitDamage('enemy', enemyIndex, damage, damage >= 45)
+          const shouldDoubleHit =
+            (attacker.passive?.type === 'double-hit' && Math.random() < attacker.passive.value) ||
+            (ability.isBasic && attacker.flags.flowStateTurns > 0) ||
+            (ability.isBasic && attacker.flags.nextBasicDouble)
+          if (shouldDoubleHit) {
+            applyDamage(attacker, target, ability, ability.damageType || 'physical', rawDamage, 'enemy', enemyIndex, newLog, { crit })
+            attacker.flags.nextBasicDouble = false
             if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
+          }
+
+          if (ability.onCritCooldownReduction && crit) {
+            attacker.abilities.forEach((skill, idx) => {
+              if (idx > 0 && skill.currentCooldown > 0) {
+                skill.currentCooldown = Math.max(0, skill.currentCooldown - 1)
+              }
+            })
+            newLog.push(`⚡ ${attacker.name}'s momentum reduces cooldowns!`)
           }
         }
         break
@@ -805,49 +1041,67 @@ function App() {
         if (!target || target.hp <= 0) break
         if (shouldDodge(target)) {
           newLog.push(`💨 ${target.name} DODGES ${attacker.name}'s ${ability.name}!`)
-        } else if (isBlocked(target)) {
-          newLog.push(`🛡️ ${target.name} blocks ${attacker.name}'s ${ability.name}!`)
         } else {
-          let damage = calculateDamage(attacker, ability.damage)
-          
+          const rawDamage = getRawDamage(attacker, ability)
+          let finalRaw = rawDamage
           if (target.hp / target.maxHp < ability.threshold) {
-            damage += ability.bonusDamage
+            finalRaw += ability.bonusDamage || 0
             newLog.push(`💀 Weak point strike!`)
           }
-
-          if (target.marked) damage += target.marked
-          
-          target.hp = Math.max(0, target.hp - damage)
-          newLog.push(`⚔️ ${attacker.name} → ${ability.name} → ${target.name} for ${damage}!`)
-          emitDamage('enemy', enemyIndex, damage, damage >= 45)
+          const crit = rollCrit()
+          applyDamage(attacker, target, ability, ability.damageType || 'physical', finalRaw, 'enemy', enemyIndex, newLog, { crit })
+          applyTargetEffects(attacker, target, ability, newLog)
           if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
         }
         break
       }
       
       case 'attack-all': {
-        newLog.push(`🔥 ${attacker.name} uses ${ability.name}!`)
-        const damage = calculateDamage(attacker, ability.damage)
+        if (isUltimate) {
+          newLog.push(`🌀 ${attacker.name} unleashes Domain Expansion: ${ability.name}!`)
+        } else {
+          newLog.push(`🔥 ${attacker.name} uses ${ability.name}!`)
+        }
+        let hitCount = 0
+        const rawDamage = isGorillaCoreActive && ability.coreDamageBase
+          ? Math.floor(
+              (ability.coreDamageBase || 0) +
+                getStatValue(attacker, ability.scalingStat || 'attack') * (ability.coreScaling || ability.scaling || 0)
+            )
+          : getRawDamage(attacker, ability)
         newEnemyTeam.forEach((enemy, idx) => {
           if (enemy.hp > 0) {
             if (shouldDodge(enemy)) {
               newLog.push(`  💨 ${enemy.name} DODGES!`)
-            } else if (isBlocked(enemy)) {
-              newLog.push(`  🛡️ ${enemy.name} blocks!`)
             } else {
-              let finalDamage = damage
-              if (enemy.marked) finalDamage += enemy.marked
-              enemy.hp = Math.max(0, enemy.hp - finalDamage)
-              newLog.push(`  → ${enemy.name} takes ${finalDamage}!`)
-              emitDamage('enemy', idx, finalDamage, finalDamage >= 45)
-              if (enemy.hp <= 0) newLog.push(`  🎉 ${enemy.name} defeated!`)
-              
-              if (attacker.passive?.type === 'burn') {
-                enemy.burning = attacker.passive.value
+              const crit = rollCrit()
+              applyDamage(attacker, enemy, ability, ability.damageType || 'physical', rawDamage, 'enemy', idx, newLog, { crit })
+              applyTargetEffects(attacker, enemy, ability, newLog)
+              hitCount += 1
+              if (ability.speechMarkAllStacks) {
+                applySpeechMark(enemy, ability.speechMarkAllStacks, newLog)
               }
+              if (ability.bindingAllDuration) {
+                enemy.states.binding = ability.bindingAllDuration
+              }
+              if (isGorillaCoreActive && ability.coreBindDuration) {
+                enemy.states.binding = ability.coreBindDuration
+              }
+              if (enemy.hp <= 0) newLog.push(`  🎉 ${enemy.name} defeated!`)
             }
           }
         })
+        if (ability.energyRestorePerHit && hitCount > 0) {
+          const restore = hitCount * ability.energyRestorePerHit
+          attacker.mana = Math.min(attacker.maxMana, attacker.mana + restore)
+          newLog.push(`⚡ ${attacker.name} recovers ${restore} cursed energy.`)
+        }
+        if (ability.recoilPercent) {
+          const recoil = Math.floor(attacker.maxHp * ability.recoilPercent)
+          attacker.hp = Math.max(1, attacker.hp - recoil)
+          newLog.push(`🩸 ${attacker.name} suffers ${recoil} recoil.`)
+          emitDamage('player', characterIndex, recoil, false)
+        }
         break
       }
 
@@ -856,15 +1110,13 @@ function App() {
         if (!target || target.hp <= 0) break
         if (shouldDodge(target)) {
           newLog.push(`💨 ${target.name} DODGES ${attacker.name}'s ${ability.name}!`)
-        } else if (isBlocked(target)) {
-          newLog.push(`🛡️ ${target.name} blocks ${attacker.name}'s ${ability.name}!`)
         } else {
-          let damage = calculateDamage(attacker, ability.damage)
-          if (target.marked) damage += target.marked
-          target.hp = Math.max(0, target.hp - damage)
-          target.stunned = ability.stunDuration
-          newLog.push(`⚡ ${attacker.name} → ${ability.name} → ${target.name} for ${damage} + STUN!`)
-          emitDamage('enemy', enemyIndex, damage, damage >= 45)
+          const crit = rollCrit()
+          const rawDamage = getRawDamage(attacker, ability)
+          applyDamage(attacker, target, ability, ability.damageType || 'physical', rawDamage, 'enemy', enemyIndex, newLog, { crit })
+          applyTargetEffects(attacker, target, ability, newLog)
+          target.states.binding = ability.bindingDuration || ability.stunDuration || 1
+          newLog.push(`⛓️ ${target.name} is bound!`)
           if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
         }
         break
@@ -873,38 +1125,59 @@ function App() {
       case 'stun-only': {
         const target = newEnemyTeam[enemyIndex]
         if (!target || target.hp <= 0) break
-        target.stunned = ability.stunDuration
-        newLog.push(`⚡ ${attacker.name} → ${ability.name} → ${target.name} STUNNED ${ability.stunDuration} turns!`)
+        target.states.binding = ability.bindingDuration || ability.stunDuration || 1
+        newLog.push(`⛓️ ${attacker.name} → ${ability.name} → ${target.name} bound for ${ability.bindingDuration || ability.stunDuration} turn(s)!`)
         break
       }
 
       case 'defensive': {
-        newPlayerTeam[characterIndex].invincible = 1
-        newLog.push(`🛡️ ${attacker.name} uses ${ability.name} → INVINCIBLE!`)
+        const barrierValue = ability.barrierValue || Math.max(30, Math.floor(attacker.maxHp * 0.35))
+        newPlayerTeam[characterIndex].barrier.value += barrierValue
+        newPlayerTeam[characterIndex].barrier.duration = Math.max(newPlayerTeam[characterIndex].barrier.duration, ability.barrierDuration || 1)
+        newLog.push(`🛡️ ${attacker.name} raises a Cursed Barrier (${barrierValue}).`)
         break
       }
 
       case 'buff': {
-        newPlayerTeam[characterIndex].attackBuff = (newPlayerTeam[characterIndex].attackBuff || 0) + ability.buffAmount
-        newPlayerTeam[characterIndex].buffDuration = ability.duration
-        newLog.push(`💪 ${attacker.name} uses ${ability.name} → ATK +${ability.buffAmount}!`)
+        addEffect(newPlayerTeam[characterIndex], 'buffs', {
+          stat: ability.buffStat || 'attack',
+          value: ability.buffAmount ?? 0,
+          isPercent: Boolean(ability.isPercent),
+          duration: ability.duration || 2,
+        })
+        newLog.push(`💪 ${attacker.name} uses ${ability.name} → ${ability.buffStat || 'Attack'} reinforced!`)
         break
       }
 
       case 'buff-self-damage': {
-        newPlayerTeam[characterIndex].attackBuff = (newPlayerTeam[characterIndex].attackBuff || 0) + ability.buffAmount
-        newPlayerTeam[characterIndex].buffDuration = ability.duration
-        newPlayerTeam[characterIndex].hp = Math.max(1, newPlayerTeam[characterIndex].hp - ability.selfDamage)
-        newLog.push(`💪 ${attacker.name} uses ${ability.name} → ATK +${ability.buffAmount}, -${ability.selfDamage} HP!`)
-        emitDamage('player', characterIndex, ability.selfDamage, false)
+        addEffect(newPlayerTeam[characterIndex], 'buffs', {
+          stat: ability.buffStat || 'attack',
+          value: ability.buffAmount ?? 0,
+          isPercent: Boolean(ability.isPercent),
+          duration: ability.duration || 2,
+        })
+        newPlayerTeam[characterIndex].hp = Math.max(1, newPlayerTeam[characterIndex].hp - (ability.selfDamage || 0))
+        newLog.push(`💪 ${attacker.name} pushes beyond limits, trading HP for power!`)
+        emitDamage('player', characterIndex, ability.selfDamage || 0, false)
         break
       }
 
       case 'heal-self': {
-        const healed = Math.min(ability.healAmount, attacker.maxHp - attacker.hp)
-        newPlayerTeam[characterIndex].hp = Math.min(attacker.maxHp, attacker.hp + ability.healAmount)
+        const healValue = ability.healPercent
+          ? Math.floor(attacker.maxHp * ability.healPercent)
+          : ability.healAmount
+        const healed = Math.min(healValue, attacker.maxHp - attacker.hp)
+        newPlayerTeam[characterIndex].hp = Math.min(attacker.maxHp, attacker.hp + healed)
         newLog.push(`💚 ${attacker.name} uses ${ability.name} → +${healed} HP!`)
         emitHeal('player', characterIndex, healed)
+        if (ability.cleanseDebuff) {
+          const removed = removeOneDebuff(newPlayerTeam[characterIndex])
+          if (removed) newLog.push(`✨ ${attacker.name} cleanses an affliction!`)
+        }
+        if (ability.resetTechniqueCounter) {
+          newPlayerTeam[characterIndex].counters.techniqueCount = 0
+          newLog.push(`🔄 ${attacker.name}'s technique counter resets.`)
+        }
         break
       }
 
@@ -912,8 +1185,11 @@ function App() {
         newLog.push(`💚 ${attacker.name} uses ${ability.name}!`)
         newPlayerTeam.forEach(ally => {
           if (ally.hp > 0) {
-            const healed = Math.min(ability.healAmount, ally.maxHp - ally.hp)
-            ally.hp = Math.min(ally.maxHp, ally.hp + ability.healAmount)
+            const healValue = ability.healPercent
+              ? Math.floor(ally.maxHp * ability.healPercent)
+              : ability.healAmount
+            const healed = Math.min(healValue, ally.maxHp - ally.hp)
+            ally.hp = Math.min(ally.maxHp, ally.hp + healed)
             if (healed > 0) newLog.push(`  → ${ally.name} +${healed} HP!`)
             if (healed > 0) {
               const allyIndex = newPlayerTeam.findIndex(member => member.id === ally.id)
@@ -925,20 +1201,21 @@ function App() {
       }
 
       case 'ultimate-megumi': {
-        const damage = calculateDamage(attacker, ability.damage)
-        newLog.push(`🌑 ${attacker.name} uses ${ability.name}!`)
+        const damage = getRawDamage(attacker, ability)
+        newLog.push(`🌑 ${attacker.name} unveils Domain Expansion: ${ability.name}!`)
         newEnemyTeam.forEach((enemy, idx) => {
           if (enemy.hp > 0) {
-            enemy.hp = Math.max(0, enemy.hp - damage)
-            newLog.push(`  → ${enemy.name} takes ${damage}!`)
-            emitDamage('enemy', idx, damage, damage >= 45)
+            applyDamage(attacker, enemy, ability, ability.damageType || 'cursed', damage, 'enemy', idx, newLog)
             if (enemy.hp <= 0) newLog.push(`  🎉 ${enemy.name} defeated!`)
           }
         })
         newPlayerTeam.forEach((ally, idx) => {
           if (ally.hp > 0) {
-            const healed = Math.min(ability.healAmount, ally.maxHp - ally.hp)
-            ally.hp = Math.min(ally.maxHp, ally.hp + ability.healAmount)
+            const healValue = ability.healPercent
+              ? Math.floor(ally.maxHp * ability.healPercent)
+              : ability.healAmount
+            const healed = Math.min(healValue, ally.maxHp - ally.hp)
+            ally.hp = Math.min(ally.maxHp, ally.hp + healed)
             if (healed > 0) newLog.push(`  💚 ${ally.name} +${healed} HP!`)
             if (healed > 0) emitHeal('player', idx, healed)
           }
@@ -949,28 +1226,62 @@ function App() {
       case 'ultimate-mahito': {
         const target = newEnemyTeam[enemyIndex]
         if (!target || target.hp <= 0) break
-        newPlayerTeam[characterIndex].invincible = 1
-        if (shouldDodge(target)) {
-          newLog.push(`💨 ${target.name} DODGES ${attacker.name}'s ${ability.name}!`)
-        } else if (isBlocked(target)) {
-          newLog.push(`🛡️ ${target.name} blocks ${attacker.name}'s ${ability.name}!`)
-        } else {
-          let damage = calculateDamage(attacker, ability.damage)
-          if (target.marked) damage += target.marked
-          target.hp = Math.max(0, target.hp - damage)
-          newLog.push(`👹 ${attacker.name} → ${ability.name} → INVINCIBLE + ${damage} to ${target.name}!`)
-          emitDamage('enemy', enemyIndex, damage, damage >= 45)
-          if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
-        }
+        newPlayerTeam[characterIndex].barrier.value += Math.max(40, Math.floor(attacker.maxHp * 0.25))
+        newPlayerTeam[characterIndex].barrier.duration = Math.max(newPlayerTeam[characterIndex].barrier.duration, 1)
+        const rawDamage = getRawDamage(attacker, ability)
+        applyDamage(attacker, target, ability, ability.damageType || 'cursed', rawDamage, 'enemy', enemyIndex, newLog)
+        if (target.hp <= 0) newLog.push(`🎉 ${target.name} defeated!`)
         break
       }
 
       case 'debuff-mark': {
         const target = newEnemyTeam[enemyIndex]
         if (!target || target.hp <= 0) break
-        target.marked = ability.extraDamage
-        target.markedDuration = ability.duration
-        newLog.push(`🎯 ${attacker.name} → ${ability.name} → ${target.name} MARKED!`)
+        addEffect(target, 'debuffs', {
+          stat: 'damageAmp',
+          value: ability.damageAmp ?? 0.15,
+          isPercent: true,
+          duration: ability.duration || 2,
+        })
+        newLog.push(`🎯 ${attacker.name} → ${ability.name} → ${target.name} is afflicted!`)
+        break
+      }
+
+      case 'attack-all-primary-mark': {
+        const primary = newEnemyTeam[enemyIndex]
+        if (!primary || primary.hp <= 0) break
+        newLog.push(`🔊 ${attacker.name} releases ${ability.name}!`)
+        const rawDamage = getRawDamage(attacker, ability)
+        newEnemyTeam.forEach((enemy, idx) => {
+          if (enemy.hp > 0) {
+            applyDamage(attacker, enemy, ability, ability.damageType || 'cursed', rawDamage, 'enemy', idx, newLog)
+          }
+        })
+        if (ability.applySpeechMark) {
+          primary.stacks.speechMark = Math.min(3, primary.stacks.speechMark + 1)
+          if (primary.stacks.speechMark >= 3) {
+            addEffect(primary, 'debuffs', { stat: 'damageAmp', value: 0.3, isPercent: true, duration: 2 })
+            primary.stacks.speechMark = 0
+            newLog.push(`📣 ${primary.name} is overwhelmed by Speech Mark!`)
+          } else {
+            newLog.push(`📣 ${primary.name} gains a Speech Mark stack (${primary.stacks.speechMark}/3).`)
+          }
+        }
+        break
+      }
+
+      case 'attack-random': {
+        const candidates = newEnemyTeam
+          .map((enemy, idx) => ({ enemy, idx }))
+          .filter(item => item.enemy.hp > 0)
+        const count = Math.min(ability.targetCount || 2, candidates.length)
+        for (let i = 0; i < count; i += 1) {
+          const pickIndex = Math.floor(Math.random() * candidates.length)
+          const pick = candidates.splice(pickIndex, 1)[0]
+          const rawDamage = getRawDamage(attacker, ability)
+          applyDamage(attacker, pick.enemy, ability, ability.damageType || 'physical', rawDamage, 'enemy', pick.idx, newLog)
+          applyTargetEffects(attacker, pick.enemy, ability, newLog)
+        }
         break
       }
 
@@ -984,15 +1295,44 @@ function App() {
         if (aliveAllies.length > 0) {
           const randomAlly = aliveAllies[Math.floor(Math.random() * aliveAllies.length)]
           const allyIndex = newPlayerTeam.findIndex(a => a.id === randomAlly.id)
-          newPlayerTeam[allyIndex].attackBuff = (newPlayerTeam[allyIndex].attackBuff || 0) + ability.buffAmount
-          newPlayerTeam[allyIndex].buffDuration = ability.duration
-          newLog.push(`💪 ${attacker.name} → ${ability.name} → ${randomAlly.name} ATK +${ability.buffAmount}!`)
+          addEffect(newPlayerTeam[allyIndex], 'buffs', {
+            stat: ability.buffStat || 'attack',
+            value: ability.buffAmount ?? 0,
+            isPercent: Boolean(ability.isPercent),
+            duration: ability.duration || 2,
+          })
+          newLog.push(`💪 ${attacker.name} → ${ability.name} → ${randomAlly.name} reinforced!`)
         }
         break
       }
 
       default:
         break
+    }
+
+    if (ability.grantFlowStateTurns) {
+      attacker.flags.flowStateTurns = Math.max(attacker.flags.flowStateTurns, ability.grantFlowStateTurns)
+      newLog.push(`🌊 ${attacker.name} enters Flow State!`)
+    }
+
+    if (ability.setNextBasicDouble) {
+      attacker.flags.nextBasicDouble = true
+      newLog.push(`⚔️ ${attacker.name}'s next basic strike will hit twice!`)
+    }
+
+    if (attacker.passive?.type === 'gorilla-core' && !ability.isBasic) {
+      attacker.counters.techniqueCount += 1
+      if (attacker.counters.techniqueCount >= 3 && attacker.flags.gorillaCoreTurns === 0) {
+        attacker.flags.gorillaCoreTurns = 2
+        attacker.counters.techniqueCount = 0
+        newLog.push(`🦍 ${attacker.name} awakens Gorilla Core!`)
+      }
+    }
+
+    if (attacker.passive?.type === 'heavenly-restriction') {
+      const gain = (ability.isBasic ? 15 : 0) + 10
+      attacker.mana = Math.min(attacker.maxMana, attacker.mana + gain)
+      newLog.push(`⚡ ${attacker.name} recovers ${gain} cursed energy.`)
     }
 
     return { logs: newLog }
@@ -1020,13 +1360,12 @@ function App() {
     let newEnemyTeam = deepCopy(startEnemyTeam)
     let newPlayerTeam = deepCopy(startPlayerTeam)
 
-    // Apply enemy passives
-    const enemyPassiveResult = applyPassives(newEnemyTeam, true, 'enemy')
-    newEnemyTeam = enemyPassiveResult.team
-    newLog.push(...enemyPassiveResult.logs)
+    const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy')
+    newEnemyTeam = enemyTurnStart.team
+    newLog.push(...enemyTurnStart.logs)
 
     // Enemy turn - each alive enemy acts
-    const aliveEnemies = newEnemyTeam.filter(e => e.hp > 0 && !e.stunned)
+    const aliveEnemies = newEnemyTeam.filter(e => e.hp > 0 && e.states?.binding === 0)
     
     aliveEnemies.forEach(enemy => {
       const enemyIndex = newEnemyTeam.findIndex(e => e.id === enemy.id)
@@ -1035,16 +1374,20 @@ function App() {
       if (aliveAllies.length === 0) return
 
       const allAbilities = [...enemy.abilities]
-      if (enemy.ultimate.currentCooldown === 0) {
+      if (enemy.ultimate?.currentCooldown === 0) {
         allAbilities.push({ ...enemy.ultimate, isUlt: true })
       }
       
-      const availableAbilities = allAbilities.filter(a => a.currentCooldown === 0 && (a.manaCost || 0) <= enemy.mana)
+      const availableAbilities = allAbilities.filter(a => {
+        if (a.currentCooldown !== 0) return false
+        if (a.requiresGorillaCore && enemy.flags?.gorillaCoreTurns <= 0) return false
+        return (getEnergyCost(enemy, a) || 0) <= enemy.mana
+      })
       
       if (availableAbilities.length > 0) {
         const randomAbility = availableAbilities[Math.floor(Math.random() * availableAbilities.length)]
         
-        // Put on cooldown and deduct mana
+        // Put on cooldown and deduct cursed energy
         if (randomAbility.isUlt) {
           newEnemyTeam[enemyIndex].ultimate.currentCooldown = randomAbility.cooldown
         } else {
@@ -1053,118 +1396,95 @@ function App() {
             newEnemyTeam[enemyIndex].abilities[abilityIndex].currentCooldown = randomAbility.cooldown
           }
         }
-        newEnemyTeam[enemyIndex].mana -= (randomAbility.manaCost || 0)
+        const energyCost = getEnergyCost(enemy, randomAbility)
+        newEnemyTeam[enemyIndex].mana -= energyCost
 
         // Find target
         const targetIndex = newPlayerTeam.findIndex(a => a.hp > 0)
         const target = newPlayerTeam[targetIndex]
 
-        if (randomAbility.type === 'attack' || randomAbility.type === 'attack-stun' || randomAbility.type === 'attack-execute') {
+        if (randomAbility.type === 'attack' || randomAbility.type === 'attack-execute' || randomAbility.type === 'attack-stun') {
           if (target.passive?.type === 'dodge-chance' && Math.random() < target.passive.value) {
             newLog.push(`💨 ${target.name} DODGES ${enemy.name}'s ${randomAbility.name}!`)
-          } else if (target.invincible) {
-            newLog.push(`🛡️ ${target.name} blocks ${enemy.name}'s ${randomAbility.name}!`)
           } else {
-            let damage = calculateDamage(enemy, randomAbility.damage)
-            if (target.marked) damage += target.marked
-            target.hp = Math.max(0, target.hp - damage)
-            newLog.push(`👊 ${enemy.name} → ${randomAbility.name} → ${target.name} for ${damage}!`)
-            emitDamage('player', targetIndex, damage, damage >= 45)
-            if (target.hp <= 0) newLog.push(`💀 ${target.name} KO'd!`)
-            
-            if (enemy.passive?.type === 'burn') {
-              target.burning = enemy.passive.value
+            const rawDamage = getRawDamage(enemy, randomAbility)
+            applyDamage(enemy, target, randomAbility, randomAbility.damageType || 'physical', rawDamage, 'player', targetIndex, newLog)
+            applyTargetEffects(enemy, target, randomAbility, newLog)
+            if (randomAbility.type === 'attack-stun') {
+              target.states.binding = randomAbility.bindingDuration || randomAbility.stunDuration || 1
+              newLog.push(`⛓️ ${target.name} is bound!`)
             }
+            if (target.hp <= 0) newLog.push(`💀 ${target.name} KO'd!`)
           }
         } else if (randomAbility.type === 'attack-all') {
-          newLog.push(`🔥 ${enemy.name} uses ${randomAbility.name}!`)
-          const damage = calculateDamage(enemy, randomAbility.damage)
+          if (randomAbility.isUlt) {
+            newLog.push(`🌀 ${enemy.name} unleashes Domain Expansion: ${randomAbility.name}!`)
+          } else {
+            newLog.push(`🔥 ${enemy.name} uses ${randomAbility.name}!`)
+          }
+          const rawDamage = getRawDamage(enemy, randomAbility)
           newPlayerTeam.forEach((ally, idx) => {
             if (ally.hp > 0) {
-              if (ally.passive?.type === 'dodge-chance' && Math.random() < ally.passive.value) {
-                newLog.push(`  💨 ${ally.name} DODGES!`)
-              } else if (ally.invincible) {
-                newLog.push(`  🛡️ ${ally.name} blocks!`)
-              } else {
-                let allyDamage = damage
-                if (ally.marked) allyDamage += ally.marked
-                ally.hp = Math.max(0, ally.hp - allyDamage)
-                newLog.push(`  → ${ally.name} takes ${allyDamage}!`)
-                emitDamage('player', idx, allyDamage, allyDamage >= 45)
-                if (ally.hp <= 0) newLog.push(`  💀 ${ally.name} KO'd!`)
-              }
+              applyDamage(enemy, ally, randomAbility, randomAbility.damageType || 'physical', rawDamage, 'player', idx, newLog)
+              applyTargetEffects(enemy, ally, randomAbility, newLog)
+              if (ally.hp <= 0) newLog.push(`  💀 ${ally.name} KO'd!`)
             }
           })
+        } else if (randomAbility.type === 'attack-all-primary-mark') {
+          const rawDamage = getRawDamage(enemy, randomAbility)
+          newPlayerTeam.forEach((ally, idx) => {
+            if (ally.hp > 0) {
+              applyDamage(enemy, ally, randomAbility, randomAbility.damageType || 'cursed', rawDamage, 'player', idx, newLog)
+            }
+          })
+          if (target && target.hp > 0 && randomAbility.applySpeechMark) {
+            applySpeechMark(target, 1, newLog)
+          }
+        } else if (randomAbility.type === 'attack-random') {
+          const candidates = newPlayerTeam
+            .map((ally, idx) => ({ ally, idx }))
+            .filter(item => item.ally.hp > 0)
+          const count = Math.min(randomAbility.targetCount || 2, candidates.length)
+          for (let i = 0; i < count; i += 1) {
+            const pickIndex = Math.floor(Math.random() * candidates.length)
+            const pick = candidates.splice(pickIndex, 1)[0]
+            const rawDamage = getRawDamage(enemy, randomAbility)
+            applyDamage(enemy, pick.ally, randomAbility, randomAbility.damageType || 'physical', rawDamage, 'player', pick.idx, newLog)
+            applyTargetEffects(enemy, pick.ally, randomAbility, newLog)
+          }
         } else if (randomAbility.type === 'heal-self') {
-          const healed = Math.min(randomAbility.healAmount, enemy.maxHp - enemy.hp)
-          newEnemyTeam[enemyIndex].hp = Math.min(enemy.maxHp, enemy.hp + randomAbility.healAmount)
+          const healValue = randomAbility.healPercent
+            ? Math.floor(enemy.maxHp * randomAbility.healPercent)
+            : randomAbility.healAmount
+          const healed = Math.min(healValue, enemy.maxHp - enemy.hp)
+          newEnemyTeam[enemyIndex].hp = Math.min(enemy.maxHp, enemy.hp + healed)
           newLog.push(`💚 ${enemy.name} heals ${healed} HP!`)
           emitHeal('enemy', enemyIndex, healed)
         } else if (randomAbility.type === 'defensive') {
-          newEnemyTeam[enemyIndex].invincible = 1
-          newLog.push(`🛡️ ${enemy.name} becomes INVINCIBLE!`)
+          const barrierValue = randomAbility.barrierValue || Math.max(30, Math.floor(enemy.maxHp * 0.35))
+          newEnemyTeam[enemyIndex].barrier.value += barrierValue
+          newEnemyTeam[enemyIndex].barrier.duration = Math.max(newEnemyTeam[enemyIndex].barrier.duration, randomAbility.barrierDuration || 1)
+          newLog.push(`🛡️ ${enemy.name} raises a barrier!`)
+        }
+
+        if (enemy.passive?.type === 'heavenly-restriction') {
+          const gain = (randomAbility.isBasic ? 15 : 0) + 10
+          newEnemyTeam[enemyIndex].mana = Math.min(enemy.maxMana, newEnemyTeam[enemyIndex].mana + gain)
+          newLog.push(`⚡ ${enemy.name} recovers ${gain} cursed energy.`)
         }
       }
     })
 
     // Stunned enemy messages
     newEnemyTeam.forEach(enemy => {
-      if (enemy.stunned && enemy.hp > 0) {
-        newLog.push(`😵 ${enemy.name} is STUNNED!`)
+      if (enemy.states?.binding && enemy.hp > 0) {
+        newLog.push(`⛓️ ${enemy.name} is bound and misses their turn!`)
       }
     })
 
-    // Apply player passives
-    const playerPassiveResult = applyPassives(newPlayerTeam, true, 'player')
-    newPlayerTeam = playerPassiveResult.team
-    newLog.push(...playerPassiveResult.logs)
-
-    // Tick cooldowns and effects for player
-    newPlayerTeam.forEach(char => {
-      const cdReduction = char.passive?.type === 'cooldown-reduction' ? char.passive.value : 0
-      
-      if (char.hp > 0) {
-        char.mana = Math.min(char.maxMana, char.mana + 25)
-      }
-      
-      char.abilities.forEach(ab => {
-        if (ab.currentCooldown > 0) ab.currentCooldown = Math.max(0, ab.currentCooldown - 1 - cdReduction)
-      })
-      if (char.ultimate?.currentCooldown > 0) {
-        char.ultimate.currentCooldown = Math.max(0, char.ultimate.currentCooldown - 1 - cdReduction)
-      }
-      if (char.invincible) char.invincible--
-      if (char.buffDuration) {
-        char.buffDuration--
-        if (char.buffDuration <= 0) char.attackBuff = 0
-      }
-      if (char.markedDuration) {
-        char.markedDuration--
-        if (char.markedDuration <= 0) char.marked = 0
-      }
-    })
-
-    // Tick cooldowns for enemies
-    newEnemyTeam.forEach(char => {
-      const cdReduction = char.passive?.type === 'cooldown-reduction' ? char.passive.value : 0
-      
-      if (char.hp > 0) {
-        char.mana = Math.min(char.maxMana, char.mana + 25)
-      }
-      
-      char.abilities.forEach(ab => {
-        if (ab.currentCooldown > 0) ab.currentCooldown = Math.max(0, ab.currentCooldown - 1 - cdReduction)
-      })
-      if (char.ultimate?.currentCooldown > 0) {
-        char.ultimate.currentCooldown = Math.max(0, char.ultimate.currentCooldown - 1 - cdReduction)
-      }
-      if (char.stunned) char.stunned--
-      if (char.invincible) char.invincible--
-      if (char.markedDuration) {
-        char.markedDuration--
-        if (char.markedDuration <= 0) char.marked = 0
-      }
-    })
+    const playerTurnStart = processTurnStart(newPlayerTeam, 'player')
+    newPlayerTeam = playerTurnStart.team
+    newLog.push(...playerTurnStart.logs)
 
     setPlayerTeam(newPlayerTeam)
     setEnemyTeam(newEnemyTeam)
@@ -1230,16 +1550,13 @@ function App() {
       const opponentId = isPlayer1 ? pvpMatch.player2_id : pvpMatch.player1_id
       const baseLog = pvpMatch.state?.log || battleLog
 
-      const playerPassiveResult = applyPassives(newPlayerTeam, true, 'player')
-      newPlayerTeam = playerPassiveResult.team
-      newLog.push(...playerPassiveResult.logs)
+      const playerTurnStart = processTurnStart(newPlayerTeam, 'player')
+      newPlayerTeam = playerTurnStart.team
+      newLog.push(...playerTurnStart.logs)
 
-      const enemyPassiveResult = applyPassives(newEnemyTeam, true, 'enemy')
-      newEnemyTeam = enemyPassiveResult.team
-      newLog.push(...enemyPassiveResult.logs)
-
-      tickTeamState(newPlayerTeam)
-      tickTeamState(newEnemyTeam)
+      const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy')
+      newEnemyTeam = enemyTurnStart.team
+      newLog.push(...enemyTurnStart.logs)
 
       if (newEnemyTeam.every(e => e.hp <= 0)) {
         const finalState = {
@@ -2094,6 +2411,7 @@ function App() {
           bannerItems={bannerItems}
           profile={profile}
           items={userItems}
+          characters={characterCatalog}
           onBack={() => setView('team')}
           onPull={pullGacha}
           result={gachaResult}

@@ -31,6 +31,19 @@ function BattleScreen({
   const [enemyHpPreview, setEnemyHpPreview] = React.useState([])
   const playerHpRef = React.useRef([])
   const enemyHpRef = React.useRef([])
+  const targetAbilityTypes = React.useMemo(
+    () => new Set([
+      'attack',
+      'attack-stun',
+      'stun-only',
+      'ultimate-mahito',
+      'attack-execute',
+      'debuff-mark',
+      'attack-all-primary-mark',
+      'attack-random',
+    ]),
+    []
+  )
 
   React.useEffect(() => {
     if (gameOver) return
@@ -72,17 +85,25 @@ function BattleScreen({
   React.useEffect(() => {
     updateHpPreview(enemyTeam, setEnemyHpPreview, enemyHpRef)
   }, [enemyTeam])
+
+  React.useEffect(() => {
+    if (!pendingAbility?.needsTarget && setSelectedEnemy) {
+      setSelectedEnemy(null)
+    }
+  }, [pendingAbility, setSelectedEnemy])
   
   const handleAbilityClick = (characterIndex, abilityIndex, isUltimate, ability, character) => {
     if (actedCharacters.includes(characterIndex)) return
     if (character.hp <= 0) return
     if (ability.currentCooldown > 0) return
     
-    let manaCost = ability.manaCost || 0
+    let energyCost = ability.manaCost || 0
     if (character.passive?.manaReduction) {
-      manaCost = Math.floor(manaCost * (1 - character.passive.manaReduction))
+      energyCost = Math.floor(energyCost * (1 - character.passive.manaReduction))
     }
-    if (character.mana < manaCost) return
+    if (character.mana < energyCost) return
+
+    const needsTarget = targetAbilityTypes.has(ability.type)
 
     if (
       pendingAbility &&
@@ -91,32 +112,39 @@ function BattleScreen({
       pendingAbility.isUltimate === isUltimate
     ) {
       setPendingAbility(null)
+      setSelectedEnemy?.(null)
       return
     }
 
-    setPendingAbility({
-      characterIndex,
-      abilityIndex,
-      isUltimate,
-      ability,
-      needsTarget: ['attack', 'attack-stun', 'stun-only', 'ultimate-mahito', 'attack-execute', 'debuff-mark'].includes(ability.type)
-    })
-
-    if (!['attack', 'attack-stun', 'stun-only', 'ultimate-mahito', 'attack-execute', 'debuff-mark'].includes(ability.type)) {
-      queueAbility(characterIndex, abilityIndex, isUltimate, null)
+    if (needsTarget) {
+      setPendingAbility({
+        characterIndex,
+        abilityIndex,
+        isUltimate,
+        ability,
+        needsTarget
+      })
+      setSelectedEnemy?.(null)
+      return
     }
+
+    setPendingAbility(null)
+    setSelectedEnemy?.(null)
+    queueAbility(characterIndex, abilityIndex, isUltimate, null)
   }
 
   const handleEnemyClick = (enemyIndex) => {
     if (!pendingAbility || !pendingAbility.needsTarget) return
-    if (enemyTeam[enemyIndex].hp <= 0) return
+    if (!enemyTeam[enemyIndex] || enemyTeam[enemyIndex].hp <= 0) return
     
+    setSelectedEnemy?.(enemyIndex)
     queueAbility(
       pendingAbility.characterIndex, 
       pendingAbility.abilityIndex, 
       pendingAbility.isUltimate, 
       enemyIndex
     )
+    setPendingAbility(null)
   }
 
   const getLogClass = (entry) => {
@@ -124,9 +152,9 @@ function BattleScreen({
     if (text.includes('victory')) return 'log-win'
     if (text.includes('defeat') || text.includes('ko')) return 'log-lose'
     if (text.includes('heals') || entry.includes('💚')) return 'log-heal'
-    if (text.includes('stun') || entry.includes('⚡')) return 'log-stun'
+    if (text.includes('bound') || text.includes('binding') || entry.includes('⛓️')) return 'log-stun'
     if (text.includes('burn') || entry.includes('🔥')) return 'log-burn'
-    if (text.includes('invincible') || entry.includes('🛡️')) return 'log-shield'
+    if (text.includes('barrier') || entry.includes('🛡️')) return 'log-shield'
     if (text.includes('damage') || entry.includes('⚔️') || entry.includes('👊')) return 'log-hit'
     return ''
   }
@@ -186,8 +214,16 @@ function BattleScreen({
       return '#e74c3c'
     }
 
-    const hasStatusEffects = character.invincible > 0 || character.burning > 0 || character.marked > 0
-    const hasPlayerStatus = character.stunned > 0 || character.attackBuff > 0
+    const bindingTurns = character.states?.binding || 0
+    const sleepTurns = character.states?.sleep || 0
+    const barrierValue = character.barrier?.value || 0
+    const burnEffect = (character.effects?.dots || []).find(effect => effect.type === 'burn')
+    const poisonEffect = (character.effects?.dots || []).find(effect => effect.type === 'poison')
+    const speechMarks = character.stacks?.speechMark || 0
+    const attackBuff = (character.effects?.buffs || []).find(effect => effect.stat === 'attack')
+    const defenseBuff = (character.effects?.buffs || []).find(effect => effect.stat === 'defense')
+    const hasStatusEffects = bindingTurns > 0 || sleepTurns > 0 || barrierValue > 0 || burnEffect || poisonEffect || speechMarks > 0
+    const hasPlayerStatus = bindingTurns > 0 || sleepTurns > 0 || attackBuff || defenseBuff
 
     const rowEvents = (combatEvents || []).filter(event =>
       event.team === (isPlayer ? 'player' : 'enemy') && event.index === index
@@ -204,9 +240,10 @@ function BattleScreen({
             {/* Status Icons */}
             {hasStatusEffects && (
               <div className="status-icons">
-                {character.invincible > 0 && <span className="status-icon invincible" title={`Invincible: ${character.invincible} turn(s)`}>🛡️</span>}
-                {character.burning > 0 && <span className="status-icon burning" title={`Burning: ${character.burning} damage`}>🔥</span>}
-                {character.marked > 0 && <span className="status-icon marked" title={`Marked: +${character.marked} damage taken`}>🎯</span>}
+                {barrierValue > 0 && <span className="status-icon invincible" title={`Barrier: ${barrierValue}`}>🛡️</span>}
+                {burnEffect && <span className="status-icon burning" title={`Cursed Burn: ${burnEffect.damage} damage`}>🔥</span>}
+                {poisonEffect && <span className="status-icon burning" title={`Cursed Poison: ${poisonEffect.damage} damage`}>☠️</span>}
+                {speechMarks > 0 && <span className="status-icon marked" title={`Speech Mark: ${speechMarks} stack(s)`}>🎙️</span>}
               </div>
             )}
 
@@ -256,7 +293,7 @@ function BattleScreen({
             <span className="portrait-hp-text">{character.hp}</span>
           </div>
           
-          {/* Mana Bar */}
+          {/* Cursed Energy Bar */}
           <div className="portrait-mana-bar">
             <div 
               className="portrait-mana-fill" 
@@ -269,11 +306,17 @@ function BattleScreen({
         {/* Ability Cards */}
         {isPlayer && hasPlayerStatus && (
           <div className="player-status-row">
-            {character.stunned > 0 && (
-              <span className="status-pill stunned">😵 Stun {character.stunned}</span>
+            {bindingTurns > 0 && (
+              <span className="status-pill stunned">⛓️ Bound {bindingTurns}</span>
             )}
-            {character.attackBuff > 0 && (
-              <span className="status-pill buffed">💪 Buff +{character.attackBuff}</span>
+            {sleepTurns > 0 && (
+              <span className="status-pill stunned">🌙 Sleep {sleepTurns}</span>
+            )}
+            {attackBuff && (
+              <span className="status-pill buffed">💪 Attack Up</span>
+            )}
+            {defenseBuff && (
+              <span className="status-pill buffed">🛡️ Defense Up</span>
             )}
           </div>
         )}
@@ -287,8 +330,9 @@ function BattleScreen({
                 index={abilityIndex}
                 isSelected={isSelectingTarget && !pendingAbility.isUltimate && pendingAbility.abilityIndex === abilityIndex}
                 isQueued={queuedActions.some(action => action.characterIndex === index && action.abilityIndex === abilityIndex && !action.isUltimate)}
+                queuedIndex={getQueuedIndex(index, abilityIndex, false)}
                 onSelect={() => onAbilityClick(index, abilityIndex, false, ability, character)}
-                disabled={hasActed || isDead || ability.currentCooldown > 0}
+                disabled={hasActed || isDead || ability.currentCooldown > 0 || (ability.requiresGorillaCore && character.flags?.gorillaCoreTurns <= 0)}
                 characterMana={character.mana}
                 character={character}
               />
@@ -298,8 +342,9 @@ function BattleScreen({
               index={0}
               isSelected={isSelectingTarget && pendingAbility.isUltimate}
               isQueued={queuedActions.some(action => action.characterIndex === index && action.isUltimate)}
+              queuedIndex={getQueuedIndex(index, 0, true)}
               onSelect={() => onAbilityClick(index, 0, true, character.ultimate, character)}
-              disabled={hasActed || isDead || character.ultimate.currentCooldown > 0}
+              disabled={hasActed || isDead || character.ultimate.currentCooldown > 0 || (character.ultimate.requiresGorillaCore && character.flags?.gorillaCoreTurns <= 0)}
               isUltimate={true}
               characterMana={character.mana}
               character={character}
@@ -310,28 +355,28 @@ function BattleScreen({
         {/* Enemy Status Effects */}
         {!isPlayer && hasStatusEffects && (
           <div className="enemy-status-effects">
-            {character.invincible > 0 && (
+            {barrierValue > 0 && (
               <div className="status-badge invincible">
                 <span className="status-emoji">🛡️</span>
-                <span className="status-count">{character.invincible}</span>
+                <span className="status-count">{Math.round(barrierValue)}</span>
               </div>
             )}
-            {character.stunned > 0 && (
+            {bindingTurns > 0 && (
               <div className="status-badge stunned">
-                <span className="status-emoji">😵</span>
-                <span className="status-count">{character.stunned}</span>
+                <span className="status-emoji">⛓️</span>
+                <span className="status-count">{bindingTurns}</span>
               </div>
             )}
-            {character.burning > 0 && (
+            {burnEffect && (
               <div className="status-badge burning">
                 <span className="status-emoji">🔥</span>
-                <span className="status-count">{character.burning}</span>
+                <span className="status-count">{burnEffect.damage}</span>
               </div>
             )}
-            {character.marked > 0 && (
+            {speechMarks > 0 && (
               <div className="status-badge marked">
-                <span className="status-emoji">🎯</span>
-                <span className="status-count">{character.marked}</span>
+                <span className="status-emoji">🎙️</span>
+                <span className="status-count">{speechMarks}</span>
               </div>
             )}
           </div>
@@ -353,7 +398,7 @@ function BattleScreen({
     )
   }
 
-  const EnemyRow = ({ character, index, isSelected, onSelect, pendingAbility, hpPreview }) => {
+  const EnemyRow = ({ character, index, isSelected, onSelect, onHover, pendingAbility, hpPreview }) => {
     const hpPercent = (character.hp / character.maxHp) * 100
     const previewPercent = hpPreview != null ? (hpPreview / character.maxHp) * 100 : hpPercent
     const manaPercent = (character.mana / character.maxMana) * 100
@@ -366,8 +411,13 @@ function BattleScreen({
       return '#e74c3c'
     }
 
-    const hasStatusEffects = character.invincible > 0 || character.stunned > 0 || 
-                            character.burning > 0 || character.marked > 0
+    const bindingTurns = character.states?.binding || 0
+    const sleepTurns = character.states?.sleep || 0
+    const barrierValue = character.barrier?.value || 0
+    const burnEffect = (character.effects?.dots || []).find(effect => effect.type === 'burn')
+    const poisonEffect = (character.effects?.dots || []).find(effect => effect.type === 'poison')
+    const speechMarks = character.stacks?.speechMark || 0
+    const hasStatusEffects = bindingTurns > 0 || sleepTurns > 0 || barrierValue > 0 || burnEffect || poisonEffect || speechMarks > 0
 
     const rowEvents = (combatEvents || []).filter(event =>
       event.team === 'enemy' && event.index === index
@@ -378,6 +428,8 @@ function BattleScreen({
       <div 
         className={`character-row enemy ${isDead ? 'dead' : ''} ${isSelected ? 'selected' : ''} ${canBeTargeted ? 'targetable' : ''} ${rowEvents.length ? 'hit-flash' : ''} ${bigHit ? 'crit-flash' : ''}`}
         onClick={() => canBeTargeted && onSelect(index)}
+        onMouseEnter={() => canBeTargeted && onHover?.(index)}
+        onMouseLeave={() => canBeTargeted && onHover?.(null)}
       >
         {/* Character Portrait */}
         <div className={`portrait-container ${canBeTargeted ? 'targetable' : ''}`}>
@@ -420,7 +472,7 @@ function BattleScreen({
             <span className="portrait-hp-text">{character.hp}</span>
           </div>
           
-          {/* Mana Bar */}
+          {/* Cursed Energy Bar */}
           <div className="portrait-mana-bar">
             <div 
               className="portrait-mana-fill" 
@@ -433,28 +485,34 @@ function BattleScreen({
         {/* Enemy Status Effects */}
         {hasStatusEffects && (
           <div className="enemy-status-effects">
-            {character.invincible > 0 && (
+            {barrierValue > 0 && (
               <div className="status-badge invincible">
                 <span className="status-emoji">🛡️</span>
-                <span className="status-count">{character.invincible}</span>
+                <span className="status-count">{Math.round(barrierValue)}</span>
               </div>
             )}
-            {character.stunned > 0 && (
+            {bindingTurns > 0 && (
               <div className="status-badge stunned">
-                <span className="status-emoji">😵</span>
-                <span className="status-count">{character.stunned}</span>
+                <span className="status-emoji">⛓️</span>
+                <span className="status-count">{bindingTurns}</span>
               </div>
             )}
-            {character.burning > 0 && (
+            {burnEffect && (
               <div className="status-badge burning">
                 <span className="status-emoji">🔥</span>
-                <span className="status-count">{character.burning}</span>
+                <span className="status-count">{burnEffect.damage}</span>
               </div>
             )}
-            {character.marked > 0 && (
+            {poisonEffect && (
+              <div className="status-badge burning">
+                <span className="status-emoji">☠️</span>
+                <span className="status-count">{poisonEffect.damage}</span>
+              </div>
+            )}
+            {speechMarks > 0 && (
               <div className="status-badge marked">
-                <span className="status-emoji">🎯</span>
-                <span className="status-count">{character.marked}</span>
+                <span className="status-emoji">🎙️</span>
+                <span className="status-count">{speechMarks}</span>
               </div>
             )}
           </div>
@@ -476,19 +534,26 @@ function BattleScreen({
     )
   }
 
-  const AbilityCard = ({ ability, index, isSelected, isQueued, onSelect, disabled, isUltimate, characterMana, character }) => {
-    let manaCost = ability.manaCost || 0
+  const AbilityCard = ({ ability, index, isSelected, isQueued, queuedIndex, onSelect, disabled, isUltimate, characterMana, character }) => {
+    let energyCost = ability.manaCost || 0
     if (character.passive?.manaReduction) {
-      manaCost = Math.floor(manaCost * (1 - character.passive.manaReduction))
+      energyCost = Math.floor(energyCost * (1 - character.passive.manaReduction))
     }
-    const notEnoughMana = characterMana < manaCost
+    const notEnoughMana = characterMana < energyCost
     const isDisabled = disabled || notEnoughMana
+    const needsTarget = targetAbilityTypes.has(ability.type)
     
     return (
       <div 
-        className={`ability-card ${isSelected ? 'selected' : ''} ${isQueued ? 'queued' : ''} ${isDisabled ? 'disabled' : ''} ${isUltimate ? 'ultimate' : ''} ${notEnoughMana ? 'no-mana' : ''}`}
+        className={`ability-card ${isSelected ? 'selected' : ''} ${isQueued ? 'queued' : ''} ${isDisabled ? 'disabled' : ''} ${isUltimate ? 'ultimate' : ''} ${notEnoughMana ? 'no-mana' : ''} ${needsTarget ? 'needs-target' : ''}`}
         onClick={() => !isDisabled && onSelect()}
       >
+        {queuedIndex && (
+          <span className="ability-queue-order">#{queuedIndex}</span>
+        )}
+        {needsTarget && (
+          <span className="ability-target-tag" title="Requires a target">🎯</span>
+        )}
         <div className="ability-card-art">
           <AbilityIcon ability={ability} isUltimate={isUltimate} />
         </div>
@@ -505,19 +570,20 @@ function BattleScreen({
         
         {/* Mana Cost */}
         <div className={`ability-mana-cost ${notEnoughMana ? 'not-enough' : ''}`}>
-          <span>💧{manaCost}</span>
+          <span>🌀{energyCost}</span>
         </div>
         
         {/* Tooltip */}
         <div className="ability-tooltip">
           <div className="tooltip-header">
             <h4>{ability.name}</h4>
-            {isUltimate && <span className="tooltip-ultimate">ULTIMATE</span>}
+            {isUltimate && <span className="tooltip-ultimate">DOMAIN EXPANSION</span>}
           </div>
           <p>{ability.description}</p>
           <div className="tooltip-stats">
-            <span className={notEnoughMana ? 'not-enough' : ''}>💧 {manaCost}</span>
+            <span className={notEnoughMana ? 'not-enough' : ''}>🌀 {energyCost}</span>
             <span>⏱️ {ability.cooldown} CD</span>
+            {needsTarget && <span>🎯 Target</span>}
           </div>
         </div>
       </div>
@@ -537,11 +603,19 @@ function BattleScreen({
     if (!character) return 'Unknown'
     const ability = action.isUltimate ? character.ultimate : character.abilities[action.abilityIndex]
     const target = action.enemyIndex != null ? enemyTeam[action.enemyIndex]?.name : null
-    return `${character.name}: ${ability?.name || 'Ability'}${target ? ` → ${target}` : ''}`
+    return `${character.name}: ${ability?.name || 'Technique'}${target ? ` → ${target}` : ''}`
+  }
+  const getQueuedIndex = (characterIndex, abilityIndex, isUltimate) => {
+    const index = queuedActions.findIndex(action => (
+      action.characterIndex === characterIndex &&
+      action.isUltimate === isUltimate &&
+      (isUltimate || action.abilityIndex === abilityIndex)
+    ))
+    return index === -1 ? null : index + 1
   }
 
   return (
-    <div className={`battle-screen ${battleShake ? 'screen-shake' : ''}`}>
+    <div className={`battle-screen ${battleShake ? 'screen-shake' : ''} ${pendingAbility?.needsTarget ? 'targeting-active' : ''}`}>
       <div className="battle-background"></div>
 
       {turnBanner && (
@@ -705,13 +779,15 @@ function BattleScreen({
           </div>
           <div className="battle-queue">
             <div className="battle-queue-title">Queued Actions</div>
+            <div className="battle-queue-meta">Order matters. Actions execute at turn end.</div>
             <div className="battle-queue-items">
               {queuedActions.length === 0 ? (
                 <span className="queue-empty">No actions queued yet.</span>
               ) : (
                 queuedActions.map((action, index) => (
                   <div key={`${action.characterIndex}-${index}`} className="queue-chip">
-                    <span>{queuedLabel(action)}</span>
+                    <span className="queue-order">{index + 1}</span>
+                    <span className="queue-text">{queuedLabel(action)}</span>
                     <button
                       type="button"
                       className="queue-remove"
@@ -750,6 +826,7 @@ function BattleScreen({
                 index={index}
                 isSelected={selectedEnemy === index}
                 onSelect={handleEnemyClick}
+                onHover={setSelectedEnemy}
                 pendingAbility={pendingAbility}
                 hpPreview={enemyHpPreview[index]}
               />

@@ -16,23 +16,27 @@ function ShopPage({ offers, profile, onBack, onPurchase }) {
       </div>
       <div className="meta-grid">
         <section className="shop-grid">
-          {offers.map(offer => (
-            <div key={offer.id} className="shop-card">
-              <h4>{offer.name}</h4>
-              <p>{offer.description}</p>
-              <div className="shop-cost">
-                <span>Soft {offer.cost_soft}</span>
-                <span>Premium {offer.cost_premium}</span>
+          {offers.length === 0 ? (
+            <div className="shop-empty">The shop is restocking. Check back soon.</div>
+          ) : (
+            offers.map(offer => (
+              <div key={offer.id} className="shop-card">
+                <h4>{offer.name}</h4>
+                <p>{offer.description}</p>
+                <div className="shop-cost">
+                  <span>Soft {offer.cost_soft}</span>
+                  <span>Premium {offer.cost_premium}</span>
+                </div>
+                <button
+                  className="mission-claim"
+                  onClick={() => onPurchase?.(offer.id)}
+                  disabled={(soft < offer.cost_soft) || (premium < offer.cost_premium)}
+                >
+                  Buy
+                </button>
               </div>
-              <button
-                className="mission-claim"
-                onClick={() => onPurchase?.(offer.id)}
-                disabled={(soft < offer.cost_soft) || (premium < offer.cost_premium)}
-              >
-                Buy
-              </button>
-            </div>
-          ))}
+            ))
+          )}
         </section>
       </div>
     </div>
