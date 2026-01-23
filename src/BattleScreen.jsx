@@ -29,8 +29,12 @@ function BattleScreen({
   const [turnBanner, setTurnBanner] = React.useState(null)
   const [playerHpPreview, setPlayerHpPreview] = React.useState([])
   const [enemyHpPreview, setEnemyHpPreview] = React.useState([])
+  const [showCombatFeed, setShowCombatFeed] = React.useState(false)
+  const [showEndTurnConfirm, setShowEndTurnConfirm] = React.useState(false)
+  const [draftQueue, setDraftQueue] = React.useState([])
   const playerHpRef = React.useRef([])
   const enemyHpRef = React.useRef([])
+  const latestLog = battleLog?.[battleLog.length - 1] || ''
   const targetAbilityTypes = React.useMemo(
     () => new Set([
       'attack',
@@ -203,10 +207,21 @@ function BattleScreen({
     const isDead = character.hp <= 0
     const hasActed = actedCharacters.includes(index)
     const isSelectingTarget = pendingAbility && pendingAbility.characterIndex === index
+    const isBottomRow = isPlayer && index === playerTeam.length - 1
     const level = character.level || 1
     const currentXp = character.xp || 0
     const xpNeeded = 100 + level * 25
     const xpPercent = Math.min(100, Math.floor((currentXp / xpNeeded) * 100))
+    const queuedActionIndex = getQueuedActionIndex(index)
+    const queuedAction = queuedActionIndex >= 0 ? queuedActions[queuedActionIndex] : null
+    const queuedAbility = queuedAction
+      ? (queuedAction.isUltimate ? character.ultimate : character.abilities[queuedAction.abilityIndex])
+      : null
+    const clearQueuedAction = () => {
+      if (queuedActionIndex >= 0) {
+        removeQueuedAction?.(queuedActionIndex)
+      }
+    }
     
     const getHpColor = () => {
       if (hpPercent > 50) return '#2ecc71'
@@ -323,6 +338,30 @@ function BattleScreen({
 
         {isPlayer && (
           <div className="ability-cards">
+            <div
+              className={`ability-card queue-slot ${queuedAction ? 'queued' : ''}`}
+              onClick={queuedAction ? clearQueuedAction : undefined}
+              title={queuedAction ? 'Click to un-queue' : 'Queued technique slot'}
+            >
+              <div className="ability-card-art">
+                {queuedAbility ? (
+                  <AbilityIcon ability={queuedAbility} isUltimate={queuedAction?.isUltimate} />
+                ) : (
+                  <div className="ability-placeholder">
+                    <span className="ability-initial">Q</span>
+                  </div>
+                )}
+              </div>
+              <div className="ability-info">
+                <div className="ability-name">{queuedAbility ? queuedAbility.name : 'Queued'}</div>
+                <div className="ability-desc">
+                  {queuedAction ? 'Click to clear' : 'Technique slot'}
+                </div>
+              </div>
+              {queuedActionIndex >= 0 && (
+                <span className="ability-queue-order">#{queuedActionIndex + 1}</span>
+              )}
+            </div>
             {character.abilities.map((ability, abilityIndex) => (
               <AbilityCard 
                 key={ability.id}
@@ -335,6 +374,7 @@ function BattleScreen({
                 disabled={hasActed || isDead || ability.currentCooldown > 0 || (ability.requiresGorillaCore && character.flags?.gorillaCoreTurns <= 0)}
                 characterMana={character.mana}
                 character={character}
+                tooltipUp={isBottomRow}
               />
             ))}
             <AbilityCard 
@@ -348,6 +388,7 @@ function BattleScreen({
               isUltimate={true}
               characterMana={character.mana}
               character={character}
+              tooltipUp={isBottomRow}
             />
           </div>
         )}
@@ -534,7 +575,7 @@ function BattleScreen({
     )
   }
 
-  const AbilityCard = ({ ability, index, isSelected, isQueued, queuedIndex, onSelect, disabled, isUltimate, characterMana, character }) => {
+  const AbilityCard = ({ ability, index, isSelected, isQueued, queuedIndex, onSelect, disabled, isUltimate, characterMana, character, tooltipUp }) => {
     let energyCost = ability.manaCost || 0
     if (character.passive?.manaReduction) {
       energyCost = Math.floor(energyCost * (1 - character.passive.manaReduction))
@@ -545,7 +586,7 @@ function BattleScreen({
     
     return (
       <div 
-        className={`ability-card ${isSelected ? 'selected' : ''} ${isQueued ? 'queued' : ''} ${isDisabled ? 'disabled' : ''} ${isUltimate ? 'ultimate' : ''} ${notEnoughMana ? 'no-mana' : ''} ${needsTarget ? 'needs-target' : ''}`}
+        className={`ability-card ${isSelected ? 'selected' : ''} ${isQueued ? 'queued' : ''} ${isDisabled ? 'disabled' : ''} ${isUltimate ? 'ultimate' : ''} ${notEnoughMana ? 'no-mana' : ''} ${needsTarget ? 'needs-target' : ''} ${tooltipUp ? 'tooltip-up' : ''}`}
         onClick={() => !isDisabled && onSelect()}
       >
         {queuedIndex && (
@@ -592,7 +633,6 @@ function BattleScreen({
 
   const alivePlayerCount = playerTeam.filter(c => c.hp > 0).length
   const actedCount = actedCharacters.length
-  const remainingActions = alivePlayerCount - actedCount
   const playerName = profile?.display_name || 'Player'
   const playerAvatar = profile?.avatar_url || null
   const playerLevel = profile?.account_level || 1
@@ -612,6 +652,40 @@ function BattleScreen({
       (isUltimate || action.abilityIndex === abilityIndex)
     ))
     return index === -1 ? null : index + 1
+  }
+  const getQueuedActionIndex = (characterIndex) => (
+    queuedActions.findIndex(action => action.characterIndex === characterIndex)
+  )
+
+  const openEndTurnConfirm = () => {
+    if (isPvp && !isMyTurn) return
+    setDraftQueue(queuedActions)
+    setShowEndTurnConfirm(true)
+  }
+
+  const confirmEndTurn = () => {
+    setShowEndTurnConfirm(false)
+    endTurn(draftQueue)
+  }
+
+  const handleQueueDragStart = (index) => (event) => {
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+
+  const handleQueueDragOver = (event) => {
+    event.preventDefault()
+  }
+
+  const handleQueueDrop = (index) => (event) => {
+    event.preventDefault()
+    const fromIndex = Number(event.dataTransfer.getData('text/plain'))
+    if (Number.isNaN(fromIndex)) return
+    setDraftQueue(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
   }
 
   return (
@@ -646,17 +720,20 @@ function BattleScreen({
             <span className="turn-label">TURN</span>
             <span className="turn-number">{turn}</span>
           </div>
-          <div className="actions-display">
-            <span className="actions-label">ACTIONS LEFT</span>
-            <span className="actions-number">{remainingActions}</span>
-          </div>
           <button
             className="end-turn-btn"
-            onClick={endTurn}
+            onClick={openEndTurnConfirm}
             disabled={isPvp && !isMyTurn}
           >
             {isPvp && !isMyTurn ? 'Waiting...' : 'End Turn'}
           </button>
+          <div className="combat-feed-ticker">
+            <span className="ticker-label">FEED</span>
+            <span className="ticker-text">{latestLog || 'Awaiting first strike...'}</span>
+            <button className="combat-feed-btn" onClick={() => setShowCombatFeed(true)}>
+              Combat Feed
+            </button>
+          </div>
         </div>
 
         <div className="hud-side right">
@@ -755,53 +832,6 @@ function BattleScreen({
 
       {/* Main Battle Area */}
       <div className={`battle-main ${storyBattle ? 'battle-main-story' : ''} ${(playerTeam.length <= 1 && enemyTeam.length <= 2) ? 'battle-main-compact' : ''}`}>
-        <div className="battle-top-row">
-          <div className="battle-log-center">
-            <div className="battle-log-header">
-              <h3>Battle Log</h3>
-              {storyBattle && (
-                <div className="battle-objective">
-                  <div className="battle-objective-title">{storyBattle.mode || 'Story Battle'}</div>
-                  <div className="battle-objective-text">{storyBattle.objective}</div>
-                </div>
-              )}
-            </div>
-            <div className="log-scroll-vertical">
-              {battleLog.slice(-8).map((entry, i) => (
-                <p
-                  key={i}
-                  className={`${getLogClass(entry)} ${i === battleLog.slice(-8).length - 1 ? 'latest' : ''}`}
-                >
-                  {entry}
-                </p>
-              ))}
-            </div>
-          </div>
-          <div className="battle-queue">
-            <div className="battle-queue-title">Queued Actions</div>
-            <div className="battle-queue-meta">Order matters. Actions execute at turn end.</div>
-            <div className="battle-queue-items">
-              {queuedActions.length === 0 ? (
-                <span className="queue-empty">No actions queued yet.</span>
-              ) : (
-                queuedActions.map((action, index) => (
-                  <div key={`${action.characterIndex}-${index}`} className="queue-chip">
-                    <span className="queue-order">{index + 1}</span>
-                    <span className="queue-text">{queuedLabel(action)}</span>
-                    <button
-                      type="button"
-                      className="queue-remove"
-                      onClick={() => removeQueuedAction?.(index)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-
         <div className="battle-team-row">
           <div className="team-container player-side">
             {playerTeam.map((char, index) => (
@@ -834,6 +864,75 @@ function BattleScreen({
           </div>
         </div>
       </div>
+
+      {showCombatFeed && (
+        <div className="combat-feed-overlay" onClick={() => setShowCombatFeed(false)}>
+          <div className="combat-feed-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="combat-feed-header">
+              <div>
+                <h3>Combat Feed</h3>
+                <p>Latest combat events</p>
+              </div>
+              <button className="combat-feed-close" onClick={() => setShowCombatFeed(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="combat-feed-body">
+              {battleLog.length === 0 ? (
+                <div className="combat-feed-empty">No events yet.</div>
+              ) : (
+                battleLog.slice().reverse().map((entry, i) => (
+                  <p key={`${entry}-${i}`} className={`${getLogClass(entry)} ${i === 0 ? 'latest' : ''}`}>
+                    {entry}
+                  </p>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEndTurnConfirm && (
+        <div className="end-turn-overlay" onClick={() => setShowEndTurnConfirm(false)}>
+          <div className="end-turn-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="end-turn-header">
+              <div>
+                <h3>Confirm End Turn</h3>
+                <p>Drag to reorder your queued techniques.</p>
+              </div>
+              <button className="end-turn-close" onClick={() => setShowEndTurnConfirm(false)}>✕</button>
+            </div>
+            <div className="end-turn-body">
+              {draftQueue.length === 0 ? (
+                <div className="end-turn-empty">No actions queued. End turn anyway?</div>
+              ) : (
+                <div className="end-turn-list">
+                  {draftQueue.map((action, index) => (
+                    <div
+                      key={`${action.characterIndex}-${action.abilityIndex}-${action.isUltimate}-${index}`}
+                      className="end-turn-item"
+                      draggable
+                      onDragStart={handleQueueDragStart(index)}
+                      onDragOver={handleQueueDragOver}
+                      onDrop={handleQueueDrop(index)}
+                    >
+                      <span className="drag-handle">⋮⋮</span>
+                      <span className="queue-order">{index + 1}</span>
+                      <span className="queue-text">{queuedLabel(action)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="end-turn-actions">
+              <button className="secondary-btn" onClick={() => setShowEndTurnConfirm(false)}>Cancel</button>
+              <button className="primary-btn" onClick={confirmEndTurn}>
+                {draftQueue.length === 0 ? 'End Turn' : 'Confirm & End Turn'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
