@@ -1,6 +1,9 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 
-function GachaPage({ banners, bannerItems, profile, items: userItems, characters, onBack, onPull, result }) {
+function GachaPage({ banners, bannerItems, profile, items: userItems, characters, onBack, onPull, result, onClearResult }) {
+  const [isPulling, setIsPulling] = useState(false)
+  const [showResult, setShowResult] = useState(false)
+
   const premium = profile?.premium_currency ?? 0
   const fragments = userItems?.finger_fragment ?? 0
   const pullCost = 100
@@ -14,6 +17,27 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
     ;(characters || []).forEach(character => map.set(character.id, character))
     return map
   }, [characters])
+
+  // Auto-show result with animation when result changes
+  useEffect(() => {
+    if (result) {
+      setShowResult(true)
+      setIsPulling(false)
+    }
+  }, [result])
+
+  const handlePull = async (bannerId, options = {}) => {
+    setIsPulling(true)
+    setShowResult(false)
+    await onPull?.(bannerId, options)
+  }
+
+  const handleClearResult = () => {
+    setShowResult(false)
+    setTimeout(() => {
+      onClearResult?.()
+    }, 300) // Wait for fade out animation
+  }
 
   const formatItemLabel = (item) => {
     if (item.item_type === 'character' && item.character_id) {
@@ -45,26 +69,43 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
           <p>{activeBanner?.description || 'Check back soon for the next featured banner.'}</p>
           <button
             className="mode-btn primary"
-            onClick={() => activeBanner && onPull?.(activeBanner.id)}
-            disabled={!activeBanner || premium < pullCost}
+            onClick={() => activeBanner && handlePull(activeBanner.id)}
+            disabled={!activeBanner || premium < pullCost || isPulling}
           >
-            Pull ({pullCost})
+            {isPulling ? 'Pulling...' : `Pull (${pullCost})`}
           </button>
           {!activeBanner && (
             <div className="gacha-empty">No active banners yet.</div>
           )}
           <button
             className="mode-btn ghost"
-            onClick={() => activeBanner && onPull?.(activeBanner.id, { useFragment: true })}
-            disabled={!activeBanner || fragments <= 0}
+            onClick={() => activeBanner && handlePull(activeBanner.id, { useFragment: true })}
+            disabled={!activeBanner || fragments <= 0 || isPulling}
           >
-            Pull (Fragment) · {fragments}
+            {isPulling ? 'Pulling...' : `Pull (Fragment) · ${fragments}`}
           </button>
+
+          {isPulling && !result && (
+            <div className="gacha-pulling">
+              <div className="gacha-spinner"></div>
+              <span>Summoning...</span>
+            </div>
+          )}
+
           {result && (
-            <div className="gacha-result">
-              <strong>Result</strong>
-              <span>{formatItemLabel(result)}</span>
-              {result.premium_currency > 0 && <span>Premium x{result.premium_currency}</span>}
+            <div className={`gacha-result ${showResult ? 'show' : ''}`}>
+              <div className="gacha-result-header">
+                <strong>You received:</strong>
+                <button className="gacha-result-close" onClick={handleClearResult}>×</button>
+              </div>
+              <div className="gacha-result-content">
+                <div className="gacha-result-item">
+                  {result.item_type === 'character' && <div className="gacha-result-rarity">★ NEW CHARACTER ★</div>}
+                  <span className="gacha-result-label">{formatItemLabel(result)}</span>
+                  {result.item_type === 'character' && <div className="gacha-result-bonus">+30 Shards</div>}
+                  {result.premium_currency > 0 && <span className="gacha-result-currency">+{result.premium_currency} Premium</span>}
+                </div>
+              </div>
             </div>
           )}
         </section>

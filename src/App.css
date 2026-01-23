@@ -6960,3 +6960,213 @@ button:disabled {
   left: 8px;
   color: var(--danger);
 }
+
+/* ==================== GACHA IMPROVEMENTS ==================== */
+
+.gacha-pulling {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px;
+  margin-top: 24px;
+  background: rgba(88, 193, 216, 0.05);
+  border: 2px dashed rgba(88, 193, 216, 0.3);
+  border-radius: 12px;
+}
+
+.gacha-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(88, 193, 216, 0.2);
+  border-top-color: var(--accent-cool);
+  border-radius: 50%;
+  animation: gacha-spin 1s linear infinite;
+}
+
+@keyframes gacha-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gacha-pulling span {
+  color: var(--accent-cool);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.gacha-result {
+  margin-top: 24px;
+  background: linear-gradient(145deg, rgba(241, 195, 106, 0.15), rgba(241, 195, 106, 0.05));
+  border: 2px solid var(--accent);
+  border-radius: 16px;
+  padding: 24px;
+  opacity: 0;
+  transform: scale(0.9) translateY(10px);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gacha-result.show {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.gacha-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.gacha-result-header strong {
+  color: var(--accent);
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gacha-result-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast) var(--transition-ease);
+}
+
+.gacha-result-close:hover {
+  color: var(--accent);
+  transform: rotate(90deg);
+}
+
+.gacha-result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gacha-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding: 20px;
+  background: var(--bg-0);
+  border-radius: 12px;
+}
+
+.gacha-result-rarity {
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: gacha-glow 2s ease-in-out infinite;
+}
+
+@keyframes gacha-glow {
+  0%, 100% {
+    text-shadow: 0 0 10px rgba(241, 195, 106, 0.5);
+  }
+  50% {
+    text-shadow: 0 0 20px rgba(241, 195, 106, 0.8);
+  }
+}
+
+.gacha-result-label {
+  font-size: 20px;
+  font-weight: 700;
+  color: #e7eaf0;
+  text-align: center;
+}
+
+.gacha-result-bonus {
+  color: var(--success);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.gacha-result-currency {
+  color: var(--accent-cool);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ==================== SHOP IMPROVEMENTS ==================== */
+
+.shop-card {
+  transition: all var(--transition-normal) var(--transition-ease);
+}
+
+.shop-card.purchased {
+  background: linear-gradient(145deg, rgba(98, 193, 137, 0.15), rgba(98, 193, 137, 0.05));
+  border-color: var(--success);
+  animation: shop-purchase-success 0.6s ease-out;
+}
+
+@keyframes shop-purchase-success {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.shop-reward {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px;
+  background: rgba(88, 193, 216, 0.08);
+  border-radius: 8px;
+}
+
+.shop-reward-item {
+  color: var(--accent-cool);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.shop-cost {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.shop-cost span {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all var(--transition-fast) var(--transition-ease);
+}
+
+.shop-cost span.insufficient {
+  color: var(--danger);
+  background: rgba(224, 108, 117, 0.1);
+}
+
+.mission-claim.success {
+  background: var(--success);
+  color: var(--bg-0);
+  pointer-events: none;
+}
+
+.mission-claim:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
