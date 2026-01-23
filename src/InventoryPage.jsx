@@ -1,7 +1,9 @@
 import React from 'react'
 import { getCharacterImage } from './imageConfig'
 
-function InventoryPage({ characters, inventory, characterProgress, onBack, onLimitBreak, limitBreakCost }) {
+function InventoryPage({ characters, inventory, characterProgress, items, titles, onBack, onLimitBreak, limitBreakCost }) {
+  const itemEntries = Object.entries(items || {})
+  const unlockedTitles = (titles || []).filter(title => title.unlocked)
   const renderCard = (character) => {
     const shards = inventory[character.id] || 0
     const progress = characterProgress[character.id] || { level: 1, xp: 0, limit_break: 0 }
@@ -43,6 +45,38 @@ function InventoryPage({ characters, inventory, characterProgress, onBack, onLim
       </div>
       <div className="meta-grid inventory-grid">
         {characters.map(renderCard)}
+      </div>
+      <div className="meta-grid inventory-extras">
+        <section className="inventory-section">
+          <h2>Items</h2>
+          {itemEntries.length === 0 ? (
+            <p className="inventory-empty">No items yet.</p>
+          ) : (
+            <div className="inventory-item-grid">
+              {itemEntries.map(([itemId, quantity]) => (
+                <div key={itemId} className="inventory-item-card">
+                  <strong>{itemId.replace(/_/g, ' ')}</strong>
+                  <span>x{quantity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="inventory-section">
+          <h2>Titles</h2>
+          {unlockedTitles.length === 0 ? (
+            <p className="inventory-empty">No titles unlocked.</p>
+          ) : (
+            <div className="inventory-item-grid">
+              {unlockedTitles.map(title => (
+                <div key={title.title_id} className={`inventory-item-card ${title.active ? 'active' : ''}`}>
+                  <strong>{title.title_id.replace(/_/g, ' ')}</strong>
+                  <span>{title.active ? 'Active' : 'Unlocked'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

@@ -51,8 +51,8 @@ export const storyEnemies = {
   'finger-bearer': {
     id: 'finger-bearer',
     name: 'Finger Bearer',
-    maxHp: 220,
-    hp: 220,
+    maxHp: 200,
+    hp: 200,
     maxMana: 120,
     mana: 120,
     attack: 26,
@@ -202,7 +202,7 @@ export const storyChapters = [
           objective: 'Defeat the Finger Bearer.',
           type: 'boss',
           playerBuffs: {
-            Yuji: { hpBonus: 30, manaBonus: 20, attackBonus: 6 },
+            Yuji: { hpBonus: 60, manaBonus: 30, attackBonus: 10 },
           },
           unlocks: ['Divergent Fist'],
         },
@@ -215,12 +215,12 @@ export const storyChapters = [
       },
     ],
     rewards: [
-      { type: 'character', label: 'Yuji Itadori — Playable Character' },
-      { type: 'character', label: 'Megumi Fushiguro — Playable Character' },
+      { type: 'character', label: 'Yuji Itadori — Playable Character', character_id: 2 },
+      { type: 'character', label: 'Megumi Fushiguro — Playable Character', character_id: 3 },
       { type: 'soft_currency', label: 'Cursed Energy x500', amount: 500 },
       { type: 'premium_currency', label: 'Premium Currency x100', amount: 100 },
-      { type: 'item', label: 'Finger Fragment x3 (Gacha Material)' },
-      { type: 'title', label: 'Title: "The Vessel"' },
+      { type: 'item', label: 'Finger Fragment x3 (Gacha Material)', item_id: 'finger_fragment', amount: 3 },
+      { type: 'title', label: 'Title: "The Vessel"', title_id: 'the_vessel' },
     ],
     preview: [
       'Gojo Satoru: "So you’re the kid who ate Sukuna’s finger and lived? Interesting."',

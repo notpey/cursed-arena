@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { supabase } from './supabaseClient'
 
-function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate }) {
+function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate, titles, onSetActiveTitle }) {
   const displayName = profile?.display_name || 'Unknown'
   const accountLevel = profile?.account_level || 1
   const accountXp = profile?.account_xp || 0
@@ -11,6 +11,7 @@ function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate }) {
   const wins = matchHistory.filter(match => match.result === 'win').length
   const losses = matchHistory.filter(match => match.result === 'lose').length
   const initials = displayName.slice(0, 2).toUpperCase()
+  const activeTitle = (titles || []).find(title => title.active)
   const fileInputRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -72,7 +73,9 @@ function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate }) {
             </div>
             <div>
               <h2>{displayName}</h2>
-              <p className="profile-subtitle">Active • Clanless</p>
+              <p className="profile-subtitle">
+                Active • {activeTitle ? `Title: ${activeTitle.title_id.replace(/_/g, ' ')}` : 'Clanless'}
+              </p>
               <div className="profile-avatar-actions">
                 <button
                   className="profile-avatar-btn"
@@ -160,6 +163,26 @@ function ProfilePage({ profile, matchHistory, onBack, onProfileUpdate }) {
               <strong>{matchHistory[0]?.result ? matchHistory[0].result.toUpperCase() : 'N/A'}</strong>
             </div>
           </div>
+        </div>
+
+        <div className="profile-card">
+          <h3>Titles</h3>
+          {(titles || []).length === 0 ? (
+            <p className="profile-empty">No titles unlocked yet.</p>
+          ) : (
+            <div className="profile-title-grid">
+              {(titles || []).map(title => (
+                <button
+                  key={title.title_id}
+                  className={`profile-title-pill ${title.active ? 'active' : ''}`}
+                  onClick={() => onSetActiveTitle?.(title.title_id)}
+                  type="button"
+                >
+                  {title.title_id.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
