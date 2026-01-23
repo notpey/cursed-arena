@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { characters } from './characters'
+import { characters as defaultCharacters } from './characters'
 import TeamSelect from './TeamSelect'
 import BattleScreen from './BattleScreen'
 import AuthGate from './AuthGate'
@@ -10,6 +10,7 @@ import ShopPage from './ShopPage'
 import GachaPage from './GachaPage'
 import InventoryPage from './InventoryPage'
 import StoryMode from './StoryMode'
+import AdminPanel from './AdminPanel'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
 
@@ -30,6 +31,7 @@ function App() {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [characterProgress, setCharacterProgress] = useState({})
+  const [characterCatalog, setCharacterCatalog] = useState(defaultCharacters)
   const [levelUpToast, setLevelUpToast] = useState(null)
   const [matchHistory, setMatchHistory] = useState([])
   const [view, setView] = useState('team')
@@ -109,7 +111,7 @@ function App() {
 
   const buildTeamSnapshot = (teamIds, useProgress = false) =>
     teamIds
-      .map(id => characters.find(character => character.id === id))
+      .map(id => characterCatalog.find(character => character.id === id))
       .filter(Boolean)
       .map(character =>
         useProgress ? scaledCharacter(character, progressByCharacterId[character.id]) : deepCopy(character)
@@ -123,6 +125,30 @@ function App() {
     [storyState.chapterId]
   )
   const storyLoadedRef = useRef(false)
+
+  const markStoryNodeCompleted = (nodeId) => {
+    if (!nodeId) return
+    setStoryState(prev => {
+      if (prev.completedNodes.includes(nodeId)) return prev
+      return {
+        ...prev,
+        completedNodes: [...prev.completedNodes, nodeId],
+      }
+    })
+  }
+
+  const advanceStoryNode = (nodeId) => {
+    if (!nodeId) return
+    setStoryState(prev => {
+      const nodes = storyChapter?.nodes || []
+      const index = nodes.findIndex(node => node.id === nodeId)
+      const nextActive = nodes[index + 1]?.id || nodeId
+      return {
+        ...prev,
+        activeNodeId: nextActive,
+      }
+    })
+  }
 
   const completeStoryNode = (nodeId) => {
     setStoryState(prev => {
@@ -141,7 +167,7 @@ function App() {
   const resolveStoryUnit = (unitId) => {
     if (!unitId) return null
     if (storyEnemies[unitId]) return deepCopy(storyEnemies[unitId])
-    const match = characters.find(character => character.id === unitId || character.name === unitId)
+    const match = characterCatalog.find(character => character.id === unitId || character.name === unitId)
     return match ? deepCopy(match) : null
   }
 
@@ -202,7 +228,7 @@ function App() {
 
   const clearStoryResult = () => {
     if (storyResult?.result === 'win' && storyResult.nodeId) {
-      completeStoryNode(storyResult.nodeId)
+      advanceStoryNode(storyResult.nodeId)
     }
     setStoryResult(null)
   }
@@ -335,6 +361,7 @@ function App() {
   useEffect(() => {
     if (!session) {
       setCharacterProgress({})
+      setCharacterCatalog(defaultCharacters)
       setMatchHistory([])
       setTeamPresets({})
       setMissions([])
@@ -366,6 +393,82 @@ function App() {
     }
 
     loadProgress()
+  }, [session])
+
+  useEffect(() => {
+    if (!session) return
+
+    const loadCharacters = async () => {
+      const { data: characterRows } = await supabase
+        .from('characters')
+        .select('id, name, rarity, max_hp, max_mana, attack, portrait_url, card_art_url')
+        .order('id')
+      const { data: skillRows } = await supabase
+        .from('character_skills')
+        .select('id, character_id, skill_key, skill_type, slot, name, description, payload, image_url')
+        .order('character_id')
+
+      if (!characterRows || characterRows.length === 0) {
+        setCharacterCatalog(defaultCharacters)
+        return
+      }
+
+      const byCharacter = new Map()
+      ;(skillRows || []).forEach(row => {
+        if (!byCharacter.has(row.character_id)) {
+          byCharacter.set(row.character_id, [])
+        }
+        byCharacter.get(row.character_id).push(row)
+      })
+
+      const buildSkill = (row) => {
+        const payload = row.payload || {}
+        return {
+          id: row.skill_key || `skill-${row.id}`,
+          name: row.name,
+          description: row.description,
+          ...payload,
+          currentCooldown: 0,
+        }
+      }
+
+      const nextCatalog = characterRows.map(row => {
+        const skills = byCharacter.get(row.id) || []
+        const abilities = skills
+          .filter(skill => skill.skill_type === 'ability')
+          .sort((a, b) => (a.slot || 0) - (b.slot || 0))
+          .map(buildSkill)
+        const ultimateRow = skills.find(skill => skill.skill_type === 'ultimate')
+        const passiveRow = skills.find(skill => skill.skill_type === 'passive')
+
+        return {
+          id: row.id,
+          name: row.name,
+          maxHp: row.max_hp,
+          hp: row.max_hp,
+          maxMana: row.max_mana,
+          mana: row.max_mana,
+          attack: row.attack,
+          rarity: row.rarity,
+          portraitUrl: row.portrait_url,
+          cardArtUrl: row.card_art_url,
+          passive: passiveRow
+            ? {
+                id: passiveRow.skill_key || `passive-${passiveRow.id}`,
+                name: passiveRow.name,
+                description: passiveRow.description,
+                ...(passiveRow.payload || {}),
+              }
+            : null,
+          abilities,
+          ultimate: ultimateRow ? buildSkill(ultimateRow) : null,
+        }
+      })
+
+      setCharacterCatalog(nextCatalog)
+    }
+
+    loadCharacters()
   }, [session])
 
   useEffect(() => {
@@ -597,6 +700,9 @@ function App() {
     setGameOver(result === 'win' ? 'win' : 'lose')
 
     if (storyBattleConfig) {
+      if (result === 'win') {
+        markStoryNodeCompleted(storyBattleConfig.nodeId)
+      }
       setStoryResult({ nodeId: storyBattleConfig.nodeId, result })
       setStoryState(prev => ({ ...prev, activeNodeId: storyBattleConfig.nodeId }))
       return
@@ -1267,7 +1373,7 @@ function App() {
     )
     setPlayerTeam(leveledTeam)
     
-    const availableEnemies = characters.filter(
+    const availableEnemies = characterCatalog.filter(
       c => !selectedPlayerTeam.some(p => p.id === c.id)
     )
     const shuffled = [...availableEnemies].sort(() => Math.random() - 0.5)
@@ -1436,7 +1542,7 @@ function App() {
 
   const applyTeamPreset = (characterIds) => {
     const nextTeam = characterIds
-      .map(id => characters.find(character => character.id === id))
+      .map(id => characterCatalog.find(character => character.id === id))
       .filter(Boolean)
     setSelectedPlayerTeam(nextTeam)
   }
@@ -1894,6 +2000,8 @@ function App() {
   }
 
   const navLocked = gamePhase === 'battle'
+  const isAdmin = profile?.role === 'admin'
+
   const navItems = [
     { label: 'Home', onClick: goHome, active: view === 'team' && gamePhase === 'select' },
     { label: 'Story', onClick: () => safeNavigate('story'), active: view === 'story', disabled: navLocked },
@@ -1901,6 +2009,7 @@ function App() {
     { label: 'Gacha', onClick: () => safeNavigate('gacha'), active: view === 'gacha', disabled: navLocked },
     { label: 'Inventory', onClick: () => safeNavigate('inventory'), active: view === 'inventory', disabled: navLocked },
     { label: 'Missions', onClick: () => safeNavigate('missions'), active: view === 'missions', disabled: navLocked },
+    ...(isAdmin ? [{ label: 'Admin', onClick: () => safeNavigate('admin'), active: view === 'admin', disabled: navLocked }] : []),
   ]
 
   const canOpenProfile = gamePhase !== 'battle'
@@ -1963,7 +2072,7 @@ function App() {
         />
       ) : view === 'inventory' ? (
         <InventoryPage
-          characters={characters}
+          characters={characterCatalog}
           inventory={inventory}
           characterProgress={characterProgress}
           items={userItems}
@@ -2002,9 +2111,15 @@ function App() {
           onClaimRewards={claimStoryRewards}
           rewardsClaimed={storyRewardsClaimed}
         />
+      ) : view === 'admin' && isAdmin ? (
+        <AdminPanel
+          profile={profile}
+          characters={characterCatalog}
+          onBack={() => setView('team')}
+        />
       ) : (
         <TeamSelect
-          characters={characters}
+          characters={characterCatalog}
           selectedTeam={selectedPlayerTeam}
           onSelect={setSelectedPlayerTeam}
           onStartBattle={startBattle}

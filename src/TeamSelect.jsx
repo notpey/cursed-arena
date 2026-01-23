@@ -76,7 +76,7 @@ function TeamSelect({
   }
 
   const Portrait = ({ character, size = 'normal' }) => {
-    const image = getCharacterImage(character.name)
+    const image = character.portraitUrl || getCharacterImage(character.name)
     
     return (
       <div className={`select-portrait ${size}`}>
