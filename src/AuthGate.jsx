@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import { validateEmail, validatePassword, validateDisplayName } from './validation'
 import './App.css'
 
 function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClick, compact = false }) {
@@ -59,44 +60,107 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
 
   const handleSignIn = async () => {
     setAuthError('')
+
+    // Validate email
+    const emailValidation = validateEmail(email)
+    if (!emailValidation.valid) {
+      setAuthError(emailValidation.error)
+      return
+    }
+
+    // Validate password (basic check for sign in)
+    if (!password || password.length === 0) {
+      setAuthError('Password is required')
+      return
+    }
+
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: emailValidation.value,
       password,
     })
-    if (error) setAuthError(error.message)
+
+    if (error) {
+      // Provide user-friendly error messages
+      if (error.message.includes('Invalid login credentials')) {
+        setAuthError('Invalid email or password. Please try again.')
+      } else if (error.message.includes('Email not confirmed')) {
+        setAuthError('Please confirm your email address before signing in.')
+      } else {
+        setAuthError(error.message)
+      }
+    }
   }
 
   const handleSignUp = async () => {
     setAuthError('')
+
+    // Validate email
+    const emailValidation = validateEmail(email)
+    if (!emailValidation.valid) {
+      setAuthError(emailValidation.error)
+      return
+    }
+
+    // Validate password with strength requirements
+    const passwordValidation = validatePassword(password)
+    if (!passwordValidation.valid) {
+      setAuthError(passwordValidation.error)
+      return
+    }
+
     const { error } = await supabase.auth.signUp({
-      email,
-      password,
+      email: emailValidation.value,
+      password: passwordValidation.value,
     })
-    if (error) setAuthError(error.message)
+
+    if (error) {
+      // Provide user-friendly error messages
+      if (error.message.includes('already registered')) {
+        setAuthError('This email is already registered. Please sign in instead.')
+      } else if (error.message.includes('invalid email')) {
+        setAuthError('Please enter a valid email address.')
+      } else {
+        setAuthError(error.message)
+      }
+    } else {
+      setAuthError('') // Clear any previous errors
+      // Optionally show success message
+    }
   }
 
   const handleSaveProfile = async () => {
     if (!session) return
-    if (!displayName.trim()) {
-      setAuthError('Display name is required.')
+
+    setAuthError('')
+
+    // Validate display name
+    const nameValidation = validateDisplayName(displayName)
+    if (!nameValidation.valid) {
+      setAuthError(nameValidation.error)
       return
     }
 
-    setAuthError('')
     const { error } = await supabase.from('profiles').upsert({
       id: session.user.id,
-      display_name: displayName.trim(),
+      display_name: nameValidation.value,
       updated_at: new Date().toISOString(),
     })
 
     if (error) {
-      setAuthError(error.message)
+      // Provide user-friendly error messages
+      if (error.message.includes('duplicate key')) {
+        setAuthError('This display name is already taken. Please choose another.')
+      } else if (error.message.includes('violates')) {
+        setAuthError('Display name contains invalid characters.')
+      } else {
+        setAuthError(`Failed to save profile: ${error.message}`)
+      }
       return
     }
 
     const nextProfile = {
       id: session.user.id,
-      display_name: displayName.trim(),
+      display_name: nameValidation.value,
       account_xp: 0,
       account_level: 1,
       rating: 1000,
@@ -155,7 +219,7 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="auth-input"
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters, include number & letter"
             />
           </label>
           {authError && <p className="auth-error">⚠️ {authError}</p>}
@@ -187,7 +251,7 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
               onChange={(e) => setDisplayName(e.target.value)}
               className="auth-input"
               placeholder="Your in-game name"
-              maxLength={20}
+              maxLength={32}
             />
           </label>
           {authError && <p className="auth-error">⚠️ {authError}</p>}
