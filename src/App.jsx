@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { characters } from './characters'
 import TeamSelect from './TeamSelect'
 import BattleScreen from './BattleScreen'
@@ -52,6 +52,7 @@ function App() {
   const [storyBattleConfig, setStoryBattleConfig] = useState(null)
   const [storyResult, setStoryResult] = useState(null)
   const [storyRewardsClaimed, setStoryRewardsClaimed] = useState(false)
+  const [storyLoaded, setStoryLoaded] = useState(false)
   const [pvpMatch, setPvpMatch] = useState(null)
   const [pvpStatus, setPvpStatus] = useState(null)
   const [pvpChannel, setPvpChannel] = useState(null)
@@ -119,6 +120,7 @@ function App() {
     () => storyChapters.find(chapter => chapter.id === storyState.chapterId) || storyChapters[0],
     [storyState.chapterId]
   )
+  const storyLoadedRef = useRef(false)
 
   const completeStoryNode = (nodeId) => {
     setStoryState(prev => {
@@ -209,6 +211,7 @@ function App() {
     const premiumReward = storyChapter.rewards.find(reward => reward.type === 'premium_currency')
     const softGain = softReward?.amount || 0
     const premiumGain = premiumReward?.amount || 0
+    const characterRewards = storyChapter.rewards.filter(reward => reward.type === 'character')
 
     if (session && (softGain > 0 || premiumGain > 0)) {
       const nextSoft = (profile?.soft_currency || 0) + softGain
@@ -228,6 +231,51 @@ function App() {
       }))
     }
 
+    if (session && characterRewards.length > 0) {
+      const unlockIds = characterRewards
+        .map(reward => reward.label?.split('—')[0]?.split('-')[0]?.trim() || '')
+        .map(label => characters.find(character =>
+          label &&
+          (label.toLowerCase().includes(character.name.toLowerCase()) ||
+            character.name.toLowerCase().includes(label.toLowerCase()))
+        ))
+        .filter(Boolean)
+        .map(character => character.id)
+
+      if (unlockIds.length > 0) {
+        const existing = new Set(Object.keys(progressByCharacterId).map(Number))
+        const missing = unlockIds.filter(id => !existing.has(id))
+        if (missing.length > 0) {
+          const payload = missing.map(id => ({
+            user_id: session.user.id,
+            character_id: id,
+            level: 1,
+            xp: 0,
+            limit_break: 0,
+            updated_at: new Date().toISOString(),
+          }))
+          const { data } = await supabase
+            .from('character_progress')
+            .upsert(payload, { onConflict: 'user_id,character_id' })
+            .select('character_id, level, xp, limit_break')
+
+          if (data) {
+            setCharacterProgress(prev => {
+              const next = { ...prev }
+              data.forEach(row => {
+                next[row.character_id] = {
+                  level: row.level,
+                  xp: row.xp,
+                  limit_break: row.limit_break,
+                }
+              })
+              return next
+            })
+          }
+        }
+      }
+    }
+
     setStoryRewardsClaimed(true)
   }
 
@@ -242,6 +290,8 @@ function App() {
       setBanners([])
       setBannerItems([])
       setInventory({})
+      setStoryLoaded(false)
+      storyLoadedRef.current = false
       return
     }
 
@@ -262,6 +312,52 @@ function App() {
 
     loadProgress()
   }, [session])
+
+  useEffect(() => {
+    if (!session) return
+
+    const loadStoryProgress = async () => {
+      setStoryLoaded(false)
+      const { data, error } = await supabase
+        .from('story_progress')
+        .select('chapter_id, active_node_id, completed_nodes, rewards_claimed')
+        .eq('user_id', session.user.id)
+        .eq('chapter_id', storyState.chapterId)
+        .maybeSingle()
+
+      if (!error && data) {
+        setStoryState(prev => ({
+          ...prev,
+          chapterId: data.chapter_id || prev.chapterId,
+          activeNodeId: data.active_node_id || prev.activeNodeId,
+          completedNodes: Array.isArray(data.completed_nodes) ? data.completed_nodes : prev.completedNodes,
+        }))
+        setStoryRewardsClaimed(Boolean(data.rewards_claimed))
+      } else {
+        setStoryRewardsClaimed(false)
+      }
+
+      setStoryLoaded(true)
+      storyLoadedRef.current = true
+    }
+
+    loadStoryProgress()
+  }, [session, storyState.chapterId])
+
+  useEffect(() => {
+    if (!session || !storyLoadedRef.current) return
+
+    const payload = {
+      user_id: session.user.id,
+      chapter_id: storyState.chapterId,
+      active_node_id: storyState.activeNodeId,
+      completed_nodes: storyState.completedNodes,
+      rewards_claimed: storyRewardsClaimed,
+      updated_at: new Date().toISOString(),
+    }
+
+    supabase.from('story_progress').upsert(payload, { onConflict: 'user_id,chapter_id' })
+  }, [session, storyState.chapterId, storyState.activeNodeId, storyState.completedNodes, storyRewardsClaimed])
 
   useEffect(() => {
     if (!session) return
