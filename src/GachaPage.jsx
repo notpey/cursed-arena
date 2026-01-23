@@ -1,7 +1,8 @@
 import React from 'react'
 
-function GachaPage({ banners, bannerItems, profile, onBack, onPull, result }) {
+function GachaPage({ banners, bannerItems, profile, items: userItems, onBack, onPull, result }) {
   const premium = profile?.premium_currency ?? 0
+  const fragments = userItems?.finger_fragment ?? 0
   const pullCost = 100
   const activeBanner = banners[0]
   const items = activeBanner
@@ -27,6 +28,13 @@ function GachaPage({ banners, bannerItems, profile, onBack, onPull, result }) {
             disabled={!activeBanner || premium < pullCost}
           >
             Pull ({pullCost})
+          </button>
+          <button
+            className="mode-btn ghost"
+            onClick={() => activeBanner && onPull?.(activeBanner.id, { useFragment: true })}
+            disabled={!activeBanner || fragments <= 0}
+          >
+            Pull (Fragment) · {fragments}
           </button>
           {result && (
             <div className="gacha-result">

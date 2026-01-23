@@ -41,6 +41,8 @@ function App() {
   const [banners, setBanners] = useState([])
   const [bannerItems, setBannerItems] = useState([])
   const [inventory, setInventory] = useState({})
+  const [userItems, setUserItems] = useState({})
+  const [userTitles, setUserTitles] = useState([])
   const [gachaResult, setGachaResult] = useState(null)
   const [combatEvents, setCombatEvents] = useState([])
   const [battleShake, setBattleShake] = useState(false)
@@ -212,6 +214,8 @@ function App() {
     const softGain = softReward?.amount || 0
     const premiumGain = premiumReward?.amount || 0
     const characterRewards = storyChapter.rewards.filter(reward => reward.type === 'character')
+    const itemRewards = storyChapter.rewards.filter(reward => reward.type === 'item')
+    const titleRewards = storyChapter.rewards.filter(reward => reward.type === 'title')
 
     if (session && (softGain > 0 || premiumGain > 0)) {
       const nextSoft = (profile?.soft_currency || 0) + softGain
@@ -233,14 +237,8 @@ function App() {
 
     if (session && characterRewards.length > 0) {
       const unlockIds = characterRewards
-        .map(reward => reward.label?.split('—')[0]?.split('-')[0]?.trim() || '')
-        .map(label => characters.find(character =>
-          label &&
-          (label.toLowerCase().includes(character.name.toLowerCase()) ||
-            character.name.toLowerCase().includes(label.toLowerCase()))
-        ))
+        .map(reward => reward.character_id)
         .filter(Boolean)
-        .map(character => character.id)
 
       if (unlockIds.length > 0) {
         const existing = new Set(Object.keys(progressByCharacterId).map(Number))
@@ -276,6 +274,61 @@ function App() {
       }
     }
 
+    if (session && itemRewards.length > 0) {
+      const itemUpdates = []
+      const itemState = { ...userItems }
+
+      itemRewards.forEach(reward => {
+        if (!reward.item_id || !reward.amount) return
+        const nextAmount = (itemState[reward.item_id] || 0) + reward.amount
+        itemState[reward.item_id] = nextAmount
+        itemUpdates.push({
+          user_id: session.user.id,
+          item_id: reward.item_id,
+          quantity: nextAmount,
+          updated_at: new Date().toISOString(),
+        })
+      })
+
+      if (itemUpdates.length > 0) {
+        await supabase
+          .from('user_items')
+          .upsert(itemUpdates, { onConflict: 'user_id,item_id' })
+        setUserItems(itemState)
+      }
+    }
+
+    if (session && titleRewards.length > 0) {
+      const titleUpdates = titleRewards
+        .map(reward => reward.title_id)
+        .filter(Boolean)
+        .map(titleId => ({
+          user_id: session.user.id,
+          title_id: titleId,
+          unlocked: true,
+          active: false,
+          updated_at: new Date().toISOString(),
+        }))
+
+      if (titleUpdates.length > 0) {
+        const { data } = await supabase
+          .from('user_titles')
+          .upsert(titleUpdates, { onConflict: 'user_id,title_id' })
+          .select()
+        if (data) {
+          setUserTitles(prev => {
+            const merged = [...prev]
+            data.forEach(row => {
+              if (!merged.some(item => item.title_id === row.title_id)) {
+                merged.push(row)
+              }
+            })
+            return merged
+          })
+        }
+      }
+    }
+
     setStoryRewardsClaimed(true)
   }
 
@@ -290,6 +343,8 @@ function App() {
       setBanners([])
       setBannerItems([])
       setInventory({})
+      setUserItems({})
+      setUserTitles([])
       setStoryLoaded(false)
       storyLoadedRef.current = false
       return
@@ -383,13 +438,24 @@ function App() {
     if (!session) return
 
     const loadMeta = async () => {
-      const [{ data: missionData }, { data: userMissionData }, { data: offerData }, { data: bannerData }, { data: bannerItemData }, { data: inventoryData }] = await Promise.all([
+      const [
+        { data: missionData },
+        { data: userMissionData },
+        { data: offerData },
+        { data: bannerData },
+        { data: bannerItemData },
+        { data: inventoryData },
+        { data: itemData },
+        { data: titleData },
+      ] = await Promise.all([
         supabase.from('missions').select('*').order('id'),
         supabase.from('user_missions').select('*').eq('user_id', session.user.id),
         supabase.from('shop_offers').select('*').eq('active', true).order('id'),
         supabase.from('banners').select('*').order('id'),
         supabase.from('banner_items').select('*').order('banner_id'),
         supabase.from('user_inventory').select('*').eq('user_id', session.user.id),
+        supabase.from('user_items').select('*').eq('user_id', session.user.id),
+        supabase.from('user_titles').select('*').eq('user_id', session.user.id),
       ])
 
       setMissions(missionData || [])
@@ -402,6 +468,12 @@ function App() {
         nextInventory[row.character_id] = row.shard_amount
       })
       setInventory(nextInventory)
+      const nextItems = {}
+      ;(itemData || []).forEach(row => {
+        nextItems[row.item_id] = row.quantity
+      })
+      setUserItems(nextItems)
+      setUserTitles(titleData || [])
     }
 
     loadMeta()
@@ -1645,11 +1717,17 @@ function App() {
     }
   }
 
-  const pullGacha = async (bannerId) => {
+  const pullGacha = async (bannerId, options = {}) => {
     if (!session) return
     const premium = profile?.premium_currency ?? 0
+    const fragmentCount = userItems.finger_fragment || 0
     const pullCost = 100
-    if (premium < pullCost) return
+    const useFragment = options.useFragment === true
+    if (useFragment) {
+      if (fragmentCount <= 0) return
+    } else if (premium < pullCost) {
+      return
+    }
 
     const items = bannerItems.filter(item => item.banner_id === bannerId)
     if (items.length === 0) return
@@ -1665,7 +1743,7 @@ function App() {
       }
     }
 
-    const nextPremium = premium - pullCost
+    const nextPremium = useFragment ? premium : premium - pullCost
     let nextSoft = profile?.soft_currency ?? 0
     const inventoryUpdates = []
 
@@ -1712,6 +1790,19 @@ function App() {
       })
       .eq('id', session.user.id)
 
+    if (useFragment) {
+      const nextFragments = Math.max(0, fragmentCount - 1)
+      await supabase
+        .from('user_items')
+        .upsert({
+          user_id: session.user.id,
+          item_id: 'finger_fragment',
+          quantity: nextFragments,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,item_id' })
+      setUserItems(prev => ({ ...prev, finger_fragment: nextFragments }))
+    }
+
     if (inventoryUpdates.length > 0) {
       await supabase
         .from('user_inventory')
@@ -1727,6 +1818,24 @@ function App() {
   }
 
   const limitBreakCost = (nextLevel) => nextLevel * 25
+
+  const setActiveTitle = async (titleId) => {
+    if (!session || !titleId) return
+    const updates = userTitles.map(title => ({
+      user_id: session.user.id,
+      title_id: title.title_id,
+      unlocked: title.unlocked,
+      active: title.title_id === titleId,
+      updated_at: new Date().toISOString(),
+    }))
+    if (updates.length === 0) return
+
+    const { data } = await supabase
+      .from('user_titles')
+      .upsert(updates, { onConflict: 'user_id,title_id' })
+      .select()
+    if (data) setUserTitles(data)
+  }
 
   const applyLimitBreak = async (characterId) => {
     if (!session) return
@@ -1842,6 +1951,8 @@ function App() {
           matchHistory={matchHistory}
           onBack={() => setView('team')}
           onProfileUpdate={setProfile}
+          titles={userTitles}
+          onSetActiveTitle={setActiveTitle}
         />
       ) : view === 'missions' ? (
         <MissionsPage
@@ -1855,6 +1966,8 @@ function App() {
           characters={characters}
           inventory={inventory}
           characterProgress={characterProgress}
+          items={userItems}
+          titles={userTitles}
           onBack={() => setView('team')}
           onLimitBreak={applyLimitBreak}
           limitBreakCost={limitBreakCost}
@@ -1871,6 +1984,7 @@ function App() {
           banners={banners}
           bannerItems={bannerItems}
           profile={profile}
+          items={userItems}
           onBack={() => setView('team')}
           onPull={pullGacha}
           result={gachaResult}

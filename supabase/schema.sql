@@ -469,3 +469,60 @@ create policy "Story progress updatable by owner"
 on story_progress for update
 to authenticated
 using (auth.uid() = user_id);
+
+create table if not exists user_items (
+  user_id uuid references auth.users on delete cascade,
+  item_id text not null,
+  quantity integer not null default 0,
+  updated_at timestamp with time zone default now(),
+  primary key (user_id, item_id)
+);
+
+alter table user_items enable row level security;
+
+drop policy if exists "Items readable by owner" on user_items;
+create policy "Items readable by owner"
+on user_items for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Items insertable by owner" on user_items;
+create policy "Items insertable by owner"
+on user_items for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Items updatable by owner" on user_items;
+create policy "Items updatable by owner"
+on user_items for update
+to authenticated
+using (auth.uid() = user_id);
+
+create table if not exists user_titles (
+  user_id uuid references auth.users on delete cascade,
+  title_id text not null,
+  unlocked boolean not null default true,
+  active boolean not null default false,
+  updated_at timestamp with time zone default now(),
+  primary key (user_id, title_id)
+);
+
+alter table user_titles enable row level security;
+
+drop policy if exists "Titles readable by owner" on user_titles;
+create policy "Titles readable by owner"
+on user_titles for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "Titles insertable by owner" on user_titles;
+create policy "Titles insertable by owner"
+on user_titles for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "Titles updatable by owner" on user_titles;
+create policy "Titles updatable by owner"
+on user_titles for update
+to authenticated
+using (auth.uid() = user_id);
