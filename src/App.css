@@ -5298,6 +5298,23 @@ button:disabled {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+.story-node-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #06140f;
+  background: linear-gradient(135deg, #2ce8c7, #34e187);
+  box-shadow: 0 8px 18px rgba(52, 225, 135, 0.25);
+}
+
 .story-node::after {
   content: '';
   position: absolute;
@@ -5322,6 +5339,7 @@ button:disabled {
 .story-node.completed {
   border-color: rgba(98, 193, 137, 0.5);
   background: rgba(98, 193, 137, 0.12);
+  box-shadow: 0 0 0 1px rgba(98, 193, 137, 0.2), 0 0 16px rgba(98, 193, 137, 0.12);
 }
 
 .story-node.locked {
@@ -5943,6 +5961,56 @@ button:disabled {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.inventory-tabs {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.inventory-tab {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 600;
+  text-transform: capitalize;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.inventory-tab.active {
+  background: linear-gradient(135deg, rgba(241, 195, 106, 0.3), rgba(241, 195, 106, 0.05));
+  border-color: rgba(241, 195, 106, 0.6);
+  color: #f7e7bf;
+  transform: translateY(-1px);
+}
+
+.inventory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 18px;
+  align-items: center;
+}
+
+.inventory-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(12, 15, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+}
+
+.inventory-select {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(12, 15, 22, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+}
+
 .inventory-card {
   display: flex;
   gap: 16px;
@@ -5953,6 +6021,15 @@ button:disabled {
   border-radius: 14px;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.inventory-card.locked {
+  opacity: 0.6;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.inventory-card.locked .mission-claim {
+  opacity: 0.5;
 }
 
 .inventory-card:hover {
@@ -6045,4 +6122,206 @@ button:disabled {
 .inventory-empty {
   color: var(--text-dim);
   font-size: 0.85rem;
+}
+
+/* ==================== ADMIN ==================== */
+
+.admin-panel {
+  background: rgba(12, 15, 22, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 18px;
+  color: #dfe6f3;
+}
+
+.admin-empty {
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0 18px;
+  flex-wrap: wrap;
+}
+
+.admin-tab {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 600;
+  text-transform: capitalize;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.admin-tab.active {
+  background: linear-gradient(120deg, rgba(241, 195, 106, 0.35), rgba(241, 195, 106, 0.05));
+  border-color: rgba(241, 195, 106, 0.6);
+  color: #f7e7bf;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(320px, 1fr);
+  gap: 18px;
+}
+
+.admin-list,
+.admin-detail {
+  background: rgba(12, 15, 22, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.admin-list h2,
+.admin-detail h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #f2d28a;
+}
+
+.admin-subsection {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-subsection h3 {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  color: #e7f0ff;
+}
+
+.admin-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(12, 15, 22, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+  margin-bottom: 12px;
+}
+
+.admin-scroll {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-list-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #dfe6f3;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-list-item.active {
+  border-color: rgba(241, 195, 106, 0.6);
+  box-shadow: 0 0 12px rgba(241, 195, 106, 0.2);
+}
+
+.admin-form {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.admin-form input,
+.admin-form select,
+.admin-form textarea {
+  background: rgba(12, 15, 22, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e6edf7;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.admin-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.admin-form .admin-code {
+  font-family: "Courier New", Courier, monospace;
+  min-height: 120px;
+  white-space: pre;
+}
+
+.admin-error {
+  color: #ffb6b6;
+  font-size: 0.85rem;
+}
+
+.admin-form.compact {
+  margin-top: 16px;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-btn {
+  background: rgba(241, 195, 106, 0.2);
+  border: 1px solid rgba(241, 195, 106, 0.5);
+  color: #f7e7bf;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.admin-btn.danger {
+  background: rgba(255, 107, 107, 0.2);
+  border-color: rgba(255, 107, 107, 0.5);
+  color: #ffd5d5;
+}
+
+.admin-character-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.admin-character {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+}
+
+.admin-character.unlocked {
+  border-color: rgba(98, 193, 137, 0.6);
+}
+
+.admin-toggle {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
 }

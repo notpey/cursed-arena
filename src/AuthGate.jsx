@@ -41,7 +41,7 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
       if (!session) return
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, display_name, account_xp, account_level, rating, avatar_url, soft_currency, premium_currency')
+        .select('id, display_name, account_xp, account_level, rating, avatar_url, soft_currency, premium_currency, role')
         .eq('id', session.user.id)
         .maybeSingle()
 
@@ -103,6 +103,7 @@ function AuthGate({ children, onSession, onProfile, navItems = [], onProfileClic
       avatar_url: null,
       soft_currency: 0,
       premium_currency: 0,
+      role: 'player',
     }
     setProfile(nextProfile)
     if (onProfile) onProfile(nextProfile)

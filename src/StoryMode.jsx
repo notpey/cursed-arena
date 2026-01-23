@@ -68,6 +68,9 @@ function StoryMode({
                 disabled={nodeStatus[node.id] === 'locked'}
                 onClick={() => onSelectNode(node.id)}
               >
+                {nodeStatus[node.id] === 'completed' && (
+                  <div className="story-node-badge">✓</div>
+                )}
                 <div className="story-node-id">{node.id}</div>
                 <div className="story-node-title">{node.title}</div>
                 <div className={`story-node-type ${node.type}`}>
