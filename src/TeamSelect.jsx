@@ -104,14 +104,11 @@ function TeamSelect({
               <>
                 <div className="details-header-row">
                   <div className="details-header-left">
-                    <div className="details-portrait">
+                    <div className={`details-portrait rarity-${focusedCharacter.rarity.toLowerCase()}`}>
                       <Portrait character={focusedCharacter} />
                     </div>
                     <div className="details-meta">
                       <h2>{focusedCharacter.name}</h2>
-                      <div className="details-grade" style={{ color: getRarityColor(focusedCharacter.rarity) }}>
-                        {focusedCharacter.rarity} Grade
-                      </div>
                       <div className="details-level">
                         Lv {focusedProgress.level}
                       </div>
@@ -182,7 +179,7 @@ function TeamSelect({
                 return (
                   <div
                     key={character.id}
-                    className={`roster-character-card ${isSelected(character.id) ? 'is-selected' : ''} ${focusedId === character.id ? 'is-focused' : ''}`}
+                    className={`roster-character-card rarity-${character.rarity.toLowerCase()} ${isSelected(character.id) ? 'is-selected' : ''} ${focusedId === character.id ? 'is-focused' : ''}`}
                     onClick={() => setFocusedId(character.id)}
                     onDoubleClick={() => handleSelect(character)}
                     draggable
@@ -200,9 +197,6 @@ function TeamSelect({
 
                     <div className="card-info">
                       <div className="card-name">{character.name}</div>
-                      <div className="card-rarity" style={{ color: getRarityColor(character.rarity) }}>
-                        {character.rarity}
-                      </div>
                       <div className="card-level">Lv {progress.level}</div>
                     </div>
                   </div>
