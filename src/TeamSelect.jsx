@@ -8,6 +8,7 @@ function TeamSelect({
   onStartBattle,
   onStartPvpQuick,
   onStartPvpRanked,
+  onCancelPvpQueue,
   pvpStatus,
   characterProgress,
   teamPresets,
@@ -279,35 +280,85 @@ function TeamSelect({
           </section>
 
           <section className="match-controls">
-            <button
-              className="match-primary-btn"
-              disabled={!canStart || pvpStatus === 'searching'}
-              onClick={onStartPvpQuick || onStartBattle}
-            >
-              {pvpStatus === 'searching' ? 'Searching...' : 'Quick PvP'}
-            </button>
-            <div className="match-secondary-buttons">
-              <button
-                className="match-secondary-btn"
-                disabled={!canStart || pvpStatus === 'searching'}
-                onClick={onStartPvpRanked}
-              >
-                Ranked PvP
-              </button>
-              <button
-                className="match-secondary-btn"
-                disabled={!canStart}
-                onClick={onStartBattle}
-              >
-                Vs AI
-              </button>
-              <button className="match-secondary-btn" onClick={() => setShowPresets(prev => !prev)}>
-                {showPresets ? 'Hide Teams' : 'Saved Teams'}
-              </button>
-              <button className="match-secondary-btn" disabled title="Coming soon">
-                Random
-              </button>
-            </div>
+            {pvpStatus ? (
+              <div className="pvp-status-container">
+                <div className={`pvp-status pvp-status-${pvpStatus}`}>
+                  {pvpStatus === 'searching' && (
+                    <>
+                      <div className="status-spinner"></div>
+                      <div className="status-text">
+                        <div className="status-title">Searching for opponent...</div>
+                        <div className="status-subtitle">Finding a worthy adversary</div>
+                      </div>
+                    </>
+                  )}
+                  {pvpStatus === 'match_found' && (
+                    <>
+                      <div className="status-icon">⚔️</div>
+                      <div className="status-text">
+                        <div className="status-title">Match Found!</div>
+                        <div className="status-subtitle">Preparing for battle...</div>
+                      </div>
+                    </>
+                  )}
+                  {pvpStatus === 'timeout' && (
+                    <>
+                      <div className="status-icon">⏱️</div>
+                      <div className="status-text">
+                        <div className="status-title">Search Timed Out</div>
+                        <div className="status-subtitle">No opponents found</div>
+                      </div>
+                    </>
+                  )}
+                  {pvpStatus === 'error' && (
+                    <>
+                      <div className="status-icon">⚠️</div>
+                      <div className="status-text">
+                        <div className="status-title">Connection Error</div>
+                        <div className="status-subtitle">Please try again</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {(pvpStatus === 'searching' || pvpStatus === 'match_found') && (
+                  <button className="cancel-queue-btn" onClick={onCancelPvpQueue}>
+                    Cancel Search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <button
+                  className="match-primary-btn"
+                  disabled={!canStart}
+                  onClick={onStartPvpQuick || onStartBattle}
+                >
+                  Quick PvP
+                </button>
+                <div className="match-secondary-buttons">
+                  <button
+                    className="match-secondary-btn"
+                    disabled={!canStart}
+                    onClick={onStartPvpRanked}
+                  >
+                    Ranked PvP
+                  </button>
+                  <button
+                    className="match-secondary-btn"
+                    disabled={!canStart}
+                    onClick={onStartBattle}
+                  >
+                    Vs AI
+                  </button>
+                  <button className="match-secondary-btn" onClick={() => setShowPresets(prev => !prev)}>
+                    {showPresets ? 'Hide Teams' : 'Saved Teams'}
+                  </button>
+                  <button className="match-secondary-btn" disabled title="Coming soon">
+                    Random
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         </div>
       </div>
