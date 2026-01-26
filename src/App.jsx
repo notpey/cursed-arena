@@ -1752,90 +1752,260 @@ function App() {
 
     const teamIds = selectedPlayerTeam.map(character => character.id)
     const teamState = buildTeamSnapshot(teamIds, true)
+    const myRating = profile?.rating || 1000
 
+    // Clean up old queue entries first
+    await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+
+    // Find ELO-appropriate opponent (±200 rating for ranked, anyone for quick)
+    const ratingRange = mode === 'ranked' ? 200 : 999999
     const { data: opponentRows } = await supabase
       .from('pvp_queue')
       .select('*')
       .eq('mode', mode)
       .neq('user_id', session.user.id)
+      .gte('rating', myRating - ratingRange)
+      .lte('rating', myRating + ratingRange)
       .order('created_at', { ascending: true })
       .limit(1)
 
     const opponent = opponentRows?.[0]
 
     if (opponent) {
-      await supabase.from('pvp_queue').delete().eq('id', opponent.id)
-      await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
-      const opponentTeam = Array.isArray(opponent.team_state) && opponent.team_state.length
-        ? opponent.team_state
-        : buildTeamSnapshot(opponent.team_ids || [], false)
+      // IMMEDIATE MATCH FOUND - Create match with 'waiting' status
+      try {
+        // Delete both queue entries atomically
+        await Promise.all([
+          supabase.from('pvp_queue').delete().eq('id', opponent.id),
+          supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+        ])
 
-      const payload = {
-        mode,
-        player1_id: opponent.user_id,
-        player2_id: session.user.id,
-        player1_team: opponent.team_ids || [],
-        player2_team: teamIds,
-        state: {
-          player1Team: opponentTeam,
-          player2Team: teamState,
+        const opponentTeam = Array.isArray(opponent.team_state) && opponent.team_state.length
+          ? opponent.team_state
+          : buildTeamSnapshot(opponent.team_ids || [], false)
+
+        const payload = {
+          mode,
+          player1_id: opponent.user_id,
+          player2_id: session.user.id,
+          player1_team: opponent.team_ids || [],
+          player2_team: teamIds,
+          player1_rating: opponent.rating || 1000,
+          player2_rating: myRating,
+          state: {
+            player1Team: opponentTeam,
+            player2Team: teamState,
+            turn: 1,
+            log: ["PvP Match Start! Queue actions, then End Turn."],
+          },
           turn: 1,
-          log: ["PvP Match Start! Queue actions, then End Turn."],
-        },
-        turn: 1,
-        turn_owner: opponent.user_id,
-        status: 'active',
-        updated_at: new Date().toISOString(),
-      }
+          turn_owner: opponent.user_id,
+          status: 'waiting', // Player 1 needs to confirm
+          player1_ready: false,
+          player2_ready: true, // Player 2 (us) is ready
+          updated_at: new Date().toISOString(),
+        }
 
-      const { data: matchData } = await supabase
-        .from('pvp_matches')
-        .insert(payload)
-        .select()
-        .single()
+        const { data: matchData, error: insertError } = await supabase
+          .from('pvp_matches')
+          .insert(payload)
+          .select()
+          .single()
 
-      if (matchData) {
-        setPvpMatch(matchData)
-        setPvpStatus(null)
-        syncBattleFromMatch(matchData)
-        subscribeToMatch(matchData.id)
+        if (insertError) throw insertError
+
+        if (matchData) {
+          setPvpMatch(matchData)
+          setPvpStatus('match_found')
+
+          // Start polling for Player 1 confirmation
+          pollForMatchReady(matchData.id)
+        }
+      } catch (error) {
+        console.error('Failed to create match:', error)
+        setPvpStatus('error')
+        setTimeout(() => setPvpStatus(null), 3000)
       }
       return
     }
 
-    await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
-    await supabase.from('pvp_queue').insert({
-      user_id: session.user.id,
-      mode,
-      team_ids: teamIds,
-      team_state: teamState,
-    })
+    // NO OPPONENT - Join queue and wait
+    try {
+      await supabase.from('pvp_queue').insert({
+        user_id: session.user.id,
+        mode,
+        team_ids: teamIds,
+        team_state: teamState,
+        rating: myRating,
+      })
 
+      setPvpStatus('searching')
+
+      // Set up Realtime subscription for match creation
+      if (pvpChannel) {
+        pvpChannel.unsubscribe()
+        setPvpChannel(null)
+      }
+
+      const lobbyChannel = supabase
+        .channel(`pvp-lobby-${session.user.id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pvp_matches' }, async (payload) => {
+          const match = payload.new
+          if (match.player1_id === session.user.id || match.player2_id === session.user.id) {
+            setPvpMatch(match)
+            setPvpStatus('match_found')
+
+            // We are Player 1, confirm we're ready
+            const isPlayer1 = match.player1_id === session.user.id
+            if (isPlayer1) {
+              await supabase
+                .from('pvp_matches')
+                .update({ player1_ready: true, updated_at: new Date().toISOString() })
+                .eq('id', match.id)
+            }
+
+            // Clean up queue and start polling for both players ready
+            await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+            lobbyChannel.unsubscribe()
+            pollForMatchReady(match.id)
+          }
+        })
+        .subscribe()
+
+      setPvpChannel(lobbyChannel)
+
+      // Start polling as fallback (checks every 2 seconds)
+      pollForMatch(mode)
+    } catch (error) {
+      console.error('Failed to join queue:', error)
+      setPvpStatus('error')
+      setTimeout(() => setPvpStatus(null), 3000)
+    }
+  }
+
+  // Polling fallback to find matches (runs every 2s for 30s)
+  const pollForMatch = async (mode, attempts = 0) => {
+    if (attempts >= 15 || !session || pvpStatus !== 'searching') return
+
+    try {
+      const { data: matches } = await supabase
+        .from('pvp_matches')
+        .select('*')
+        .or(`player1_id.eq.${session.user.id},player2_id.eq.${session.user.id}`)
+        .eq('status', 'waiting')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (matches && matches.length > 0) {
+        const match = matches[0]
+        setPvpMatch(match)
+        setPvpStatus('match_found')
+
+        // Confirm we're ready
+        const isPlayer1 = match.player1_id === session.user.id
+        if (isPlayer1 && !match.player1_ready) {
+          await supabase
+            .from('pvp_matches')
+            .update({ player1_ready: true, updated_at: new Date().toISOString() })
+            .eq('id', match.id)
+        }
+
+        // Clean up and start waiting for both ready
+        await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+        if (pvpChannel) {
+          pvpChannel.unsubscribe()
+          setPvpChannel(null)
+        }
+        pollForMatchReady(match.id)
+        return
+      }
+    } catch (error) {
+      console.error('Poll error:', error)
+    }
+
+    // Continue polling
+    setTimeout(() => pollForMatch(mode, attempts + 1), 2000)
+  }
+
+  // Poll for both players to be ready (checks every 1s for 30s)
+  const pollForMatchReady = async (matchId, attempts = 0) => {
+    if (attempts >= 30 || !session) {
+      setPvpStatus('timeout')
+      setTimeout(() => setPvpStatus(null), 3000)
+      return
+    }
+
+    try {
+      const { data: match } = await supabase
+        .from('pvp_matches')
+        .select('*')
+        .eq('id', matchId)
+        .single()
+
+      if (!match) {
+        setPvpStatus('error')
+        setTimeout(() => setPvpStatus(null), 3000)
+        return
+      }
+
+      // Check if both players are ready
+      if (match.player1_ready && match.player2_ready && match.status === 'waiting') {
+        // Transition to active state
+        const isPlayer1 = match.player1_id === session.user.id
+
+        // Only Player 1 updates to active (prevents race condition)
+        if (isPlayer1) {
+          await supabase
+            .from('pvp_matches')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', matchId)
+            .eq('status', 'waiting') // Atomic check
+        }
+
+        // Wait a moment for update to propagate
+        setTimeout(async () => {
+          const { data: activeMatch } = await supabase
+            .from('pvp_matches')
+            .select('*')
+            .eq('id', matchId)
+            .single()
+
+          if (activeMatch && activeMatch.status === 'active') {
+            setPvpMatch(activeMatch)
+            setPvpStatus(null)
+            syncBattleFromMatch(activeMatch)
+            subscribeToMatch(activeMatch.id)
+          }
+        }, 500)
+        return
+      }
+    } catch (error) {
+      console.error('Ready poll error:', error)
+    }
+
+    // Continue polling
+    setTimeout(() => pollForMatchReady(matchId, attempts + 1), 1000)
+  }
+
+  const startPvpQuick = () => startPvpQueue('quick')
+  const startPvpRanked = () => startPvpQueue('ranked')
+
+  const cancelPvpQueue = async () => {
+    if (!session) return
+
+    // Clean up queue entry
+    await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
+
+    // Unsubscribe from lobby channel
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
     }
 
-    const lobbyChannel = supabase
-      .channel(`pvp-lobby-${session.user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pvp_matches' }, (payload) => {
-        const match = payload.new
-        if (match.player1_id === session.user.id || match.player2_id === session.user.id) {
-          setPvpMatch(match)
-          setPvpStatus(null)
-          syncBattleFromMatch(match)
-          subscribeToMatch(match.id)
-          supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
-          lobbyChannel.unsubscribe()
-        }
-      })
-      .subscribe()
-
-    setPvpChannel(lobbyChannel)
+    // Reset status
+    setPvpStatus(null)
+    setPvpMatch(null)
   }
-
-  const startPvpQuick = () => startPvpQueue('quick')
-  const startPvpRanked = () => startPvpQueue('ranked')
 
   const saveTeamPreset = async (slot, name, characterIds) => {
     if (!session) return
@@ -2526,6 +2696,7 @@ function App() {
           onStartBattle={startBattle}
           onStartPvpQuick={startPvpQuick}
           onStartPvpRanked={startPvpRanked}
+          onCancelPvpQueue={cancelPvpQueue}
           pvpStatus={pvpStatus}
           characterProgress={characterProgress}
           teamPresets={teamPresets}

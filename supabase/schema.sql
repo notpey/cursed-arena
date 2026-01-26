@@ -675,8 +675,12 @@ create table if not exists pvp_queue (
   mode text not null,
   team_ids integer[] not null default '{}',
   team_state jsonb not null default '{}'::jsonb,
+  rating integer not null default 1000,
   created_at timestamp with time zone default now()
 );
+
+-- Add rating column for ELO-based matchmaking
+alter table pvp_queue add column if not exists rating integer not null default 1000;
 
 alter table pvp_queue enable row level security;
 
@@ -708,11 +712,21 @@ create table if not exists pvp_matches (
   state jsonb not null default '{}'::jsonb,
   turn integer not null default 1,
   turn_owner uuid,
-  status text not null default 'active',
+  status text not null default 'waiting',
   winner_id uuid,
+  player1_ready boolean not null default false,
+  player2_ready boolean not null default false,
+  player1_rating integer not null default 1000,
+  player2_rating integer not null default 1000,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now()
 );
+
+-- Add new columns for match confirmation and ELO tracking
+alter table pvp_matches add column if not exists player1_ready boolean not null default false;
+alter table pvp_matches add column if not exists player2_ready boolean not null default false;
+alter table pvp_matches add column if not exists player1_rating integer not null default 1000;
+alter table pvp_matches add column if not exists player2_rating integer not null default 1000;
 
 alter table pvp_matches enable row level security;
 
