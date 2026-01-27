@@ -11,6 +11,8 @@ import GachaPage from './GachaPage'
 import InventoryPage from './InventoryPage'
 import StoryMode from './StoryMode'
 import AdminPanel from './AdminPanel'
+import DailyRewards from './DailyRewards'
+import Achievements from './Achievements'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
 
@@ -60,6 +62,9 @@ function App() {
   const [pvpMatch, setPvpMatch] = useState(null)
   const [pvpStatus, setPvpStatus] = useState(null)
   const [pvpChannel, setPvpChannel] = useState(null)
+  const [dailyReward, setDailyReward] = useState(null)
+  const [achievements, setAchievements] = useState([])
+  const [achievementProgress, setAchievementProgress] = useState([])
 
   const xpForLevel = (level) => 100 + level * 25
 
@@ -660,6 +665,50 @@ function App() {
     }
 
     loadMatchHistory()
+  }, [session])
+
+  // Load daily rewards
+  useEffect(() => {
+    if (!session) return
+
+    const loadDailyReward = async () => {
+      const { data } = await supabase
+        .from('daily_rewards')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .single()
+
+      if (data) {
+        setDailyReward(data)
+      } else {
+        // Create initial record
+        const { data: newRecord } = await supabase
+          .from('daily_rewards')
+          .insert({ user_id: session.user.id })
+          .select()
+          .single()
+        setDailyReward(newRecord)
+      }
+    }
+
+    loadDailyReward()
+  }, [session])
+
+  // Load achievements
+  useEffect(() => {
+    if (!session) return
+
+    const loadAchievements = async () => {
+      const [achievementsRes, progressRes] = await Promise.all([
+        supabase.from('achievements').select('*').order('category'),
+        supabase.from('achievement_progress').select('*').eq('user_id', session.user.id)
+      ])
+
+      setAchievements(achievementsRes.data || [])
+      setAchievementProgress(progressRes.data || [])
+    }
+
+    loadAchievements()
   }, [session])
 
   const getEffectsForStat = (character, stat) => {
@@ -2134,6 +2183,32 @@ function App() {
     }
 
     await trackMissionProgress(result, characterLevelUps.length)
+
+    // Track achievements
+    if (result === 'win') {
+      // Count total wins (need to query match_history for accurate count)
+      const { count } = await supabase
+        .from('match_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('result', 'win')
+
+      if (count !== null) {
+        trackAchievementProgress('battles_won', count)
+      }
+    }
+
+    // Track account level achievement
+    trackAchievementProgress('account_level', nextAccount.level)
+
+    // Track character max level if any reached max
+    teamSnapshot.forEach(character => {
+      const progress = updatedProgress[character.id]
+      if (progress && progress.level >= 50) { // Assuming max level is 50
+        trackAchievementProgress('max_level_characters', 1)
+      }
+    })
+
     setMatchSummary({
       result,
       accountGain,
@@ -2243,6 +2318,173 @@ function App() {
     setUserMissions(prev =>
       prev.map(item => item.mission_id === missionId ? { ...item, claimed: true } : item)
     )
+  }
+
+  const claimDailyReward = async () => {
+    if (!session || !dailyReward) return
+
+    const today = new Date().toISOString().split('T')[0]
+    const lastClaim = dailyReward.last_claim_date
+
+    // Check if already claimed today
+    if (lastClaim === today) return
+
+    // Calculate new streak
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+
+    const isConsecutive = lastClaim === yesterdayStr
+    const newStreak = isConsecutive ? dailyReward.current_streak + 1 : 1
+    const newLongest = Math.max(newStreak, dailyReward.longest_streak)
+
+    // Calculate rewards
+    const dayInCycle = ((newStreak - 1) % 7) + 1
+    const rewardSchedule = {
+      1: { soft: 50, premium: 0 },
+      2: { soft: 75, premium: 0 },
+      3: { soft: 100, premium: 5 },
+      4: { soft: 125, premium: 0 },
+      5: { soft: 150, premium: 10 },
+      6: { soft: 200, premium: 0 },
+      7: { soft: 300, premium: 25 },
+    }
+    const reward = rewardSchedule[dayInCycle]
+
+    // Update daily reward record
+    await supabase
+      .from('daily_rewards')
+      .update({
+        current_streak: newStreak,
+        longest_streak: newLongest,
+        last_claim_date: today,
+        total_logins: dailyReward.total_logins + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', session.user.id)
+
+    // Award currency
+    const nextSoft = (profile?.soft_currency || 0) + reward.soft
+    const nextPremium = (profile?.premium_currency || 0) + reward.premium
+
+    await supabase
+      .from('profiles')
+      .update({
+        soft_currency: nextSoft,
+        premium_currency: nextPremium,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', session.user.id)
+
+    // Update local state
+    setDailyReward(prev => ({
+      ...prev,
+      current_streak: newStreak,
+      longest_streak: newLongest,
+      last_claim_date: today,
+      total_logins: prev.total_logins + 1,
+    }))
+
+    setProfile(prev => ({
+      ...prev,
+      soft_currency: nextSoft,
+      premium_currency: nextPremium,
+    }))
+
+    // Track achievement progress
+    trackAchievementProgress('login_streak', newStreak)
+    trackAchievementProgress('total_logins', dailyReward.total_logins + 1)
+  }
+
+  const trackAchievementProgress = async (requirementType, currentValue) => {
+    if (!session) return
+
+    // Find achievements that match this requirement type
+    const relevantAchievements = achievements.filter(a =>
+      a.requirement_type === requirementType &&
+      currentValue >= a.requirement_target
+    )
+
+    for (const achievement of relevantAchievements) {
+      const existing = achievementProgress.find(p => p.achievement_id === achievement.id)
+
+      if (!existing || !existing.is_completed) {
+        await supabase
+          .from('achievement_progress')
+          .upsert({
+            user_id: session.user.id,
+            achievement_id: achievement.id,
+            progress: currentValue,
+            is_completed: currentValue >= achievement.requirement_target,
+            completed_at: currentValue >= achievement.requirement_target ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          })
+
+        // Refresh progress
+        const { data } = await supabase
+          .from('achievement_progress')
+          .select('*')
+          .eq('user_id', session.user.id)
+        setAchievementProgress(data || [])
+      }
+    }
+  }
+
+  const claimAchievementReward = async (achievementId) => {
+    if (!session) return
+
+    const achievement = achievements.find(a => a.id === achievementId)
+    if (!achievement) return
+
+    const progress = achievementProgress.find(p => p.achievement_id === achievementId)
+    if (!progress || !progress.is_completed || progress.rewards_claimed) return
+
+    // Award currency
+    const nextSoft = (profile?.soft_currency || 0) + achievement.reward_soft_currency
+    const nextPremium = (profile?.premium_currency || 0) + achievement.reward_premium_currency
+
+    await supabase
+      .from('profiles')
+      .update({
+        soft_currency: nextSoft,
+        premium_currency: nextPremium,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', session.user.id)
+
+    // Award title if applicable
+    if (achievement.reward_title) {
+      await supabase
+        .from('user_titles')
+        .upsert({
+          user_id: session.user.id,
+          title_id: achievement.id,
+          unlocked: true,
+        })
+    }
+
+    // Mark as claimed
+    await supabase
+      .from('achievement_progress')
+      .update({
+        rewards_claimed: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', session.user.id)
+      .eq('achievement_id', achievementId)
+
+    // Update local state
+    setProfile(prev => ({
+      ...prev,
+      soft_currency: nextSoft,
+      premium_currency: nextPremium,
+    }))
+
+    setAchievementProgress(prev => prev.map(p =>
+      p.achievement_id === achievementId
+        ? { ...p, rewards_claimed: true }
+        : p
+    ))
   }
 
   const purchaseOffer = async (offerId) => {
@@ -2487,6 +2729,23 @@ function App() {
 
       // Show gacha result
       setGachaResult(selected)
+
+      // Track achievement progress
+      // Count total gacha pulls
+      const { count: gachaPullCount } = await supabase
+        .from('match_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+
+      if (gachaPullCount !== null) {
+        trackAchievementProgress('gacha_pulls', gachaPullCount + 1)
+      }
+
+      // Track characters unlocked
+      if (characterUnlockIds.length > 0) {
+        const unlockedCount = Object.keys(progressByCharacterId).length + characterUnlockIds.length
+        trackAchievementProgress('characters_unlocked', unlockedCount)
+      }
     } catch (error) {
       console.error('Gacha pull failed:', error)
     }
@@ -2552,6 +2811,10 @@ function App() {
         limit_break: nextLevel,
       },
     }))
+
+    // Track achievement progress for limit breaks
+    const totalLimitBreaks = Object.values(characterProgress).reduce((sum, prog) => sum + (prog.limit_break || 0), 0) + 1
+    trackAchievementProgress('limit_breaks', totalLimitBreaks)
   }
 
   const goHome = () => {
@@ -2574,6 +2837,8 @@ function App() {
   const navItems = [
     { label: 'Home', onClick: goHome, active: view === 'team' && gamePhase === 'select' },
     { label: 'Story', onClick: () => safeNavigate('story'), active: view === 'story', disabled: navLocked },
+    { label: 'Daily', onClick: () => safeNavigate('daily'), active: view === 'daily', disabled: navLocked },
+    { label: 'Achievements', onClick: () => safeNavigate('achievements'), active: view === 'achievements', disabled: navLocked },
     { label: 'Shop', onClick: () => safeNavigate('shop'), active: view === 'shop', disabled: navLocked },
     { label: 'Gacha', onClick: () => safeNavigate('gacha'), active: view === 'gacha', disabled: navLocked },
     { label: 'Inventory', onClick: () => safeNavigate('inventory'), active: view === 'inventory', disabled: navLocked },
@@ -2681,6 +2946,19 @@ function App() {
           onClearResult={clearStoryResult}
           onClaimRewards={claimStoryRewards}
           rewardsClaimed={storyRewardsClaimed}
+        />
+      ) : view === 'daily' ? (
+        <DailyRewards
+          dailyReward={dailyReward}
+          onClaim={claimDailyReward}
+          onBack={() => setView('team')}
+        />
+      ) : view === 'achievements' ? (
+        <Achievements
+          achievements={achievements}
+          progress={achievementProgress}
+          onClaimReward={claimAchievementReward}
+          onBack={() => setView('team')}
         />
       ) : view === 'admin' && isAdmin ? (
         <AdminPanel
