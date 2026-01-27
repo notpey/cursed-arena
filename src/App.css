@@ -80,7 +80,7 @@ body {
   background: var(--bg-0);
   min-height: 100vh;
   color: #e7eaf0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 /* ==================== BATTLE SCREEN ==================== */
@@ -629,11 +629,10 @@ body {
 }
 
 .auth-wrapper {
-  min-height: 0;
-  height: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .auth-content {
@@ -641,7 +640,8 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .auth-bar {
