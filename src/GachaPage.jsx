@@ -6,7 +6,7 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
 
   const premium = profile?.premium_currency ?? 0
   const fragments = userItems?.finger_fragment ?? 0
-  const pullCost = 100
+  const pullCost = 25
   const activeBanner = banners[0]
   const items = activeBanner
     ? bannerItems.filter(item => item.banner_id === activeBanner.id)
