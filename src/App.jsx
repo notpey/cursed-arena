@@ -13,6 +13,8 @@ import StoryMode from './StoryMode'
 import AdminPanel from './AdminPanel'
 import DailyRewards from './DailyRewards'
 import Achievements from './Achievements'
+import OpponentSelect from './OpponentSelect'
+import BattleResultScreen from './BattleResultScreen'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
 
@@ -65,6 +67,7 @@ function App() {
   const [dailyReward, setDailyReward] = useState(null)
   const [achievements, setAchievements] = useState([])
   const [achievementProgress, setAchievementProgress] = useState([])
+  const [battleResult, setBattleResult] = useState(null)
 
   const xpForLevel = (level) => 100 + level * 25
 
@@ -1713,6 +1716,7 @@ function App() {
     setStoryBattleConfig(null)
     setPvpMatch(null)
     setPvpStatus(null)
+    setBattleResult(null)
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -1735,20 +1739,39 @@ function App() {
     setView('story')
   }
 
-  const startBattle = () => {
+  const startBattleWithOpponents = ({ opponents, difficulty }) => {
+    // Scale player team based on their progress
     const leveledTeam = selectedPlayerTeam.map(character =>
       scaledCharacter(character, progressByCharacterId[character.id])
     )
     setPlayerTeam(leveledTeam)
-    
-    const availableEnemies = characterCatalog.filter(
-      c => !selectedPlayerTeam.some(p => p.id === c.id)
-    )
-    const shuffled = [...availableEnemies].sort(() => Math.random() - 0.5)
-    setEnemyTeam(deepCopy(shuffled.slice(0, 3)))
-    
+
+    // Scale enemy team based on difficulty
+    const enemyTeam = opponents.map(character => {
+      const baseChar = deepCopy(character)
+      const multiplier = difficulty.statMultiplier
+
+      // Apply difficulty multiplier to base stats
+      baseChar.hp = Math.floor(baseChar.hp * multiplier)
+      baseChar.currentHp = baseChar.hp
+      baseChar.mana = Math.floor(baseChar.mana * multiplier)
+      baseChar.currentMana = baseChar.mana
+      baseChar.attack = Math.floor(baseChar.attack * multiplier)
+      baseChar.defense = Math.floor(baseChar.defense * multiplier)
+      baseChar.speed = Math.floor(baseChar.speed * multiplier)
+
+      // Store difficulty info for rewards calculation
+      baseChar.difficultyMultiplier = {
+        xp: difficulty.xpMultiplier,
+        currency: difficulty.currencyMultiplier
+      }
+
+      return ensureCombatState(baseChar)
+    })
+
+    setEnemyTeam(enemyTeam)
     setGamePhase('battle')
-    setBattleLog(["Battle Start! Queue actions, then End Turn."])
+    setBattleLog([`Battle Start! Difficulty: ${difficulty.label}`])
     setActedCharacters([])
     setQueuedActions([])
     setStoryBattleConfig(null)
@@ -2090,13 +2113,19 @@ function App() {
 
     const accountGain = result === 'win' ? 60 : 40
     const characterGain = result === 'win' ? 35 : 25
+    const softCurrencyGain = result === 'win' ? 50 : 20
+    const premiumCurrencyGain = result === 'win' ? 2 : 0
 
     const currentAccountLevel = profile?.account_level || 1
     const currentAccountXp = profile?.account_xp || 0
     const currentRating = profile?.rating ?? 1000
+    const currentSoftCurrency = profile?.soft_currency || 0
+    const currentPremiumCurrency = profile?.premium_currency || 0
     const nextAccount = applyXpGain(currentAccountLevel, currentAccountXp, accountGain)
     const ratingDelta = result === 'win' ? 20 : -15
     const nextRating = Math.max(0, currentRating + ratingDelta)
+    const nextSoftCurrency = currentSoftCurrency + softCurrencyGain
+    const nextPremiumCurrency = currentPremiumCurrency + premiumCurrencyGain
 
     const toastMessages = []
     if (nextAccount.level > currentAccountLevel) {
@@ -2108,6 +2137,8 @@ function App() {
       account_level: nextAccount.level,
       account_xp: nextAccount.xp,
       rating: nextRating,
+      soft_currency: nextSoftCurrency,
+      premium_currency: nextPremiumCurrency,
     }))
 
     const updatedProgress = { ...progressByCharacterId }
@@ -2148,6 +2179,8 @@ function App() {
         account_level: nextAccount.level,
         account_xp: nextAccount.xp,
         rating: nextRating,
+        soft_currency: nextSoftCurrency,
+        premium_currency: nextPremiumCurrency,
         updated_at: new Date().toISOString(),
       })
       .eq('id', session.user.id)
@@ -2209,6 +2242,23 @@ function App() {
       }
     })
 
+    const characterRewards = characterSummaries.map(char => ({
+      ...char,
+      levelUp: characterLevelUps.some(lu => lu.name === char.name)
+    }))
+
+    const rewardData = {
+      turns: turn,
+      accountXpGain: accountGain,
+      accountLevel: nextAccount.level,
+      accountLevelUp: nextAccount.level > currentAccountLevel,
+      softCurrencyGain,
+      premiumCurrencyGain,
+      ratingDelta,
+      characters: characterRewards,
+      achievementsUnlocked: [], // Will be populated by achievement tracking
+    }
+
     setMatchSummary({
       result,
       accountGain,
@@ -2221,6 +2271,8 @@ function App() {
       characterLevelUps,
       characterSummaries,
     })
+
+    setBattleResult({ result, rewards: rewardData })
   }
 
   const trackMissionProgress = async (result, levelUps = 0) => {
@@ -2568,7 +2620,7 @@ function App() {
     if (!session) return
     const premium = profile?.premium_currency ?? 0
     const fragmentCount = userItems.finger_fragment || 0
-    const pullCost = 100
+    const pullCost = 25
     const useFragment = options.useFragment === true
 
     // Validate currency/fragments before pull
@@ -2861,6 +2913,17 @@ function App() {
           <span>{levelUpToast}</span>
         </div>
       )}
+      {battleResult && (
+        <BattleResultScreen
+          result={battleResult.result}
+          rewards={battleResult.rewards}
+          onContinue={() => {
+            setBattleResult(null)
+            resetGame()
+          }}
+          isPvp={isPvp}
+        />
+      )}
       {gamePhase === 'battle' ? (
           <BattleScreen
             playerTeam={playerTeam}
@@ -2960,6 +3023,12 @@ function App() {
           onClaimReward={claimAchievementReward}
           onBack={() => setView('team')}
         />
+      ) : view === 'opponent-select' ? (
+        <OpponentSelect
+          characters={characterCatalog}
+          onConfirm={startBattleWithOpponents}
+          onBack={() => setView('team')}
+        />
       ) : view === 'admin' && isAdmin ? (
         <AdminPanel
           profile={profile}
@@ -2971,7 +3040,7 @@ function App() {
           characters={characterCatalog}
           selectedTeam={selectedPlayerTeam}
           onSelect={setSelectedPlayerTeam}
-          onStartBattle={startBattle}
+          onStartBattle={() => setView('opponent-select')}
           onStartPvpQuick={startPvpQuick}
           onStartPvpRanked={startPvpRanked}
           onCancelPvpQueue={cancelPvpQueue}
