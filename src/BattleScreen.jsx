@@ -24,7 +24,12 @@ function BattleScreen({
   isPvp,
   isMyTurn,
   storyBattle,
-  onExitStory
+  onExitStory,
+  battleSpeed = 1,
+  onToggleSpeed,
+  autoBattle,
+  onToggleAutoBattle,
+  autoBattleDisabled
 }) {
   const [turnBanner, setTurnBanner] = React.useState(null)
   const [playerHpPreview, setPlayerHpPreview] = React.useState([])
@@ -35,6 +40,9 @@ function BattleScreen({
   const playerHpRef = React.useRef([])
   const enemyHpRef = React.useRef([])
   const latestLog = battleLog?.[battleLog.length - 1] || ''
+  const speedFactor = Math.max(1, battleSpeed || 1)
+  const turnBannerDuration = Math.max(600, Math.floor(1200 / speedFactor))
+  const hpPreviewDelay = Math.max(140, Math.floor(360 / speedFactor))
   const targetAbilityTypes = React.useMemo(
     () => new Set([
       'attack',
@@ -52,9 +60,9 @@ function BattleScreen({
   React.useEffect(() => {
     if (gameOver) return
     setTurnBanner('YOUR TURN')
-    const timer = setTimeout(() => setTurnBanner(null), 1200)
+    const timer = setTimeout(() => setTurnBanner(null), turnBannerDuration)
     return () => clearTimeout(timer)
-  }, [turn, gameOver])
+  }, [turn, gameOver, turnBannerDuration])
 
   const updateHpPreview = (team, setPreview, ref) => {
     const next = team.map(member => member.hp)
@@ -71,7 +79,7 @@ function BattleScreen({
               clone[idx] = hp
               return clone
             })
-          }, 360)
+          }, hpPreviewDelay)
         } else {
           updated[idx] = hp
         }
@@ -84,19 +92,27 @@ function BattleScreen({
 
   React.useEffect(() => {
     updateHpPreview(playerTeam, setPlayerHpPreview, playerHpRef)
-  }, [playerTeam])
+  }, [playerTeam, hpPreviewDelay])
 
   React.useEffect(() => {
     updateHpPreview(enemyTeam, setEnemyHpPreview, enemyHpRef)
-  }, [enemyTeam])
+  }, [enemyTeam, hpPreviewDelay])
 
   React.useEffect(() => {
     if (!pendingAbility?.needsTarget && setSelectedEnemy) {
       setSelectedEnemy(null)
     }
   }, [pendingAbility, setSelectedEnemy])
+
+  React.useEffect(() => {
+    if (!autoBattle) return
+    setShowEndTurnConfirm(false)
+    setDraftQueue([])
+    setPendingAbility(null)
+  }, [autoBattle, setPendingAbility])
   
   const handleAbilityClick = (characterIndex, abilityIndex, isUltimate, ability, character) => {
+    if (autoBattle) return
     if (actedCharacters.includes(characterIndex)) return
     if (character.hp <= 0) return
     if (ability.currentCooldown > 0) return
@@ -138,6 +154,7 @@ function BattleScreen({
   }
 
   const handleEnemyClick = (enemyIndex) => {
+    if (autoBattle) return
     if (!pendingAbility || !pendingAbility.needsTarget) return
     if (!enemyTeam[enemyIndex] || enemyTeam[enemyIndex].hp <= 0) return
     
@@ -716,17 +733,37 @@ function BattleScreen({
         </div>
 
         <div className="hud-center">
-          <div className="turn-display">
-            <span className="turn-label">TURN</span>
-            <span className="turn-number">{turn}</span>
-          </div>
+          <div className="hud-actions">
+            <div className="turn-display">
+              <span className="turn-label">TURN</span>
+              <span className="turn-number">{turn}</span>
+            </div>
           <button
             className="end-turn-btn"
             onClick={openEndTurnConfirm}
-            disabled={isPvp && !isMyTurn}
+            disabled={(isPvp && !isMyTurn) || autoBattle}
           >
-            {isPvp && !isMyTurn ? 'Waiting...' : 'End Turn'}
+            {autoBattle ? 'Auto Running' : (isPvp && !isMyTurn ? 'Waiting...' : 'End Turn')}
           </button>
+            <div className="battle-controls">
+              <button
+                className={`battle-toggle ${speedFactor > 1 ? 'active' : ''}`}
+                onClick={onToggleSpeed}
+                type="button"
+              >
+                Speed {speedFactor}x
+              </button>
+              <button
+                className={`battle-toggle auto ${autoBattle ? 'active' : ''}`}
+                onClick={onToggleAutoBattle}
+                type="button"
+                disabled={autoBattleDisabled}
+                title={autoBattleDisabled ? 'Auto-battle is disabled in Ranked PvP.' : 'Toggle auto-battle'}
+              >
+                Auto: {autoBattle ? 'On' : 'Off'}
+              </button>
+            </div>
+          </div>
           <div className="combat-feed-ticker">
             <span className="ticker-label">FEED</span>
             <span className="ticker-text">{latestLog || 'Awaiting first strike...'}</span>

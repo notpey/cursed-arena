@@ -53,6 +53,8 @@ function App() {
   const [gachaResult, setGachaResult] = useState(null)
   const [combatEvents, setCombatEvents] = useState([])
   const [battleShake, setBattleShake] = useState(false)
+  const [battleSpeed, setBattleSpeed] = useState(1)
+  const [autoBattle, setAutoBattle] = useState(false)
   const [storyState, setStoryState] = useState({
     chapterId: 'chapter-1',
     activeNodeId: '1-1',
@@ -79,6 +81,8 @@ function App() {
   const pvpMatchIdRef = useRef(null)
   const pendingRankedQueueRef = useRef(null)
   const pvpSearchingRef = useRef(false)
+  const autoBattleTimerRef = useRef(null)
+  const autoBattleTurnRef = useRef(null)
 
   const getSeasonInfo = (date = new Date()) => {
     const year = date.getUTCFullYear()
@@ -105,6 +109,13 @@ function App() {
   const getBattleStats = () =>
     battleStatsRef.current || { abilitiesUsed: 0, damageDealt: 0, damageTaken: 0 }
 
+  const clearAutoBattleTimer = () => {
+    if (autoBattleTimerRef.current) {
+      clearTimeout(autoBattleTimerRef.current)
+      autoBattleTimerRef.current = null
+    }
+  }
+
   const applyXpGain = (currentLevel, currentXp, gain) => {
     let level = Math.max(1, currentLevel || 1)
     let xp = Math.max(0, currentXp || 0) + gain
@@ -118,17 +129,19 @@ function App() {
   }
 
   const pushCombatEvent = (event) => {
+    const speed = Math.max(1, battleSpeed || 1)
     const id = `${Date.now()}-${Math.random()}`
     const payload = { id, ...event }
     setCombatEvents(prev => [...prev, payload])
     setTimeout(() => {
       setCombatEvents(prev => prev.filter(item => item.id !== id))
-    }, 800)
+    }, Math.max(300, Math.floor(800 / speed)))
   }
 
   const triggerShake = () => {
+    const speed = Math.max(1, battleSpeed || 1)
     setBattleShake(true)
-    setTimeout(() => setBattleShake(false), 220)
+    setTimeout(() => setBattleShake(false), Math.max(120, Math.floor(220 / speed)))
   }
 
   const ensureCombatState = (character) => {
@@ -195,6 +208,7 @@ function App() {
   const isPvp = Boolean(pvpMatch)
   const isRankedMatch = isPvp || Boolean(rankedBotMatch)
   const isMyTurn = isPvp && pvpMatch?.turn_owner === session?.user?.id
+  const canAutoBattle = !isRankedMatch
   const seasonInfo = useMemo(() => getSeasonInfo(new Date()), [])
   const storyChapter = useMemo(
     () => storyChapters.find(chapter => chapter.id === storyState.chapterId) || storyChapters[0],
@@ -203,6 +217,13 @@ function App() {
   const storyLoadedRef = useRef(false)
 
   const clampValue = (value, min, max) => Math.max(min, Math.min(max, value))
+  const toggleBattleSpeed = () => {
+    setBattleSpeed(prev => (prev >= 2 ? 1 : 2))
+  }
+  const toggleAutoBattle = () => {
+    if (!canAutoBattle) return
+    setAutoBattle(prev => !prev)
+  }
 
   const seedFromString = (value) => {
     let hash = 0
@@ -1704,6 +1725,90 @@ function App() {
     })
   }
 
+  const autoTargetAbilityTypes = new Set([
+    'attack',
+    'attack-stun',
+    'stun-only',
+    'ultimate-mahito',
+    'attack-execute',
+    'debuff-mark',
+    'attack-all-primary-mark',
+    'attack-random',
+  ])
+
+  const offensiveAbilityTypes = new Set([
+    'attack',
+    'attack-stun',
+    'attack-execute',
+    'attack-all',
+    'attack-all-primary-mark',
+    'attack-random',
+    'ultimate-mahito',
+  ])
+
+  const pickAutoAbility = (character) => {
+    const abilities = (character.abilities || []).map((ability, abilityIndex) => ({
+      ability,
+      abilityIndex,
+      isUltimate: false,
+    }))
+    if (character.ultimate) {
+      abilities.push({ ability: character.ultimate, abilityIndex: 0, isUltimate: true })
+    }
+
+    const available = abilities.filter(({ ability }) => {
+      if (!ability || ability.currentCooldown > 0) return false
+      if (ability.requiresGorillaCore && character.flags?.gorillaCoreTurns <= 0) return false
+      const cost = getEnergyCost(character, ability)
+      return cost <= character.mana
+    })
+
+    if (available.length === 0) return null
+
+    const scored = available.map(entry => {
+      const base = entry.ability.damageBase ?? entry.ability.damage ?? 0
+      const offenseBoost = offensiveAbilityTypes.has(entry.ability.type) ? 8 : 0
+      const aoeBoost = ['attack-all', 'attack-all-primary-mark'].includes(entry.ability.type) ? 6 : 0
+      const ultimateBoost = entry.isUltimate ? 20 : 0
+      const supportPenalty = ['defensive', 'utility', 'heal-self'].includes(entry.ability.type) ? -4 : 0
+      return { ...entry, score: base + offenseBoost + aoeBoost + ultimateBoost + supportPenalty }
+    })
+
+    scored.sort((a, b) => b.score - a.score)
+    return scored[0]
+  }
+
+  const selectAutoTarget = (team) => {
+    let targetIndex = null
+    let lowestHp = Infinity
+    team.forEach((member, index) => {
+      if (member.hp > 0 && member.hp < lowestHp) {
+        lowestHp = member.hp
+        targetIndex = index
+      }
+    })
+    return targetIndex
+  }
+
+  const buildAutoActions = (currentPlayerTeam, currentEnemyTeam) => {
+    const actions = []
+    currentPlayerTeam.forEach((character, characterIndex) => {
+      if (!character || character.hp <= 0) return
+      if (character.states?.binding > 0 || character.states?.sleep > 0) return
+      const pick = pickAutoAbility(character)
+      if (!pick) return
+      const needsTarget = autoTargetAbilityTypes.has(pick.ability.type)
+      const enemyIndex = needsTarget ? selectAutoTarget(currentEnemyTeam) : null
+      actions.push({
+        characterIndex,
+        abilityIndex: pick.abilityIndex,
+        isUltimate: pick.isUltimate,
+        enemyIndex,
+      })
+    })
+    return actions
+  }
+
 
   const endPlayerTurn = (startPlayerTeam = playerTeam, startEnemyTeam = enemyTeam) => {
     let newLog = []
@@ -1989,6 +2094,42 @@ function App() {
   }
 
   useEffect(() => {
+    if (!autoBattle) return
+    if (!canAutoBattle) {
+      setAutoBattle(false)
+      return
+    }
+    setQueuedActions([])
+    setActedCharacters([])
+    setPendingAbility(null)
+  }, [autoBattle, canAutoBattle])
+
+  useEffect(() => {
+    if (!autoBattle || !canAutoBattle) {
+      clearAutoBattleTimer()
+      autoBattleTurnRef.current = null
+      return
+    }
+    if (gamePhase !== 'battle' || gameOver) {
+      clearAutoBattleTimer()
+      return
+    }
+    if (autoBattleTurnRef.current === turn) return
+
+    const actions = buildAutoActions(playerTeam, enemyTeam)
+    autoBattleTurnRef.current = turn
+    clearAutoBattleTimer()
+    const speed = Math.max(1, battleSpeed || 1)
+    const delay = Math.max(220, Math.floor(450 / speed))
+
+    autoBattleTimerRef.current = setTimeout(() => {
+      handleEndTurn(actions)
+    }, delay)
+
+    return () => clearAutoBattleTimer()
+  }, [autoBattle, canAutoBattle, gamePhase, gameOver, turn, playerTeam, enemyTeam, battleSpeed])
+
+  useEffect(() => {
     if (!storyBattleConfig || gamePhase !== 'battle' || gameOver) return
     if (storyBattleConfig.type !== 'survival') return
     if (turn > storyBattleConfig.turnLimit) {
@@ -2019,6 +2160,8 @@ function App() {
     pvpMatchIdRef.current = null
     pvpSearchingRef.current = false
     pendingRankedQueueRef.current = null
+    autoBattleTurnRef.current = null
+    clearAutoBattleTimer()
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -2043,6 +2186,8 @@ function App() {
     resetBattleStats()
     pvpSearchingRef.current = false
     pendingRankedQueueRef.current = null
+    autoBattleTurnRef.current = null
+    clearAutoBattleTimer()
   }
 
   const startBattleWithOpponents = ({ opponents, difficulty }) => {
@@ -3501,22 +3646,21 @@ function App() {
         />
       )}
       {gamePhase === 'battle' ? (
-          <BattleScreen
-            playerTeam={playerTeam}
-            enemyTeam={enemyTeam}
-            selectedEnemy={selectedEnemy}
-            setSelectedEnemy={setSelectedEnemy}
-            queueAbility={queueAbility}
-            queuedActions={queuedActions}
-            removeQueuedAction={removeQueuedAction}
-            battleLog={battleLog}
-            turn={turn}
-            gameOver={gameOver}
-            resetGame={resetGame}
-            actedCharacters={actedCharacters}
-            pendingAbility={pendingAbility}
+        <BattleScreen
+          playerTeam={playerTeam}
+          enemyTeam={enemyTeam}
+          selectedEnemy={selectedEnemy}
+          setSelectedEnemy={setSelectedEnemy}
+          queueAbility={queueAbility}
+          queuedActions={queuedActions}
+          removeQueuedAction={removeQueuedAction}
+          battleLog={battleLog}
+          turn={turn}
+          gameOver={gameOver}
+          resetGame={resetGame}
+          actedCharacters={actedCharacters}
+          pendingAbility={pendingAbility}
           setPendingAbility={setPendingAbility}
-          setActedCharacters={setActedCharacters}
           endTurn={handleEndTurn}
           profile={profile}
           matchSummary={matchSummary}
@@ -3526,6 +3670,11 @@ function App() {
           isMyTurn={isMyTurn}
           storyBattle={storyBattleConfig}
           onExitStory={exitStoryBattle}
+          battleSpeed={battleSpeed}
+          onToggleSpeed={toggleBattleSpeed}
+          autoBattle={autoBattle}
+          onToggleAutoBattle={toggleAutoBattle}
+          autoBattleDisabled={!canAutoBattle}
         />
       ) : view === 'profile' ? (
         <ProfilePage
