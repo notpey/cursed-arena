@@ -16,6 +16,7 @@ import Achievements from './Achievements'
 import OpponentSelect from './OpponentSelect'
 import BattleResultScreen from './BattleResultScreen'
 import LadderPage from './LadderPage'
+import RogueMode from './RogueMode'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
 
@@ -75,6 +76,22 @@ function App() {
   const [leaderboardStatus, setLeaderboardStatus] = useState('idle')
   const [leaderboardError, setLeaderboardError] = useState(null)
   const [rankedBotMatch, setRankedBotMatch] = useState(null)
+  const [rogueState, setRogueState] = useState({
+    active: false,
+    floor: 0,
+    maxFloors: 10,
+    blessings: [],
+    pendingBlessings: [],
+    nodeOptions: [],
+    selectedNode: null,
+    activeModifiers: [],
+    pendingEvent: null,
+    synergies: [],
+    status: 'idle',
+    seed: null,
+    teamSnapshot: null,
+    lastReward: null,
+  })
 
   const battleStatsRef = useRef({ abilitiesUsed: 0, damageDealt: 0, damageTaken: 0 })
   const winStreakRef = useRef(0)
@@ -83,6 +100,8 @@ function App() {
   const pvpSearchingRef = useRef(false)
   const autoBattleTimerRef = useRef(null)
   const autoBattleTurnRef = useRef(null)
+  const rogueTeamRef = useRef(null)
+  const rogueResultRef = useRef(null)
 
   const getSeasonInfo = (date = new Date()) => {
     const year = date.getUTCFullYear()
@@ -217,6 +236,214 @@ function App() {
   const storyLoadedRef = useRef(false)
 
   const clampValue = (value, min, max) => Math.max(min, Math.min(max, value))
+
+  const rogueBlessings = useMemo(
+    () => ([
+      {
+        id: 'fury',
+        name: 'Crimson Fury',
+        description: '+12% Attack for all allies.',
+        tags: ['assault'],
+        effect: { type: 'stat', stat: 'attack', value: 0.12, isPercent: true },
+      },
+      {
+        id: 'bulwark',
+        name: 'Stoneward Pact',
+        description: '+10% Defense for all allies.',
+        tags: ['guard'],
+        effect: { type: 'stat', stat: 'defense', value: 0.1, isPercent: true },
+      },
+      {
+        id: 'clarity',
+        name: 'Cursed Clarity',
+        description: '+15 Max Mana for all allies.',
+        tags: ['arcane'],
+        effect: { type: 'stat', stat: 'maxMana', value: 15, isPercent: false },
+      },
+      {
+        id: 'deadeye',
+        name: 'Deadeye Sigil',
+        description: '+8% Crit Chance for all allies.',
+        tags: ['precision'],
+        effect: { type: 'stat', stat: 'critChance', value: 0.08, isPercent: false },
+      },
+      {
+        id: 'ward',
+        name: 'Ward of Sentries',
+        description: 'Start each battle with a 30 HP barrier.',
+        tags: ['guard'],
+        effect: { type: 'barrier', value: 30, duration: 2 },
+      },
+      {
+        id: 'surge',
+        name: 'Vital Surge',
+        description: 'Heal 12% HP after each floor.',
+        tags: ['vitality'],
+        effect: { type: 'postBattleHeal', value: 0.12 },
+      },
+      {
+        id: 'spark',
+        name: 'Cursed Spark',
+        description: 'Restore 20 Mana at battle start.',
+        tags: ['arcane'],
+        effect: { type: 'startMana', value: 20 },
+      },
+      {
+        id: 'hex',
+        name: 'Ruinous Hex',
+        description: 'Enemies take +8% damage.',
+        tags: ['hex'],
+        effect: { type: 'enemyDebuff', stat: 'damageAmp', value: 0.08 },
+      },
+    ]),
+    []
+  )
+
+  const rogueSynergies = useMemo(
+    () => ([
+      {
+        id: 'assault',
+        name: 'Assault Sigil',
+        tag: 'assault',
+        threshold: 2,
+        description: '+6% Attack (2 Assault blessings)',
+        effect: { type: 'stat', stat: 'attack', value: 0.06, isPercent: true },
+      },
+      {
+        id: 'guard',
+        name: 'Guardian Sigil',
+        tag: 'guard',
+        threshold: 2,
+        description: '+6% Defense (2 Guard blessings)',
+        effect: { type: 'stat', stat: 'defense', value: 0.06, isPercent: true },
+      },
+      {
+        id: 'arcane',
+        name: 'Arcane Sigil',
+        tag: 'arcane',
+        threshold: 2,
+        description: '+10 Max Mana (2 Arcane blessings)',
+        effect: { type: 'stat', stat: 'maxMana', value: 10, isPercent: false },
+      },
+      {
+        id: 'precision',
+        name: 'Precision Sigil',
+        tag: 'precision',
+        threshold: 2,
+        description: '+5% Crit Chance (2 Precision blessings)',
+        effect: { type: 'stat', stat: 'critChance', value: 0.05, isPercent: false },
+      },
+      {
+        id: 'vitality',
+        name: 'Vitality Sigil',
+        tag: 'vitality',
+        threshold: 2,
+        description: '+8% HP recovery between floors',
+        effect: { type: 'postBattleHeal', value: 0.08 },
+      },
+      {
+        id: 'hex',
+        name: 'Hex Sigil',
+        tag: 'hex',
+        threshold: 2,
+        description: 'Enemies take +6% damage',
+        effect: { type: 'enemyDebuff', stat: 'damageAmp', value: 0.06 },
+      },
+    ]),
+    []
+  )
+
+  const rogueEliteModifiers = useMemo(
+    () => ([
+      {
+        id: 'juggernaut',
+        name: 'Juggernaut',
+        description: 'Enemies gain 25% HP and 15% Defense.',
+        stats: { hp: 1.25, defense: 1.15 },
+        barrier: 0,
+      },
+      {
+        id: 'ravager',
+        name: 'Ravager',
+        description: 'Enemies gain 20% Attack and 10% Speed.',
+        stats: { attack: 1.2, speed: 1.1 },
+        barrier: 0,
+      },
+      {
+        id: 'sorcery',
+        name: 'Sorcery Surge',
+        description: 'Enemies gain 25% Cursed Technique.',
+        stats: { cursedOutput: 1.25 },
+        barrier: 0,
+      },
+      {
+        id: 'shielded',
+        name: 'Shielded',
+        description: 'Enemies begin with a 40 HP barrier.',
+        stats: {},
+        barrier: 40,
+      },
+    ]),
+    []
+  )
+
+  const rogueEvents = useMemo(
+    () => ([
+      {
+        id: 'blood-pact',
+        name: 'Blood Pact',
+        description: 'Trade your vitality for power.',
+        options: [
+          { id: 'pact-blessing', label: 'Sacrifice 15% HP, gain a random blessing', effect: 'sacrificeBlessing' },
+          { id: 'pact-escape', label: 'Leave with 2 Rogue Tokens', effect: 'token' },
+        ],
+      },
+      {
+        id: 'forbidden-altar',
+        name: 'Forbidden Altar',
+        description: 'A cursed altar hums with energy.',
+        options: [
+          { id: 'altar-wealth', label: 'Gain 250 Soft Currency', effect: 'soft' },
+          { id: 'altar-mana', label: 'Restore team mana and gain a blessing', effect: 'manaBlessing' },
+        ],
+      },
+    ]),
+    []
+  )
+
+  const rollRogueBlessings = (existing, count = 3) => {
+    const existingIds = new Set((existing || []).map(item => item.id))
+    const pool = rogueBlessings.filter(item => !existingIds.has(item.id))
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, Math.min(count, shuffled.length))
+  }
+
+  const getRogueSynergies = (blessings) => {
+    const counts = {}
+    ;(blessings || []).forEach(blessing => {
+      ;(blessing.tags || []).forEach(tag => {
+        counts[tag] = (counts[tag] || 0) + 1
+      })
+    })
+    return rogueSynergies.filter(synergy => (counts[synergy.tag] || 0) >= synergy.threshold)
+  }
+
+  const rollRogueNodes = (floor) => {
+    if (floor % 5 === 0) {
+      return [{
+        type: 'boss',
+        name: 'Boss Gate',
+        description: 'A cursed champion awaits.',
+      }]
+    }
+    const options = [
+      { type: 'battle', name: 'Battle', description: 'Standard encounter.' },
+      { type: 'elite', name: 'Elite', description: 'Harder fight, better rewards.' },
+      { type: 'treasure', name: 'Treasure', description: 'Claim a relic without a fight.' },
+      { type: 'event', name: 'Event', description: 'A risky opportunity.' },
+    ]
+    return options.sort(() => Math.random() - 0.5).slice(0, 3)
+  }
   const toggleBattleSpeed = () => {
     setBattleSpeed(prev => (prev >= 2 ? 1 : 2))
   }
@@ -1033,9 +1260,32 @@ function App() {
     return cost
   }
 
+  const getDefaultScaling = (ability) => {
+    switch (ability.type) {
+      case 'attack-all':
+        return 0.16
+      case 'attack-all-primary-mark':
+        return 0.15
+      case 'attack-stun':
+        return 0.18
+      case 'attack-execute':
+        return 0.22
+      case 'attack-random':
+        return 0.16
+      case 'ultimate-mahito':
+        return 0.25
+      case 'attack':
+      default:
+        return 0.2
+    }
+  }
+
   const getRawDamage = (attacker, ability) => {
     const baseDamage = ability.damageBase ?? ability.damage ?? 0
-    const scaling = ability.scaling || 0
+    const scaling =
+      typeof ability.scaling === 'number'
+        ? ability.scaling
+        : getDefaultScaling(ability)
     const scalingStat =
       ability.scalingStat || (ability.damageType === 'cursed' ? 'cursedOutput' : 'attack')
     const statValue = getStatValue(attacker, scalingStat)
@@ -1084,6 +1334,86 @@ function App() {
       }
     }
     return remaining
+  }
+
+  const applyRogueBlessingsToTeam = (team, blessings = [], synergies = []) => {
+    const combined = [...blessings, ...synergies]
+    const applied = deepCopy(team)
+    combined.forEach(blessing => {
+      const effect = blessing.effect || {}
+      if (effect.type === 'stat') {
+        applied.forEach(character => {
+          if (effect.stat === 'maxMana') {
+            const gain = effect.value || 0
+            character.maxMana += gain
+            character.mana = Math.min(character.maxMana, character.mana + gain)
+            return
+          }
+          if (effect.stat === 'maxHp') {
+            const gain = effect.value || 0
+            character.maxHp += gain
+            character.hp = Math.min(character.maxHp, character.hp + gain)
+            return
+          }
+          addEffect(character, 'buffs', {
+            stat: effect.stat,
+            value: effect.value,
+            isPercent: Boolean(effect.isPercent),
+            duration: 99,
+          })
+        })
+      }
+      if (effect.type === 'barrier') {
+        applied.forEach(character => {
+          character.barrier.value += effect.value || 0
+          character.barrier.duration = Math.max(character.barrier.duration || 0, effect.duration || 2)
+        })
+      }
+      if (effect.type === 'startMana') {
+        applied.forEach(character => {
+          const gain = effect.value || 0
+          character.mana = Math.min(character.maxMana, character.mana + gain)
+        })
+      }
+    })
+    return applied
+  }
+
+  const applyRogueBlessingsToEnemies = (team, blessings = [], synergies = []) => {
+    const combined = [...blessings, ...synergies]
+    const applied = deepCopy(team)
+    combined.forEach(blessing => {
+      const effect = blessing.effect || {}
+      if (effect.type === 'enemyDebuff') {
+        applied.forEach(character => {
+          addEffect(character, 'debuffs', {
+            stat: effect.stat,
+            value: effect.value,
+            isPercent: true,
+            duration: 99,
+          })
+        })
+      }
+    })
+    return applied
+  }
+
+  const applyRogueRecovery = (team, blessings = [], synergies = []) => {
+    const combined = [...blessings, ...synergies]
+    const healed = deepCopy(team)
+    const baseHeal = 0.15
+    const bonusHeal = combined
+      .filter(blessing => blessing.effect?.type === 'postBattleHeal')
+      .reduce((sum, blessing) => sum + (blessing.effect?.value || 0), 0)
+    const healPercent = baseHeal + bonusHeal
+
+    healed.forEach(character => {
+      if (character.hp <= 0) return
+      character.hp = Math.min(character.maxHp, Math.floor(character.hp + character.maxHp * healPercent))
+      character.mana = Math.min(character.maxMana, character.mana + 20)
+    })
+
+    return healed
   }
 
   const applyDotEffects = (character, teamType, index, logs) => {
@@ -1242,6 +1572,11 @@ function App() {
       setBattleLog(prev => [...prev, ...newLog])
     }
     setGameOver(result === 'win' ? 'win' : 'lose')
+
+    if (rogueState.active) {
+      rogueTeamRef.current = deepCopy(teamSnapshot)
+      rogueResultRef.current = result
+    }
 
     const battleStats = getBattleStats()
     const nextWinStreak = result === 'win' ? winStreakRef.current + 1 : 0
@@ -2128,6 +2463,391 @@ function App() {
 
     return () => clearAutoBattleTimer()
   }, [autoBattle, canAutoBattle, gamePhase, gameOver, turn, playerTeam, enemyTeam, battleSpeed])
+
+  const resetBattleState = () => {
+    setGamePhase('select')
+    setPlayerTeam([])
+    setEnemyTeam([])
+    setSelectedEnemy(null)
+    setBattleLog(["Battle Start! Queue actions, then End Turn."])
+    setGameOver(null)
+    setTurn(1)
+    setActedCharacters([])
+    setPendingAbility(null)
+    setQueuedActions([])
+    setMatchSummary(null)
+    setStoryBattleConfig(null)
+    setPvpMatch(null)
+    setPvpStatus(null)
+    setBattleResult(null)
+    setRankedBotMatch(null)
+    resetBattleStats()
+    pvpMatchIdRef.current = null
+    pvpSearchingRef.current = false
+    pendingRankedQueueRef.current = null
+    autoBattleTurnRef.current = null
+    clearAutoBattleTimer()
+    if (pvpChannel) {
+      pvpChannel.unsubscribe()
+      setPvpChannel(null)
+    }
+  }
+
+  const startRogueRun = () => {
+    if (selectedPlayerTeam.length === 0) return
+    const seed = Date.now()
+    const nextFloor = 1
+    setRogueState({
+      active: true,
+      floor: nextFloor,
+      maxFloors: 10,
+      blessings: [],
+      pendingBlessings: [],
+      nodeOptions: rollRogueNodes(nextFloor),
+      selectedNode: null,
+      activeModifiers: [],
+      pendingEvent: null,
+      synergies: [],
+      status: 'node-select',
+      seed,
+      teamSnapshot: null,
+      lastReward: null,
+    })
+    rogueTeamRef.current = null
+    rogueResultRef.current = null
+    setView('rogue')
+  }
+
+  const abandonRogueRun = () => {
+    setRogueState(prev => ({
+      ...prev,
+      active: false,
+      status: 'idle',
+      floor: 0,
+      blessings: [],
+      pendingBlessings: [],
+      nodeOptions: [],
+      selectedNode: null,
+      activeModifiers: [],
+      pendingEvent: null,
+      synergies: [],
+      teamSnapshot: null,
+      lastReward: null,
+    }))
+    rogueTeamRef.current = null
+    rogueResultRef.current = null
+  }
+
+  const rollRogueModifiers = (floor, nodeType) => {
+    if (nodeType === 'boss') return rogueEliteModifiers.sort(() => Math.random() - 0.5).slice(0, 2)
+    if (nodeType === 'elite') return rogueEliteModifiers.sort(() => Math.random() - 0.5).slice(0, 1)
+    return []
+  }
+
+  const generateRogueEnemyTeam = (floor, nodeType, modifiers = []) => {
+    const pool = characterCatalog.length > 0 ? characterCatalog : defaultCharacters
+    const enemyCount = Math.min(3, pool.length)
+    const selected = [...pool].sort(() => Math.random() - 0.5).slice(0, enemyCount)
+    const baseMultiplier = 0.9 + floor * 0.08
+    const bossMultiplier = nodeType === 'boss' ? 1.35 : 1
+    const eliteMultiplier = nodeType === 'elite' ? 1.2 : 1
+    const multiplier = baseMultiplier * bossMultiplier * eliteMultiplier
+
+    return selected.map(character => {
+      const baseChar = ensureCombatState(deepCopy(character))
+      let hp = Math.floor(baseChar.hp * multiplier)
+      let defense = Math.floor(baseChar.defense * multiplier)
+      let attack = Math.floor(baseChar.attack * multiplier)
+      let cursedOutput = Math.floor(baseChar.cursedOutput * multiplier)
+      let cursedResistance = Math.floor(baseChar.cursedResistance * multiplier)
+      let speed = Math.floor(baseChar.speed * multiplier)
+
+      modifiers.forEach(mod => {
+        const stats = mod.stats || {}
+        if (stats.hp) hp = Math.floor(hp * stats.hp)
+        if (stats.defense) defense = Math.floor(defense * stats.defense)
+        if (stats.attack) attack = Math.floor(attack * stats.attack)
+        if (stats.cursedOutput) cursedOutput = Math.floor(cursedOutput * stats.cursedOutput)
+        if (stats.cursedResistance) cursedResistance = Math.floor(cursedResistance * stats.cursedResistance)
+        if (stats.speed) speed = Math.floor(speed * stats.speed)
+      })
+
+      baseChar.hp = hp
+      baseChar.maxHp = baseChar.hp
+      baseChar.mana = Math.floor(baseChar.mana * multiplier)
+      baseChar.maxMana = baseChar.mana
+      baseChar.attack = attack
+      baseChar.defense = defense
+      baseChar.cursedOutput = cursedOutput
+      baseChar.cursedResistance = cursedResistance
+      baseChar.speed = speed
+
+      modifiers.forEach(mod => {
+        if (mod.barrier) {
+          baseChar.barrier.value += mod.barrier
+          baseChar.barrier.duration = Math.max(baseChar.barrier.duration || 0, 2)
+        }
+      })
+      return baseChar
+    })
+  }
+
+  const grantRogueReward = async (reward) => {
+    if (!reward) return
+    const softGain = reward.soft || 0
+    const premiumGain = reward.premium || 0
+    const tokenGain = reward.tokens || 0
+
+    if (session && profile) {
+      const nextSoft = (profile.soft_currency || 0) + softGain
+      const nextPremium = (profile.premium_currency || 0) + premiumGain
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          soft_currency: nextSoft,
+          premium_currency: nextPremium,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', session.user.id)
+      if (!error) {
+        setProfile(prev => ({
+          ...(prev || {}),
+          soft_currency: nextSoft,
+          premium_currency: nextPremium,
+        }))
+      }
+    }
+
+    if (session && tokenGain > 0) {
+      const nextTokens = (userItems?.rogue_token || 0) + tokenGain
+      await supabase
+        .from('user_items')
+        .upsert({
+          user_id: session.user.id,
+          item_id: 'rogue_token',
+          quantity: nextTokens,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,item_id' })
+      setUserItems(prev => ({ ...prev, rogue_token: nextTokens }))
+    }
+
+    setRogueState(prev => ({ ...prev, lastReward: reward }))
+  }
+
+  const chooseRogueNode = (node) => {
+    if (!rogueState.active) return
+    if (node.type === 'treasure') {
+      const reward = { soft: 150 + rogueState.floor * 15, premium: 0, tokens: 2 }
+      grantRogueReward(reward)
+      const nextBlessing = rollRogueBlessings(rogueState.blessings, 1)
+      setRogueState(prev => ({
+        ...prev,
+        status: 'reward',
+        pendingBlessings: nextBlessing,
+        selectedNode: node,
+        nodeOptions: [],
+        activeModifiers: [],
+        pendingEvent: null,
+      }))
+      return
+    }
+
+    if (node.type === 'event') {
+      const event = rogueEvents[Math.floor(Math.random() * rogueEvents.length)]
+      setRogueState(prev => ({
+        ...prev,
+        status: 'event',
+        pendingEvent: event,
+        selectedNode: node,
+        nodeOptions: [],
+      }))
+      return
+    }
+
+    setRogueState(prev => ({
+      ...prev,
+      status: 'ready',
+      selectedNode: node,
+      nodeOptions: [],
+      activeModifiers: [],
+      pendingEvent: null,
+    }))
+  }
+
+  const resolveRogueEvent = async (option) => {
+    if (!rogueState.active || !rogueState.pendingEvent) return
+    const result = option.effect
+    const nextBlessings = []
+    let reward = null
+    let teamSnapshot = rogueState.teamSnapshot
+
+    if (result === 'sacrificeBlessing') {
+      if (teamSnapshot) {
+        const nextTeam = deepCopy(teamSnapshot)
+        nextTeam.forEach(member => {
+          member.hp = Math.max(1, Math.floor(member.hp * 0.85))
+        })
+        teamSnapshot = nextTeam
+      }
+      nextBlessings.push(...rollRogueBlessings(rogueState.blessings, 1))
+    }
+
+    if (result === 'token') {
+      reward = { soft: 0, premium: 0, tokens: 2 }
+    }
+
+    if (result === 'soft') {
+      reward = { soft: 250, premium: 0, tokens: 0 }
+    }
+
+    if (result === 'manaBlessing') {
+      if (teamSnapshot) {
+        const nextTeam = deepCopy(teamSnapshot)
+        nextTeam.forEach(member => {
+          member.mana = Math.min(member.maxMana, member.mana + 30)
+        })
+        teamSnapshot = nextTeam
+      }
+      nextBlessings.push(...rollRogueBlessings(rogueState.blessings, 1))
+    }
+
+    if (reward) {
+      await grantRogueReward(reward)
+    }
+
+    const nextFloor = nextBlessings.length > 0 ? rogueState.floor : rogueState.floor + 1
+    const shouldComplete = nextFloor > rogueState.maxFloors
+
+    setRogueState(prev => ({
+      ...prev,
+      floor: nextFloor > prev.maxFloors ? prev.maxFloors : nextFloor,
+      status: shouldComplete ? 'complete' : (nextBlessings.length > 0 ? 'reward' : 'node-select'),
+      pendingBlessings: nextBlessings,
+      pendingEvent: null,
+      teamSnapshot,
+      selectedNode: null,
+      activeModifiers: [],
+      nodeOptions: shouldComplete || nextBlessings.length > 0 ? [] : rollRogueNodes(nextFloor),
+    }))
+    if (shouldComplete) {
+      setView('rogue')
+    }
+  }
+
+  const startRogueBattle = () => {
+    if (!rogueState.active) return
+    if (selectedPlayerTeam.length === 0 && !rogueState.teamSnapshot) return
+
+    resetBattleStats()
+    const selectedNode = rogueState.selectedNode || { type: 'battle' }
+    const modifiers = rollRogueModifiers(rogueState.floor, selectedNode.type)
+    const baseTeam = rogueState.teamSnapshot
+      ? deepCopy(rogueState.teamSnapshot)
+      : selectedPlayerTeam.map(character =>
+          scaledCharacter(character, progressByCharacterId[character.id])
+        )
+
+    let playerSnapshot = baseTeam.map(character => ensureCombatState(deepCopy(character)))
+    const synergies = getRogueSynergies(rogueState.blessings)
+    playerSnapshot = applyRogueBlessingsToTeam(playerSnapshot, rogueState.blessings, synergies)
+
+    let enemySnapshot = generateRogueEnemyTeam(rogueState.floor, selectedNode.type, modifiers)
+    enemySnapshot = applyRogueBlessingsToEnemies(enemySnapshot, rogueState.blessings, synergies)
+
+    setPlayerTeam(playerSnapshot)
+    setEnemyTeam(enemySnapshot)
+    setGamePhase('battle')
+    setBattleLog([
+      `Roguelike Floor ${rogueState.floor}${selectedNode.type === 'boss' ? ' — Boss' : ''}`,
+    ])
+    setActedCharacters([])
+    setQueuedActions([])
+    setStoryBattleConfig(null)
+    setRogueState(prev => ({
+      ...prev,
+      status: 'in-battle',
+      activeModifiers: modifiers,
+      selectedNode,
+      synergies,
+    }))
+  }
+
+  const handleRogueBattleContinue = async () => {
+    const result = rogueResultRef.current || battleResult?.result
+    const teamSnapshot = rogueTeamRef.current || playerTeam
+    setBattleResult(null)
+    resetBattleState()
+
+    if (!rogueState.active) return
+
+    if (result !== 'win') {
+      setRogueState(prev => ({
+        ...prev,
+        active: false,
+        status: 'failed',
+        pendingBlessings: [],
+        teamSnapshot: null,
+      }))
+      setView('rogue')
+      return
+    }
+
+    const synergies = getRogueSynergies(rogueState.blessings)
+    const healedTeam = applyRogueRecovery(teamSnapshot, rogueState.blessings, synergies)
+    const isFinal = rogueState.floor >= rogueState.maxFloors
+    const nodeType = rogueState.selectedNode?.type || 'battle'
+    const reward = {
+      soft: 120 + rogueState.floor * 20 + (nodeType === 'elite' ? 60 : 0) + (nodeType === 'boss' ? 120 : 0),
+      premium: nodeType === 'boss' ? 2 : 0,
+      tokens: 2 + (nodeType === 'elite' ? 2 : 0) + (nodeType === 'boss' ? 5 : 0),
+    }
+
+    await grantRogueReward(reward)
+
+    if (isFinal) {
+      setRogueState(prev => ({
+        ...prev,
+        status: 'complete',
+        teamSnapshot: healedTeam,
+        pendingBlessings: [],
+        lastReward: reward,
+        selectedNode: null,
+      }))
+      setView('rogue')
+      return
+    }
+
+    const blessingCount = nodeType === 'elite' ? 4 : 3
+    const nextBlessings = rollRogueBlessings(rogueState.blessings, blessingCount)
+    setRogueState(prev => ({
+      ...prev,
+      status: 'reward',
+      pendingBlessings: nextBlessings,
+      teamSnapshot: healedTeam,
+      lastReward: reward,
+      selectedNode: null,
+    }))
+    setView('rogue')
+  }
+
+  const chooseRogueBlessing = (blessing) => {
+    if (!rogueState.active) return
+    const nextFloor = rogueState.floor + 1
+    const nextBlessings = [...rogueState.blessings, blessing]
+    const nextSynergies = getRogueSynergies(nextBlessings)
+    setRogueState(prev => ({
+      ...prev,
+      floor: nextFloor,
+      blessings: nextBlessings,
+      pendingBlessings: [],
+      status: 'node-select',
+      nodeOptions: rollRogueNodes(nextFloor),
+      selectedNode: null,
+      activeModifiers: [],
+      pendingEvent: null,
+      synergies: nextSynergies,
+    }))
+  }
 
   useEffect(() => {
     if (!storyBattleConfig || gamePhase !== 'battle' || gameOver) return
@@ -3341,78 +4061,92 @@ function App() {
   const pullGacha = async (bannerId, options = {}) => {
     if (!session) return
     const premium = profile?.premium_currency ?? 0
-    const fragmentCount = userItems.finger_fragment || 0
+    const fragmentCount = userItems?.finger_fragment || 0
     const pullCost = 25
     const useFragment = options.useFragment === true
+    const pullCount = Math.max(1, Number(options.count) || 1)
+    const isMulti = pullCount > 1
+    if (useFragment && isMulti) return
+    const totalCost = pullCost * pullCount
 
     // Validate currency/fragments before pull
     if (useFragment) {
       if (fragmentCount <= 0) return
-    } else if (premium < pullCost) {
+    } else if (premium < totalCost) {
       return
     }
 
     const items = bannerItems.filter(item => item.banner_id === bannerId)
     if (items.length === 0) return
 
-    // Weighted random selection
-    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
-    let roll = Math.random() * totalWeight
-    let selected = items[0]
-    for (const item of items) {
-      roll -= item.weight
-      if (roll <= 0) {
-        selected = item
-        break
+    const boostRates = pullCount >= 10
+    const getWeight = (item, boosted) => {
+      const base = Number(item.weight) || 0
+      if (!boosted) return base
+      if (item.item_type === 'character') return base * 1.25
+      if (item.item_type === 'shards') return base * 1.15
+      return base
+    }
+
+    const rollItem = (pool, boosted) => {
+      const totalWeight = pool.reduce((sum, item) => sum + getWeight(item, boosted), 0)
+      if (totalWeight <= 0) return pool[0]
+      let roll = Math.random() * totalWeight
+      for (const item of pool) {
+        roll -= getWeight(item, boosted)
+        if (roll <= 0) return item
+      }
+      return pool[0]
+    }
+
+    const results = Array.from({ length: pullCount }, () => rollItem(items, boostRates))
+
+    if (boostRates) {
+      const hasRare = results.some(item => item.item_type === 'character' || item.item_type === 'shards')
+      const guaranteePool = items.filter(item => item.item_type === 'character' || item.item_type === 'shards')
+      if (!hasRare && guaranteePool.length > 0) {
+        results[results.length - 1] = rollItem(guaranteePool, true)
       }
     }
 
-    const nextPremium = useFragment ? premium : premium - pullCost
+    const nextPremium = useFragment ? premium : premium - totalCost
     let nextSoft = profile?.soft_currency ?? 0
     const inventoryUpdates = []
-    const characterUnlockIds = []
+    const characterUnlockIds = new Set()
+    const shardDeltas = {}
+    let softCurrencyEarned = 0
 
-    // Handle currency rewards
-    if (selected.item_type === 'currency') {
-      nextSoft += selected.soft_currency || 0
-    }
+    results.forEach(selected => {
+      if (!selected) return
 
-    // Handle shard rewards
-    if (selected.item_type === 'shards' && selected.character_id) {
-      const currentAmount = inventory[selected.character_id] || 0
-      const nextAmount = currentAmount + (selected.shard_amount || 0)
-      inventoryUpdates.push({
-        user_id: session.user.id,
-        character_id: selected.character_id,
-        shard_amount: nextAmount,
-        updated_at: new Date().toISOString(),
-      })
-      setInventory(prev => ({
-        ...prev,
-        [selected.character_id]: nextAmount,
-      }))
-    }
-
-    // Handle character rewards (FIXED: now unlocks character + gives shards)
-    if (selected.item_type === 'character' && selected.character_id) {
-      const currentAmount = inventory[selected.character_id] || 0
-      const nextAmount = currentAmount + 30
-      inventoryUpdates.push({
-        user_id: session.user.id,
-        character_id: selected.character_id,
-        shard_amount: nextAmount,
-        updated_at: new Date().toISOString(),
-      })
-      setInventory(prev => ({
-        ...prev,
-        [selected.character_id]: nextAmount,
-      }))
-
-      // Track character for unlock if not already unlocked
-      if (!progressByCharacterId[selected.character_id]) {
-        characterUnlockIds.push(selected.character_id)
+      if (selected.item_type === 'currency') {
+        const gain = selected.soft_currency || 0
+        nextSoft += gain
+        softCurrencyEarned += gain
       }
-    }
+
+      if (selected.item_type === 'shards' && selected.character_id) {
+        shardDeltas[selected.character_id] = (shardDeltas[selected.character_id] || 0) + (selected.shard_amount || 0)
+      }
+
+      if (selected.item_type === 'character' && selected.character_id) {
+        shardDeltas[selected.character_id] = (shardDeltas[selected.character_id] || 0) + 30
+        if (!progressByCharacterId[selected.character_id]) {
+          characterUnlockIds.add(selected.character_id)
+        }
+      }
+    })
+
+    Object.entries(shardDeltas).forEach(([characterId, delta]) => {
+      const currentAmount = inventory[characterId] || 0
+      const nextAmount = currentAmount + delta
+      inventoryUpdates.push({
+        user_id: session.user.id,
+        character_id: Number(characterId),
+        shard_amount: nextAmount,
+        updated_at: new Date().toISOString(),
+      })
+    })
 
     try {
       // Update profile currency (deduct cost, add soft currency if applicable)
@@ -3462,8 +4196,8 @@ function App() {
       }
 
       // Unlock character if pulled (create character_progress entry)
-      if (characterUnlockIds.length > 0) {
-        const payload = characterUnlockIds.map(id => ({
+      if (characterUnlockIds.size > 0) {
+        const payload = Array.from(characterUnlockIds).map(id => ({
           user_id: session.user.id,
           character_id: id,
           level: 1,
@@ -3501,20 +4235,30 @@ function App() {
         premium_currency: nextPremium,
       }))
 
+      if (inventoryUpdates.length > 0) {
+        setInventory(prev => {
+          const next = { ...prev }
+          Object.entries(shardDeltas).forEach(([characterId, delta]) => {
+            next[characterId] = (next[characterId] || 0) + delta
+          })
+          return next
+        })
+      }
+
       // Show gacha result
-      setGachaResult(selected)
+      setGachaResult(results)
 
       // Track achievement progress
       const previousGachaPulls = getAchievementProgressValue('gacha_pulls')
-      trackAchievementProgress('gacha_pulls', previousGachaPulls + 1)
+      trackAchievementProgress('gacha_pulls', previousGachaPulls + pullCount)
       trackMissionProgress({
-        gachaPulls: 1,
-        softCurrencyEarned: selected.item_type === 'currency' ? (selected.soft_currency || 0) : 0,
+        gachaPulls: pullCount,
+        softCurrencyEarned,
       })
 
       // Track characters unlocked
-      if (characterUnlockIds.length > 0) {
-        const unlockedCount = Object.keys(progressByCharacterId).length + characterUnlockIds.length
+      if (characterUnlockIds.size > 0) {
+        const unlockedCount = Object.keys(progressByCharacterId).length + characterUnlockIds.size
         trackAchievementProgress('characters_unlocked', unlockedCount)
         trackMissionProgress({ charactersUnlocked: unlockedCount })
       }
@@ -3609,6 +4353,7 @@ function App() {
   const navItems = [
     { label: 'Home', onClick: goHome, active: view === 'team' && gamePhase === 'select' },
     { label: 'Story', onClick: () => safeNavigate('story'), active: view === 'story', disabled: navLocked },
+    { label: 'Rogue', onClick: () => safeNavigate('rogue'), active: view === 'rogue', disabled: navLocked },
     { label: 'Daily', onClick: () => safeNavigate('daily'), active: view === 'daily', disabled: navLocked },
     { label: 'Achievements', onClick: () => safeNavigate('achievements'), active: view === 'achievements', disabled: navLocked },
     { label: 'Shop', onClick: () => safeNavigate('shop'), active: view === 'shop', disabled: navLocked },
@@ -3639,6 +4384,10 @@ function App() {
           result={battleResult.result}
           rewards={battleResult.rewards}
           onContinue={() => {
+            if (rogueState.active) {
+              handleRogueBattleContinue()
+              return
+            }
             setBattleResult(null)
             resetGame()
           }}
@@ -3721,6 +4470,19 @@ function App() {
           onPull={pullGacha}
           result={gachaResult}
           onClearResult={() => setGachaResult(null)}
+        />
+      ) : view === 'rogue' ? (
+        <RogueMode
+          rogueState={rogueState}
+          selectedTeam={selectedPlayerTeam}
+          onStart={startRogueRun}
+          onEnterFloor={startRogueBattle}
+          onChooseBlessing={chooseRogueBlessing}
+          onChooseNode={chooseRogueNode}
+          onResolveEvent={resolveRogueEvent}
+          onAbandon={abandonRogueRun}
+          onBack={() => setView('team')}
+          rogueTokens={userItems?.rogue_token || 0}
         />
       ) : view === 'story' ? (
         <StoryMode

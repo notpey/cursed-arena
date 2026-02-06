@@ -197,6 +197,149 @@ function AdminPanel({ profile, onBack, characters = [] }) {
 
   const isAdmin = profile?.role === 'admin'
 
+  const getRarityDefaults = (rarity) => {
+    const key = String(rarity || '').toUpperCase()
+    switch (key) {
+      case 'SSR':
+        return { weight: 2, shards: 20 }
+      case 'SR':
+        return { weight: 5, shards: 15 }
+      case 'R':
+        return { weight: 10, shards: 10 }
+      case 'N':
+        return { weight: 14, shards: 8 }
+      default:
+        return { weight: 8, shards: 12 }
+    }
+  }
+
+  const resolveCharacterId = (value) => {
+    if (value) return Number(value)
+    return characters[0]?.id ? Number(characters[0].id) : null
+  }
+
+  const applyBannerPreset = (preset) => {
+    const bannerId = Number(selectedBannerId || bannerItemDraft.banner_id) || null
+    const characterId = resolveCharacterId(bannerItemDraft.character_id)
+    const character = characters.find(c => c.id === Number(characterId))
+    const defaults = getRarityDefaults(character?.rarity)
+
+    if ((preset === 'character' || preset === 'shards') && !characterId) {
+      showToast('Select a character first', 'error')
+      return
+    }
+
+    if (preset === 'character') {
+      setBannerItemDraft({
+        ...emptyBannerItem,
+        banner_id: bannerId,
+        item_type: 'character',
+        character_id: characterId,
+        weight: defaults.weight,
+        shard_amount: 0,
+        soft_currency: 0,
+        premium_currency: 0,
+      })
+      return
+    }
+
+    if (preset === 'shards') {
+      setBannerItemDraft({
+        ...emptyBannerItem,
+        banner_id: bannerId,
+        item_type: 'shards',
+        character_id: characterId,
+        shard_amount: defaults.shards,
+        weight: Math.max(1, Math.round(defaults.weight * 1.5)),
+        soft_currency: 0,
+        premium_currency: 0,
+      })
+      return
+    }
+
+    if (preset === 'soft') {
+      setBannerItemDraft({
+        ...emptyBannerItem,
+        banner_id: bannerId,
+        item_type: 'currency',
+        character_id: null,
+        shard_amount: 0,
+        soft_currency: 1000,
+        premium_currency: 0,
+        weight: 8,
+      })
+      return
+    }
+
+    if (preset === 'premium') {
+      setBannerItemDraft({
+        ...emptyBannerItem,
+        banner_id: bannerId,
+        item_type: 'currency',
+        character_id: null,
+        shard_amount: 0,
+        soft_currency: 0,
+        premium_currency: 5,
+        weight: 4,
+      })
+    }
+  }
+
+  const applyOfferPreset = (preset) => {
+    const characterId = resolveCharacterId(offerDraft.character_id)
+    if (preset.includes('shards') && !characterId) {
+      showToast('Select a character first', 'error')
+      return
+    }
+
+    if (preset === 'shards-small') {
+      setOfferDraft(prev => ({
+        ...prev,
+        item_type: 'shards',
+        character_id: characterId,
+        shard_amount: 10,
+        soft_currency: 0,
+        premium_currency: 0,
+      }))
+      return
+    }
+
+    if (preset === 'shards-large') {
+      setOfferDraft(prev => ({
+        ...prev,
+        item_type: 'shards',
+        character_id: characterId,
+        shard_amount: 30,
+        soft_currency: 0,
+        premium_currency: 0,
+      }))
+      return
+    }
+
+    if (preset === 'soft-pack') {
+      setOfferDraft(prev => ({
+        ...prev,
+        item_type: 'currency',
+        character_id: null,
+        shard_amount: 0,
+        soft_currency: 5000,
+        premium_currency: 0,
+      }))
+      return
+    }
+
+    if (preset === 'premium-pack') {
+      setOfferDraft(prev => ({
+        ...prev,
+        item_type: 'currency',
+        character_id: null,
+        shard_amount: 0,
+        soft_currency: 0,
+        premium_currency: 10,
+      }))
+    }
+  }
+
   const showToast = (message, type = 'success') => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
@@ -1907,6 +2050,38 @@ function AdminPanel({ profile, onBack, characters = [] }) {
 
               {bannerDraft.id && (
                 <CollapsibleSection title="Banner Items" defaultOpen={false} badge={bannerItems.length}>
+                  <div className="quick-preset">
+                    <div className="quick-preset-title">Quick presets</div>
+                    <div className="quick-preset-row">
+                      <select
+                        className="form-input quick-preset-select"
+                        value={bannerItemDraft.character_id || ''}
+                        onChange={(e) => setBannerItemDraft(prev => ({ ...prev, character_id: e.target.value }))}
+                      >
+                        <option value="">Select character</option>
+                        {characters.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.rarity})
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn-secondary" type="button" onClick={() => applyBannerPreset('character')}>
+                        Feature Character
+                      </button>
+                      <button className="btn-secondary" type="button" onClick={() => applyBannerPreset('shards')}>
+                        Shard Pack
+                      </button>
+                    </div>
+                    <div className="quick-preset-row">
+                      <button className="btn-secondary" type="button" onClick={() => applyBannerPreset('soft')}>
+                        Soft Pack
+                      </button>
+                      <button className="btn-secondary" type="button" onClick={() => applyBannerPreset('premium')}>
+                        Premium Pack
+                      </button>
+                    </div>
+                    <p className="quick-preset-hint">Applies defaults so you can tweak weights/amounts below.</p>
+                  </div>
                   <div className="subsection-list">
                     {bannerItems.map(item => (
                       <button
@@ -2070,6 +2245,39 @@ function AdminPanel({ profile, onBack, characters = [] }) {
             <div className="admin-panel-detail">
               <div className="admin-detail-header">
                 <h2>{offerDraft.id ? 'Edit Offer' : 'New Offer'}</h2>
+              </div>
+
+              <div className="quick-preset">
+                <div className="quick-preset-title">Quick presets</div>
+                <div className="quick-preset-row">
+                  <select
+                    className="form-input quick-preset-select"
+                    value={offerDraft.character_id || ''}
+                    onChange={(e) => setOfferDraft(prev => ({ ...prev, character_id: e.target.value }))}
+                  >
+                    <option value="">Select character</option>
+                    {characters.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.rarity})
+                      </option>
+                    ))}
+                  </select>
+                  <button className="btn-secondary" type="button" onClick={() => applyOfferPreset('shards-small')}>
+                    Shard x10
+                  </button>
+                  <button className="btn-secondary" type="button" onClick={() => applyOfferPreset('shards-large')}>
+                    Shard x30
+                  </button>
+                </div>
+                <div className="quick-preset-row">
+                  <button className="btn-secondary" type="button" onClick={() => applyOfferPreset('soft-pack')}>
+                    Soft Pack
+                  </button>
+                  <button className="btn-secondary" type="button" onClick={() => applyOfferPreset('premium-pack')}>
+                    Premium Pack
+                  </button>
+                </div>
+                <p className="quick-preset-hint">Sets reward fields only; add name/description/cost below.</p>
               </div>
 
               <CollapsibleSection title="Basic Info" defaultOpen={true}>

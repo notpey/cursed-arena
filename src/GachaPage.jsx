@@ -7,11 +7,13 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
   const premium = profile?.premium_currency ?? 0
   const fragments = userItems?.finger_fragment ?? 0
   const pullCost = 25
+  const multiPullCount = 10
+  const multiPullCost = pullCost * multiPullCount
   const activeBanner = banners[0]
   const items = activeBanner
     ? bannerItems.filter(item => item.banner_id === activeBanner.id)
     : []
-  const totalWeight = items.reduce((sum, item) => sum + (item.weight || 0), 0)
+  const totalWeight = items.reduce((sum, item) => sum + Number(item.weight || 0), 0)
   const characterMap = useMemo(() => {
     const map = new Map()
     ;(characters || []).forEach(character => map.set(character.id, character))
@@ -38,6 +40,9 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
       onClearResult?.()
     }, 300) // Wait for fade out animation
   }
+
+  const results = Array.isArray(result) ? result : (result ? [result] : [])
+  const isMultiResult = results.length > 1
 
   const formatItemLabel = (item) => {
     if (item.item_type === 'character' && item.character_id) {
@@ -121,6 +126,22 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
                 </button>
 
                 <button
+                  className={`pull-button primary multi ${isPulling ? 'pulling' : ''}`}
+                  onClick={() => handlePull(activeBanner.id, { count: multiPullCount })}
+                  disabled={premium < multiPullCost || isPulling}
+                >
+                  <div className="pull-button-content">
+                    <span className="pull-icon">💎</span>
+                    <div className="pull-text">
+                      <span className="pull-label">{isPulling ? 'Summoning...' : `${multiPullCount}x Summon`}</span>
+                      <span className="pull-cost">{multiPullCost} Premium</span>
+                      <span className="pull-bonus">Boosted rates + guaranteed rare</span>
+                    </div>
+                  </div>
+                  {premium < multiPullCost && <div className="pull-overlay">Insufficient Funds</div>}
+                </button>
+
+                <button
                   className={`pull-button fragment ${isPulling ? 'pulling' : ''}`}
                   onClick={() => handlePull(activeBanner.id, { useFragment: true })}
                   disabled={fragments <= 0 || isPulling}
@@ -155,22 +176,48 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
               <div className={`summon-result ${showResult ? 'revealed' : ''}`}>
                 <button className="result-close" onClick={handleClearResult}>×</button>
                 <div className="result-backdrop"></div>
-                <div className="result-card">
-                  <div className={`result-rarity ${getRarityClass(result)}`}>
-                    {result.item_type === 'character' && (
-                      <>
-                        <div className="rarity-stars">★★★</div>
-                        <div className="rarity-label">NEW CHARACTER</div>
-                      </>
-                    )}
-                  </div>
-                  <div className="result-name">{formatItemLabel(result)}</div>
-                  <div className="result-rewards">
-                    {result.item_type === 'character' && <span className="reward-badge">+30 Shards</span>}
-                    {result.item_type === 'shards' && <span className="reward-badge">+{result.shard_amount} Shards</span>}
-                    {result.soft_currency > 0 && <span className="reward-badge">+{result.soft_currency} Soft</span>}
-                    {result.premium_currency > 0 && <span className="reward-badge">+{result.premium_currency} Premium</span>}
-                  </div>
+                <div className={`result-card ${isMultiResult ? 'result-card-multi' : ''}`}>
+                  {isMultiResult ? (
+                    <>
+                      <div className="result-header">
+                        <div>
+                          <div className="rarity-label">Summon Results</div>
+                          <div className="result-name">{results.length} Pulls</div>
+                        </div>
+                      </div>
+                      <div className="result-grid">
+                        {results.map((item, index) => (
+                          <div key={`${item.item_type}-${index}`} className={`result-tile ${getRarityClass(item)}`}>
+                            <div className="result-tile-name">{formatItemLabel(item)}</div>
+                            <div className="result-tile-rewards">
+                              {item.item_type === 'character' && <span>+30 Shards</span>}
+                              {item.item_type === 'shards' && <span>+{item.shard_amount} Shards</span>}
+                              {item.soft_currency > 0 && <span>+{item.soft_currency} Soft</span>}
+                              {item.premium_currency > 0 && <span>+{item.premium_currency} Premium</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={`result-rarity ${getRarityClass(results[0])}`}>
+                        {results[0].item_type === 'character' && (
+                          <>
+                            <div className="rarity-stars">★★★</div>
+                            <div className="rarity-label">NEW CHARACTER</div>
+                          </>
+                        )}
+                      </div>
+                      <div className="result-name">{formatItemLabel(results[0])}</div>
+                      <div className="result-rewards">
+                        {results[0].item_type === 'character' && <span className="reward-badge">+30 Shards</span>}
+                        {results[0].item_type === 'shards' && <span className="reward-badge">+{results[0].shard_amount} Shards</span>}
+                        {results[0].soft_currency > 0 && <span className="reward-badge">+{results[0].soft_currency} Soft</span>}
+                        {results[0].premium_currency > 0 && <span className="reward-badge">+{results[0].premium_currency} Premium</span>}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
