@@ -2111,10 +2111,28 @@ function App() {
   const awardProgress = async (result, teamSnapshot) => {
     if (!session) return
 
-    const accountGain = result === 'win' ? 60 : 40
-    const characterGain = result === 'win' ? 35 : 25
-    const softCurrencyGain = result === 'win' ? 50 : 20
-    const premiumCurrencyGain = result === 'win' ? 2 : 0
+    const isStoryBattle = Boolean(storyBattleConfig)
+    const isAiBattle = !pvpMatch && !isStoryBattle
+    let xpMultiplier = 1
+    let currencyMultiplier = 1
+
+    if (isAiBattle) {
+      const difficulty = enemyTeam.find(member => member?.difficultyMultiplier)?.difficultyMultiplier
+      if (difficulty) {
+        xpMultiplier = difficulty.xp || 1
+        currencyMultiplier = difficulty.currency || 1
+      }
+    }
+
+    const baseAccountGain = result === 'win' ? 60 : 40
+    const baseCharacterGain = result === 'win' ? 35 : 25
+    const baseSoftCurrencyGain = result === 'win' ? 50 : 20
+    const basePremiumCurrencyGain = result === 'win' ? 2 : 0
+
+    const accountGain = Math.max(0, Math.round(baseAccountGain * xpMultiplier))
+    const characterGain = Math.max(0, Math.round(baseCharacterGain * xpMultiplier))
+    const softCurrencyGain = Math.max(0, Math.round(baseSoftCurrencyGain * currencyMultiplier))
+    const premiumCurrencyGain = Math.max(0, Math.round(basePremiumCurrencyGain * currencyMultiplier))
 
     const currentAccountLevel = profile?.account_level || 1
     const currentAccountXp = profile?.account_xp || 0
@@ -2122,8 +2140,8 @@ function App() {
     const currentSoftCurrency = profile?.soft_currency || 0
     const currentPremiumCurrency = profile?.premium_currency || 0
     const nextAccount = applyXpGain(currentAccountLevel, currentAccountXp, accountGain)
-    const ratingDelta = result === 'win' ? 20 : -15
-    const nextRating = Math.max(0, currentRating + ratingDelta)
+    const ratingDelta = isPvp ? (result === 'win' ? 20 : -15) : 0
+    const nextRating = isPvp ? Math.max(0, currentRating + ratingDelta) : currentRating
     const nextSoftCurrency = currentSoftCurrency + softCurrencyGain
     const nextPremiumCurrency = currentPremiumCurrency + premiumCurrencyGain
 
@@ -2217,6 +2235,8 @@ function App() {
 
     await trackMissionProgress(result, characterLevelUps.length)
 
+    const unlockedAchievements = []
+
     // Track achievements
     if (result === 'win') {
       // Count total wins (need to query match_history for accurate count)
@@ -2227,24 +2247,34 @@ function App() {
         .eq('result', 'win')
 
       if (count !== null) {
-        trackAchievementProgress('battles_won', count)
+        unlockedAchievements.push(...await trackAchievementProgress('battles_won', count))
       }
     }
 
     // Track account level achievement
-    trackAchievementProgress('account_level', nextAccount.level)
+    unlockedAchievements.push(...await trackAchievementProgress('account_level', nextAccount.level))
 
     // Track character max level if any reached max
-    teamSnapshot.forEach(character => {
+    const maxLevelCount = teamSnapshot.reduce((count, character) => {
       const progress = updatedProgress[character.id]
-      if (progress && progress.level >= 50) { // Assuming max level is 50
-        trackAchievementProgress('max_level_characters', 1)
-      }
-    })
+      return progress && progress.level >= 50 ? count + 1 : count
+    }, 0)
+    if (maxLevelCount > 0) {
+      unlockedAchievements.push(...await trackAchievementProgress('max_level_characters', maxLevelCount))
+    }
 
     const characterRewards = characterSummaries.map(char => ({
       ...char,
       levelUp: characterLevelUps.some(lu => lu.name === char.name)
+    }))
+
+    const achievementsUnlocked = Array.from(
+      new Map(unlockedAchievements.map(achievement => [achievement.id, achievement])).values()
+    ).map(achievement => ({
+      id: achievement.id,
+      name: achievement.name,
+      description: achievement.description,
+      icon: achievement.icon || '🏅',
     }))
 
     const rewardData = {
@@ -2256,7 +2286,7 @@ function App() {
       premiumCurrencyGain,
       ratingDelta,
       characters: characterRewards,
-      achievementsUnlocked: [], // Will be populated by achievement tracking
+      achievementsUnlocked,
     }
 
     setMatchSummary({
@@ -2449,7 +2479,7 @@ function App() {
   }
 
   const trackAchievementProgress = async (requirementType, currentValue) => {
-    if (!session) return
+    if (!session) return []
 
     // Find achievements that match this requirement type
     const relevantAchievements = achievements.filter(a =>
@@ -2457,29 +2487,41 @@ function App() {
       currentValue >= a.requirement_target
     )
 
-    for (const achievement of relevantAchievements) {
+    if (relevantAchievements.length === 0) return []
+
+    const now = new Date().toISOString()
+    const upserts = []
+    const newlyUnlocked = []
+
+    relevantAchievements.forEach(achievement => {
       const existing = achievementProgress.find(p => p.achievement_id === achievement.id)
 
       if (!existing || !existing.is_completed) {
-        await supabase
-          .from('achievement_progress')
-          .upsert({
-            user_id: session.user.id,
-            achievement_id: achievement.id,
-            progress: currentValue,
-            is_completed: currentValue >= achievement.requirement_target,
-            completed_at: currentValue >= achievement.requirement_target ? new Date().toISOString() : null,
-            updated_at: new Date().toISOString(),
-          })
-
-        // Refresh progress
-        const { data } = await supabase
-          .from('achievement_progress')
-          .select('*')
-          .eq('user_id', session.user.id)
-        setAchievementProgress(data || [])
+        newlyUnlocked.push(achievement)
+        upserts.push({
+          user_id: session.user.id,
+          achievement_id: achievement.id,
+          progress: currentValue,
+          is_completed: true,
+          completed_at: now,
+          updated_at: now,
+        })
       }
-    }
+    })
+
+    if (upserts.length === 0) return []
+
+    await supabase
+      .from('achievement_progress')
+      .upsert(upserts, { onConflict: 'user_id,achievement_id' })
+
+    // Refresh progress
+    const { data } = await supabase
+      .from('achievement_progress')
+      .select('*')
+      .eq('user_id', session.user.id)
+    setAchievementProgress(data || [])
+    return newlyUnlocked
   }
 
   const claimAchievementReward = async (achievementId) => {
