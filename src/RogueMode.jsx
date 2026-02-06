@@ -29,27 +29,32 @@ function RogueMode({
 
   return (
     <div className="rogue-page">
-      <div className="rogue-header">
-        <button className="rogue-back" onClick={onBack}>
-          <span>←</span>
-          <span>Back</span>
-        </button>
-        <div className="rogue-title">
-          <h1>Simulated Curse</h1>
-          <p>Ascend the tower, claim augments, survive the bosses.</p>
-        </div>
-        <div className="rogue-token-badge">
-          🜁 Rogue Tokens: {rogueTokens}
-        </div>
-        {runActive && (
-          <button className="rogue-abandon" onClick={onAbandon}>
-            Abandon Run
+      <div className="page-shell padded">
+        <div className="rogue-header">
+        <div className="rogue-header-left">
+          <button className="rogue-back" onClick={onBack}>
+            <span>←</span>
+            <span>Back</span>
           </button>
-        )}
-      </div>
+          <div className="rogue-title">
+            <h1>Simulated Curse</h1>
+            <p>Ascend the tower, claim augments, survive the bosses.</p>
+          </div>
+        </div>
+        <div className="rogue-header-right">
+          <div className="rogue-token-badge">
+            🜁 Rogue Tokens: {rogueTokens}
+          </div>
+          {runActive && (
+            <button className="rogue-abandon ghost-btn" onClick={onAbandon}>
+              Abandon Run
+            </button>
+          )}
+        </div>
+        </div>
 
-      <div className="rogue-grid">
-        <div className="rogue-panel">
+        <div className="rogue-grid">
+        <div className="rogue-panel rogue-main">
           <div className="rogue-progress">
             <div>
               <h2>Run Progress</h2>
@@ -175,7 +180,7 @@ function RogueMode({
           )}
         </div>
 
-        <div className="rogue-panel">
+        <div className="rogue-panel rogue-sidebar">
           <h2>Your Team</h2>
           {hasTeam ? (
             <div className="rogue-team-list">
@@ -222,6 +227,7 @@ function RogueMode({
           )}
         </div>
       </div>
+    </div>
     </div>
   )
 }

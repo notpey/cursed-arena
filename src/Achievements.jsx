@@ -11,7 +11,7 @@ import React, { useState, useMemo } from 'react'
  * - Rarity-based styling
  */
 
-function Achievements({ achievements, progress, onClaimReward, onBack }) {
+function Achievements({ achievements, progress, onClaimReward, onBack, embedded = false }) {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [claimingId, setClaimingId] = useState(null)
 
@@ -77,14 +77,18 @@ function Achievements({ achievements, progress, onClaimReward, onBack }) {
   }
 
   return (
-    <div className="achievements-page">
-      <div className="achievements-header">
-        <button className="achievements-back" onClick={onBack}>
-          <span>←</span>
-          <span>Back</span>
-        </button>
-        <h1>Achievements</h1>
-      </div>
+    <div className={`achievements-page ${embedded ? 'embedded' : ''}`}>
+      {!embedded && (
+        <div className="achievements-header">
+          {onBack && (
+            <button className="achievements-back" onClick={onBack}>
+              <span>←</span>
+              <span>Back</span>
+            </button>
+          )}
+          <h1>Achievements</h1>
+        </div>
+      )}
 
       <div className="achievements-container">
         {/* Stats Section */}

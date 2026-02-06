@@ -1,6 +1,6 @@
 import React from 'react'
 
-function MissionsPage({ missions, userMissions, onBack, onClaim }) {
+function MissionsPage({ missions, userMissions, onBack, onClaim, embedded = false }) {
   const progressById = new Map(userMissions.map(entry => [entry.mission_id, entry]))
 
   const groupByType = (type) => missions.filter(mission => mission.type === type)
@@ -35,13 +35,15 @@ function MissionsPage({ missions, userMissions, onBack, onClaim }) {
   }
 
   return (
-    <div className="meta-page">
-      <div className="meta-header">
-        <button className="profile-back" onClick={onBack}>← Back</button>
-        <h1>Missions</h1>
-      </div>
+    <div className={`meta-page ${embedded ? 'embedded' : ''}`}>
+      {!embedded && (
+        <div className="meta-header">
+          {onBack && <button className="profile-back" onClick={onBack}>← Back</button>}
+          <h1>Missions</h1>
+        </div>
+      )}
 
-      <div className="meta-grid">
+      <div className={`meta-grid ${embedded ? 'embedded' : ''}`}>
         <section>
           <h3>Daily</h3>
           <div className="mission-list">

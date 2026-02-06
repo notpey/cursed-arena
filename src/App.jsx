@@ -5,20 +5,19 @@ import BattleScreen from './BattleScreen'
 import AuthGate from './AuthGate'
 import { supabase } from './supabaseClient'
 import ProfilePage from './ProfilePage'
-import MissionsPage from './MissionsPage'
-import ShopPage from './ShopPage'
-import GachaPage from './GachaPage'
-import InventoryPage from './InventoryPage'
-import StoryMode from './StoryMode'
-import AdminPanel from './AdminPanel'
-import DailyRewards from './DailyRewards'
-import Achievements from './Achievements'
 import OpponentSelect from './OpponentSelect'
 import BattleResultScreen from './BattleResultScreen'
-import LadderPage from './LadderPage'
-import RogueMode from './RogueMode'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
+
+const ShopPage = React.lazy(() => import('./ShopPage'))
+const GachaPage = React.lazy(() => import('./GachaPage'))
+const InventoryPage = React.lazy(() => import('./InventoryPage'))
+const StoryMode = React.lazy(() => import('./StoryMode'))
+const AdminPanel = React.lazy(() => import('./AdminPanel'))
+const LadderPage = React.lazy(() => import('./LadderPage'))
+const RogueMode = React.lazy(() => import('./RogueMode'))
+const ProgressHub = React.lazy(() => import('./ProgressHub'))
 
 const deepCopy = (obj) => JSON.parse(JSON.stringify(obj))
 
@@ -102,6 +101,10 @@ function App() {
   const autoBattleTurnRef = useRef(null)
   const rogueTeamRef = useRef(null)
   const rogueResultRef = useRef(null)
+  const combatEventQueueRef = useRef([])
+  const combatEventFlushRef = useRef(null)
+  const battleLogBufferRef = useRef([])
+  const battleLogFlushRef = useRef(null)
 
   const getSeasonInfo = (date = new Date()) => {
     const year = date.getUTCFullYear()
@@ -147,11 +150,77 @@ function App() {
     return { level, xp }
   }
 
+  const flushBattleLog = () => {
+    const queued = battleLogBufferRef.current
+    if (queued.length === 0) return
+    battleLogBufferRef.current = []
+    setBattleLog(prev => [...prev, ...queued])
+  }
+
+  const scheduleBattleLogFlush = () => {
+    if (battleLogFlushRef.current) return
+    const raf = typeof window !== 'undefined' ? window.requestAnimationFrame : null
+    battleLogFlushRef.current = raf
+      ? raf(() => {
+          battleLogFlushRef.current = null
+          flushBattleLog()
+        })
+      : setTimeout(() => {
+          battleLogFlushRef.current = null
+          flushBattleLog()
+        }, 16)
+  }
+
+  const cancelBattleLogFlush = () => {
+    if (!battleLogFlushRef.current) return
+    const raf = typeof window !== 'undefined' ? window.cancelAnimationFrame : null
+    if (raf) {
+      raf(battleLogFlushRef.current)
+    } else {
+      clearTimeout(battleLogFlushRef.current)
+    }
+    battleLogFlushRef.current = null
+  }
+
+  const appendBattleLog = (entries) => {
+    if (!entries || entries.length === 0) return
+    battleLogBufferRef.current.push(...entries)
+    scheduleBattleLogFlush()
+  }
+
+  const resetBattleLog = (entries) => {
+    battleLogBufferRef.current = []
+    cancelBattleLogFlush()
+    setBattleLog(entries)
+  }
+
+  const flushCombatEvents = () => {
+    const queued = combatEventQueueRef.current
+    if (queued.length === 0) return
+    combatEventQueueRef.current = []
+    setCombatEvents(prev => [...prev, ...queued])
+  }
+
+  const scheduleCombatEventFlush = () => {
+    if (combatEventFlushRef.current) return
+    const raf = typeof window !== 'undefined' ? window.requestAnimationFrame : null
+    combatEventFlushRef.current = raf
+      ? raf(() => {
+          combatEventFlushRef.current = null
+          flushCombatEvents()
+        })
+      : setTimeout(() => {
+          combatEventFlushRef.current = null
+          flushCombatEvents()
+        }, 16)
+  }
+
   const pushCombatEvent = (event) => {
     const speed = Math.max(1, battleSpeed || 1)
     const id = `${Date.now()}-${Math.random()}`
     const payload = { id, ...event }
-    setCombatEvents(prev => [...prev, payload])
+    combatEventQueueRef.current.push(payload)
+    scheduleCombatEventFlush()
     setTimeout(() => {
       setCombatEvents(prev => prev.filter(item => item.id !== id))
     }, Math.max(300, Math.floor(800 / speed)))
@@ -626,7 +695,7 @@ function App() {
     setPlayerTeam(teamState)
     setEnemyTeam(botTeam)
     setGamePhase('battle')
-    setBattleLog([`Ranked Bot Match vs ${bot.name} (Rating ${bot.rating})`])
+    resetBattleLog([`Ranked Bot Match vs ${bot.name} (Rating ${bot.rating})`])
     setActedCharacters([])
     setQueuedActions([])
     setStoryBattleConfig(null)
@@ -739,7 +808,7 @@ function App() {
     })
     setStoryResult(null)
     setGamePhase('battle')
-    setBattleLog([
+    resetBattleLog([
       `Story Battle: ${node.title}`,
       `Objective: ${battleConfig.objective}`,
       ...battleConfig.prompts.map(prompt => `Tip: ${prompt}`),
@@ -1569,7 +1638,7 @@ function App() {
 
   const finalizeBattle = (result, teamSnapshot, newLog = []) => {
     if (newLog.length > 0) {
-      setBattleLog(prev => [...prev, ...newLog])
+      appendBattleLog(newLog)
     }
     setGameOver(result === 'win' ? 'win' : 'lose')
 
@@ -2286,7 +2355,7 @@ function App() {
       return
     }
 
-    setBattleLog(prev => [...prev, ...newLog])
+    appendBattleLog(newLog)
     setActedCharacters([])
     setTurn(prev => prev + 1)
   }
@@ -2399,7 +2468,7 @@ function App() {
         log: [...baseLog, ...newLog],
       }
 
-      setBattleLog(nextState.log)
+      resetBattleLog(nextState.log)
       setPlayerTeam(newPlayerTeam)
       setEnemyTeam(newEnemyTeam)
       setActedCharacters([])
@@ -2424,7 +2493,7 @@ function App() {
       return
     }
 
-    setBattleLog(prev => [...prev, ...newLog])
+    appendBattleLog(newLog)
     endPlayerTurn(newPlayerTeam, newEnemyTeam)
   }
 
@@ -2469,7 +2538,7 @@ function App() {
     setPlayerTeam([])
     setEnemyTeam([])
     setSelectedEnemy(null)
-    setBattleLog(["Battle Start! Queue actions, then End Turn."])
+    resetBattleLog(["Battle Start! Queue actions, then End Turn."])
     setGameOver(null)
     setTurn(1)
     setActedCharacters([])
@@ -2757,7 +2826,7 @@ function App() {
     setPlayerTeam(playerSnapshot)
     setEnemyTeam(enemySnapshot)
     setGamePhase('battle')
-    setBattleLog([
+    resetBattleLog([
       `Roguelike Floor ${rogueState.floor}${selectedNode.type === 'boss' ? ' — Boss' : ''}`,
     ])
     setActedCharacters([])
@@ -2864,7 +2933,7 @@ function App() {
     setPlayerTeam([])
     setEnemyTeam([])
     setSelectedEnemy(null)
-    setBattleLog(["Battle Start! Queue actions, then End Turn."])
+    resetBattleLog(["Battle Start! Queue actions, then End Turn."])
     setGameOver(null)
     setTurn(1)
     setActedCharacters([])
@@ -2893,7 +2962,7 @@ function App() {
     setPlayerTeam([])
     setEnemyTeam([])
     setSelectedEnemy(null)
-    setBattleLog(["Battle Start! Queue actions, then End Turn."])
+    resetBattleLog(["Battle Start! Queue actions, then End Turn."])
     setGameOver(null)
     setTurn(1)
     setActedCharacters([])
@@ -2945,7 +3014,7 @@ function App() {
 
     setEnemyTeam(enemyTeam)
     setGamePhase('battle')
-    setBattleLog([`Battle Start! Difficulty: ${difficulty.label}`])
+    resetBattleLog([`Battle Start! Difficulty: ${difficulty.label}`])
     setActedCharacters([])
     setQueuedActions([])
     setStoryBattleConfig(null)
@@ -2964,7 +3033,7 @@ function App() {
     const player2Team = state.player2Team || buildTeamSnapshot(match.player2_team || [], false)
     setPlayerTeam(deepCopy(isPlayer1 ? player1Team : player2Team))
     setEnemyTeam(deepCopy(isPlayer1 ? player2Team : player1Team))
-    setBattleLog(state.log?.length ? state.log : ["PvP Match Start!"])
+    resetBattleLog(state.log?.length ? state.log : ["PvP Match Start!"])
     setTurn(state.turn || match.turn || 1)
     setQueuedActions([])
     setActedCharacters([])
@@ -4354,13 +4423,11 @@ function App() {
     { label: 'Home', onClick: goHome, active: view === 'team' && gamePhase === 'select' },
     { label: 'Story', onClick: () => safeNavigate('story'), active: view === 'story', disabled: navLocked },
     { label: 'Rogue', onClick: () => safeNavigate('rogue'), active: view === 'rogue', disabled: navLocked },
-    { label: 'Daily', onClick: () => safeNavigate('daily'), active: view === 'daily', disabled: navLocked },
-    { label: 'Achievements', onClick: () => safeNavigate('achievements'), active: view === 'achievements', disabled: navLocked },
-    { label: 'Shop', onClick: () => safeNavigate('shop'), active: view === 'shop', disabled: navLocked },
-    { label: 'Gacha', onClick: () => safeNavigate('gacha'), active: view === 'gacha', disabled: navLocked },
-    { label: 'Inventory', onClick: () => safeNavigate('inventory'), active: view === 'inventory', disabled: navLocked },
-    { label: 'Missions', onClick: () => safeNavigate('missions'), active: view === 'missions', disabled: navLocked },
     { label: 'Ladder', onClick: () => safeNavigate('ladder'), active: view === 'ladder', disabled: navLocked },
+    { label: 'Progress', onClick: () => safeNavigate('progress'), active: view === 'progress', disabled: navLocked },
+    { label: 'Gacha', onClick: () => safeNavigate('gacha'), active: view === 'gacha', disabled: navLocked },
+    { label: 'Shop', onClick: () => safeNavigate('shop'), active: view === 'shop', disabled: navLocked },
+    { label: 'Inventory', onClick: () => safeNavigate('inventory'), active: view === 'inventory', disabled: navLocked },
     ...(isAdmin ? [{ label: 'Admin', onClick: () => safeNavigate('admin'), active: view === 'admin', disabled: navLocked }] : []),
   ]
 
@@ -4394,161 +4461,154 @@ function App() {
           isPvp={isRankedMatch}
         />
       )}
-      {gamePhase === 'battle' ? (
-        <BattleScreen
-          playerTeam={playerTeam}
-          enemyTeam={enemyTeam}
-          selectedEnemy={selectedEnemy}
-          setSelectedEnemy={setSelectedEnemy}
-          queueAbility={queueAbility}
-          queuedActions={queuedActions}
-          removeQueuedAction={removeQueuedAction}
-          battleLog={battleLog}
-          turn={turn}
-          gameOver={gameOver}
-          resetGame={resetGame}
-          actedCharacters={actedCharacters}
-          pendingAbility={pendingAbility}
-          setPendingAbility={setPendingAbility}
-          endTurn={handleEndTurn}
-          profile={profile}
-          matchSummary={matchSummary}
-          combatEvents={combatEvents}
-          battleShake={battleShake}
-          isPvp={isPvp}
-          isMyTurn={isMyTurn}
-          storyBattle={storyBattleConfig}
-          onExitStory={exitStoryBattle}
-          battleSpeed={battleSpeed}
-          onToggleSpeed={toggleBattleSpeed}
-          autoBattle={autoBattle}
-          onToggleAutoBattle={toggleAutoBattle}
-          autoBattleDisabled={!canAutoBattle}
-        />
-      ) : view === 'profile' ? (
-        <ProfilePage
-          profile={profile}
-          matchHistory={matchHistory}
-          onBack={() => setView('team')}
-          onProfileUpdate={setProfile}
-          titles={userTitles}
-          onSetActiveTitle={setActiveTitle}
-        />
-      ) : view === 'missions' ? (
-        <MissionsPage
-          missions={missions}
-          userMissions={userMissions}
-          onBack={() => setView('team')}
-          onClaim={claimMission}
-        />
-      ) : view === 'inventory' ? (
-        <InventoryPage
-          characters={characterCatalog}
-          inventory={inventory}
-          characterProgress={characterProgress}
-          items={userItems}
-          titles={userTitles}
-          onBack={() => setView('team')}
-          onLimitBreak={applyLimitBreak}
-          limitBreakCost={limitBreakCost}
-        />
-      ) : view === 'shop' ? (
-        <ShopPage
-          offers={shopOffers}
-          profile={profile}
-          onBack={() => setView('team')}
-          onPurchase={purchaseOffer}
-        />
-      ) : view === 'gacha' ? (
-        <GachaPage
-          banners={banners}
-          bannerItems={bannerItems}
-          profile={profile}
-          items={userItems}
-          characters={characterCatalog}
-          onBack={() => setView('team')}
-          onPull={pullGacha}
-          result={gachaResult}
-          onClearResult={() => setGachaResult(null)}
-        />
-      ) : view === 'rogue' ? (
-        <RogueMode
-          rogueState={rogueState}
-          selectedTeam={selectedPlayerTeam}
-          onStart={startRogueRun}
-          onEnterFloor={startRogueBattle}
-          onChooseBlessing={chooseRogueBlessing}
-          onChooseNode={chooseRogueNode}
-          onResolveEvent={resolveRogueEvent}
-          onAbandon={abandonRogueRun}
-          onBack={() => setView('team')}
-          rogueTokens={userItems?.rogue_token || 0}
-        />
-      ) : view === 'story' ? (
-        <StoryMode
-          chapter={storyChapter}
-          completedNodes={storyState.completedNodes}
-          activeNodeId={storyState.activeNodeId}
-          onSelectNode={(nodeId) => setStoryState(prev => ({ ...prev, activeNodeId: nodeId }))}
-          onCompleteNode={completeStoryNode}
-          onStartBattle={startStoryBattle}
-          storyResult={storyResult}
-          onClearResult={clearStoryResult}
-          onClaimRewards={claimStoryRewards}
-          rewardsClaimed={storyRewardsClaimed}
-        />
-      ) : view === 'daily' ? (
-        <DailyRewards
-          dailyReward={dailyReward}
-          onClaim={claimDailyReward}
-          onBack={() => setView('team')}
-        />
-      ) : view === 'achievements' ? (
-        <Achievements
-          achievements={achievements}
-          progress={achievementProgress}
-          onClaimReward={claimAchievementReward}
-          onBack={() => setView('team')}
-        />
-      ) : view === 'ladder' ? (
-        <LadderPage
-          entries={leaderboardEntries}
-          status={leaderboardStatus}
-          error={leaderboardError}
-          season={seasonInfo}
-          currentUserId={session?.user?.id}
-          currentRating={profile?.rating ?? 1000}
-          onRefresh={loadLeaderboard}
-          onBack={() => setView('team')}
-        />
-      ) : view === 'opponent-select' ? (
-        <OpponentSelect
-          characters={characterCatalog}
-          onConfirm={startBattleWithOpponents}
-          onBack={() => setView('team')}
-        />
-      ) : view === 'admin' && isAdmin ? (
-        <AdminPanel
-          profile={profile}
-          characters={characterCatalog}
-          onBack={() => setView('team')}
-        />
-      ) : (
-        <TeamSelect
-          characters={characterCatalog}
-          selectedTeam={selectedPlayerTeam}
-          onSelect={setSelectedPlayerTeam}
-          onStartBattle={() => setView('opponent-select')}
-          onStartPvpQuick={startPvpQuick}
-          onStartPvpRanked={startPvpRanked}
-          onCancelPvpQueue={cancelPvpQueue}
-          pvpStatus={pvpStatus}
-          characterProgress={characterProgress}
-          teamPresets={teamPresets}
-          onSavePreset={saveTeamPreset}
-          onApplyPreset={applyTeamPreset}
-        />
-      )}
+      <React.Suspense fallback={<div className="page-loading">Loading...</div>}>
+        {gamePhase === 'battle' ? (
+          <BattleScreen
+            playerTeam={playerTeam}
+            enemyTeam={enemyTeam}
+            selectedEnemy={selectedEnemy}
+            setSelectedEnemy={setSelectedEnemy}
+            queueAbility={queueAbility}
+            queuedActions={queuedActions}
+            removeQueuedAction={removeQueuedAction}
+            battleLog={battleLog}
+            turn={turn}
+            gameOver={gameOver}
+            resetGame={resetGame}
+            actedCharacters={actedCharacters}
+            pendingAbility={pendingAbility}
+            setPendingAbility={setPendingAbility}
+            endTurn={handleEndTurn}
+            profile={profile}
+            matchSummary={matchSummary}
+            combatEvents={combatEvents}
+            battleShake={battleShake}
+            isPvp={isPvp}
+            isMyTurn={isMyTurn}
+            storyBattle={storyBattleConfig}
+            onExitStory={exitStoryBattle}
+            battleSpeed={battleSpeed}
+            onToggleSpeed={toggleBattleSpeed}
+            autoBattle={autoBattle}
+            onToggleAutoBattle={toggleAutoBattle}
+            autoBattleDisabled={!canAutoBattle}
+          />
+        ) : view === 'profile' ? (
+          <ProfilePage
+            profile={profile}
+            matchHistory={matchHistory}
+            onBack={() => setView('team')}
+            onProfileUpdate={setProfile}
+            titles={userTitles}
+            onSetActiveTitle={setActiveTitle}
+          />
+        ) : view === 'inventory' ? (
+          <InventoryPage
+            characters={characterCatalog}
+            inventory={inventory}
+            characterProgress={characterProgress}
+            items={userItems}
+            titles={userTitles}
+            onBack={() => setView('team')}
+            onLimitBreak={applyLimitBreak}
+            limitBreakCost={limitBreakCost}
+          />
+        ) : view === 'shop' ? (
+          <ShopPage
+            offers={shopOffers}
+            profile={profile}
+            onBack={() => setView('team')}
+            onPurchase={purchaseOffer}
+          />
+        ) : view === 'gacha' ? (
+          <GachaPage
+            banners={banners}
+            bannerItems={bannerItems}
+            profile={profile}
+            items={userItems}
+            characters={characterCatalog}
+            onBack={() => setView('team')}
+            onPull={pullGacha}
+            result={gachaResult}
+            onClearResult={() => setGachaResult(null)}
+          />
+        ) : view === 'progress' ? (
+          <ProgressHub
+            dailyReward={dailyReward}
+            onClaimDaily={claimDailyReward}
+            missions={missions}
+            userMissions={userMissions}
+            onClaimMission={claimMission}
+            achievements={achievements}
+            achievementProgress={achievementProgress}
+            onClaimAchievement={claimAchievementReward}
+          />
+        ) : view === 'rogue' ? (
+          <RogueMode
+            rogueState={rogueState}
+            selectedTeam={selectedPlayerTeam}
+            onStart={startRogueRun}
+            onEnterFloor={startRogueBattle}
+            onChooseBlessing={chooseRogueBlessing}
+            onChooseNode={chooseRogueNode}
+            onResolveEvent={resolveRogueEvent}
+            onAbandon={abandonRogueRun}
+            onBack={() => setView('team')}
+            rogueTokens={userItems?.rogue_token || 0}
+          />
+        ) : view === 'story' ? (
+          <StoryMode
+            chapter={storyChapter}
+            completedNodes={storyState.completedNodes}
+            activeNodeId={storyState.activeNodeId}
+            onSelectNode={(nodeId) => setStoryState(prev => ({ ...prev, activeNodeId: nodeId }))}
+            onCompleteNode={completeStoryNode}
+            onStartBattle={startStoryBattle}
+            storyResult={storyResult}
+            onClearResult={clearStoryResult}
+            onClaimRewards={claimStoryRewards}
+            rewardsClaimed={storyRewardsClaimed}
+          />
+        ) : view === 'ladder' ? (
+          <LadderPage
+            entries={leaderboardEntries}
+            status={leaderboardStatus}
+            error={leaderboardError}
+            season={seasonInfo}
+            currentUserId={session?.user?.id}
+            currentRating={profile?.rating ?? 1000}
+            onRefresh={loadLeaderboard}
+            onBack={() => setView('team')}
+          />
+        ) : view === 'opponent-select' ? (
+          <OpponentSelect
+            characters={characterCatalog}
+            onConfirm={startBattleWithOpponents}
+            onBack={() => setView('team')}
+          />
+        ) : view === 'admin' && isAdmin ? (
+          <AdminPanel
+            profile={profile}
+            characters={characterCatalog}
+            onBack={() => setView('team')}
+          />
+        ) : (
+          <TeamSelect
+            characters={characterCatalog}
+            selectedTeam={selectedPlayerTeam}
+            onSelect={setSelectedPlayerTeam}
+            onStartBattle={() => setView('opponent-select')}
+            onStartPvpQuick={startPvpQuick}
+            onStartPvpRanked={startPvpRanked}
+            onCancelPvpQueue={cancelPvpQueue}
+            pvpStatus={pvpStatus}
+            characterProgress={characterProgress}
+            teamPresets={teamPresets}
+            onSavePreset={saveTeamPreset}
+            onApplyPreset={applyTeamPreset}
+          />
+        )}
+      </React.Suspense>
     </AuthGate>
   )
 }

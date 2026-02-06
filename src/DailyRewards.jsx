@@ -10,7 +10,7 @@ import React, { useState, useEffect } from 'react'
  * - Streak bonus multiplier
  */
 
-function DailyRewards({ dailyReward, onClaim, onBack }) {
+function DailyRewards({ dailyReward, onClaim, onBack, embedded = false }) {
   const [claiming, setClaiming] = useState(false)
   const [justClaimed, setJustClaimed] = useState(false)
 
@@ -47,14 +47,18 @@ function DailyRewards({ dailyReward, onClaim, onBack }) {
   }
 
   return (
-    <div className="daily-rewards-page">
-      <div className="daily-rewards-header">
-        <button className="daily-rewards-back" onClick={onBack}>
-          <span>←</span>
-          <span>Back</span>
-        </button>
-        <h1>Daily Login Rewards</h1>
-      </div>
+    <div className={`daily-rewards-page ${embedded ? 'embedded' : ''}`}>
+      {!embedded && (
+        <div className="daily-rewards-header">
+          {onBack && (
+            <button className="daily-rewards-back" onClick={onBack}>
+              <span>←</span>
+              <span>Back</span>
+            </button>
+          )}
+          <h1>Daily Login Rewards</h1>
+        </div>
+      )}
 
       <div className="daily-rewards-container">
         {/* Stats Section */}

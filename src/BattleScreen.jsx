@@ -1,6 +1,41 @@
 import React from 'react'
 import { getCharacterImage, getAbilityImage } from './imageConfig'
 
+const Portrait = React.memo(function Portrait({ name, image, size = 'normal' }) {
+  const resolvedImage = image || getCharacterImage(name)
+  const sizeClass = size === 'small' ? 'portrait-small' : ''
+
+  return (
+    <div className={`portrait-image-container ${sizeClass}`}>
+      {resolvedImage ? (
+        <img src={resolvedImage} alt={name} className="portrait-img" />
+      ) : (
+        <div className="portrait-placeholder">
+          <span className="portrait-initial">{name[0]}</span>
+          <span className="portrait-name-small">{name.substring(1, 4)}</span>
+        </div>
+      )}
+    </div>
+  )
+})
+
+const AbilityIcon = React.memo(function AbilityIcon({ abilityId, abilityName, isUltimate }) {
+  const image = getAbilityImage(abilityId)
+
+  return (
+    <div className={`ability-icon-container ${isUltimate ? 'ultimate' : ''}`}>
+      {image ? (
+        <img src={image} alt={abilityName} className="ability-img" />
+      ) : (
+        <div className="ability-placeholder">
+          <span className="ability-initial">{abilityName.substring(0, 2)}</span>
+        </div>
+      )}
+      {isUltimate && <span className="ultimate-star">★</span>}
+    </div>
+  )
+})
+
 function BattleScreen({ 
   playerTeam, 
   enemyTeam, 
@@ -35,10 +70,13 @@ function BattleScreen({
   const [playerHpPreview, setPlayerHpPreview] = React.useState([])
   const [enemyHpPreview, setEnemyHpPreview] = React.useState([])
   const [showCombatFeed, setShowCombatFeed] = React.useState(false)
+  const [feedFilter, setFeedFilter] = React.useState('all')
+  const [autoScrollFeed, setAutoScrollFeed] = React.useState(true)
   const [showEndTurnConfirm, setShowEndTurnConfirm] = React.useState(false)
   const [draftQueue, setDraftQueue] = React.useState([])
   const playerHpRef = React.useRef([])
   const enemyHpRef = React.useRef([])
+  const feedBodyRef = React.useRef(null)
   const latestLog = battleLog?.[battleLog.length - 1] || ''
   const speedFactor = Math.max(1, battleSpeed || 1)
   const turnBannerDuration = Math.max(600, Math.floor(1200 / speedFactor))
@@ -57,12 +95,69 @@ function BattleScreen({
     []
   )
 
+  const getDefaultScaling = (ability) => {
+    switch (ability.type) {
+      case 'attack-all':
+        return 0.16
+      case 'attack-all-primary-mark':
+        return 0.15
+      case 'attack-stun':
+        return 0.18
+      case 'attack-execute':
+        return 0.22
+      case 'attack-random':
+        return 0.16
+      case 'ultimate-mahito':
+        return 0.25
+      case 'attack':
+      default:
+        return 0.2
+    }
+  }
+
+  const getScalingStat = (ability) =>
+    ability.scalingStat || (ability.damageType === 'cursed' ? 'cursedOutput' : 'attack')
+
+  const getStatValue = (character, stat) => {
+    const base = character?.[stat] || 0
+    const effects = [
+      ...(character?.effects?.buffs || []).filter(effect => effect.stat === stat),
+      ...(character?.effects?.debuffs || []).filter(effect => effect.stat === stat),
+    ]
+    const percent = effects.filter(effect => effect.isPercent).reduce((sum, effect) => sum + effect.value, 0)
+    const flat = effects.filter(effect => !effect.isPercent).reduce((sum, effect) => sum + effect.value, 0)
+    return Math.max(0, Math.floor(base * (1 + percent) + flat))
+  }
+
+  const buildScalingPreview = (ability, character) => {
+    const baseDamage = ability.damageBase ?? ability.damage ?? 0
+    const scaling =
+      typeof ability.scaling === 'number'
+        ? ability.scaling
+        : getDefaultScaling(ability)
+    const scalingStat = getScalingStat(ability)
+
+    if (!baseDamage && !scaling) return null
+    const statValue = getStatValue(character, scalingStat)
+    const scalingAmount = Math.floor(statValue * scaling)
+    const total = Math.floor(baseDamage + scalingAmount)
+
+    return {
+      baseDamage,
+      scalingPercent: Math.round(scaling * 100),
+      scalingStat,
+      scalingAmount,
+      total,
+    }
+  }
+
   React.useEffect(() => {
     if (gameOver) return
-    setTurnBanner('YOUR TURN')
+    const bannerText = autoBattle ? 'AUTO TURN' : (isPvp && !isMyTurn ? 'ENEMY TURN' : 'YOUR TURN')
+    setTurnBanner(bannerText)
     const timer = setTimeout(() => setTurnBanner(null), turnBannerDuration)
     return () => clearTimeout(timer)
-  }, [turn, gameOver, turnBannerDuration])
+  }, [turn, gameOver, turnBannerDuration, isPvp, isMyTurn, autoBattle])
 
   const updateHpPreview = (team, setPreview, ref) => {
     const next = team.map(member => member.hp)
@@ -110,6 +205,35 @@ function BattleScreen({
     setDraftQueue([])
     setPendingAbility(null)
   }, [autoBattle, setPendingAbility])
+
+  const combatEventMap = React.useMemo(() => {
+    const map = { player: {}, enemy: {} }
+    ;(combatEvents || []).forEach(event => {
+      const team = event.team === 'player' ? 'player' : 'enemy'
+      if (!map[team][event.index]) map[team][event.index] = []
+      map[team][event.index].push(event)
+    })
+    return map
+  }, [combatEvents])
+
+  const queuedLookup = React.useMemo(() => {
+    const lookup = new Map()
+    queuedActions.forEach((action, idx) => {
+      const key = action.isUltimate ? `${action.characterIndex}-u` : `${action.characterIndex}-${action.abilityIndex}`
+      lookup.set(key, idx)
+    })
+    return lookup
+  }, [queuedActions])
+
+  const queuedByCharacter = React.useMemo(() => {
+    const map = new Map()
+    queuedActions.forEach((action, idx) => {
+      if (!map.has(action.characterIndex)) {
+        map.set(action.characterIndex, idx)
+      }
+    })
+    return map
+  }, [queuedActions])
   
   const handleAbilityClick = (characterIndex, abilityIndex, isUltimate, ability, character) => {
     if (autoBattle) return
@@ -180,42 +304,45 @@ function BattleScreen({
     return ''
   }
 
-  // Portrait Component with Image Support
-  const Portrait = ({ character, size = 'normal' }) => {
-    const image = getCharacterImage(character.name)
-    const sizeClass = size === 'small' ? 'portrait-small' : ''
-    
-    return (
-      <div className={`portrait-image-container ${sizeClass}`}>
-        {image ? (
-          <img src={image} alt={character.name} className="portrait-img" />
-        ) : (
-          <div className="portrait-placeholder">
-            <span className="portrait-initial">{character.name[0]}</span>
-            <span className="portrait-name-small">{character.name.substring(1, 4)}</span>
-          </div>
-        )}
-      </div>
-    )
+  const filterLogEntry = (entry) => {
+    if (feedFilter === 'all') return true
+    const text = entry.toLowerCase()
+    if (feedFilter === 'damage') {
+      return text.includes('damage') || entry.includes('⚔️') || entry.includes('👊')
+    }
+    if (feedFilter === 'heal') {
+      return text.includes('heal') || entry.includes('💚')
+    }
+    if (feedFilter === 'status') {
+      return (
+        text.includes('bound') ||
+        text.includes('binding') ||
+        text.includes('sleep') ||
+        text.includes('burn') ||
+        text.includes('barrier') ||
+        text.includes('stun') ||
+        text.includes('buff') ||
+        text.includes('debuff') ||
+        entry.includes('⛓️') ||
+        entry.includes('🔥') ||
+        entry.includes('🛡️') ||
+        entry.includes('💨')
+      )
+    }
+    return true
   }
 
-  // Ability Icon Component with Image Support
-  const AbilityIcon = ({ ability, isUltimate }) => {
-    const image = getAbilityImage(ability.id)
-    
-    return (
-      <div className={`ability-icon-container ${isUltimate ? 'ultimate' : ''}`}>
-        {image ? (
-          <img src={image} alt={ability.name} className="ability-img" />
-        ) : (
-          <div className="ability-placeholder">
-            <span className="ability-initial">{ability.name.substring(0, 2)}</span>
-          </div>
-        )}
-        {isUltimate && <span className="ultimate-star">★</span>}
-      </div>
-    )
-  }
+  const filteredLog = React.useMemo(
+    () => (battleLog || []).filter(filterLogEntry),
+    [battleLog, feedFilter]
+  )
+
+  React.useEffect(() => {
+    if (!showCombatFeed || !autoScrollFeed) return
+    const container = feedBodyRef.current
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [filteredLog, showCombatFeed, autoScrollFeed])
 
   const CharacterRow = ({ character, index, isPlayer, onAbilityClick, actedCharacters, pendingAbility, hpPreview }) => {
     const hpPercent = (character.hp / character.maxHp) * 100
@@ -229,13 +356,13 @@ function BattleScreen({
     const currentXp = character.xp || 0
     const xpNeeded = 100 + level * 25
     const xpPercent = Math.min(100, Math.floor((currentXp / xpNeeded) * 100))
-    const queuedActionIndex = getQueuedActionIndex(index)
-    const queuedAction = queuedActionIndex >= 0 ? queuedActions[queuedActionIndex] : null
+    const queuedActionIndex = queuedByCharacter.get(index)
+    const queuedAction = queuedActionIndex != null ? queuedActions[queuedActionIndex] : null
     const queuedAbility = queuedAction
       ? (queuedAction.isUltimate ? character.ultimate : character.abilities[queuedAction.abilityIndex])
       : null
     const clearQueuedAction = () => {
-      if (queuedActionIndex >= 0) {
+      if (queuedActionIndex != null) {
         removeQueuedAction?.(queuedActionIndex)
       }
     }
@@ -257,17 +384,27 @@ function BattleScreen({
     const hasStatusEffects = bindingTurns > 0 || sleepTurns > 0 || barrierValue > 0 || burnEffect || poisonEffect || speechMarks > 0
     const hasPlayerStatus = bindingTurns > 0 || sleepTurns > 0 || attackBuff || defenseBuff
 
-    const rowEvents = (combatEvents || []).filter(event =>
-      event.team === (isPlayer ? 'player' : 'enemy') && event.index === index
-    )
+    const rowEvents = combatEventMap[isPlayer ? 'player' : 'enemy']?.[index] || []
     const bigHit = rowEvents.some(event => event.type === 'damage' && event.big)
+    const abilityCosts = isPlayer
+      ? [...character.abilities, character.ultimate]
+        .filter(Boolean)
+        .map(ability => {
+          let cost = ability.manaCost || 0
+          if (character.passive?.manaReduction) {
+            cost = Math.floor(cost * (1 - character.passive.manaReduction))
+          }
+          return cost
+        })
+      : []
+    const canAffordAbility = !isPlayer || abilityCosts.some(cost => cost <= character.mana)
 
     return (
       <div className={`character-row ${isDead ? 'dead' : ''} ${hasActed ? 'acted' : ''} ${isSelectingTarget ? 'selecting-target' : ''} ${rowEvents.length ? 'hit-flash' : ''} ${bigHit ? 'crit-flash' : ''}`}>
         {/* Character Portrait */}
         <div className={`portrait-container ${isSelectingTarget ? 'active' : ''}`}>
           <div className="portrait-frame">
-            <Portrait character={character} />
+            <Portrait name={character.name} image={getCharacterImage(character.name)} />
             
             {/* Status Icons */}
             {hasStatusEffects && (
@@ -333,6 +470,9 @@ function BattleScreen({
             />
             <span className="portrait-mana-text">{character.mana}</span>
           </div>
+          {isPlayer && !isDead && !canAffordAbility && (
+            <div className="mana-warning">Low CE</div>
+          )}
         </div>
 
         {/* Ability Cards */}
@@ -362,7 +502,11 @@ function BattleScreen({
             >
               <div className="ability-card-art">
                 {queuedAbility ? (
-                  <AbilityIcon ability={queuedAbility} isUltimate={queuedAction?.isUltimate} />
+                  <AbilityIcon
+                    abilityId={queuedAbility.id}
+                    abilityName={queuedAbility.name}
+                    isUltimate={queuedAction?.isUltimate}
+                  />
                 ) : (
                   <div className="ability-placeholder">
                     <span className="ability-initial">Q</span>
@@ -375,9 +519,9 @@ function BattleScreen({
                   {queuedAction ? 'Click to clear' : 'Technique slot'}
                 </div>
               </div>
-              {queuedActionIndex >= 0 && (
-                <span className="ability-queue-order">#{queuedActionIndex + 1}</span>
-              )}
+            {queuedActionIndex != null && (
+              <span className="ability-queue-order">#{queuedActionIndex + 1}</span>
+            )}
             </div>
             {character.abilities.map((ability, abilityIndex) => (
               <AbilityCard 
@@ -477,9 +621,7 @@ function BattleScreen({
     const speechMarks = character.stacks?.speechMark || 0
     const hasStatusEffects = bindingTurns > 0 || sleepTurns > 0 || barrierValue > 0 || burnEffect || poisonEffect || speechMarks > 0
 
-    const rowEvents = (combatEvents || []).filter(event =>
-      event.team === 'enemy' && event.index === index
-    )
+    const rowEvents = combatEventMap.enemy?.[index] || []
     const bigHit = rowEvents.some(event => event.type === 'damage' && event.big)
 
     return (
@@ -492,7 +634,7 @@ function BattleScreen({
         {/* Character Portrait */}
         <div className={`portrait-container ${canBeTargeted ? 'targetable' : ''}`}>
           <div className="portrait-frame">
-            <Portrait character={character} />
+            <Portrait name={character.name} image={getCharacterImage(character.name)} />
 
             {/* Rarity Badge */}
             <div className={`portrait-rarity ${character.rarity.toLowerCase()}`}>
@@ -600,6 +742,10 @@ function BattleScreen({
     const notEnoughMana = characterMana < energyCost
     const isDisabled = disabled || notEnoughMana
     const needsTarget = targetAbilityTypes.has(ability.type)
+    const scalingPreview = buildScalingPreview(ability, character)
+    const scalingLabel = scalingPreview
+      ? `${scalingPreview.baseDamage} + ${scalingPreview.scalingAmount} (${scalingPreview.scalingPercent}% ${scalingPreview.scalingStat === 'cursedOutput' ? 'Cursed Technique' : 'Attack'})`
+      : null
     
     return (
       <div 
@@ -613,7 +759,7 @@ function BattleScreen({
           <span className="ability-target-tag" title="Requires a target">🎯</span>
         )}
         <div className="ability-card-art">
-          <AbilityIcon ability={ability} isUltimate={isUltimate} />
+          <AbilityIcon abilityId={ability.id} abilityName={ability.name} isUltimate={isUltimate} />
         </div>
 
         <div className="ability-name" title={ability.name}>{ability.name}</div>
@@ -638,6 +784,12 @@ function BattleScreen({
             {isUltimate && <span className="tooltip-ultimate">DOMAIN EXPANSION</span>}
           </div>
           <p>{ability.description}</p>
+          {scalingPreview && (
+            <div className="tooltip-scaling">
+              <span>💥 {scalingPreview.total} raw</span>
+              <span>{scalingLabel}</span>
+            </div>
+          )}
           <div className="tooltip-stats">
             <span className={notEnoughMana ? 'not-enough' : ''}>🌀 {energyCost}</span>
             <span>⏱️ {ability.cooldown} CD</span>
@@ -649,7 +801,10 @@ function BattleScreen({
   }
 
   const alivePlayerCount = playerTeam.filter(c => c.hp > 0).length
-  const actedCount = actedCharacters.length
+  const queuedCount = queuedActions.length
+  const missingQueue = Math.max(0, alivePlayerCount - queuedCount)
+  const endTurnWarning = missingQueue > 0 && !autoBattle && !(isPvp && !isMyTurn)
+  const turnStateLabel = autoBattle ? 'AUTO' : (isPvp && !isMyTurn ? 'ENEMY TURN' : 'YOUR TURN')
   const playerName = profile?.display_name || 'Player'
   const playerAvatar = profile?.avatar_url || null
   const playerLevel = profile?.account_level || 1
@@ -660,19 +815,14 @@ function BattleScreen({
     if (!character) return 'Unknown'
     const ability = action.isUltimate ? character.ultimate : character.abilities[action.abilityIndex]
     const target = action.enemyIndex != null ? enemyTeam[action.enemyIndex]?.name : null
-    return `${character.name}: ${ability?.name || 'Technique'}${target ? ` → ${target}` : ''}`
+    const cost = ability?.manaCost ?? 0
+    return `${character.name}: ${ability?.name || 'Technique'}${target ? ` → ${target}` : ''} (${cost} CE)`
   }
   const getQueuedIndex = (characterIndex, abilityIndex, isUltimate) => {
-    const index = queuedActions.findIndex(action => (
-      action.characterIndex === characterIndex &&
-      action.isUltimate === isUltimate &&
-      (isUltimate || action.abilityIndex === abilityIndex)
-    ))
-    return index === -1 ? null : index + 1
+    const key = isUltimate ? `${characterIndex}-u` : `${characterIndex}-${abilityIndex}`
+    const index = queuedLookup.get(key)
+    return index == null ? null : index + 1
   }
-  const getQueuedActionIndex = (characterIndex) => (
-    queuedActions.findIndex(action => action.characterIndex === characterIndex)
-  )
 
   const openEndTurnConfirm = () => {
     if (isPvp && !isMyTurn) return
@@ -737,9 +887,21 @@ function BattleScreen({
             <div className="turn-display">
               <span className="turn-label">TURN</span>
               <span className="turn-number">{turn}</span>
+              <span className={`turn-state ${autoBattle ? 'auto' : ''}`}>{turnStateLabel}</span>
+            </div>
+            <div className="queue-summary">
+              <span>Queued: {queuedCount}</span>
+              {missingQueue > 0 && <span className="queue-missing">+{missingQueue} unqueued</span>}
+              <button
+                className="queue-review-btn"
+                onClick={openEndTurnConfirm}
+                disabled={autoBattle || (isPvp && !isMyTurn)}
+              >
+                Review
+              </button>
             </div>
           <button
-            className="end-turn-btn"
+            className={`end-turn-btn ${endTurnWarning ? 'warn' : ''}`}
             onClick={openEndTurnConfirm}
             disabled={(isPvp && !isMyTurn) || autoBattle}
           >
@@ -910,16 +1072,37 @@ function BattleScreen({
                 <h3>Combat Feed</h3>
                 <p>Latest combat events</p>
               </div>
+              <div className="combat-feed-controls">
+                <div className="feed-filters">
+                  {['all', 'damage', 'heal', 'status'].map(filter => (
+                    <button
+                      key={filter}
+                      className={`feed-filter-btn ${feedFilter === filter ? 'active' : ''}`}
+                      onClick={() => setFeedFilter(filter)}
+                    >
+                      {filter}
+                    </button>
+                  ))}
+                </div>
+                <label className="feed-autoscroll">
+                  <input
+                    type="checkbox"
+                    checked={autoScrollFeed}
+                    onChange={(event) => setAutoScrollFeed(event.target.checked)}
+                  />
+                  Auto-scroll
+                </label>
+              </div>
               <button className="combat-feed-close" onClick={() => setShowCombatFeed(false)}>
                 ✕
               </button>
             </div>
-            <div className="combat-feed-body">
-              {battleLog.length === 0 ? (
-                <div className="combat-feed-empty">No events yet.</div>
+            <div className="combat-feed-body" ref={feedBodyRef}>
+              {filteredLog.length === 0 ? (
+                <div className="combat-feed-empty">No events for this filter yet.</div>
               ) : (
-                battleLog.slice().reverse().map((entry, i) => (
-                  <p key={`${entry}-${i}`} className={`${getLogClass(entry)} ${i === 0 ? 'latest' : ''}`}>
+                filteredLog.map((entry, i) => (
+                  <p key={`${entry}-${i}`} className={`${getLogClass(entry)} ${i === filteredLog.length - 1 ? 'latest' : ''}`}>
                     {entry}
                   </p>
                 ))
@@ -962,6 +1145,7 @@ function BattleScreen({
               )}
             </div>
             <div className="end-turn-actions">
+              <button className="secondary-btn" onClick={() => setDraftQueue([])}>Clear Queue</button>
               <button className="secondary-btn" onClick={() => setShowEndTurnConfirm(false)}>Cancel</button>
               <button className="primary-btn" onClick={confirmEndTurn}>
                 {draftQueue.length === 0 ? 'End Turn' : 'Confirm & End Turn'}
