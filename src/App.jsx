@@ -15,6 +15,7 @@ import DailyRewards from './DailyRewards'
 import Achievements from './Achievements'
 import OpponentSelect from './OpponentSelect'
 import BattleResultScreen from './BattleResultScreen'
+import LadderPage from './LadderPage'
 import { storyChapters, storyEnemies } from './storyData'
 import './App.css'
 
@@ -68,8 +69,40 @@ function App() {
   const [achievements, setAchievements] = useState([])
   const [achievementProgress, setAchievementProgress] = useState([])
   const [battleResult, setBattleResult] = useState(null)
+  const [leaderboardEntries, setLeaderboardEntries] = useState([])
+  const [leaderboardStatus, setLeaderboardStatus] = useState('idle')
+  const [leaderboardError, setLeaderboardError] = useState(null)
+  const [rankedBotMatch, setRankedBotMatch] = useState(null)
+
+  const battleStatsRef = useRef({ abilitiesUsed: 0, damageDealt: 0, damageTaken: 0 })
+  const winStreakRef = useRef(0)
+  const pvpMatchIdRef = useRef(null)
+  const pendingRankedQueueRef = useRef(null)
+
+  const getSeasonInfo = (date = new Date()) => {
+    const year = date.getUTCFullYear()
+    const monthIndex = date.getUTCMonth()
+    const seasonStart = new Date(Date.UTC(year, monthIndex, 1))
+    const seasonEnd = new Date(Date.UTC(year, monthIndex + 1, 1))
+    const seasonId = `${year}-${String(monthIndex + 1).padStart(2, '0')}`
+    const daysRemaining = Math.max(0, Math.ceil((seasonEnd - date) / 86400000))
+    return {
+      id: seasonId,
+      label: `Season ${seasonId}`,
+      start: seasonStart,
+      end: seasonEnd,
+      daysRemaining,
+    }
+  }
 
   const xpForLevel = (level) => 100 + level * 25
+
+  const resetBattleStats = () => {
+    battleStatsRef.current = { abilitiesUsed: 0, damageDealt: 0, damageTaken: 0 }
+  }
+
+  const getBattleStats = () =>
+    battleStatsRef.current || { abilitiesUsed: 0, damageDealt: 0, damageTaken: 0 }
 
   const applyXpGain = (currentLevel, currentXp, gain) => {
     let level = Math.max(1, currentLevel || 1)
@@ -159,20 +192,216 @@ function App() {
 
   const progressByCharacterId = useMemo(() => characterProgress, [characterProgress])
   const isPvp = Boolean(pvpMatch)
+  const isRankedMatch = isPvp || Boolean(rankedBotMatch)
   const isMyTurn = isPvp && pvpMatch?.turn_owner === session?.user?.id
+  const seasonInfo = useMemo(() => getSeasonInfo(new Date()), [])
   const storyChapter = useMemo(
     () => storyChapters.find(chapter => chapter.id === storyState.chapterId) || storyChapters[0],
     [storyState.chapterId]
   )
   const storyLoadedRef = useRef(false)
 
+  const clampValue = (value, min, max) => Math.max(min, Math.min(max, value))
+
+  const seedFromString = (value) => {
+    let hash = 0
+    for (let i = 0; i < value.length; i += 1) {
+      hash = (hash << 5) - hash + value.charCodeAt(i)
+      hash |= 0
+    }
+    return hash >>> 0
+  }
+
+  const mulberry32 = (seed) => () => {
+    let t = (seed += 0x6d2b79f5)
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+
+  const buildBotLeaderboard = (seasonId, existingEntries = [], targetCount = 50) => {
+    if (existingEntries.length >= targetCount) return existingEntries
+
+    const botNames = [
+      'Shadow', 'Bladewind', 'Sandfox', 'Ironleaf', 'Stormfang', 'Nightveil',
+      'Ashen', 'Crimson', 'Silent', 'Steel', 'Moonlit', 'Frost', 'Viper',
+      'Drift', 'Ember', 'Specter', 'Dawn', 'Torrent', 'Rogue', 'Vortex',
+    ]
+
+    const ratings = existingEntries.map(entry => entry.rating ?? 1000)
+    const meanRating = ratings.length
+      ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+      : 1300
+    const maxRating = ratings.length ? Math.max(...ratings) : 1750
+    const minRating = ratings.length ? Math.min(...ratings) : 950
+    const spread = Math.max(160, Math.floor((maxRating - minRating) / 2))
+
+    const seed = seedFromString(`${seasonId}-${existingEntries.length}`)
+    const rng = mulberry32(seed)
+    const botsNeeded = targetCount - existingEntries.length
+    const bots = []
+
+    for (let i = 0; i < botsNeeded; i += 1) {
+      const roll = rng()
+      let rating = Math.round(meanRating + (rng() - 0.5) * spread * 2)
+      if (roll > 0.92) {
+        rating = Math.round(maxRating + 80 + rng() * 120)
+      } else if (roll < 0.2) {
+        rating = Math.round(minRating - rng() * 120)
+      }
+      rating = clampValue(rating, 900, 1950)
+
+      const name = `${botNames[i % botNames.length]} Bot ${i + 1}`
+      bots.push({
+        user_id: `bot-${seasonId}-${i + 1}`,
+        display_name: name,
+        rating,
+        updated_at: new Date().toISOString(),
+        is_bot: true,
+      })
+    }
+
+    const combined = [...existingEntries, ...bots]
+    return combined.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+  }
+
+  const createRankedBot = (playerRating, roster) => {
+    const botNames = [
+      'Shadowblade', 'Ironleaf', 'Silent Fang', 'Stormveil', 'Crimson Echo',
+      'Obsidian', 'Dawnstrike', 'Voidstep', 'Frostbite', 'Nightweaver',
+    ]
+    const seed = seedFromString(`${seasonInfo.id}-${session?.user?.id}-${Date.now()}`)
+    const rng = mulberry32(seed)
+    const name = botNames[Math.floor(rng() * botNames.length)]
+    const ratingOffset = Math.round((rng() - 0.5) * 220)
+    const rating = clampValue((playerRating || 1000) + ratingOffset, 900, 1900)
+
+    const rarityRank = { UR: 4, SSR: 3, SR: 2, R: 1 }
+    const sortedRoster = [...roster].sort((a, b) => (rarityRank[b.rarity] || 0) - (rarityRank[a.rarity] || 0))
+    const poolSize = rating >= 1600 ? 5 : rating >= 1400 ? 6 : rating >= 1200 ? 7 : sortedRoster.length
+    const pool = sortedRoster.slice(0, Math.max(3, poolSize))
+
+    const team = []
+    while (team.length < 3 && pool.length > 0) {
+      const index = Math.floor(rng() * pool.length)
+      team.push(pool.splice(index, 1)[0])
+    }
+
+    return {
+      id: `ranked-bot-${seed}`,
+      name,
+      rating,
+      team,
+    }
+  }
+
+  const trackStoryProgress = (nodeId, nextCompletedNodes) => {
+    if (!nodeId) return
+    trackMissionProgress({ storyNodesCompleted: 1 })
+
+    const chapterNumber = storyChapter?.id?.split('-')[1]
+    const chapterNodes = storyChapter?.nodes || []
+    const isChapterComplete = chapterNodes.length > 0 &&
+      chapterNodes.every(node => nextCompletedNodes.includes(node.id))
+
+    if (isChapterComplete && chapterNumber) {
+      trackMissionProgress({ chapterCompleted: chapterNumber })
+    }
+
+    const completedChapters = storyChapters.filter(chapter =>
+      chapter.nodes.every(node => nextCompletedNodes.includes(node.id))
+    ).length
+    trackAchievementProgress('chapters_completed', completedChapters)
+  }
+
+  const loadLeaderboard = async () => {
+    if (!session) return
+    setLeaderboardStatus('loading')
+    setLeaderboardError(null)
+    const { data, error } = await supabase
+      .from('pvp_leaderboard')
+      .select('user_id, display_name, rating, updated_at')
+      .eq('season_id', seasonInfo.id)
+      .order('rating', { ascending: false })
+      .limit(100)
+
+    if (error) {
+      setLeaderboardStatus('error')
+      setLeaderboardError(error.message)
+      return
+    }
+
+    const combined = buildBotLeaderboard(seasonInfo.id, data || [], 50)
+    setLeaderboardEntries(combined)
+    setLeaderboardStatus('ready')
+  }
+
+  const upsertLeaderboardEntry = async (ratingValue) => {
+    if (!session || !profile) return
+    const payload = {
+      user_id: session.user.id,
+      season_id: seasonInfo.id,
+      display_name: profile.display_name || 'Player',
+      rating: ratingValue ?? profile.rating ?? 1000,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = await supabase
+      .from('pvp_leaderboard')
+      .upsert(payload, { onConflict: 'user_id,season_id' })
+
+    if (error) {
+      console.error('Failed to sync leaderboard:', error)
+    }
+  }
+
+  const startRankedBotMatch = (teamIds, teamState, myRating) => {
+    if (!teamState?.length || !characterCatalog.length) return
+    const bot = createRankedBot(myRating, characterCatalog)
+    let botTeam = bot.team.map(character => ensureCombatState(deepCopy(character)))
+    if (botTeam.length < 3) {
+      const fallback = characterCatalog
+        .filter(character => !botTeam.some(member => member.id === character.id))
+        .slice(0, 3 - botTeam.length)
+        .map(character => ensureCombatState(deepCopy(character)))
+      botTeam = [...botTeam, ...fallback]
+    }
+
+    setRankedBotMatch({
+      id: bot.id,
+      name: bot.name,
+      rating: bot.rating,
+      teamIds: bot.team.map(character => character.id),
+    })
+
+    setPlayerTeam(teamState)
+    setEnemyTeam(botTeam)
+    setGamePhase('battle')
+    setBattleLog([`Ranked Bot Match vs ${bot.name} (Rating ${bot.rating})`])
+    setActedCharacters([])
+    setQueuedActions([])
+    setStoryBattleConfig(null)
+    setPvpStatus(null)
+    setPvpMatch(null)
+    resetBattleStats()
+
+    if (pvpChannel) {
+      pvpChannel.unsubscribe()
+      setPvpChannel(null)
+    }
+
+    supabase.from('pvp_queue').delete().eq('user_id', session?.user?.id)
+  }
+
   const markStoryNodeCompleted = (nodeId) => {
     if (!nodeId) return
     setStoryState(prev => {
       if (prev.completedNodes.includes(nodeId)) return prev
+      const nextCompleted = [...prev.completedNodes, nodeId]
+      trackStoryProgress(nodeId, nextCompleted)
       return {
         ...prev,
-        completedNodes: [...prev.completedNodes, nodeId],
+        completedNodes: nextCompleted,
       }
     })
   }
@@ -196,9 +425,11 @@ function App() {
       const nodes = storyChapter?.nodes || []
       const index = nodes.findIndex(node => node.id === nodeId)
       const nextActive = nodes[index + 1]?.id || nodeId
+      const nextCompleted = [...prev.completedNodes, nodeId]
+      trackStoryProgress(nodeId, nextCompleted)
       return {
         ...prev,
-        completedNodes: [...prev.completedNodes, nodeId],
+        completedNodes: nextCompleted,
         activeNodeId: nextActive,
       }
     })
@@ -231,6 +462,8 @@ function App() {
   const startStoryBattle = (node) => {
     if (!node?.battle) return
     const battleConfig = node.battle
+    resetBattleStats()
+    pvpMatchIdRef.current = null
     const playerTeamRaw = battleConfig.playerIds.map(id => resolveStoryUnit(id)).filter(Boolean)
     const enemyTeamRaw = battleConfig.enemyIds.map(id => resolveStoryUnit(id)).filter(Boolean)
     const buffMap = battleConfig.playerBuffs || {}
@@ -310,6 +543,7 @@ function App() {
         const existing = new Set(Object.keys(progressByCharacterId).map(Number))
         const missing = unlockIds.filter(id => !existing.has(id))
         if (missing.length > 0) {
+          const unlockedCount = Object.keys(progressByCharacterId).length + missing.length
           const payload = missing.map(id => ({
             user_id: session.user.id,
             character_id: id,
@@ -335,6 +569,8 @@ function App() {
               })
               return next
             })
+            trackAchievementProgress('characters_unlocked', unlockedCount)
+            trackMissionProgress({ charactersUnlocked: unlockedCount })
           }
         }
       }
@@ -393,6 +629,10 @@ function App() {
           })
         }
       }
+    }
+
+    if (softGain > 0) {
+      trackMissionProgress({ softCurrencyEarned: softGain })
     }
 
     setStoryRewardsClaimed(true)
@@ -714,6 +954,16 @@ function App() {
     loadAchievements()
   }, [session])
 
+  useEffect(() => {
+    if (!session || !profile) return
+    upsertLeaderboardEntry(profile.rating ?? 1000)
+  }, [session, profile?.id, profile?.rating, profile?.display_name, seasonInfo.id])
+
+  useEffect(() => {
+    if (view !== 'ladder') return
+    loadLeaderboard()
+  }, [view, session, seasonInfo.id])
+
   const getEffectsForStat = (character, stat) => {
     const buffs = (character.effects?.buffs || []).filter(effect => effect.stat === stat)
     const debuffs = (character.effects?.debuffs || []).filter(effect => effect.stat === stat)
@@ -796,6 +1046,11 @@ function App() {
 
     if (remaining > 0) {
       target.hp = Math.max(0, target.hp - remaining)
+      if (teamType === 'enemy') {
+        battleStatsRef.current.damageDealt += remaining
+      } else if (teamType === 'player') {
+        battleStatsRef.current.damageTaken += remaining
+      }
       emitDamage(teamType, targetIndex, remaining, remaining >= 45)
       if (logs) {
         logs.push(`⚔️ ${attacker.name} → ${ability.name} → ${target.name} for ${remaining} damage${options.crit ? ' (CRIT)' : ''}!`)
@@ -815,6 +1070,11 @@ function App() {
         const damage = Math.max(0, dot.damage || 0)
         if (damage > 0 && character.hp > 0) {
           character.hp = Math.max(0, character.hp - damage)
+          if (teamType === 'enemy') {
+            battleStatsRef.current.damageDealt += damage
+          } else if (teamType === 'player') {
+            battleStatsRef.current.damageTaken += damage
+          }
           emitDamage(teamType, index, damage, false)
           logs.push(`🔥 ${character.name} suffers ${damage} ${dot.type === 'burn' ? 'cursed burn' : 'cursed poison'} damage!`)
         }
@@ -960,16 +1220,50 @@ function App() {
     }
     setGameOver(result === 'win' ? 'win' : 'lose')
 
+    const battleStats = getBattleStats()
+    const nextWinStreak = result === 'win' ? winStreakRef.current + 1 : 0
+    winStreakRef.current = nextWinStreak
+    const perfectVictory = result === 'win' && battleStats.damageTaken === 0
+    const aliveCount = teamSnapshot.filter(character => character.hp > 0).length
+    const clutchVictory = result === 'win' && aliveCount === 1 && teamSnapshot.some(character => character.hp === 1)
+
     if (storyBattleConfig) {
       if (result === 'win') {
         markStoryNodeCompleted(storyBattleConfig.nodeId)
       }
       setStoryResult({ nodeId: storyBattleConfig.nodeId, result })
       setStoryState(prev => ({ ...prev, activeNodeId: storyBattleConfig.nodeId }))
+      trackMissionProgress({
+        result,
+        battlesPlayed: 1,
+        abilitiesUsed: battleStats.abilitiesUsed,
+        damageDealt: battleStats.damageDealt,
+        perfectVictory,
+        winStreak: nextWinStreak,
+        damageDealtSingleBattle: battleStats.damageDealt,
+        abilitiesUsedSingleBattle: battleStats.abilitiesUsed,
+        teamSnapshot,
+      })
+      if (perfectVictory) {
+        const previous = getAchievementProgressValue('perfect_victories')
+        trackAchievementProgress('perfect_victories', previous + 1)
+      }
+      if (clutchVictory) {
+        const previous = getAchievementProgressValue('clutch_victories')
+        trackAchievementProgress('clutch_victories', previous + 1)
+      }
+      trackAchievementProgress('win_streak', nextWinStreak)
+      resetBattleStats()
       return
     }
 
-    awardProgress(result, teamSnapshot)
+    awardProgress(result, teamSnapshot, {
+      battleStats,
+      winStreak: nextWinStreak,
+      perfectVictory,
+      clutchVictory,
+    })
+    resetBattleStats()
   }
 
   const emitDamage = (teamType, index, amount, big = false) => {
@@ -1015,6 +1309,7 @@ function App() {
       return { logs: [`⛔ ${attacker.name} doesn't have enough cursed energy for ${ability.name}.`] }
     }
     newPlayerTeam[characterIndex].mana -= energyCost
+    battleStatsRef.current.abilitiesUsed += 1
 
     const rollCrit = () => {
       if (ability.guaranteedCrit) return true
@@ -1717,6 +2012,9 @@ function App() {
     setPvpMatch(null)
     setPvpStatus(null)
     setBattleResult(null)
+    setRankedBotMatch(null)
+    resetBattleStats()
+    pvpMatchIdRef.current = null
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -1737,9 +2035,14 @@ function App() {
     setMatchSummary(null)
     setStoryBattleConfig(null)
     setView('story')
+    setRankedBotMatch(null)
+    resetBattleStats()
   }
 
   const startBattleWithOpponents = ({ opponents, difficulty }) => {
+    resetBattleStats()
+    pvpMatchIdRef.current = null
+    setRankedBotMatch(null)
     // Scale player team based on their progress
     const leveledTeam = selectedPlayerTeam.map(character =>
       scaledCharacter(character, progressByCharacterId[character.id])
@@ -1779,6 +2082,11 @@ function App() {
 
   const syncBattleFromMatch = (match) => {
     if (!match || !session) return
+    setRankedBotMatch(null)
+    if (pvpMatchIdRef.current !== match.id) {
+      resetBattleStats()
+      pvpMatchIdRef.current = match.id
+    }
     const isPlayer1 = match.player1_id === session.user.id
     const state = match.state || {}
     const player1Team = state.player1Team || buildTeamSnapshot(match.player1_team || [], false)
@@ -1821,10 +2129,16 @@ function App() {
   const startPvpQueue = async (mode) => {
     if (!session || selectedPlayerTeam.length < 3) return
     setPvpStatus('searching')
+    setRankedBotMatch(null)
 
     const teamIds = selectedPlayerTeam.map(character => character.id)
     const teamState = buildTeamSnapshot(teamIds, true)
     const myRating = profile?.rating || 1000
+    if (mode === 'ranked') {
+      pendingRankedQueueRef.current = { teamIds, teamState, rating: myRating }
+    } else {
+      pendingRankedQueueRef.current = null
+    }
 
     // Clean up old queue entries first
     await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
@@ -1957,7 +2271,18 @@ function App() {
 
   // Polling fallback to find matches (runs every 2s for 30s)
   const pollForMatch = async (mode, attempts = 0) => {
-    if (attempts >= 15 || !session || pvpStatus !== 'searching') return
+    if (!session || pvpStatus !== 'searching') return
+
+    if (mode === 'ranked' && attempts >= 6) {
+      const queued = pendingRankedQueueRef.current
+      if (queued && queued.teamState?.length) {
+        startRankedBotMatch(queued.teamIds, queued.teamState, queued.rating)
+        pendingRankedQueueRef.current = null
+        return
+      }
+    }
+
+    if (attempts >= 15) return
 
     try {
       const { data: matches } = await supabase
@@ -2077,6 +2402,8 @@ function App() {
     // Reset status
     setPvpStatus(null)
     setPvpMatch(null)
+    setRankedBotMatch(null)
+    pendingRankedQueueRef.current = null
   }
 
   const saveTeamPreset = async (slot, name, characterIds) => {
@@ -2108,11 +2435,19 @@ function App() {
     setSelectedPlayerTeam(nextTeam)
   }
 
-  const awardProgress = async (result, teamSnapshot) => {
+  const awardProgress = async (result, teamSnapshot, battleContext = {}) => {
     if (!session) return
+
+    const battleStats = battleContext.battleStats || getBattleStats()
+    const perfectVictory = battleContext.perfectVictory ?? (result === 'win' && battleStats.damageTaken === 0)
+    const winStreak = battleContext.winStreak ?? (result === 'win' ? winStreakRef.current : 0)
+    const aliveCount = teamSnapshot.filter(character => character.hp > 0).length
+    const clutchVictory = battleContext.clutchVictory ??
+      (result === 'win' && aliveCount === 1 && teamSnapshot.some(character => character.hp === 1))
 
     const isStoryBattle = Boolean(storyBattleConfig)
     const isAiBattle = !pvpMatch && !isStoryBattle
+    const isRanked = Boolean(pvpMatch) || Boolean(rankedBotMatch)
     let xpMultiplier = 1
     let currencyMultiplier = 1
 
@@ -2140,8 +2475,8 @@ function App() {
     const currentSoftCurrency = profile?.soft_currency || 0
     const currentPremiumCurrency = profile?.premium_currency || 0
     const nextAccount = applyXpGain(currentAccountLevel, currentAccountXp, accountGain)
-    const ratingDelta = isPvp ? (result === 'win' ? 20 : -15) : 0
-    const nextRating = isPvp ? Math.max(0, currentRating + ratingDelta) : currentRating
+    const ratingDelta = isRanked ? (result === 'win' ? 20 : -15) : 0
+    const nextRating = isRanked ? Math.max(0, currentRating + ratingDelta) : currentRating
     const nextSoftCurrency = currentSoftCurrency + softCurrencyGain
     const nextPremiumCurrency = currentPremiumCurrency + premiumCurrencyGain
 
@@ -2203,6 +2538,10 @@ function App() {
       })
       .eq('id', session.user.id)
 
+    if (isRanked) {
+      await upsertLeaderboardEntry(nextRating)
+    }
+
     if (upserts.length > 0) {
       await supabase
         .from('character_progress')
@@ -2233,7 +2572,24 @@ function App() {
       }, 2800)
     }
 
-    await trackMissionProgress(result, characterLevelUps.length)
+    const characterXpGained = characterGain * teamSnapshot.length
+    await trackMissionProgress({
+      result,
+      isPvp: isRanked,
+      battlesPlayed: 1,
+      abilitiesUsed: battleStats.abilitiesUsed,
+      damageDealt: battleStats.damageDealt,
+      characterXpGained,
+      perfectVictory,
+      levelUps: characterLevelUps.length,
+      softCurrencyEarned: softCurrencyGain,
+      winStreak,
+      rating: isRanked ? nextRating : null,
+      accountLevel: nextAccount.level,
+      teamSnapshot,
+      damageDealtSingleBattle: battleStats.damageDealt,
+      abilitiesUsedSingleBattle: battleStats.abilitiesUsed,
+    })
 
     const unlockedAchievements = []
 
@@ -2249,6 +2605,35 @@ function App() {
       if (count !== null) {
         unlockedAchievements.push(...await trackAchievementProgress('battles_won', count))
       }
+    }
+
+    if (isRanked && result === 'win') {
+      const { count } = await supabase
+        .from('match_history')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('result', 'win')
+        .neq('rating_delta', 0)
+
+      if (count !== null) {
+        unlockedAchievements.push(...await trackAchievementProgress('pvp_wins', count))
+      }
+    }
+
+    if (isRanked) {
+      unlockedAchievements.push(...await trackAchievementProgress('rating_reached', nextRating))
+    }
+
+    unlockedAchievements.push(...await trackAchievementProgress('win_streak', winStreak))
+
+    if (perfectVictory) {
+      const previous = getAchievementProgressValue('perfect_victories')
+      unlockedAchievements.push(...await trackAchievementProgress('perfect_victories', previous + 1))
+    }
+
+    if (clutchVictory) {
+      const previous = getAchievementProgressValue('clutch_victories')
+      unlockedAchievements.push(...await trackAchievementProgress('clutch_victories', previous + 1))
     }
 
     // Track account level achievement
@@ -2305,11 +2690,46 @@ function App() {
     setBattleResult({ result, rewards: rewardData })
   }
 
-  const trackMissionProgress = async (result, levelUps = 0) => {
-    if (!session || missions.length === 0) return
+  const trackMissionProgress = async (event = {}) => {
+    if (!session || missions.length === 0 || userMissions.length === 0) return
+
+    const {
+      result,
+      isPvp = false,
+      battlesPlayed = 0,
+      abilitiesUsed = 0,
+      damageDealt = 0,
+      characterXpGained = 0,
+      perfectVictory = false,
+      levelUps = 0,
+      softCurrencyEarned = 0,
+      gachaPulls = 0,
+      login = 0,
+      loginDays = 0,
+      storyNodesCompleted = 0,
+      rating = null,
+      winStreak = null,
+      charactersUnlocked = null,
+      accountLevel = null,
+      teamSnapshot = [],
+      damageDealtSingleBattle = null,
+      abilitiesUsedSingleBattle = null,
+      chapterCompleted = null,
+    } = event
 
     const updates = []
     const nextUserMissions = [...userMissions]
+    const missionById = new Map(missions.map(mission => [mission.id, mission]))
+
+    const teamHasTag = (tag) => {
+      if (!tag) return true
+      const normalized = String(tag).toLowerCase()
+      return teamSnapshot.some(character => {
+        const name = String(character?.name || '').toLowerCase()
+        const id = String(character?.id || '').toLowerCase()
+        return name.includes(normalized) || id === normalized
+      })
+    }
 
     missions.forEach(mission => {
       const entryIndex = nextUserMissions.findIndex(entry => entry.mission_id === mission.id)
@@ -2317,17 +2737,88 @@ function App() {
       const entry = nextUserMissions[entryIndex]
       if (entry.claimed) return
 
-      const condition = mission.condition || 'match_any'
-      const shouldProgress =
-        condition === 'match_any' ||
-        (condition === 'match_win' && result === 'win') ||
-        (condition === 'match_loss' && result === 'lose') ||
-        (condition === 'character_level_up' && levelUps > 0)
+      let increment = 0
+      let absoluteValue = null
 
-      if (!shouldProgress) return
+      switch (mission.condition) {
+        case 'battles_played':
+        case 'total_battles':
+          increment = battlesPlayed
+          break
+        case 'battles_won':
+          if (result === 'win' && teamHasTag(mission.condition_value)) {
+            increment = 1
+          }
+          break
+        case 'pvp_battles_won':
+          if (isPvp && result === 'win') {
+            increment = 1
+          }
+          break
+        case 'abilities_used':
+          increment = abilitiesUsed
+          break
+        case 'abilities_used_single_battle':
+          absoluteValue = abilitiesUsedSingleBattle ?? abilitiesUsed
+          break
+        case 'damage_dealt':
+          increment = damageDealt
+          break
+        case 'damage_dealt_single_battle':
+          absoluteValue = damageDealtSingleBattle ?? damageDealt
+          break
+        case 'character_xp_gained':
+          increment = characterXpGained
+          break
+        case 'perfect_victories':
+          increment = perfectVictory ? 1 : 0
+          break
+        case 'login':
+          increment = login
+          break
+        case 'login_days':
+          increment = loginDays
+          break
+        case 'gacha_pulls':
+          increment = gachaPulls
+          break
+        case 'characters_leveled':
+          increment = levelUps
+          break
+        case 'story_nodes_completed':
+          increment = storyNodesCompleted
+          break
+        case 'soft_currency_earned':
+          increment = softCurrencyEarned
+          break
+        case 'pvp_rating':
+          absoluteValue = rating
+          break
+        case 'win_streak':
+          absoluteValue = winStreak
+          break
+        case 'all_characters_unlocked':
+          absoluteValue = charactersUnlocked
+          break
+        case 'story_chapter_complete':
+          if (chapterCompleted && String(mission.condition_value) === String(chapterCompleted)) {
+            absoluteValue = 1
+          }
+          break
+        case 'account_level':
+          absoluteValue = accountLevel
+          break
+        default:
+          break
+      }
 
-      const increment = condition === 'character_level_up' ? levelUps : 1
-      const nextProgress = Math.min(mission.target, entry.progress + increment)
+      let nextProgress = entry.progress
+      if (increment > 0) {
+        nextProgress = Math.min(mission.target, entry.progress + increment)
+      } else if (absoluteValue !== null && absoluteValue !== undefined) {
+        nextProgress = Math.min(mission.target, Math.max(entry.progress, absoluteValue))
+      }
+
       if (nextProgress === entry.progress) return
 
       nextUserMissions[entryIndex] = { ...entry, progress: nextProgress }
@@ -2344,6 +2835,13 @@ function App() {
 
     await supabase.from('user_missions').upsert(updates, { onConflict: 'user_id,mission_id' })
     setUserMissions(nextUserMissions)
+
+    const completedCount = nextUserMissions.reduce((count, entry) => {
+      const mission = missionById.get(entry.mission_id)
+      if (!mission) return count
+      return entry.progress >= mission.target ? count + 1 : count
+    }, 0)
+    trackAchievementProgress('missions_completed', completedCount)
   }
 
   const claimMission = async (missionId) => {
@@ -2400,6 +2898,10 @@ function App() {
     setUserMissions(prev =>
       prev.map(item => item.mission_id === missionId ? { ...item, claimed: true } : item)
     )
+
+    if (mission.reward_soft > 0) {
+      trackMissionProgress({ softCurrencyEarned: mission.reward_soft })
+    }
   }
 
   const claimDailyReward = async () => {
@@ -2476,6 +2978,18 @@ function App() {
     // Track achievement progress
     trackAchievementProgress('login_streak', newStreak)
     trackAchievementProgress('total_logins', dailyReward.total_logins + 1)
+    trackMissionProgress({ login: 1, loginDays: 1, softCurrencyEarned: reward.soft })
+  }
+
+  const getAchievementProgressValue = (requirementType) => {
+    const relevantIds = achievements
+      .filter(achievement => achievement.requirement_type === requirementType)
+      .map(achievement => achievement.id)
+    if (relevantIds.length === 0) return 0
+    const values = achievementProgress
+      .filter(entry => relevantIds.includes(entry.achievement_id))
+      .map(entry => entry.progress || 0)
+    return values.length > 0 ? Math.max(...values) : 0
   }
 
   const trackAchievementProgress = async (requirementType, currentValue) => {
@@ -2483,8 +2997,7 @@ function App() {
 
     // Find achievements that match this requirement type
     const relevantAchievements = achievements.filter(a =>
-      a.requirement_type === requirementType &&
-      currentValue >= a.requirement_target
+      a.requirement_type === requirementType
     )
 
     if (relevantAchievements.length === 0) return []
@@ -2495,17 +3008,25 @@ function App() {
 
     relevantAchievements.forEach(achievement => {
       const existing = achievementProgress.find(p => p.achievement_id === achievement.id)
+      const previousProgress = existing?.progress || 0
+      const nextProgress = Math.max(previousProgress, currentValue)
+      const isCompleted = nextProgress >= achievement.requirement_target
+      const completedAt = isCompleted ? (existing?.completed_at || now) : (existing?.completed_at || null)
 
-      if (!existing || !existing.is_completed) {
-        newlyUnlocked.push(achievement)
+      if (!existing || nextProgress !== previousProgress || (isCompleted && !existing.is_completed)) {
         upserts.push({
           user_id: session.user.id,
           achievement_id: achievement.id,
-          progress: currentValue,
-          is_completed: true,
-          completed_at: now,
+          progress: nextProgress,
+          is_completed: isCompleted,
+          completed_at: completedAt,
+          rewards_claimed: existing?.rewards_claimed ?? false,
           updated_at: now,
         })
+      }
+
+      if (isCompleted && !existing?.is_completed) {
+        newlyUnlocked.push(achievement)
       }
     })
 
@@ -2579,6 +3100,10 @@ function App() {
         ? { ...p, rewards_claimed: true }
         : p
     ))
+
+    if (achievement.reward_soft_currency > 0) {
+      trackMissionProgress({ softCurrencyEarned: achievement.reward_soft_currency })
+    }
   }
 
   const purchaseOffer = async (offerId) => {
@@ -2825,20 +3350,18 @@ function App() {
       setGachaResult(selected)
 
       // Track achievement progress
-      // Count total gacha pulls
-      const { count: gachaPullCount } = await supabase
-        .from('match_history')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', session.user.id)
-
-      if (gachaPullCount !== null) {
-        trackAchievementProgress('gacha_pulls', gachaPullCount + 1)
-      }
+      const previousGachaPulls = getAchievementProgressValue('gacha_pulls')
+      trackAchievementProgress('gacha_pulls', previousGachaPulls + 1)
+      trackMissionProgress({
+        gachaPulls: 1,
+        softCurrencyEarned: selected.item_type === 'currency' ? (selected.soft_currency || 0) : 0,
+      })
 
       // Track characters unlocked
       if (characterUnlockIds.length > 0) {
         const unlockedCount = Object.keys(progressByCharacterId).length + characterUnlockIds.length
         trackAchievementProgress('characters_unlocked', unlockedCount)
+        trackMissionProgress({ charactersUnlocked: unlockedCount })
       }
     } catch (error) {
       console.error('Gacha pull failed:', error)
@@ -2937,6 +3460,7 @@ function App() {
     { label: 'Gacha', onClick: () => safeNavigate('gacha'), active: view === 'gacha', disabled: navLocked },
     { label: 'Inventory', onClick: () => safeNavigate('inventory'), active: view === 'inventory', disabled: navLocked },
     { label: 'Missions', onClick: () => safeNavigate('missions'), active: view === 'missions', disabled: navLocked },
+    { label: 'Ladder', onClick: () => safeNavigate('ladder'), active: view === 'ladder', disabled: navLocked },
     ...(isAdmin ? [{ label: 'Admin', onClick: () => safeNavigate('admin'), active: view === 'admin', disabled: navLocked }] : []),
   ]
 
@@ -2963,7 +3487,7 @@ function App() {
             setBattleResult(null)
             resetGame()
           }}
-          isPvp={isPvp}
+          isPvp={isRankedMatch}
         />
       )}
       {gamePhase === 'battle' ? (
@@ -3063,6 +3587,17 @@ function App() {
           achievements={achievements}
           progress={achievementProgress}
           onClaimReward={claimAchievementReward}
+          onBack={() => setView('team')}
+        />
+      ) : view === 'ladder' ? (
+        <LadderPage
+          entries={leaderboardEntries}
+          status={leaderboardStatus}
+          error={leaderboardError}
+          season={seasonInfo}
+          currentUserId={session?.user?.id}
+          currentRating={profile?.rating ?? 1000}
+          onRefresh={loadLeaderboard}
           onBack={() => setView('team')}
         />
       ) : view === 'opponent-select' ? (
