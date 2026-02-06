@@ -74,9 +74,11 @@ function BattleScreen({
   const [autoScrollFeed, setAutoScrollFeed] = React.useState(true)
   const [showEndTurnConfirm, setShowEndTurnConfirm] = React.useState(false)
   const [draftQueue, setDraftQueue] = React.useState([])
+  const [autoReview, setAutoReview] = React.useState(false)
   const playerHpRef = React.useRef([])
   const enemyHpRef = React.useRef([])
   const feedBodyRef = React.useRef(null)
+  const autoReviewTurnRef = React.useRef(null)
   const latestLog = battleLog?.[battleLog.length - 1] || ''
   const speedFactor = Math.max(1, battleSpeed || 1)
   const turnBannerDuration = Math.max(600, Math.floor(1200 / speedFactor))
@@ -855,6 +857,31 @@ function BattleScreen({
     })
   }
 
+  React.useEffect(() => {
+    if (!autoReview) return
+    if (showEndTurnConfirm) return
+    if (autoBattle || gameOver) return
+    if (isPvp && !isMyTurn) return
+    if (pendingAbility?.needsTarget) return
+    if (alivePlayerCount === 0 || queuedCount === 0 || missingQueue > 0) return
+    if (autoReviewTurnRef.current === turn) return
+
+    autoReviewTurnRef.current = turn
+    openEndTurnConfirm()
+  }, [
+    autoReview,
+    showEndTurnConfirm,
+    autoBattle,
+    gameOver,
+    isPvp,
+    isMyTurn,
+    pendingAbility,
+    alivePlayerCount,
+    queuedCount,
+    missingQueue,
+    turn
+  ])
+
   return (
     <div className={`battle-screen ${battleShake ? 'screen-shake' : ''} ${pendingAbility?.needsTarget ? 'targeting-active' : ''}`}>
       <div className="battle-background"></div>
@@ -924,6 +951,15 @@ function BattleScreen({
               >
                 Auto: {autoBattle ? 'On' : 'Off'}
               </button>
+              <button
+                className={`battle-toggle review ${autoReview ? 'active' : ''}`}
+                onClick={() => setAutoReview(prev => !prev)}
+                type="button"
+                disabled={autoBattle || (isPvp && !isMyTurn)}
+                title="When all actions are queued, open the review panel automatically."
+              >
+                Auto Review: {autoReview ? 'On' : 'Off'}
+              </button>
             </div>
           </div>
           <div className="combat-feed-ticker">
@@ -957,6 +993,43 @@ function BattleScreen({
           </div>
         )}
       </div>
+
+      {pendingAbility && pendingAbility.needsTarget && (
+        <div className="targeting-overlay" onClick={() => setPendingAbility(null)}>
+          <div className="targeting-panel" onClick={(event) => event.stopPropagation()}>
+            <div className="targeting-header">
+              <div>
+                <h3>Choose Target</h3>
+                <p>{pendingAbility.ability.name} • Select an enemy</p>
+              </div>
+              <button className="targeting-close" onClick={() => setPendingAbility(null)}>✕</button>
+            </div>
+            <div className="targeting-grid">
+              {enemyTeam.map((enemy, index) => {
+                const isDead = enemy.hp <= 0
+                return (
+                  <button
+                    key={enemy.id}
+                    className={`targeting-card ${selectedEnemy === index ? 'selected' : ''} ${isDead ? 'disabled' : ''}`}
+                    onClick={() => !isDead && handleEnemyClick(index)}
+                    type="button"
+                    disabled={isDead}
+                  >
+                    <Portrait name={enemy.name} image={getCharacterImage(enemy.name)} size="small" />
+                    <div className="targeting-meta">
+                      <span className="target-name">{enemy.name}</span>
+                      <span className="target-hp">{Math.max(0, enemy.hp)} / {enemy.maxHp} HP</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="targeting-footer">
+              Click a target to queue instantly, or press Cancel to adjust.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Game Over */}
       {gameOver && (
@@ -1020,10 +1093,30 @@ function BattleScreen({
             )}
             {storyBattle ? (
               <div className="battle-result-actions">
+                {!autoBattleDisabled && (
+                  <button
+                    className={`battle-result-toggle ${autoBattle ? 'active' : ''}`}
+                    onClick={onToggleAutoBattle}
+                    type="button"
+                  >
+                    Auto-Battle: {autoBattle ? 'On' : 'Off'}
+                  </button>
+                )}
                 <button onClick={onExitStory} className="play-again-btn" disabled={!onExitStory}>Return to Story</button>
               </div>
             ) : (
-              <button onClick={resetGame} className="play-again-btn">Play Again</button>
+              <div className="battle-result-actions">
+                {!autoBattleDisabled && (
+                  <button
+                    className={`battle-result-toggle ${autoBattle ? 'active' : ''}`}
+                    onClick={onToggleAutoBattle}
+                    type="button"
+                  >
+                    Auto-Battle: {autoBattle ? 'On' : 'Off'}
+                  </button>
+                )}
+                <button onClick={resetGame} className="play-again-btn">Play Again</button>
+              </div>
             )}
           </div>
         </div>
