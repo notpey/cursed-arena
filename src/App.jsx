@@ -78,6 +78,7 @@ function App() {
   const winStreakRef = useRef(0)
   const pvpMatchIdRef = useRef(null)
   const pendingRankedQueueRef = useRef(null)
+  const pvpSearchingRef = useRef(false)
 
   const getSeasonInfo = (date = new Date()) => {
     const year = date.getUTCFullYear()
@@ -383,6 +384,7 @@ function App() {
     setStoryBattleConfig(null)
     setPvpStatus(null)
     setPvpMatch(null)
+    pvpSearchingRef.current = false
     resetBattleStats()
 
     if (pvpChannel) {
@@ -2015,6 +2017,8 @@ function App() {
     setRankedBotMatch(null)
     resetBattleStats()
     pvpMatchIdRef.current = null
+    pvpSearchingRef.current = false
+    pendingRankedQueueRef.current = null
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -2037,6 +2041,8 @@ function App() {
     setView('story')
     setRankedBotMatch(null)
     resetBattleStats()
+    pvpSearchingRef.current = false
+    pendingRankedQueueRef.current = null
   }
 
   const startBattleWithOpponents = ({ opponents, difficulty }) => {
@@ -2130,15 +2136,12 @@ function App() {
     if (!session || selectedPlayerTeam.length < 3) return
     setPvpStatus('searching')
     setRankedBotMatch(null)
+    pvpSearchingRef.current = true
 
     const teamIds = selectedPlayerTeam.map(character => character.id)
     const teamState = buildTeamSnapshot(teamIds, true)
     const myRating = profile?.rating || 1000
-    if (mode === 'ranked') {
-      pendingRankedQueueRef.current = { teamIds, teamState, rating: myRating }
-    } else {
-      pendingRankedQueueRef.current = null
-    }
+    pendingRankedQueueRef.current = mode === 'ranked' ? { teamIds, teamState, rating: myRating } : null
 
     // Clean up old queue entries first
     await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
@@ -2158,6 +2161,7 @@ function App() {
     const opponent = opponentRows?.[0]
 
     if (opponent) {
+      pvpSearchingRef.current = false
       // IMMEDIATE MATCH FOUND - Create match with 'waiting' status
       try {
         // Delete both queue entries atomically
@@ -2264,6 +2268,7 @@ function App() {
       pollForMatch(mode)
     } catch (error) {
       console.error('Failed to join queue:', error)
+      pvpSearchingRef.current = false
       setPvpStatus('error')
       setTimeout(() => setPvpStatus(null), 3000)
     }
@@ -2271,7 +2276,7 @@ function App() {
 
   // Polling fallback to find matches (runs every 2s for 30s)
   const pollForMatch = async (mode, attempts = 0) => {
-    if (!session || pvpStatus !== 'searching') return
+    if (!session || !pvpSearchingRef.current) return
 
     if (mode === 'ranked' && attempts >= 6) {
       const queued = pendingRankedQueueRef.current
@@ -2297,6 +2302,7 @@ function App() {
         const match = matches[0]
         setPvpMatch(match)
         setPvpStatus('match_found')
+        pvpSearchingRef.current = false
 
         // Confirm we're ready
         const isPlayer1 = match.player1_id === session.user.id
@@ -2327,6 +2333,7 @@ function App() {
   // Poll for both players to be ready (checks every 1s for 30s)
   const pollForMatchReady = async (matchId, attempts = 0) => {
     if (attempts >= 30 || !session) {
+      pvpSearchingRef.current = false
       setPvpStatus('timeout')
       setTimeout(() => setPvpStatus(null), 3000)
       return
@@ -2340,6 +2347,7 @@ function App() {
         .single()
 
       if (!match) {
+        pvpSearchingRef.current = false
         setPvpStatus('error')
         setTimeout(() => setPvpStatus(null), 3000)
         return
@@ -2370,6 +2378,7 @@ function App() {
           if (activeMatch && activeMatch.status === 'active') {
             setPvpMatch(activeMatch)
             setPvpStatus(null)
+            pvpSearchingRef.current = false
             syncBattleFromMatch(activeMatch)
             subscribeToMatch(activeMatch.id)
           }
@@ -2404,6 +2413,7 @@ function App() {
     setPvpMatch(null)
     setRankedBotMatch(null)
     pendingRankedQueueRef.current = null
+    pvpSearchingRef.current = false
   }
 
   const saveTeamPreset = async (slot, name, characterIds) => {
