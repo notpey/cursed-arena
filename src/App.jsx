@@ -1567,8 +1567,9 @@ function App() {
     }
   }
 
-  const processTurnStart = (team, teamType) => {
-    const nextTeam = deepCopy(team)
+  const processTurnStart = (team, teamType, options = {}) => {
+    const mutate = options.mutate === true
+    const nextTeam = mutate ? team : deepCopy(team)
     const logs = []
 
     nextTeam.forEach((char, idx) => {
@@ -2214,12 +2215,13 @@ function App() {
   }
 
 
-  const endPlayerTurn = (startPlayerTeam = playerTeam, startEnemyTeam = enemyTeam) => {
+  const endPlayerTurn = (startPlayerTeam = playerTeam, startEnemyTeam = enemyTeam, options = {}) => {
+    const mutate = options.mutate === true
     let newLog = []
-    let newEnemyTeam = deepCopy(startEnemyTeam)
-    let newPlayerTeam = deepCopy(startPlayerTeam)
+    let newEnemyTeam = mutate ? startEnemyTeam : deepCopy(startEnemyTeam)
+    let newPlayerTeam = mutate ? startPlayerTeam : deepCopy(startPlayerTeam)
 
-    const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy')
+    const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy', { mutate: true })
     newEnemyTeam = enemyTurnStart.team
     newLog.push(...enemyTurnStart.logs)
 
@@ -2341,7 +2343,7 @@ function App() {
       }
     })
 
-    const playerTurnStart = processTurnStart(newPlayerTeam, 'player')
+    const playerTurnStart = processTurnStart(newPlayerTeam, 'player', { mutate: true })
     newPlayerTeam = playerTurnStart.team
     newLog.push(...playerTurnStart.logs)
 
@@ -2410,11 +2412,11 @@ function App() {
       const opponentId = isPlayer1 ? pvpMatch.player2_id : pvpMatch.player1_id
       const baseLog = pvpMatch.state?.log || battleLog
 
-      const playerTurnStart = processTurnStart(newPlayerTeam, 'player')
+      const playerTurnStart = processTurnStart(newPlayerTeam, 'player', { mutate: true })
       newPlayerTeam = playerTurnStart.team
       newLog.push(...playerTurnStart.logs)
 
-      const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy')
+      const enemyTurnStart = processTurnStart(newEnemyTeam, 'enemy', { mutate: true })
       newEnemyTeam = enemyTurnStart.team
       newLog.push(...enemyTurnStart.logs)
 
@@ -2494,7 +2496,7 @@ function App() {
     }
 
     appendBattleLog(newLog)
-    endPlayerTurn(newPlayerTeam, newEnemyTeam)
+    endPlayerTurn(newPlayerTeam, newEnemyTeam, { mutate: true })
   }
 
   useEffect(() => {
