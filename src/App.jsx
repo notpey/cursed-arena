@@ -105,6 +105,7 @@ function App() {
   const combatEventFlushRef = useRef(null)
   const battleLogBufferRef = useRef([])
   const battleLogFlushRef = useRef(null)
+  const pvpPollTimersRef = useRef({ match: null, ready: null })
 
   const getSeasonInfo = (date = new Date()) => {
     const year = date.getUTCFullYear()
@@ -137,6 +138,21 @@ function App() {
       autoBattleTimerRef.current = null
     }
   }
+
+  const clearPvpPollTimers = () => {
+    if (pvpPollTimersRef.current.match) {
+      clearTimeout(pvpPollTimersRef.current.match)
+      pvpPollTimersRef.current.match = null
+    }
+    if (pvpPollTimersRef.current.ready) {
+      clearTimeout(pvpPollTimersRef.current.ready)
+      pvpPollTimersRef.current.ready = null
+    }
+  }
+
+  useEffect(() => {
+    return () => clearPvpPollTimers()
+  }, [])
 
   const applyXpGain = (currentLevel, currentXp, gain) => {
     let level = Math.max(1, currentLevel || 1)
@@ -305,6 +321,14 @@ function App() {
   const storyLoadedRef = useRef(false)
 
   const clampValue = (value, min, max) => Math.max(min, Math.min(max, value))
+  const isActiveWindow = (row, now = new Date()) => {
+    if (!row) return false
+    const startsAt = row.starts_at ? new Date(row.starts_at) : null
+    const endsAt = row.ends_at ? new Date(row.ends_at) : null
+    if (startsAt && startsAt > now) return false
+    if (endsAt && endsAt < now) return false
+    return true
+  }
 
   const rogueBlessings = useMemo(
     () => ([
@@ -1147,7 +1171,6 @@ function App() {
     const loadMeta = async () => {
       const [
         { data: missionData },
-        { data: userMissionData },
         { data: offerData },
         { data: bannerData },
         { data: bannerItemData },
@@ -1156,7 +1179,6 @@ function App() {
         { data: titleData },
       ] = await Promise.all([
         supabase.from('missions').select('*').order('id'),
-        supabase.from('user_missions').select('*').eq('user_id', session.user.id),
         supabase.from('shop_offers').select('*').eq('active', true).order('id'),
         supabase.from('banners').select('*').order('id'),
         supabase.from('banner_items').select('*').order('banner_id'),
@@ -1165,11 +1187,16 @@ function App() {
         supabase.from('user_titles').select('*').eq('user_id', session.user.id),
       ])
 
-      setMissions(missionData || [])
-      setUserMissions(userMissionData || [])
+      const now = new Date()
+      const activeMissions = (missionData || []).filter(mission => isActiveWindow(mission, now))
+      const activeBanners = (bannerData || []).filter(banner => isActiveWindow(banner, now))
+      const activeBannerIds = new Set(activeBanners.map(banner => banner.id))
+      const activeBannerItems = (bannerItemData || []).filter(item => activeBannerIds.has(item.banner_id))
+
+      setMissions(activeMissions)
       setShopOffers(offerData || [])
-      setBanners(bannerData || [])
-      setBannerItems(bannerItemData || [])
+      setBanners(activeBanners)
+      setBannerItems(activeBannerItems)
       const nextInventory = {}
       ;(inventoryData || []).forEach(row => {
         nextInventory[row.character_id] = row.shard_amount
@@ -1181,35 +1208,65 @@ function App() {
       })
       setUserItems(nextItems)
       setUserTitles(titleData || [])
+
+      const { data: syncedMissions, error: syncError } = await supabase.rpc('sync_user_missions')
+      if (syncError) {
+        console.error('Failed to sync missions:', syncError)
+      } else if (syncedMissions) {
+        setUserMissions(syncedMissions)
+      }
     }
 
     loadMeta()
   }, [session])
 
-  useEffect(() => {
-    if (!session || missions.length === 0) return
+  const refreshInventory = async () => {
+    if (!session) return
+    const { data } = await supabase
+      .from('user_inventory')
+      .select('*')
+      .eq('user_id', session.user.id)
+    const nextInventory = {}
+    ;(data || []).forEach(row => {
+      nextInventory[row.character_id] = row.shard_amount
+    })
+    setInventory(nextInventory)
+  }
 
-    const ensureUserMissions = async () => {
-      const existingIds = new Set(userMissions.map(entry => entry.mission_id))
-      const missing = missions.filter(mission => !existingIds.has(mission.id))
-      if (missing.length === 0) return
+  const refreshUserItems = async () => {
+    if (!session) return
+    const { data } = await supabase
+      .from('user_items')
+      .select('*')
+      .eq('user_id', session.user.id)
+    const nextItems = {}
+    ;(data || []).forEach(row => {
+      nextItems[row.item_id] = row.quantity
+    })
+    setUserItems(nextItems)
+  }
 
-      const payload = missing.map(mission => ({
-        user_id: session.user.id,
-        mission_id: mission.id,
-        progress: 0,
-        claimed: false,
-        updated_at: new Date().toISOString(),
-      }))
+  const refreshUserTitles = async () => {
+    if (!session) return
+    const { data } = await supabase
+      .from('user_titles')
+      .select('*')
+      .eq('user_id', session.user.id)
+    setUserTitles(data || [])
+  }
 
-      const { data } = await supabase.from('user_missions').insert(payload).select()
-      if (data) {
-        setUserMissions(prev => [...prev, ...data])
-      }
-    }
-
-    ensureUserMissions()
-  }, [missions, session, userMissions])
+  const refreshCharacterProgress = async () => {
+    if (!session) return
+    const { data } = await supabase
+      .from('character_progress')
+      .select('character_id, level, xp, limit_break')
+      .eq('user_id', session.user.id)
+    const next = {}
+    ;(data || []).forEach(row => {
+      next[row.character_id] = { level: row.level, xp: row.xp, limit_break: row.limit_break }
+    })
+    setCharacterProgress(next)
+  }
 
   useEffect(() => {
     if (!session) return
@@ -2427,16 +2484,17 @@ function App() {
           turn: pvpMatch.state?.turn || turn,
           log: [...baseLog, ...newLog, '👑 VICTORY!'],
         }
-        await supabase
-          .from('pvp_matches')
-          .update({
-            state: finalState,
-            status: 'completed',
-            winner_id: session.user.id,
-            turn_owner: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', pvpMatch.id)
+        const { error: winError } = await supabase.rpc('pvp_complete_match', {
+          match_id: pvpMatch.id,
+          final_state: finalState,
+          winner_id: session.user.id,
+        })
+        if (winError) {
+          console.error('Failed to complete match:', winError)
+          setPvpStatus('error')
+          appendBattleLog([...newLog, 'Match update failed. Try again.'])
+          return
+        }
         finalizeBattle('win', newPlayerTeam, [])
         return
       }
@@ -2448,16 +2506,17 @@ function App() {
           turn: pvpMatch.state?.turn || turn,
           log: [...baseLog, ...newLog, '☠️ DEFEAT!'],
         }
-        await supabase
-          .from('pvp_matches')
-          .update({
-            state: finalState,
-            status: 'completed',
-            winner_id: opponentId,
-            turn_owner: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', pvpMatch.id)
+        const { error: loseError } = await supabase.rpc('pvp_complete_match', {
+          match_id: pvpMatch.id,
+          final_state: finalState,
+          winner_id: opponentId,
+        })
+        if (loseError) {
+          console.error('Failed to complete match:', loseError)
+          setPvpStatus('error')
+          appendBattleLog([...newLog, 'Match update failed. Try again.'])
+          return
+        }
         finalizeBattle('lose', newPlayerTeam, [])
         return
       }
@@ -2470,28 +2529,24 @@ function App() {
         log: [...baseLog, ...newLog],
       }
 
+      const { error: submitError } = await supabase.rpc('pvp_submit_turn', {
+        match_id: pvpMatch.id,
+        next_state: nextState,
+        next_turn: nextTurn,
+        actions: { queuedActions: actionsSnapshot },
+      })
+      if (submitError) {
+        console.error('Failed to submit turn:', submitError)
+        setPvpStatus('error')
+        appendBattleLog([...newLog, 'Turn submission failed. Try again.'])
+        return
+      }
+
       resetBattleLog(nextState.log)
       setPlayerTeam(newPlayerTeam)
       setEnemyTeam(newEnemyTeam)
       setActedCharacters([])
       setTurn(nextTurn)
-
-      await supabase.from('pvp_turns').insert({
-        match_id: pvpMatch.id,
-        user_id: session.user.id,
-        turn_number: nextTurn - 1,
-        actions: { queuedActions: actionsSnapshot },
-      })
-
-      await supabase
-        .from('pvp_matches')
-        .update({
-          state: nextState,
-          turn: nextTurn,
-          turn_owner: opponentId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', pvpMatch.id)
       return
     }
 
@@ -2558,6 +2613,7 @@ function App() {
     pendingRankedQueueRef.current = null
     autoBattleTurnRef.current = null
     clearAutoBattleTimer()
+    clearPvpPollTimers()
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -2953,6 +3009,7 @@ function App() {
     pendingRankedQueueRef.current = null
     autoBattleTurnRef.current = null
     clearAutoBattleTimer()
+    clearPvpPollTimers()
     if (pvpChannel) {
       pvpChannel.unsubscribe()
       setPvpChannel(null)
@@ -2979,6 +3036,7 @@ function App() {
     pendingRankedQueueRef.current = null
     autoBattleTurnRef.current = null
     clearAutoBattleTimer()
+    clearPvpPollTimers()
   }
 
   const startBattleWithOpponents = ({ opponents, difficulty }) => {
@@ -3070,6 +3128,7 @@ function App() {
 
   const startPvpQueue = async (mode) => {
     if (!session || selectedPlayerTeam.length < 3) return
+    clearPvpPollTimers()
     setPvpStatus('searching')
     setRankedBotMatch(null)
     pvpSearchingRef.current = true
@@ -3184,10 +3243,7 @@ function App() {
             // We are Player 1, confirm we're ready
             const isPlayer1 = match.player1_id === session.user.id
             if (isPlayer1) {
-              await supabase
-                .from('pvp_matches')
-                .update({ player1_ready: true, updated_at: new Date().toISOString() })
-                .eq('id', match.id)
+              await supabase.rpc('pvp_set_ready', { match_id: match.id })
             }
 
             // Clean up queue and start polling for both players ready
@@ -3239,14 +3295,12 @@ function App() {
         setPvpMatch(match)
         setPvpStatus('match_found')
         pvpSearchingRef.current = false
+        clearPvpPollTimers()
 
         // Confirm we're ready
         const isPlayer1 = match.player1_id === session.user.id
         if (isPlayer1 && !match.player1_ready) {
-          await supabase
-            .from('pvp_matches')
-            .update({ player1_ready: true, updated_at: new Date().toISOString() })
-            .eq('id', match.id)
+          await supabase.rpc('pvp_set_ready', { match_id: match.id })
         }
 
         // Clean up and start waiting for both ready
@@ -3263,7 +3317,8 @@ function App() {
     }
 
     // Continue polling
-    setTimeout(() => pollForMatch(mode, attempts + 1), 2000)
+    clearTimeout(pvpPollTimersRef.current.match)
+    pvpPollTimersRef.current.match = setTimeout(() => pollForMatch(mode, attempts + 1), 2000)
   }
 
   // Poll for both players to be ready (checks every 1s for 30s)
@@ -3296,11 +3351,10 @@ function App() {
 
         // Only Player 1 updates to active (prevents race condition)
         if (isPlayer1) {
-          await supabase
-            .from('pvp_matches')
-            .update({ status: 'active', updated_at: new Date().toISOString() })
-            .eq('id', matchId)
-            .eq('status', 'waiting') // Atomic check
+          const { error: activateError } = await supabase.rpc('pvp_activate_match', { match_id: matchId })
+          if (activateError) {
+            console.error('Failed to activate match:', activateError)
+          }
         }
 
         // Wait a moment for update to propagate
@@ -3315,6 +3369,7 @@ function App() {
             setPvpMatch(activeMatch)
             setPvpStatus(null)
             pvpSearchingRef.current = false
+            clearPvpPollTimers()
             syncBattleFromMatch(activeMatch)
             subscribeToMatch(activeMatch.id)
           }
@@ -3326,7 +3381,8 @@ function App() {
     }
 
     // Continue polling
-    setTimeout(() => pollForMatchReady(matchId, attempts + 1), 1000)
+    clearTimeout(pvpPollTimersRef.current.ready)
+    pvpPollTimersRef.current.ready = setTimeout(() => pollForMatchReady(matchId, attempts + 1), 1000)
   }
 
   const startPvpQuick = () => startPvpQueue('quick')
@@ -3334,6 +3390,7 @@ function App() {
 
   const cancelPvpQueue = async () => {
     if (!session) return
+    clearPvpPollTimers()
 
     // Clean up queue entry
     await supabase.from('pvp_queue').delete().eq('user_id', session.user.id)
@@ -3687,10 +3744,12 @@ function App() {
       let absoluteValue = null
 
       switch (mission.condition) {
+        case 'match_any':
         case 'battles_played':
         case 'total_battles':
           increment = battlesPlayed
           break
+        case 'match_win':
         case 'battles_won':
           if (result === 'win' && teamHasTag(mission.condition_value)) {
             increment = 1
@@ -3728,6 +3787,7 @@ function App() {
         case 'gacha_pulls':
           increment = gachaPulls
           break
+        case 'character_level_up':
         case 'characters_leveled':
           increment = levelUps
           break
@@ -3796,51 +3856,29 @@ function App() {
     const entry = userMissions.find(item => item.mission_id === missionId)
     if (!mission || !entry || entry.claimed || entry.progress < mission.target) return
 
-    const nextSoft = (profile?.soft_currency ?? 0) + mission.reward_soft
-    const nextPremium = (profile?.premium_currency ?? 0) + mission.reward_premium
+    const { data, error } = await supabase.rpc('claim_mission_reward', {
+      p_mission_id: missionId,
+    })
+    if (error) {
+      console.error('Failed to claim mission:', error)
+      return
+    }
 
-    const inventoryUpdates = []
-    if (mission.reward_shard_character_id && mission.reward_shard_amount > 0) {
-      const currentAmount = inventory[mission.reward_shard_character_id] || 0
-      const nextAmount = currentAmount + mission.reward_shard_amount
-      inventoryUpdates.push({
-        user_id: session.user.id,
-        character_id: mission.reward_shard_character_id,
-        shard_amount: nextAmount,
-        updated_at: new Date().toISOString(),
-      })
-      setInventory(prev => ({
-        ...prev,
-        [mission.reward_shard_character_id]: nextAmount,
+    if (typeof data?.soft_currency === 'number' || typeof data?.premium_currency === 'number') {
+      setProfile(prev => ({
+        ...(prev || {}),
+        soft_currency: data?.soft_currency ?? prev?.soft_currency ?? 0,
+        premium_currency: data?.premium_currency ?? prev?.premium_currency ?? 0,
       }))
     }
 
-    await supabase
-      .from('profiles')
-      .update({
-        soft_currency: nextSoft,
-        premium_currency: nextPremium,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', session.user.id)
-
-    await supabase
-      .from('user_missions')
-      .update({ claimed: true, updated_at: new Date().toISOString() })
-      .eq('user_id', session.user.id)
-      .eq('mission_id', missionId)
-
-    if (inventoryUpdates.length > 0) {
-      await supabase
-        .from('user_inventory')
-        .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
+    if (data?.reward_shard_character_id && data?.reward_shard_amount) {
+      setInventory(prev => ({
+        ...prev,
+        [data.reward_shard_character_id]: (prev[data.reward_shard_character_id] || 0) + data.reward_shard_amount,
+      }))
     }
 
-    setProfile(prev => ({
-      ...(prev || {}),
-      soft_currency: nextSoft,
-      premium_currency: nextPremium,
-    }))
     setUserMissions(prev =>
       prev.map(item => item.mission_id === missionId ? { ...item, claimed: true } : item)
     )
@@ -3853,78 +3891,33 @@ function App() {
   const claimDailyReward = async () => {
     if (!session || !dailyReward) return
 
-    const today = new Date().toISOString().split('T')[0]
-    const lastClaim = dailyReward.last_claim_date
-
-    // Check if already claimed today
-    if (lastClaim === today) return
-
-    // Calculate new streak
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
-
-    const isConsecutive = lastClaim === yesterdayStr
-    const newStreak = isConsecutive ? dailyReward.current_streak + 1 : 1
-    const newLongest = Math.max(newStreak, dailyReward.longest_streak)
-
-    // Calculate rewards
-    const dayInCycle = ((newStreak - 1) % 7) + 1
-    const rewardSchedule = {
-      1: { soft: 50, premium: 0 },
-      2: { soft: 75, premium: 0 },
-      3: { soft: 100, premium: 5 },
-      4: { soft: 125, premium: 0 },
-      5: { soft: 150, premium: 10 },
-      6: { soft: 200, premium: 0 },
-      7: { soft: 300, premium: 25 },
+    const { data, error } = await supabase.rpc('claim_daily_reward')
+    if (error) {
+      console.error('Failed to claim daily reward:', error)
+      return
     }
-    const reward = rewardSchedule[dayInCycle]
 
-    // Update daily reward record
-    await supabase
-      .from('daily_rewards')
-      .update({
-        current_streak: newStreak,
-        longest_streak: newLongest,
-        last_claim_date: today,
-        total_logins: dailyReward.total_logins + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', session.user.id)
-
-    // Award currency
-    const nextSoft = (profile?.soft_currency || 0) + reward.soft
-    const nextPremium = (profile?.premium_currency || 0) + reward.premium
-
-    await supabase
-      .from('profiles')
-      .update({
-        soft_currency: nextSoft,
-        premium_currency: nextPremium,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', session.user.id)
-
-    // Update local state
     setDailyReward(prev => ({
-      ...prev,
-      current_streak: newStreak,
-      longest_streak: newLongest,
-      last_claim_date: today,
-      total_logins: prev.total_logins + 1,
+      ...(prev || {}),
+      current_streak: data.current_streak,
+      longest_streak: data.longest_streak,
+      last_claim_date: data.last_claim_date,
+      total_logins: data.total_logins,
     }))
 
     setProfile(prev => ({
-      ...prev,
-      soft_currency: nextSoft,
-      premium_currency: nextPremium,
+      ...(prev || {}),
+      soft_currency: data.soft_currency ?? prev?.soft_currency ?? 0,
+      premium_currency: data.premium_currency ?? prev?.premium_currency ?? 0,
     }))
 
-    // Track achievement progress
-    trackAchievementProgress('login_streak', newStreak)
-    trackAchievementProgress('total_logins', dailyReward.total_logins + 1)
-    trackMissionProgress({ login: 1, loginDays: 1, softCurrencyEarned: reward.soft })
+    trackAchievementProgress('login_streak', data.current_streak)
+    trackAchievementProgress('total_logins', data.total_logins)
+    trackMissionProgress({
+      login: 1,
+      loginDays: 1,
+      softCurrencyEarned: data.reward_soft || 0,
+    })
   }
 
   const getAchievementProgressValue = (requirementType) => {
@@ -3999,46 +3992,18 @@ function App() {
 
     const progress = achievementProgress.find(p => p.achievement_id === achievementId)
     if (!progress || !progress.is_completed || progress.rewards_claimed) return
-
-    // Award currency
-    const nextSoft = (profile?.soft_currency || 0) + achievement.reward_soft_currency
-    const nextPremium = (profile?.premium_currency || 0) + achievement.reward_premium_currency
-
-    await supabase
-      .from('profiles')
-      .update({
-        soft_currency: nextSoft,
-        premium_currency: nextPremium,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', session.user.id)
-
-    // Award title if applicable
-    if (achievement.reward_title) {
-      await supabase
-        .from('user_titles')
-        .upsert({
-          user_id: session.user.id,
-          title_id: achievement.id,
-          unlocked: true,
-        })
+    const { data, error } = await supabase.rpc('claim_achievement_reward', {
+      p_achievement_id: achievementId,
+    })
+    if (error) {
+      console.error('Failed to claim achievement:', error)
+      return
     }
 
-    // Mark as claimed
-    await supabase
-      .from('achievement_progress')
-      .update({
-        rewards_claimed: true,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', session.user.id)
-      .eq('achievement_id', achievementId)
-
-    // Update local state
     setProfile(prev => ({
-      ...prev,
-      soft_currency: nextSoft,
-      premium_currency: nextPremium,
+      ...(prev || {}),
+      soft_currency: data?.soft_currency ?? prev?.soft_currency ?? 0,
+      premium_currency: data?.premium_currency ?? prev?.premium_currency ?? 0,
     }))
 
     setAchievementProgress(prev => prev.map(p =>
@@ -4049,6 +4014,10 @@ function App() {
 
     if (achievement.reward_soft_currency > 0) {
       trackMissionProgress({ softCurrencyEarned: achievement.reward_soft_currency })
+    }
+
+    if (achievement.reward_title) {
+      refreshUserTitles()
     }
   }
 
@@ -4066,260 +4035,82 @@ function App() {
       return
     }
 
-    // Calculate new currency values
-    const nextSoft = soft - offer.cost_soft + (offer.item_type === 'currency' ? (offer.soft_currency || 0) : 0)
-    const nextPremium = premium - offer.cost_premium + (offer.item_type === 'currency' ? (offer.premium_currency || 0) : 0)
-
-    const inventoryUpdates = []
-
-    // Handle shard purchases
-    if (offer.item_type === 'shards' && offer.character_id && offer.shard_amount > 0) {
-      const currentAmount = inventory[offer.character_id] || 0
-      const nextAmount = currentAmount + offer.shard_amount
-      inventoryUpdates.push({
-        user_id: session.user.id,
-        character_id: offer.character_id,
-        shard_amount: nextAmount,
-        updated_at: new Date().toISOString(),
-      })
-    }
-
     try {
-      // Update profile currency first
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          soft_currency: nextSoft,
-          premium_currency: nextPremium,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', session.user.id)
+      const { data, error } = await supabase.rpc('purchase_shop_offer', {
+        p_offer_id: offer.id,
+      })
 
-      if (profileError) {
-        console.error('Failed to update profile:', profileError)
+      if (error) {
+        console.error('Failed to purchase offer:', error)
         return
       }
 
-      // Update inventory if shards purchased
-      if (inventoryUpdates.length > 0) {
-        const { error: inventoryError } = await supabase
-          .from('user_inventory')
-          .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
-
-        if (inventoryError) {
-          console.error('Failed to update inventory:', inventoryError)
-          return
-        }
-
-        // Update local inventory state
-        setInventory(prev => ({
-          ...prev,
-          [offer.character_id]: inventoryUpdates[0].shard_amount,
+      if (typeof data?.soft_currency === 'number' || typeof data?.premium_currency === 'number') {
+        setProfile(prev => ({
+          ...(prev || {}),
+          soft_currency: data?.soft_currency ?? prev?.soft_currency ?? 0,
+          premium_currency: data?.premium_currency ?? prev?.premium_currency ?? 0,
         }))
       }
 
-      // Update local profile state
-      setProfile(prev => ({
-        ...(prev || {}),
-        soft_currency: nextSoft,
-        premium_currency: nextPremium,
-      }))
+      if (data?.character_id && data?.shard_amount) {
+        setInventory(prev => ({
+          ...prev,
+          [data.character_id]: (prev[data.character_id] || 0) + data.shard_amount,
+        }))
+      }
     } catch (error) {
       console.error('Purchase failed:', error)
     }
   }
 
   const pullGacha = async (bannerId, options = {}) => {
-    if (!session) return
-    const premium = profile?.premium_currency ?? 0
-    const fragmentCount = userItems?.finger_fragment || 0
-    const pullCost = 25
+    if (!session || !bannerId) return false
     const useFragment = options.useFragment === true
     const pullCount = Math.max(1, Number(options.count) || 1)
-    const isMulti = pullCount > 1
-    if (useFragment && isMulti) return
-    const totalCost = pullCost * pullCount
+    if (useFragment && pullCount > 1) return false
 
-    // Validate currency/fragments before pull
-    if (useFragment) {
-      if (fragmentCount <= 0) return
-    } else if (premium < totalCost) {
-      return
-    }
-
-    const items = bannerItems.filter(item => item.banner_id === bannerId)
-    if (items.length === 0) return
-
-    const boostRates = pullCount >= 10
-    const getWeight = (item, boosted) => {
-      const base = Number(item.weight) || 0
-      if (!boosted) return base
-      if (item.item_type === 'character') return base * 1.25
-      if (item.item_type === 'shards') return base * 1.15
-      return base
-    }
-
-    const rollItem = (pool, boosted) => {
-      const totalWeight = pool.reduce((sum, item) => sum + getWeight(item, boosted), 0)
-      if (totalWeight <= 0) return pool[0]
-      let roll = Math.random() * totalWeight
-      for (const item of pool) {
-        roll -= getWeight(item, boosted)
-        if (roll <= 0) return item
-      }
-      return pool[0]
-    }
-
-    const results = Array.from({ length: pullCount }, () => rollItem(items, boostRates))
-
-    if (boostRates) {
-      const hasRare = results.some(item => item.item_type === 'character' || item.item_type === 'shards')
-      const guaranteePool = items.filter(item => item.item_type === 'character' || item.item_type === 'shards')
-      if (!hasRare && guaranteePool.length > 0) {
-        results[results.length - 1] = rollItem(guaranteePool, true)
-      }
-    }
-
-    const nextPremium = useFragment ? premium : premium - totalCost
-    let nextSoft = profile?.soft_currency ?? 0
-    const inventoryUpdates = []
-    const characterUnlockIds = new Set()
-    const shardDeltas = {}
-    let softCurrencyEarned = 0
-
-    results.forEach(selected => {
-      if (!selected) return
-
-      if (selected.item_type === 'currency') {
-        const gain = selected.soft_currency || 0
-        nextSoft += gain
-        softCurrencyEarned += gain
-      }
-
-      if (selected.item_type === 'shards' && selected.character_id) {
-        shardDeltas[selected.character_id] = (shardDeltas[selected.character_id] || 0) + (selected.shard_amount || 0)
-      }
-
-      if (selected.item_type === 'character' && selected.character_id) {
-        shardDeltas[selected.character_id] = (shardDeltas[selected.character_id] || 0) + 30
-        if (!progressByCharacterId[selected.character_id]) {
-          characterUnlockIds.add(selected.character_id)
-        }
-      }
-    })
-
-    Object.entries(shardDeltas).forEach(([characterId, delta]) => {
-      const currentAmount = inventory[characterId] || 0
-      const nextAmount = currentAmount + delta
-      inventoryUpdates.push({
-        user_id: session.user.id,
-        character_id: Number(characterId),
-        shard_amount: nextAmount,
-        updated_at: new Date().toISOString(),
-      })
-    })
+    const preUnlocked = new Set(Object.keys(progressByCharacterId).map(id => Number(id)))
 
     try {
-      // Update profile currency (deduct cost, add soft currency if applicable)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          soft_currency: nextSoft,
-          premium_currency: nextPremium,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', session.user.id)
-
-      if (profileError) {
-        console.error('Failed to update profile:', profileError)
-        return
+      const { data, error } = await supabase.rpc('gacha_pull', {
+        p_banner_id: bannerId,
+        p_pull_count: pullCount,
+        p_use_fragment: useFragment,
+      })
+      if (error) {
+        console.error('Gacha pull failed:', error)
+        return false
       }
 
-      // Deduct fragment if used
-      if (useFragment) {
-        const nextFragments = Math.max(0, fragmentCount - 1)
-        const { error: fragmentError } = await supabase
-          .from('user_items')
-          .upsert({
-            user_id: session.user.id,
-            item_id: 'finger_fragment',
-            quantity: nextFragments,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id,item_id' })
+      const results = Array.isArray(data?.results) ? data.results : []
+      const softCurrencyEarned = results
+        .filter(item => item?.item_type === 'currency')
+        .reduce((sum, item) => sum + (item.soft_currency || 0), 0)
 
-        if (fragmentError) {
-          console.error('Failed to deduct fragment:', fragmentError)
-          return
-        }
+      const characterUnlockIds = new Set(
+        results
+          .filter(item => item?.item_type === 'character' && item.character_id != null)
+          .map(item => Number(item.character_id))
+          .filter(id => !preUnlocked.has(id))
+      )
 
-        setUserItems(prev => ({ ...prev, finger_fragment: nextFragments }))
-      }
-
-      // Update inventory with shards
-      if (inventoryUpdates.length > 0) {
-        const { error: inventoryError } = await supabase
-          .from('user_inventory')
-          .upsert(inventoryUpdates, { onConflict: 'user_id,character_id' })
-
-        if (inventoryError) {
-          console.error('Failed to update inventory:', inventoryError)
-        }
-      }
-
-      // Unlock character if pulled (create character_progress entry)
-      if (characterUnlockIds.size > 0) {
-        const payload = Array.from(characterUnlockIds).map(id => ({
-          user_id: session.user.id,
-          character_id: id,
-          level: 1,
-          xp: 0,
-          limit_break: 0,
-          updated_at: new Date().toISOString(),
-        }))
-
-        const { data: unlockData, error: unlockError } = await supabase
-          .from('character_progress')
-          .upsert(payload, { onConflict: 'user_id,character_id' })
-          .select('character_id, level, xp, limit_break')
-
-        if (unlockError) {
-          console.error('Failed to unlock character:', unlockError)
-        } else if (unlockData) {
-          setCharacterProgress(prev => {
-            const next = { ...prev }
-            unlockData.forEach(row => {
-              next[row.character_id] = {
-                level: row.level,
-                xp: row.xp,
-                limit_break: row.limit_break,
-              }
-            })
-            return next
-          })
-        }
-      }
-
-      // Update local profile state
-      setProfile(prev => ({
-        ...(prev || {}),
-        soft_currency: nextSoft,
-        premium_currency: nextPremium,
-      }))
-
-      if (inventoryUpdates.length > 0) {
-        setInventory(prev => {
-          const next = { ...prev }
-          Object.entries(shardDeltas).forEach(([characterId, delta]) => {
-            next[characterId] = (next[characterId] || 0) + delta
-          })
-          return next
-        })
-      }
-
-      // Show gacha result
       setGachaResult(results)
 
-      // Track achievement progress
+      if (typeof data?.soft_currency === 'number' || typeof data?.premium_currency === 'number') {
+        setProfile(prev => ({
+          ...(prev || {}),
+          soft_currency: data?.soft_currency ?? prev?.soft_currency ?? 0,
+          premium_currency: data?.premium_currency ?? prev?.premium_currency ?? 0,
+        }))
+      }
+
+      if (data?.fragments != null) {
+        setUserItems(prev => ({ ...prev, finger_fragment: data.fragments }))
+      }
+
+      await Promise.all([refreshInventory(), refreshCharacterProgress(), refreshUserItems()])
+
       const previousGachaPulls = getAchievementProgressValue('gacha_pulls')
       trackAchievementProgress('gacha_pulls', previousGachaPulls + pullCount)
       trackMissionProgress({
@@ -4327,14 +4118,15 @@ function App() {
         softCurrencyEarned,
       })
 
-      // Track characters unlocked
       if (characterUnlockIds.size > 0) {
         const unlockedCount = Object.keys(progressByCharacterId).length + characterUnlockIds.size
         trackAchievementProgress('characters_unlocked', unlockedCount)
         trackMissionProgress({ charactersUnlocked: unlockedCount })
       }
+      return true
     } catch (error) {
       console.error('Gacha pull failed:', error)
+      return false
     }
   }
 
@@ -4368,36 +4160,27 @@ function App() {
     const cost = limitBreakCost(nextLevel)
     if (currentShards < cost) return
 
-    const nextShards = currentShards - cost
+    const { data, error } = await supabase.rpc('apply_limit_break', {
+      p_character_id: characterId,
+    })
+    if (error) {
+      console.error('Failed to apply limit break:', error)
+      return
+    }
 
-    await supabase
-      .from('user_inventory')
-      .upsert({
-        user_id: session.user.id,
-        character_id: characterId,
-        shard_amount: nextShards,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,character_id' })
+    if (data?.shard_amount != null) {
+      setInventory(prev => ({ ...prev, [characterId]: data.shard_amount }))
+    }
 
-    await supabase
-      .from('character_progress')
-      .upsert({
-        user_id: session.user.id,
-        character_id: characterId,
-        level: currentProgress.level,
-        xp: currentProgress.xp,
-        limit_break: nextLevel,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id,character_id' })
-
-    setInventory(prev => ({ ...prev, [characterId]: nextShards }))
-    setCharacterProgress(prev => ({
-      ...prev,
-      [characterId]: {
-        ...currentProgress,
-        limit_break: nextLevel,
-      },
-    }))
+    if (data?.limit_break != null) {
+      setCharacterProgress(prev => ({
+        ...prev,
+        [characterId]: {
+          ...currentProgress,
+          limit_break: data.limit_break,
+        },
+      }))
+    }
 
     // Track achievement progress for limit breaks
     const totalLimitBreaks = Object.values(characterProgress).reduce((sum, prog) => sum + (prog.limit_break || 0), 0) + 1

@@ -1109,3 +1109,857 @@ on achievement_progress for all
 to authenticated
 using (is_admin(auth.uid()))
 with check (is_admin(auth.uid()));
+
+-- =========================================================
+-- Mission condition alignment + period resets
+-- =========================================================
+alter table user_missions add column if not exists period_key text;
+
+-- Align legacy mission condition keys with runtime keys
+update missions set condition = 'battles_played' where condition = 'match_any';
+update missions set condition = 'battles_won' where condition = 'match_win';
+update missions set condition = 'characters_leveled' where condition = 'character_level_up';
+
+create or replace function public.mission_period_key(mission_type text)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select case
+    when mission_type = 'daily' then to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD')
+    when mission_type = 'weekly' then to_char(date_trunc('week', now() at time zone 'utc'), 'IYYY-IW')
+    else 'permanent'
+  end;
+$$;
+
+create or replace function public.sync_user_missions()
+returns setof user_missions
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  return query
+    with active_missions as (
+      select
+        id as mission_id,
+        mission_period_key(type) as period_key
+      from missions
+      where (starts_at is null or starts_at <= now())
+        and (ends_at is null or ends_at >= now())
+    ),
+    updated as (
+      update user_missions um
+      set progress = 0,
+          claimed = false,
+          updated_at = now(),
+          period_key = am.period_key
+      from active_missions am
+      where um.user_id = v_user
+        and um.mission_id = am.mission_id
+        and coalesce(um.period_key, '') <> am.period_key
+      returning um.*
+    ),
+    inserted as (
+      insert into user_missions (user_id, mission_id, progress, claimed, updated_at, period_key)
+      select v_user, am.mission_id, 0, false, now(), am.period_key
+      from active_missions am
+      left join user_missions um
+        on um.user_id = v_user and um.mission_id = am.mission_id
+      where um.mission_id is null
+      returning *
+    )
+    select *
+    from user_missions um
+    where um.user_id = v_user
+      and um.mission_id in (select mission_id from active_missions);
+end;
+$$;
+
+-- =========================================================
+-- PvP hardening: enforce turn ownership via RPC
+-- =========================================================
+drop policy if exists "PVP matches updatable by players" on pvp_matches;
+create policy "PVP matches updatable by rpc only"
+on pvp_matches for update
+to authenticated
+using (false);
+
+drop policy if exists "PVP turns insertable by owner" on pvp_turns;
+create policy "PVP turns insertable by rpc only"
+on pvp_turns for insert
+to authenticated
+with check (false);
+
+create or replace function public.pvp_set_ready(match_id uuid)
+returns pvp_matches
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_match pvp_matches;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_match
+  from pvp_matches
+  where id = match_id
+    and (player1_id = v_user or player2_id = v_user);
+
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  if v_match.player1_id = v_user then
+    update pvp_matches
+    set player1_ready = true, updated_at = now()
+    where id = match_id;
+  else
+    update pvp_matches
+    set player2_ready = true, updated_at = now()
+    where id = match_id;
+  end if;
+
+  return (select * from pvp_matches where id = match_id);
+end;
+$$;
+
+create or replace function public.pvp_activate_match(match_id uuid)
+returns pvp_matches
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_match pvp_matches;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_match
+  from pvp_matches
+  where id = match_id
+    and (player1_id = v_user or player2_id = v_user);
+
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  if v_match.status <> 'waiting' then
+    return v_match;
+  end if;
+
+  if not (v_match.player1_ready and v_match.player2_ready) then
+    raise exception 'players_not_ready';
+  end if;
+
+  update pvp_matches
+  set status = 'active', updated_at = now()
+  where id = match_id
+    and status = 'waiting';
+
+  return (select * from pvp_matches where id = match_id);
+end;
+$$;
+
+create or replace function public.pvp_submit_turn(
+  match_id uuid,
+  next_state jsonb,
+  next_turn integer,
+  actions jsonb
+)
+returns pvp_matches
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_match pvp_matches;
+  v_opponent uuid;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_match
+  from pvp_matches
+  where id = match_id
+    and status = 'active'
+    and (player1_id = v_user or player2_id = v_user);
+
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  if v_match.turn_owner is null or v_match.turn_owner <> v_user then
+    raise exception 'not_your_turn';
+  end if;
+
+  v_opponent := case
+    when v_match.player1_id = v_user then v_match.player2_id
+    else v_match.player1_id
+  end;
+
+  insert into pvp_turns (match_id, user_id, turn_number, actions, created_at)
+  values (match_id, v_user, greatest(1, next_turn - 1), coalesce(actions, '{}'::jsonb), now());
+
+  update pvp_matches
+  set state = coalesce(next_state, v_match.state),
+      turn = greatest(1, next_turn),
+      turn_owner = v_opponent,
+      updated_at = now()
+  where id = match_id;
+
+  return (select * from pvp_matches where id = match_id);
+end;
+$$;
+
+create or replace function public.pvp_complete_match(
+  match_id uuid,
+  final_state jsonb,
+  winner_id uuid
+)
+returns pvp_matches
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_match pvp_matches;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_match
+  from pvp_matches
+  where id = match_id
+    and (player1_id = v_user or player2_id = v_user);
+
+  if not found then
+    raise exception 'match_not_found';
+  end if;
+
+  if winner_id is not null
+     and winner_id <> v_match.player1_id
+     and winner_id <> v_match.player2_id then
+    raise exception 'invalid_winner';
+  end if;
+
+  update pvp_matches
+  set state = coalesce(final_state, v_match.state),
+      status = 'completed',
+      winner_id = winner_id,
+      turn_owner = null,
+      updated_at = now()
+  where id = match_id;
+
+  return (select * from pvp_matches where id = match_id);
+end;
+$$;
+
+-- =========================================================
+-- Economy RPCs for atomic updates
+-- =========================================================
+create or replace function public.gacha_pull(
+  p_banner_id bigint,
+  p_pull_count integer default 1,
+  p_use_fragment boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_pull_count integer := greatest(1, coalesce(p_pull_count, 1));
+  v_use_fragment boolean := coalesce(p_use_fragment, false);
+  v_pull_cost integer := 25;
+  v_total_cost integer := v_pull_count * v_pull_cost;
+  v_premium integer;
+  v_soft integer;
+  v_fragments integer;
+  v_results jsonb := '[]'::jsonb;
+  v_item record;
+  v_total_weight numeric;
+  v_roll numeric;
+  v_boost boolean := v_pull_count >= 10;
+  v_has_rare boolean := false;
+  v_index integer := 0;
+  v_last record;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  if v_use_fragment and v_pull_count > 1 then
+    raise exception 'fragment_multi_not_allowed';
+  end if;
+
+  if not exists (
+    select 1 from banners
+    where id = p_banner_id
+      and (starts_at is null or starts_at <= now())
+      and (ends_at is null or ends_at >= now())
+  ) then
+    raise exception 'banner_inactive';
+  end if;
+
+  select soft_currency, premium_currency
+  into v_soft, v_premium
+  from profiles
+  where id = v_user
+  for update;
+
+  if v_use_fragment then
+    select quantity into v_fragments
+    from user_items
+    where user_id = v_user and item_id = 'finger_fragment'
+    for update;
+    if coalesce(v_fragments, 0) <= 0 then
+      raise exception 'no_fragments';
+    end if;
+  else
+    if v_premium < v_total_cost then
+      raise exception 'insufficient_premium';
+    end if;
+    v_premium := v_premium - v_total_cost;
+  end if;
+
+  for v_index in 1..v_pull_count loop
+    v_total_weight := 0;
+    if v_boost and v_index = v_pull_count and not v_has_rare then
+      for v_item in
+        select *,
+          case
+            when item_type = 'character' then weight * 1.25
+            when item_type = 'shards' then weight * 1.15
+            else weight
+          end as eff_weight
+        from banner_items
+        where banner_id = p_banner_id
+          and item_type in ('character', 'shards')
+        order by id
+      loop
+        v_total_weight := v_total_weight + v_item.eff_weight;
+      end loop;
+    else
+      for v_item in
+        select *,
+          case
+            when v_boost and item_type = 'character' then weight * 1.25
+            when v_boost and item_type = 'shards' then weight * 1.15
+            else weight
+          end as eff_weight
+        from banner_items
+        where banner_id = p_banner_id
+        order by id
+      loop
+        v_total_weight := v_total_weight + v_item.eff_weight;
+      end loop;
+    end if;
+
+    if v_total_weight <= 0 then
+      raise exception 'no_items';
+    end if;
+
+    v_roll := random() * v_total_weight;
+    v_last := null;
+
+    if v_boost and v_index = v_pull_count and not v_has_rare then
+      for v_item in
+        select *,
+          case
+            when item_type = 'character' then weight * 1.25
+            when item_type = 'shards' then weight * 1.15
+            else weight
+          end as eff_weight
+        from banner_items
+        where banner_id = p_banner_id
+          and item_type in ('character', 'shards')
+        order by id
+      loop
+        v_roll := v_roll - v_item.eff_weight;
+        v_last := v_item;
+        if v_roll <= 0 then
+          exit;
+        end if;
+      end loop;
+    else
+      for v_item in
+        select *,
+          case
+            when v_boost and item_type = 'character' then weight * 1.25
+            when v_boost and item_type = 'shards' then weight * 1.15
+            else weight
+          end as eff_weight
+        from banner_items
+        where banner_id = p_banner_id
+        order by id
+      loop
+        v_roll := v_roll - v_item.eff_weight;
+        v_last := v_item;
+        if v_roll <= 0 then
+          exit;
+        end if;
+      end loop;
+    end if;
+
+    if v_last is null then
+      raise exception 'no_items';
+    end if;
+
+    if v_last.item_type in ('character', 'shards') then
+      v_has_rare := true;
+    end if;
+
+    if v_last.item_type = 'currency' then
+      v_soft := v_soft + coalesce(v_last.soft_currency, 0);
+      v_premium := v_premium + coalesce(v_last.premium_currency, 0);
+    elsif v_last.item_type = 'shards' and v_last.character_id is not null then
+      update user_inventory
+      set shard_amount = shard_amount + coalesce(v_last.shard_amount, 0),
+          updated_at = now()
+      where user_id = v_user and character_id = v_last.character_id;
+      if not found then
+        insert into user_inventory (user_id, character_id, shard_amount, updated_at)
+        values (v_user, v_last.character_id, coalesce(v_last.shard_amount, 0), now());
+      end if;
+    elsif v_last.item_type = 'character' and v_last.character_id is not null then
+      update user_inventory
+      set shard_amount = shard_amount + 30,
+          updated_at = now()
+      where user_id = v_user and character_id = v_last.character_id;
+      if not found then
+        insert into user_inventory (user_id, character_id, shard_amount, updated_at)
+        values (v_user, v_last.character_id, 30, now());
+      end if;
+
+      insert into character_progress (user_id, character_id, level, xp, limit_break, updated_at)
+      values (v_user, v_last.character_id, 1, 0, 0, now())
+      on conflict (user_id, character_id) do nothing;
+    end if;
+
+    v_results := v_results || jsonb_build_array(jsonb_build_object(
+      'item_type', v_last.item_type,
+      'character_id', v_last.character_id,
+      'shard_amount', v_last.shard_amount,
+      'soft_currency', v_last.soft_currency,
+      'premium_currency', v_last.premium_currency
+    ));
+  end loop;
+
+  if v_use_fragment then
+    update user_items
+    set quantity = greatest(0, coalesce(quantity, 0) - 1),
+        updated_at = now()
+    where user_id = v_user and item_id = 'finger_fragment';
+  end if;
+
+  update profiles
+  set soft_currency = v_soft,
+      premium_currency = v_premium,
+      updated_at = now()
+  where id = v_user;
+
+  return jsonb_build_object(
+    'results', v_results,
+    'soft_currency', v_soft,
+    'premium_currency', v_premium,
+    'fragments', (select quantity from user_items where user_id = v_user and item_id = 'finger_fragment')
+  );
+end;
+$$;
+
+create or replace function public.purchase_shop_offer(p_offer_id bigint)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_offer shop_offers;
+  v_premium integer;
+  v_soft integer;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_offer
+  from shop_offers
+  where id = p_offer_id and active = true;
+
+  if not found then
+    raise exception 'offer_not_found';
+  end if;
+
+  select soft_currency, premium_currency
+  into v_soft, v_premium
+  from profiles
+  where id = v_user
+  for update;
+
+  if v_soft < v_offer.cost_soft or v_premium < v_offer.cost_premium then
+    raise exception 'insufficient_funds';
+  end if;
+
+  v_soft := v_soft - v_offer.cost_soft;
+  v_premium := v_premium - v_offer.cost_premium;
+
+  if v_offer.item_type = 'currency' then
+    v_soft := v_soft + coalesce(v_offer.soft_currency, 0);
+    v_premium := v_premium + coalesce(v_offer.premium_currency, 0);
+  elsif v_offer.item_type = 'shards' and v_offer.character_id is not null then
+    update user_inventory
+    set shard_amount = shard_amount + coalesce(v_offer.shard_amount, 0),
+        updated_at = now()
+    where user_id = v_user and character_id = v_offer.character_id;
+    if not found then
+      insert into user_inventory (user_id, character_id, shard_amount, updated_at)
+      values (v_user, v_offer.character_id, coalesce(v_offer.shard_amount, 0), now());
+    end if;
+  end if;
+
+  update profiles
+  set soft_currency = v_soft,
+      premium_currency = v_premium,
+      updated_at = now()
+  where id = v_user;
+
+  return jsonb_build_object(
+    'soft_currency', v_soft,
+    'premium_currency', v_premium,
+    'character_id', v_offer.character_id,
+    'shard_amount', v_offer.shard_amount
+  );
+end;
+$$;
+
+create or replace function public.claim_mission_reward(p_mission_id bigint)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_mission missions;
+  v_entry user_missions;
+  v_soft integer;
+  v_premium integer;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_mission from missions where id = p_mission_id;
+  if not found then
+    raise exception 'mission_not_found';
+  end if;
+
+  select * into v_entry
+  from user_missions
+  where user_id = v_user and mission_id = p_mission_id
+  for update;
+
+  if not found then
+    raise exception 'mission_entry_not_found';
+  end if;
+
+  if v_entry.claimed or v_entry.progress < v_mission.target then
+    raise exception 'mission_not_claimable';
+  end if;
+
+  select soft_currency, premium_currency
+  into v_soft, v_premium
+  from profiles
+  where id = v_user
+  for update;
+
+  v_soft := v_soft + coalesce(v_mission.reward_soft, 0);
+  v_premium := v_premium + coalesce(v_mission.reward_premium, 0);
+
+  if v_mission.reward_shard_character_id is not null and v_mission.reward_shard_amount > 0 then
+    update user_inventory
+    set shard_amount = shard_amount + v_mission.reward_shard_amount,
+        updated_at = now()
+    where user_id = v_user and character_id = v_mission.reward_shard_character_id;
+    if not found then
+      insert into user_inventory (user_id, character_id, shard_amount, updated_at)
+      values (v_user, v_mission.reward_shard_character_id, v_mission.reward_shard_amount, now());
+    end if;
+  end if;
+
+  update user_missions
+  set claimed = true, updated_at = now()
+  where user_id = v_user and mission_id = p_mission_id;
+
+  update profiles
+  set soft_currency = v_soft,
+      premium_currency = v_premium,
+      updated_at = now()
+  where id = v_user;
+
+  return jsonb_build_object(
+    'soft_currency', v_soft,
+    'premium_currency', v_premium,
+    'mission_id', p_mission_id,
+    'reward_shard_character_id', v_mission.reward_shard_character_id,
+    'reward_shard_amount', v_mission.reward_shard_amount
+  );
+end;
+$$;
+
+create or replace function public.claim_achievement_reward(p_achievement_id bigint)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_achievement achievements;
+  v_progress achievement_progress;
+  v_soft integer;
+  v_premium integer;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_achievement from achievements where id = p_achievement_id;
+  if not found then
+    raise exception 'achievement_not_found';
+  end if;
+
+  select * into v_progress
+  from achievement_progress
+  where user_id = v_user and achievement_id = p_achievement_id
+  for update;
+
+  if not found or not v_progress.is_completed or v_progress.rewards_claimed then
+    raise exception 'achievement_not_claimable';
+  end if;
+
+  select soft_currency, premium_currency
+  into v_soft, v_premium
+  from profiles
+  where id = v_user
+  for update;
+
+  v_soft := v_soft + coalesce(v_achievement.reward_soft_currency, 0);
+  v_premium := v_premium + coalesce(v_achievement.reward_premium_currency, 0);
+
+  if v_achievement.reward_title then
+    insert into user_titles (user_id, title_id, unlocked, active)
+    values (v_user, v_achievement.id, true, false)
+    on conflict (user_id, title_id) do update set unlocked = true;
+  end if;
+
+  update achievement_progress
+  set rewards_claimed = true, updated_at = now()
+  where user_id = v_user and achievement_id = p_achievement_id;
+
+  update profiles
+  set soft_currency = v_soft,
+      premium_currency = v_premium,
+      updated_at = now()
+  where id = v_user;
+
+  return jsonb_build_object(
+    'soft_currency', v_soft,
+    'premium_currency', v_premium,
+    'achievement_id', p_achievement_id
+  );
+end;
+$$;
+
+create or replace function public.apply_limit_break(p_character_id integer)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_inventory user_inventory;
+  v_progress character_progress;
+  v_next_limit integer;
+  v_cost integer;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_inventory
+  from user_inventory
+  where user_id = v_user and character_id = p_character_id
+  for update;
+
+  select * into v_progress
+  from character_progress
+  where user_id = v_user and character_id = p_character_id
+  for update;
+
+  if not found then
+    raise exception 'character_not_unlocked';
+  end if;
+
+  v_next_limit := coalesce(v_progress.limit_break, 0) + 1;
+  if v_next_limit > 5 then
+    raise exception 'limit_break_maxed';
+  end if;
+
+  v_cost := v_next_limit * 25;
+  if coalesce(v_inventory.shard_amount, 0) < v_cost then
+    raise exception 'insufficient_shards';
+  end if;
+
+  update user_inventory
+  set shard_amount = shard_amount - v_cost,
+      updated_at = now()
+  where user_id = v_user and character_id = p_character_id;
+
+  update character_progress
+  set limit_break = v_next_limit,
+      updated_at = now()
+  where user_id = v_user and character_id = p_character_id;
+
+  return jsonb_build_object(
+    'character_id', p_character_id,
+    'limit_break', v_next_limit,
+    'shard_amount', (select shard_amount from user_inventory where user_id = v_user and character_id = p_character_id)
+  );
+end;
+$$;
+
+create or replace function public.claim_daily_reward()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_daily daily_rewards;
+  v_today text := to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD');
+  v_yesterday text := to_char(((now() at time zone 'utc')::date - 1), 'YYYY-MM-DD');
+  v_new_streak integer;
+  v_new_longest integer;
+  v_soft integer;
+  v_premium integer;
+  v_day integer;
+  v_reward_soft integer;
+  v_reward_premium integer;
+begin
+  if v_user is null then
+    raise exception 'not authenticated';
+  end if;
+
+  select * into v_daily
+  from daily_rewards
+  where user_id = v_user
+  for update;
+
+  if not found then
+    insert into daily_rewards (user_id, current_streak, longest_streak, last_claim_date, total_logins, updated_at)
+    values (v_user, 0, 0, null, 0, now())
+    returning * into v_daily;
+  end if;
+
+  if v_daily.last_claim_date = v_today then
+    raise exception 'already_claimed';
+  end if;
+
+  if v_daily.last_claim_date = v_yesterday then
+    v_new_streak := v_daily.current_streak + 1;
+  else
+    v_new_streak := 1;
+  end if;
+
+  v_new_longest := greatest(v_new_streak, v_daily.longest_streak);
+  v_day := ((v_new_streak - 1) % 7) + 1;
+
+  v_reward_soft := case v_day
+    when 1 then 50
+    when 2 then 75
+    when 3 then 100
+    when 4 then 125
+    when 5 then 150
+    when 6 then 200
+    when 7 then 300
+    else 50
+  end;
+
+  v_reward_premium := case v_day
+    when 3 then 5
+    when 5 then 10
+    when 7 then 25
+    else 0
+  end;
+
+  update daily_rewards
+  set current_streak = v_new_streak,
+      longest_streak = v_new_longest,
+      last_claim_date = v_today,
+      total_logins = v_daily.total_logins + 1,
+      updated_at = now()
+  where user_id = v_user;
+
+  select soft_currency, premium_currency
+  into v_soft, v_premium
+  from profiles
+  where id = v_user
+  for update;
+
+  v_soft := v_soft + v_reward_soft;
+  v_premium := v_premium + v_reward_premium;
+
+  update profiles
+  set soft_currency = v_soft,
+      premium_currency = v_premium,
+      updated_at = now()
+  where id = v_user;
+
+  return jsonb_build_object(
+    'current_streak', v_new_streak,
+    'longest_streak', v_new_longest,
+    'last_claim_date', v_today,
+    'total_logins', v_daily.total_logins + 1,
+    'reward_soft', v_reward_soft,
+    'reward_premium', v_reward_premium,
+    'soft_currency', v_soft,
+    'premium_currency', v_premium
+  );
+end;
+$$;
+
+grant execute on function public.sync_user_missions() to authenticated;
+grant execute on function public.pvp_set_ready(uuid) to authenticated;
+grant execute on function public.pvp_activate_match(uuid) to authenticated;
+grant execute on function public.pvp_submit_turn(uuid, jsonb, integer, jsonb) to authenticated;
+grant execute on function public.pvp_complete_match(uuid, jsonb, uuid) to authenticated;
+grant execute on function public.gacha_pull(bigint, integer, boolean) to authenticated;
+grant execute on function public.purchase_shop_offer(bigint) to authenticated;
+grant execute on function public.claim_mission_reward(bigint) to authenticated;
+grant execute on function public.claim_achievement_reward(bigint) to authenticated;
+grant execute on function public.apply_limit_break(integer) to authenticated;
+grant execute on function public.claim_daily_reward() to authenticated;

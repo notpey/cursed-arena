@@ -1,15 +1,24 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 
 function GachaPage({ banners, bannerItems, profile, items: userItems, characters, onBack, onPull, result, onClearResult }) {
   const [isPulling, setIsPulling] = useState(false)
   const [showResult, setShowResult] = useState(false)
+  const clearTimerRef = useRef(null)
 
   const premium = profile?.premium_currency ?? 0
   const fragments = userItems?.finger_fragment ?? 0
   const pullCost = 25
   const multiPullCount = 10
   const multiPullCost = pullCost * multiPullCount
-  const activeBanner = banners[0]
+  const activeBanner = useMemo(() => {
+    if (!banners || banners.length === 0) return null
+    const sorted = [...banners].sort((a, b) => {
+      const aTime = a?.starts_at ? new Date(a.starts_at).getTime() : 0
+      const bTime = b?.starts_at ? new Date(b.starts_at).getTime() : 0
+      return bTime - aTime
+    })
+    return sorted[0]
+  }, [banners])
   const items = activeBanner
     ? bannerItems.filter(item => item.banner_id === activeBanner.id)
     : []
@@ -31,15 +40,29 @@ function GachaPage({ banners, bannerItems, profile, items: userItems, characters
   const handlePull = async (bannerId, options = {}) => {
     setIsPulling(true)
     setShowResult(false)
-    await onPull?.(bannerId, options)
+    const success = await onPull?.(bannerId, options)
+    if (!success) {
+      setIsPulling(false)
+    }
   }
 
   const handleClearResult = () => {
     setShowResult(false)
-    setTimeout(() => {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current)
+    }
+    clearTimerRef.current = setTimeout(() => {
       onClearResult?.()
     }, 300) // Wait for fade out animation
   }
+
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current)
+      }
+    }
+  }, [])
 
   const results = Array.isArray(result) ? result : (result ? [result] : [])
   const isMultiResult = results.length > 1

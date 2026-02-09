@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 
 /**
  * Daily Login Rewards Component
@@ -13,6 +13,7 @@ import React, { useState, useEffect } from 'react'
 function DailyRewards({ dailyReward, onClaim, onBack, embedded = false }) {
   const [claiming, setClaiming] = useState(false)
   const [justClaimed, setJustClaimed] = useState(false)
+  const claimedTimerRef = useRef(null)
 
   const currentStreak = dailyReward?.current_streak || 0
   const longestStreak = dailyReward?.longest_streak || 0
@@ -43,8 +44,19 @@ function DailyRewards({ dailyReward, onClaim, onBack, embedded = false }) {
     await onClaim?.()
     setClaiming(false)
     setJustClaimed(true)
-    setTimeout(() => setJustClaimed(false), 3000)
+    if (claimedTimerRef.current) {
+      clearTimeout(claimedTimerRef.current)
+    }
+    claimedTimerRef.current = setTimeout(() => setJustClaimed(false), 3000)
   }
+
+  useEffect(() => {
+    return () => {
+      if (claimedTimerRef.current) {
+        clearTimeout(claimedTimerRef.current)
+      }
+    }
+  }, [])
 
   return (
     <div className={`daily-rewards-page ${embedded ? 'embedded' : ''}`}>

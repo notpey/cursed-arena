@@ -11,10 +11,14 @@ function BattleResultScreen({
 
   useEffect(() => {
     // Victory/defeat animation
-    setTimeout(() => setAnimationStep(1), 100)
+    const stepTimer = setTimeout(() => setAnimationStep(1), 100)
     // Show rewards after victory animation
-    setTimeout(() => setShowRewards(true), 800)
+    const rewardTimer = setTimeout(() => setShowRewards(true), 800)
     // Auto-continue after showing all rewards (optional, removed for user control)
+    return () => {
+      clearTimeout(stepTimer)
+      clearTimeout(rewardTimer)
+    }
   }, [])
 
   const isVictory = result === 'win'
