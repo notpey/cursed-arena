@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&display=swap');
+
+/* Extracted from /reference/design-system-v3.html */
+:root {
+    /* ===== ANCHORS ===== */
+    --anchor-red: #fa2742;
+    --anchor-teal: #05d8bd;
+    --anchor-base: #17151c;
+    --anchor-frost: #e4e6ef;
+
+    /* ===== BACKGROUND SCALE =====
+       Built from #17151c with purple undertone preserved.
+       Each step lifts ~4-6% lightness. */
+    --bg-void:      #0d0c11;
+    --bg-base:      #17151c;
+    --bg-raised:    #1e1c24;
+    --bg-surface:   #26242e;
+    --bg-overlay:   #302e3a;
+    --bg-highlight: #3a3846;
+    --bg-elevated:  #454353;
+
+    /* ===== CURSED RED ===== */
+    --red-glow:     #ff3d5a;
+    --red-primary:  #fa2742;
+    --red-deep:     #c41d33;
+    --red-muted:    #8a1523;
+    --red-wash:     rgba(250, 39, 66, 0.08);
+    --red-wash-mid: rgba(250, 39, 66, 0.15);
+    --red-wash-strong: rgba(250, 39, 66, 0.25);
+
+    /* ===== TEAL ===== */
+    --teal-glow:    #2aecd4;
+    --teal-primary: #05d8bd;
+    --teal-deep:    #04a896;
+    --teal-muted:   #03796d;
+    --teal-dark:    #024d45;
+    --teal-wash:    rgba(5, 216, 189, 0.08);
+    --teal-wash-mid: rgba(5, 216, 189, 0.15);
+    --teal-wash-strong: rgba(5, 216, 189, 0.25);
+
+    /* ===== TEXT (Frost family) ===== */
+    --text-primary:   #e4e6ef;
+    --text-secondary: #b0b2c0;
+    --text-tertiary:  #7a7c8e;
+    --text-disabled:  #4e5060;
+    --text-inverse:   #17151c;
+
+    /* ===== FUNCTIONAL ===== */
+    --success:      #2dd4a0;
+    --success-wash: rgba(45, 212, 160, 0.12);
+    --warning:      #f5a623;
+    --warning-wash: rgba(245, 166, 35, 0.12);
+    --error:        var(--red-primary);
+    --info:         var(--teal-primary);
+
+    /* ===== RARITY ===== */
+    --rarity-common:    #6b6b80;
+    --rarity-uncommon:  #4ade80;
+    --rarity-rare:      #3b82f6;
+    --rarity-epic:      #9b6dff;
+    --rarity-legendary: var(--red-primary);
+    --rarity-special:   var(--warning);
+
+    /* ===== BORDERS ===== */
+    --border-subtle:  rgba(228, 230, 239, 0.06);
+    --border-default: rgba(228, 230, 239, 0.10);
+    --border-strong:  rgba(228, 230, 239, 0.18);
+    --border-accent:  var(--red-primary);
+
+    /* ===== SPACING ===== */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+    --sp-12: 48px; --sp-16: 64px; --sp-20: 80px; --sp-24: 96px;
+
+    /* ===== TYPOGRAPHY ===== */
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-display-alt: 'Syne', sans-serif;
+    --font-body: 'Noto Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* ===== ELEVATION ===== */
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.5);
+    --shadow-md:  0 4px 16px rgba(0,0,0,0.6);
+    --shadow-lg:  0 8px 32px rgba(0,0,0,0.7);
+    --shadow-xl:  0 16px 48px rgba(0,0,0,0.8);
+    --shadow-red: 0 0 24px rgba(250, 39, 66, 0.3);
+    --shadow-red-intense: 0 0 40px rgba(250, 39, 66, 0.5), 0 0 80px rgba(250, 39, 66, 0.15);
+    --shadow-teal: 0 0 24px rgba(5, 216, 189, 0.25);
+    --shadow-teal-intense: 0 0 40px rgba(5, 216, 189, 0.4), 0 0 80px rgba(5, 216, 189, 0.12);
+
+    /* ===== RADIUS ===== */
+    --radius-xs: 2px; --radius-sm: 4px; --radius-md: 8px;
+    --radius-lg: 12px; --radius-xl: 16px; --radius-2xl: 24px;
+
+    /* ===== TRANSITIONS ===== */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --transition-micro: 120ms var(--ease-out-expo);
+    --transition-fast: 200ms var(--ease-out-expo);
+    --transition-base: 350ms var(--ease-out-expo);
+    --transition-slow: 600ms var(--ease-out-expo);
+    --transition-dramatic: 900ms var(--ease-out-expo);
+  }

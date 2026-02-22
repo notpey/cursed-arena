@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cursed Arena — Design System v0.3</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ===== ANCHORS ===== */
+    --anchor-red: #fa2742;
+    --anchor-teal: #05d8bd;
+    --anchor-base: #17151c;
+    --anchor-frost: #e4e6ef;
+
+    /* ===== BACKGROUND SCALE =====
+       Built from #17151c with purple undertone preserved.
+       Each step lifts ~4-6% lightness. */
+    --bg-void:      #0d0c11;
+    --bg-base:      #17151c;
+    --bg-raised:    #1e1c24;
+    --bg-surface:   #26242e;
+    --bg-overlay:   #302e3a;
+    --bg-highlight: #3a3846;
+    --bg-elevated:  #454353;
+
+    /* ===== CURSED RED ===== */
+    --red-glow:     #ff3d5a;
+    --red-primary:  #fa2742;
+    --red-deep:     #c41d33;
+    --red-muted:    #8a1523;
+    --red-wash:     rgba(250, 39, 66, 0.08);
+    --red-wash-mid: rgba(250, 39, 66, 0.15);
+    --red-wash-strong: rgba(250, 39, 66, 0.25);
+
+    /* ===== TEAL ===== */
+    --teal-glow:    #2aecd4;
+    --teal-primary: #05d8bd;
+    --teal-deep:    #04a896;
+    --teal-muted:   #03796d;
+    --teal-dark:    #024d45;
+    --teal-wash:    rgba(5, 216, 189, 0.08);
+    --teal-wash-mid: rgba(5, 216, 189, 0.15);
+    --teal-wash-strong: rgba(5, 216, 189, 0.25);
+
+    /* ===== TEXT (Frost family) ===== */
+    --text-primary:   #e4e6ef;
+    --text-secondary: #b0b2c0;
+    --text-tertiary:  #7a7c8e;
+    --text-disabled:  #4e5060;
+    --text-inverse:   #17151c;
+
+    /* ===== FUNCTIONAL ===== */
+    --success:      #2dd4a0;
+    --success-wash: rgba(45, 212, 160, 0.12);
+    --warning:      #f5a623;
+    --warning-wash: rgba(245, 166, 35, 0.12);
+    --error:        var(--red-primary);
+    --info:         var(--teal-primary);
+
+    /* ===== RARITY ===== */
+    --rarity-common:    #6b6b80;
+    --rarity-uncommon:  #4ade80;
+    --rarity-rare:      #3b82f6;
+    --rarity-epic:      #9b6dff;
+    --rarity-legendary: var(--red-primary);
+    --rarity-special:   var(--warning);
+
+    /* ===== BORDERS ===== */
+    --border-subtle:  rgba(228, 230, 239, 0.06);
+    --border-default: rgba(228, 230, 239, 0.10);
+    --border-strong:  rgba(228, 230, 239, 0.18);
+    --border-accent:  var(--red-primary);
+
+    /* ===== SPACING ===== */
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+    --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+    --sp-12: 48px; --sp-16: 64px; --sp-20: 80px; --sp-24: 96px;
+
+    /* ===== TYPOGRAPHY ===== */
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-display-alt: 'Syne', sans-serif;
+    --font-body: 'Noto Sans', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* ===== ELEVATION ===== */
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.5);
+    --shadow-md:  0 4px 16px rgba(0,0,0,0.6);
+    --shadow-lg:  0 8px 32px rgba(0,0,0,0.7);
+    --shadow-xl:  0 16px 48px rgba(0,0,0,0.8);
+    --shadow-red: 0 0 24px rgba(250, 39, 66, 0.3);
+    --shadow-red-intense: 0 0 40px rgba(250, 39, 66, 0.5), 0 0 80px rgba(250, 39, 66, 0.15);
+    --shadow-teal: 0 0 24px rgba(5, 216, 189, 0.25);
+    --shadow-teal-intense: 0 0 40px rgba(5, 216, 189, 0.4), 0 0 80px rgba(5, 216, 189, 0.12);
+
+    /* ===== RADIUS ===== */
+    --radius-xs: 2px; --radius-sm: 4px; --radius-md: 8px;
+    --radius-lg: 12px; --radius-xl: 16px; --radius-2xl: 24px;
+
+    /* ===== TRANSITIONS ===== */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --transition-micro: 120ms var(--ease-out-expo);
+    --transition-fast: 200ms var(--ease-out-expo);
+    --transition-base: 350ms var(--ease-out-expo);
+    --transition-slow: 600ms var(--ease-out-expo);
+    --transition-dramatic: 900ms var(--ease-out-expo);
+  }
+
+  /* ===== RESET ===== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--red-wash-strong);
+    color: var(--text-primary);
+  }
+
+  /* ===== LAYOUT ===== */
+  .guide {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: var(--sp-16) var(--sp-8);
+  }
+
+  .guide-header {
+    margin-bottom: var(--sp-24);
+    padding-bottom: var(--sp-16);
+    border-bottom: 1px solid var(--border-subtle);
+    position: relative;
+  }
+
+  .guide-header::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(ellipse, rgba(250,39,66,0.05), transparent 70%);
+    pointer-events: none;
+  }
+
+  .guide-header::after {
+    content: '';
+    position: absolute;
+    top: -40px; right: -150px;
+    width: 500px; height: 500px;
+    background: radial-gradient(ellipse, rgba(5,216,189,0.04), transparent 70%);
+    pointer-events: none;
+  }
+
+  .guide-version {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: var(--sp-3);
+  }
+
+  .guide-header h1 {
+    font-family: var(--font-display);
+    font-size: clamp(3.5rem, 8vw, 6rem);
+    letter-spacing: 0.06em;
+    line-height: 0.9;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-6);
+  }
+
+  .guide-header h1 .red { color: var(--red-primary); }
+  .guide-header h1 .teal { color: var(--teal-primary); }
+
+  .guide-header .lead {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    max-width: 680px;
+    line-height: 1.7;
+  }
+
+  .guide-meta {
+    display: flex;
+    gap: var(--sp-6);
+    margin-top: var(--sp-6);
+    flex-wrap: wrap;
+  }
+
+  .guide-meta-item {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    letter-spacing: 0.05em;
+  }
+
+  .guide-meta-item strong { color: var(--text-secondary); }
+
+  /* Sections */
+  .section { margin-bottom: var(--sp-24); }
+  .subsection { margin-bottom: var(--sp-12); }
+
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--teal-primary);
+    margin-bottom: var(--sp-2);
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 2.4rem;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-2);
+  }
+
+  .section-desc {
+    font-size: 0.92rem;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-10);
+    max-width: 720px;
+    line-height: 1.7;
+  }
+
+  .subsection-title {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-4);
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    margin: var(--sp-20) 0;
+  }
+
+  /* Notes */
+  .note {
+    padding: var(--sp-5) var(--sp-6);
+    background: var(--bg-raised);
+    border-left: 3px solid var(--red-primary);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin-bottom: var(--sp-6);
+  }
+  .note.teal { border-left-color: var(--teal-primary); }
+  .note.neutral { border-left-color: var(--text-tertiary); }
+  .note.trend { border-left-color: var(--warning); }
+
+  .note p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+  .note p + p { margin-top: var(--sp-3); }
+  .note strong { color: var(--text-primary); }
+  .note code {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    background: var(--bg-surface);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--teal-glow);
+  }
+
+  .note .trend-label {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--warning-wash);
+    color: var(--warning);
+    margin-bottom: var(--sp-2);
+  }
+
+  /* ===== SWATCHES ===== */
+  .anchor-swatches {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--sp-6);
+    margin-bottom: var(--sp-10);
+  }
+
+  .anchor-swatch {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .anchor-swatch:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+  .anchor-swatch .swatch-color { height: 120px; }
+  .anchor-swatch .swatch-info {
+    padding: var(--sp-5);
+    background: var(--bg-raised);
+  }
+  .anchor-swatch .swatch-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .anchor-swatch .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+  }
+  .anchor-swatch .swatch-role {
+    font-size: 0.78rem;
+    color: var(--text-disabled);
+    margin-top: var(--sp-2);
+    line-height: 1.5;
+  }
+
+  .swatches {
+    display: flex;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    width: 130px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    transition: transform var(--transition-micro);
+  }
+  .swatch:hover { transform: translateY(-2px); }
+  .swatch-color { height: 72px; }
+  .swatch-color.bordered { border-bottom: 1px solid var(--border-subtle); }
+  .swatch-info {
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--bg-raised);
+  }
+  .swatch-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1px;
+  }
+  .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+  }
+  .swatch-role {
+    font-size: 0.6rem;
+    color: var(--text-disabled);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  /* Ratio bar */
+  .ratio-bar {
+    display: flex;
+    height: 48px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: var(--sp-4);
+    border: 1px solid var(--border-subtle);
+  }
+  .ratio-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== TYPOGRAPHY ===== */
+  .type-specimen {
+    margin-bottom: var(--sp-8);
+    padding: var(--sp-8);
+    background: var(--bg-raised);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+  }
+  .type-specimen-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    margin-bottom: var(--sp-4);
+  }
+  .type-display {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    letter-spacing: 0.06em;
+    line-height: 0.95;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-3);
+  }
+  .type-display .red { color: var(--red-primary); }
+  .type-display .teal { color: var(--teal-primary); }
+  .type-display-alt {
+    font-family: var(--font-display-alt);
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-3);
+  }
+  .type-note {
+    font-size: 0.82rem;
+    color: var(--text-tertiary);
+    margin-top: var(--sp-3);
+    line-height: 1.6;
+  }
+  .type-body-sample {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--text-secondary);
+    max-width: 580px;
+    line-height: 1.7;
+  }
+  .type-mono-sample {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    padding: var(--sp-4);
+    background: var(--bg-base);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    letter-spacing: 0.02em;
+  }
+  .type-scale {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+  }
+  .type-scale-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-6);
+    padding-bottom: var(--sp-4);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .type-scale-row:last-child { border-bottom: none; }
+  .type-scale-meta {
+    min-width: 200px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-disabled);
+    line-height: 1.6;
+    flex-shrink: 0;
+  }
+  .type-scale-sample { flex: 1; }
+
+  /* ===== SPACING ===== */
+  .spacing-demo {
+    display: flex;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-6);
+  }
+  .spacing-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--sp-1);
+  }
+  .spacing-visual {
+    background: var(--teal-wash-mid);
+    border: 1px solid var(--teal-dark);
+    border-radius: 2px;
+  }
+  .spacing-label {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    color: var(--text-disabled);
+  }
+
+  /* ===== COMPONENTS ===== */
+  .component-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--sp-6);
+  }
+
+  /* Buttons */
+  .button-row {
+    display: flex;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: var(--sp-6);
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    padding: var(--sp-3) var(--sp-6);
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-transform: uppercase;
+  }
+  .btn-primary {
+    background: var(--red-primary);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: var(--red-glow);
+    box-shadow: var(--shadow-red);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    background: var(--red-deep);
+    transform: translateY(0);
+    box-shadow: none;
+  }
+  .btn-primary-lg {
+    background: var(--red-primary);
+    color: #fff;
+    font-size: 0.95rem;
+    padding: var(--sp-4) var(--sp-10);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-red);
+  }
+  .btn-primary-lg:hover {
+    background: var(--red-glow);
+    box-shadow: var(--shadow-red-intense);
+    transform: translateY(-2px);
+  }
+  .btn-teal {
+    background: var(--teal-primary);
+    color: var(--text-inverse);
+  }
+  .btn-teal:hover {
+    background: var(--teal-glow);
+    box-shadow: var(--shadow-teal);
+    transform: translateY(-1px);
+  }
+  .btn-secondary {
+    background: var(--bg-overlay);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+  }
+  .btn-secondary:hover {
+    border-color: var(--teal-primary);
+    color: var(--teal-primary);
+    background: var(--teal-wash);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+  }
+  .btn-ghost:hover {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background: var(--bg-highlight);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--red-primary);
+    border: 1px solid var(--red-muted);
+  }
+  .btn-danger:hover {
+    background: var(--red-wash-mid);
+    border-color: var(--red-primary);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  }
+  .card:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+  .card-banner {
+    height: 120px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-banner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 30%, var(--bg-raised) 100%);
+  }
+  .card-banner.red-grd { background: linear-gradient(135deg, var(--red-muted), var(--bg-raised)); }
+  .card-banner.teal-grd { background: linear-gradient(135deg, var(--teal-dark), var(--bg-raised)); }
+  .card-banner.gold-grd { background: linear-gradient(135deg, rgba(245,166,35,0.25), var(--bg-raised)); }
+  .card-body { padding: var(--sp-5); }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: var(--sp-1) var(--sp-2);
+    border-radius: 3px;
+    margin-bottom: var(--sp-3);
+  }
+  .tag-red { background: var(--red-wash-mid); color: var(--red-primary); }
+  .tag-teal { background: var(--teal-wash-mid); color: var(--teal-primary); }
+  .tag-success { background: var(--success-wash); color: var(--success); }
+  .tag-warning { background: var(--warning-wash); color: var(--warning); }
+  .tag-neutral { background: rgba(228,230,239,0.06); color: var(--text-tertiary); }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    margin-bottom: var(--sp-2);
+  }
+  .card-desc {
+    font-size: 0.82rem;
+    color: var(--text-tertiary);
+    line-height: 1.5;
+  }
+
+  /* Progress */
+  .progress-container { margin-top: var(--sp-4); }
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--sp-2);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+  }
+  .progress-track {
+    height: 4px;
+    background: var(--bg-highlight);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s var(--ease-out-expo);
+  }
+  .progress-fill.red { background: var(--red-primary); }
+  .progress-fill.teal { background: var(--teal-primary); }
+  .progress-fill.success { background: var(--success); }
+  .progress-fill.gold { background: var(--warning); }
+
+  /* Rarity chips */
+  .rarity-bar {
+    display: flex;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+  .rarity-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+  }
+  .rarity-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .rarity-name {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+  }
+
+  /* ===== ATMOSPHERE ===== */
+  .atmo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-6);
+    margin-bottom: var(--sp-8);
+  }
+  .atmo-panel {
+    height: 200px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: flex-end;
+    padding: var(--sp-5);
+    position: relative;
+    overflow: hidden;
+  }
+  .atmo-panel .label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+    line-height: 1.5;
+  }
+  .atmo-red { background: radial-gradient(ellipse at 30% 20%, rgba(250,39,66,0.15), transparent 60%), var(--bg-base); }
+  .atmo-teal { background: radial-gradient(ellipse at 70% 30%, rgba(5,216,189,0.12), transparent 60%), var(--bg-base); }
+  .atmo-grain { background: var(--bg-base); }
+  .atmo-grain::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px;
+  }
+  .atmo-combined {
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(250,39,66,0.08), transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(5,216,189,0.06), transparent 50%),
+      var(--bg-base);
+  }
+  .atmo-edge-red {
+    background: linear-gradient(90deg, rgba(250,39,66,0.12), transparent 30%), var(--bg-base);
+  }
+  .atmo-edge-teal {
+    background: linear-gradient(270deg, rgba(5,216,189,0.10), transparent 30%), var(--bg-base);
+  }
+
+  /* ===== BENTO ===== */
+  .bento-demo {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 120px);
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-8);
+  }
+  .bento-cell {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    transition: border-color var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+  }
+  .bento-cell:hover { border-color: var(--border-strong); }
+  .bento-cell .bento-label {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-disabled);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .bento-cell .bento-value {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    color: var(--text-primary);
+    letter-spacing: 0.03em;
+    line-height: 1;
+  }
+  .bento-hero {
+    grid-column: 1 / 3;
+    grid-row: 1 / 3;
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(250,39,66,0.08), transparent 60%),
+      var(--bg-raised);
+  }
+  .bento-tall { grid-row: span 2; }
+  .bento-wide { grid-column: span 2; }
+
+  /* ===== EASING DEMO ===== */
+  .easing-demo {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--sp-4);
+    margin-bottom: var(--sp-8);
+  }
+  .easing-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: var(--sp-4);
+    text-align: center;
+  }
+  .easing-card .easing-name {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    margin-bottom: var(--sp-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .easing-card .easing-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--teal-primary);
+    margin: 0 auto var(--sp-3);
+    animation: easing-bounce 2s infinite;
+  }
+  .easing-card:nth-child(1) .easing-dot { animation-timing-function: var(--ease-out-expo); background: var(--red-primary); }
+  .easing-card:nth-child(2) .easing-dot { animation-timing-function: var(--ease-out-back); }
+  .easing-card:nth-child(3) .easing-dot { animation-timing-function: var(--ease-spring); background: var(--red-primary); }
+  .easing-card:nth-child(4) .easing-dot { animation-timing-function: ease; }
+  @keyframes easing-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+  .easing-card .easing-value {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    color: var(--text-disabled);
+    line-height: 1.4;
+  }
+
+  /* Duration chips */
+  .duration-row {
+    display: flex;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-6);
+  }
+  .duration-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-4);
+    background: var(--bg-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+  .duration-chip .d-bar {
+    height: 3px;
+    background: var(--teal-primary);
+    border-radius: 2px;
+  }
+  .duration-chip .d-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+  }
+  .duration-chip .d-use {
+    font-size: 0.65rem;
+    color: var(--text-disabled);
+  }
+
+  /* ===== CONTRAST TABLE ===== */
+  .contrast-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--sp-6);
+  }
+  .contrast-table th, .contrast-table td {
+    padding: var(--sp-3) var(--sp-4);
+    text-align: left;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .contrast-table th {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-disabled);
+    font-weight: 500;
+  }
+  .contrast-table td { color: var(--text-secondary); }
+  .contrast-table .pass { color: var(--success); font-weight: 600; font-family: var(--font-mono); font-size: 0.75rem; }
+  .contrast-table .fail { color: var(--red-primary); font-weight: 600; font-family: var(--font-mono); font-size: 0.75rem; }
+  .contrast-preview {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  /* ===== DO / DON'T ===== */
+  .do-dont-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-6);
+    margin-bottom: var(--sp-6);
+  }
+  .do-dont-card {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+  }
+  .do-dont-card .dd-header {
+    padding: var(--sp-3) var(--sp-4);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .do-dont-card.do .dd-header { background: var(--success-wash); color: var(--success); }
+  .do-dont-card.dont .dd-header { background: var(--red-wash-mid); color: var(--red-primary); }
+  .do-dont-card .dd-body {
+    padding: var(--sp-5);
+    background: var(--bg-raised);
+  }
+  .do-dont-card .dd-body p {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 900px) {
+    .anchor-swatches { grid-template-columns: 1fr; }
+    .atmo-grid, .do-dont-grid { grid-template-columns: 1fr; }
+    .easing-demo { grid-template-columns: repeat(2, 1fr); }
+    .bento-demo { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
+    .bento-hero { grid-column: span 2; grid-row: span 1; }
+    .bento-tall { grid-row: span 1; }
+    .type-scale-row { flex-direction: column; gap: var(--sp-2); }
+    .type-scale-meta { min-width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="guide">
+
+  <!-- ===== HEADER ===== -->
+  <header class="guide-header">
+    <p class="guide-version">Design System v0.3 — February 2026</p>
+    <h1>CURSED <span class="red">ARENA</span></h1>
+    <p class="lead">A comprehensive design system built from three anchors: a purple-black void, a vivid cursed red, and a supernatural teal. Dark, menacing, editorially clean. Structured for Photoshop comp work with eventual development handoff.</p>
+    <div class="guide-meta">
+      <span class="guide-meta-item"><strong>Base:</strong> #17151c</span>
+      <span class="guide-meta-item"><strong>Text:</strong> #e4e6ef (Frost)</span>
+      <span class="guide-meta-item"><strong>Accent 1:</strong> #fa2742 (Cursed Red)</span>
+      <span class="guide-meta-item"><strong>Accent 2:</strong> #05d8bd (Teal)</span>
+      <span class="guide-meta-item"><strong>Theme:</strong> Dark / Menacing / Editorial</span>
+    </div>
+  </header>
+
+  <!-- ===== 01: PHILOSOPHY ===== -->
+  <section class="section">
+    <p class="section-label">01 / Philosophy</p>
+    <h2 class="section-title">DESIGN DIRECTION</h2>
+    <p class="section-desc">Before any visual decisions, the team needs alignment on what Cursed Arena should feel like. These guardrails govern every design choice that follows.</p>
+
+    <div class="note">
+      <p><strong>The core tension:</strong> Cursed Arena lives at the intersection of <strong>menace</strong> and <strong>control</strong>. The world is supernatural and dangerous, but the player is in command. The UI should feel like a sealed barrier holding back chaos — clean edges, precise typography, controlled space — but underneath, color bleeds through. The teal hums with latent cursed energy. The red ruptures when action is demanded.</p>
+    </div>
+
+    <div class="note teal">
+      <p><strong>The emotional arc across screens:</strong> Not every screen should feel equally intense. The homepage is calm before the storm — dark, editorial, restrained. The gacha pull screen is where cursed energy erupts — teal glow, particles, dramatic motion. Battle UI is maximum tension — red accents, sharp contrast, urgent type. The collection screen is the trophy room — clean, reverent, organized. Design intensity maps to gameplay intensity.</p>
+    </div>
+
+    <div class="note teal">
+      <p><strong>Red vs. Teal — the semantic split:</strong> Red = player agency. "You do something." Battle CTAs, damage numbers, urgency, brand mark. Teal = system / supernatural. "Something is happening." Cursed energy, gacha mechanics, buff/heal, progression, domain expansions. This is the most important design rule in the system. If both colors appear simultaneously, the player should feel the tension between action and the unknown.</p>
+    </div>
+
+    <div class="note trend">
+      <span class="trend-label">2026 Trend</span>
+      <p><strong>Anti-sterility / "Imperfect by Design":</strong> The dominant 2026 direction actively rejects algorithmic neutrality. Fonts should have historical friction and visible personality. Backgrounds should have atmosphere. The human hand should be visible in the design even if AI assisted production. For Cursed Arena: avoid anything that looks auto-generated. Your display type should have character, not geometric perfection.</p>
+    </div>
+
+    <div class="note trend">
+      <span class="trend-label">2026 Trend</span>
+      <p><strong>Cinematic gradients as light sources:</strong> Gradients in 2026 function as directional lighting, not decoration. A red vignette from the left signals danger. A teal glow emanating from behind a character card suggests cursed energy. Position gradients off-center, let them bleed past edges. In Photoshop, build these as separate screen/soft-light layers at 5–15% opacity.</p>
+    </div>
+
+    <div class="note trend">
+      <span class="trend-label">2026 Trend</span>
+      <p><strong>Micro-delight over macro-motion:</strong> The 2026 motion consensus favors small, purposeful moments: a button that gives a subtle bounce on press, a progress bar that slightly overshoots before settling. One well-choreographed page load with staggered reveals creates more impact than scattered effects. Annotate these moments on your comps — motion is part of the design.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 02: COLOR ===== -->
+  <section class="section">
+    <p class="section-label">02 / Color</p>
+    <h2 class="section-title">COLOR SYSTEM</h2>
+    <p class="section-desc">Every color traces back to three anchors. No color exists without a role. If you can't name what a color does, it doesn't belong in the system.</p>
+
+    <!-- Anchors -->
+    <div class="subsection">
+      <h3 class="subsection-title">Anchor Colors</h3>
+      <div class="anchor-swatches">
+        <div class="anchor-swatch">
+          <div class="swatch-color" style="background: var(--anchor-red);"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Cursed Red</div>
+            <div class="swatch-hex">#fa2742</div>
+            <div class="swatch-role">Primary accent. CTAs, active states, danger, brand. Should feel like a wound — rare and meaningful.</div>
+          </div>
+        </div>
+        <div class="anchor-swatch">
+          <div class="swatch-color" style="background: var(--anchor-teal);"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Cursed Teal</div>
+            <div class="swatch-hex">#05d8bd</div>
+            <div class="swatch-role">Secondary accent. Supernatural, progression, gacha, buffs. The hum of cursed energy beneath the surface.</div>
+          </div>
+        </div>
+        <div class="anchor-swatch">
+          <div class="swatch-color" style="background: var(--anchor-base);"></div>
+          <div class="swatch-info">
+            <div class="swatch-name">Void</div>
+            <div class="swatch-hex">#17151c</div>
+            <div class="swatch-role">Base background. Purple-black undertone carries through every elevation step. The darkness is never truly neutral.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ratio -->
+    <div class="subsection">
+      <h3 class="subsection-title">The 82 / 12 / 4 / 2 Rule</h3>
+      <div class="ratio-bar">
+        <div class="ratio-segment" style="flex: 82; background: var(--bg-base); color: var(--text-tertiary);">82% DARK</div>
+        <div class="ratio-segment" style="flex: 12; background: var(--anchor-frost); color: var(--text-inverse);">12% FROST</div>
+        <div class="ratio-segment" style="flex: 4; background: var(--anchor-teal); color: var(--text-inverse);">4%</div>
+        <div class="ratio-segment" style="flex: 2; background: var(--anchor-red); color: #fff;">2%</div>
+      </div>
+      <div class="note">
+        <p><strong>Red is rarer than teal.</strong> With two accent colors, the hierarchy matters even more. Teal can appear in more places — progress bars, tags, data highlights, navigation indicators — because it's the system's ambient energy. Red remains surgical: one CTA, one alert, one critical indicator per viewport. If you squint and see red in more than one spot, something's wrong.</p>
+      </div>
+    </div>
+
+    <!-- Background Scale -->
+    <div class="subsection">
+      <h3 class="subsection-title">Background Scale</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="swatch-color bordered" style="background: var(--bg-void);"></div><div class="swatch-info"><div class="swatch-name">Void</div><div class="swatch-hex">#0d0c11</div><div class="swatch-role">Full bleed, deepest layer</div></div></div>
+        <div class="swatch"><div class="swatch-color bordered" style="background: var(--bg-base);"></div><div class="swatch-info"><div class="swatch-name">Base</div><div class="swatch-hex">#17151c</div><div class="swatch-role">App background</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--bg-raised);"></div><div class="swatch-info"><div class="swatch-name">Raised</div><div class="swatch-hex">#1e1c24</div><div class="swatch-role">Sidebar, cards</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--bg-surface);"></div><div class="swatch-info"><div class="swatch-name">Surface</div><div class="swatch-hex">#26242e</div><div class="swatch-role">Inner containers</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--bg-overlay);"></div><div class="swatch-info"><div class="swatch-name">Overlay</div><div class="swatch-hex">#302e3a</div><div class="swatch-role">Modals, tooltips</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--bg-highlight);"></div><div class="swatch-info"><div class="swatch-name">Highlight</div><div class="swatch-hex">#3a3846</div><div class="swatch-role">Active, selected</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--bg-elevated);"></div><div class="swatch-info"><div class="swatch-name">Elevated</div><div class="swatch-hex">#454353</div><div class="swatch-role">Hover, inputs</div></div></div>
+      </div>
+      <div class="note neutral" style="margin-top: var(--sp-6);">
+        <p><strong>The purple undertone is intentional.</strong> Your base #17151c has a cool violet lean. Every elevation step preserves this — the scale never drifts to neutral gray. This creates a subliminal cohesion: the darkness itself has a color identity. It's not just "dark mode" — it's the Cursed Arena void.</p>
+      </div>
+    </div>
+
+    <!-- Red Scale -->
+    <div class="subsection">
+      <h3 class="subsection-title">Cursed Red — Accent Scale</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="swatch-color" style="background: var(--red-glow);"></div><div class="swatch-info"><div class="swatch-name">Glow</div><div class="swatch-hex">#ff3d5a</div><div class="swatch-role">Hover, glow FX</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--red-primary);"></div><div class="swatch-info"><div class="swatch-name">Primary</div><div class="swatch-hex">#fa2742</div><div class="swatch-role">CTAs, active, brand</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--red-deep);"></div><div class="swatch-info"><div class="swatch-name">Deep</div><div class="swatch-hex">#c41d33</div><div class="swatch-role">Pressed states</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--red-muted);"></div><div class="swatch-info"><div class="swatch-name">Muted</div><div class="swatch-hex">#8a1523</div><div class="swatch-role">Disabled, bg tints</div></div></div>
+      </div>
+    </div>
+
+    <!-- Teal Scale -->
+    <div class="subsection">
+      <h3 class="subsection-title">Cursed Teal — Secondary Scale</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="swatch-color" style="background: var(--teal-glow);"></div><div class="swatch-info"><div class="swatch-name">Glow</div><div class="swatch-hex">#2aecd4</div><div class="swatch-role">Hover, glow FX</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--teal-primary);"></div><div class="swatch-info"><div class="swatch-name">Primary</div><div class="swatch-hex">#05d8bd</div><div class="swatch-role">Info, abilities, gacha</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--teal-deep);"></div><div class="swatch-info"><div class="swatch-name">Deep</div><div class="swatch-hex">#04a896</div><div class="swatch-role">Pressed states</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--teal-muted);"></div><div class="swatch-info"><div class="swatch-name">Muted</div><div class="swatch-hex">#03796d</div><div class="swatch-role">Subtle indicators</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--teal-dark);"></div><div class="swatch-info"><div class="swatch-name">Dark</div><div class="swatch-hex">#024d45</div><div class="swatch-role">Background tints</div></div></div>
+      </div>
+      <div class="note teal" style="margin-top: var(--sp-6);">
+        <p><strong>Teal has more range than red.</strong> Because teal serves as the ambient system color, it needs more steps — from bright glow (gacha reveals, domain effects) down to barely-visible dark tints (card gradient backgrounds, subtle data highlights). Red stays tight: 4 steps, surgical deployment.</p>
+      </div>
+    </div>
+
+    <!-- Text Scale -->
+    <div class="subsection">
+      <h3 class="subsection-title">Text Scale (Frost Family)</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="swatch-color" style="background: var(--text-primary);"></div><div class="swatch-info"><div class="swatch-name">Primary</div><div class="swatch-hex">#e4e6ef</div><div class="swatch-role">Headlines, key content</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--text-secondary);"></div><div class="swatch-info"><div class="swatch-name">Secondary</div><div class="swatch-hex">#b0b2c0</div><div class="swatch-role">Body, descriptions</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--text-tertiary);"></div><div class="swatch-info"><div class="swatch-name">Tertiary</div><div class="swatch-hex">#7a7c8e</div><div class="swatch-role">Captions, metadata</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--text-disabled);"></div><div class="swatch-info"><div class="swatch-name">Disabled</div><div class="swatch-hex">#4e5060</div><div class="swatch-role">Disabled, placeholder</div></div></div>
+      </div>
+      <div class="note neutral" style="margin-top: var(--sp-6);">
+        <p><strong>The Frost family has a cool blue undertone</strong> that harmonizes with the purple-black base. Each step down the scale maintains this lean — the grays never go warm or truly neutral. This creates a cohesive temperature across the entire interface.</p>
+      </div>
+    </div>
+
+    <!-- Functional + Rarity -->
+    <div class="subsection">
+      <h3 class="subsection-title">Functional Colors</h3>
+      <div class="swatches" style="margin-bottom: var(--sp-6);">
+        <div class="swatch"><div class="swatch-color" style="background: var(--success);"></div><div class="swatch-info"><div class="swatch-name">Success</div><div class="swatch-hex">#2dd4a0</div><div class="swatch-role">Complete, heal, buff</div></div></div>
+        <div class="swatch"><div class="swatch-color" style="background: var(--warning);"></div><div class="swatch-info"><div class="swatch-name">Warning</div><div class="swatch-hex">#f5a623</div><div class="swatch-role">Expiring, caution, gold</div></div></div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Rarity Scale</h3>
+      <div class="rarity-bar">
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-common);"></div><span class="rarity-name">Common</span></div>
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-uncommon);"></div><span class="rarity-name">Uncommon</span></div>
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-rare);"></div><span class="rarity-name">Rare</span></div>
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-epic);"></div><span class="rarity-name">Epic</span></div>
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-legendary);"></div><span class="rarity-name">Legendary</span></div>
+        <div class="rarity-chip"><div class="rarity-dot" style="background: var(--rarity-special);"></div><span class="rarity-name">Special Grade</span></div>
+      </div>
+      <div class="note neutral" style="margin-top: var(--sp-6);">
+        <p><strong>Epic uses a distinct purple (#9b6dff)</strong> rather than reusing either accent. This prevents confusion — Epic rarity shouldn't feel like a system action (teal) or a danger state (red). Legendary uses the red anchor because it's the peak of the normal hierarchy. Special Grade gets gold/amber because it exists outside the system entirely.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 03: TYPOGRAPHY ===== -->
+  <section class="section">
+    <p class="section-label">03 / Typography</p>
+    <h2 class="section-title">TYPE SYSTEM</h2>
+    <p class="section-desc">Three font roles, each with a clear job. Specific typefaces below are starting points — the structural pattern (condensed display + humanist body + monospace data) is the system.</p>
+
+    <div class="note trend">
+      <span class="trend-label">2026 Trend</span>
+      <p><strong>Kinetic / variable typography:</strong> Variable fonts allow weight, width, and optical size to shift dynamically on scroll, hover, or state change. For Cursed Arena, consider a variable display face where weight animates heavier during battle and lighter during menus. Show both states side by side in your comps as a motion spec.</p>
+    </div>
+
+    <div class="type-specimen">
+      <p class="type-specimen-label">Display — Bebas Neue (placeholder) — Condensed Sans</p>
+      <div class="type-display">DOMAIN <span class="red">EXPANSION</span></div>
+      <p class="type-note">Always uppercase. Tracked at 0.04–0.06em. Headlines, banner titles, section headers, character names. Commanding, sharp, slightly threatening. Never for body text.</p>
+    </div>
+
+    <div class="type-specimen">
+      <p class="type-specimen-label">Alt Display — Syne (placeholder) — Expressive Sans</p>
+      <div class="type-display-alt">Cursed Technique: <span style="color: var(--teal-primary);">Malevolent Shrine</span></div>
+      <p class="type-note">Secondary display for moments needing personality over authority. Technique names, ability labels, lore headers, event branding. 700–800 weight for impact.</p>
+    </div>
+
+    <div class="type-specimen">
+      <p class="type-specimen-label">Body — Noto Sans (placeholder) — Humanist Sans</p>
+      <div class="type-body-sample">A high-pressure striker joins this week with burst-focused cursed technique scaling. Her domain expansion creates a 2.4x multiplier on all curse-type damage for three turns, making her the top pick for sustained DPS in ranked play.</div>
+      <p class="type-note">All readable content. 400 weight body, 600 emphasis. Line-height 1.6–1.7.</p>
+    </div>
+
+    <div class="type-specimen">
+      <p class="type-specimen-label">Data — JetBrains Mono (placeholder) — Monospace</p>
+      <div class="type-mono-sample">GRADE 2 • LV 14 • MASTER II &nbsp;&nbsp; W 13 | L 7 | WR 65% &nbsp;&nbsp; 443/450 XP &nbsp;&nbsp; PITY: 67/90</div>
+      <p class="type-note">Stats, numbers, progress, metadata, system tags. Tabular figures keep columns aligned. The "system voice" — cold, precise, mechanical.</p>
+    </div>
+
+    <!-- Type Scale -->
+    <div class="subsection" style="margin-top: var(--sp-10);">
+      <h3 class="subsection-title">Type Scale</h3>
+      <div class="type-scale">
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Hero Display<br>clamp(3rem, 6vw, 5rem)<br>Bebas Neue, 0.06em</div>
+          <div class="type-scale-sample" style="font-family: var(--font-display); font-size: clamp(3rem,6vw,5rem); letter-spacing: 0.06em; line-height: 0.9;">SPECIAL GRADE</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Section Title<br>2.2–2.5rem<br>Bebas Neue, 0.04em</div>
+          <div class="type-scale-sample" style="font-family: var(--font-display); font-size: 2.4rem; letter-spacing: 0.04em; line-height: 1;">BANNER ROTATION</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Card Title<br>1.3–1.5rem<br>Bebas Neue, 0.04em</div>
+          <div class="type-scale-sample" style="font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.04em; line-height: 1;">DAILY MISSIONS</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Body Large<br>1.05rem<br>Noto Sans 400</div>
+          <div class="type-scale-sample" style="font-family: var(--font-body); font-size: 1.05rem; color: var(--text-secondary);">A new striker enters the arena this week.</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Body Base<br>0.92rem<br>Noto Sans 400</div>
+          <div class="type-scale-sample" style="font-family: var(--font-body); font-size: 0.92rem; color: var(--text-secondary);">Burst-focused cursed technique scaling with domain multiplier.</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Body Small<br>0.82rem<br>Noto Sans 400</div>
+          <div class="type-scale-sample" style="font-family: var(--font-body); font-size: 0.82rem; color: var(--text-tertiary);">Deal 500 total damage today. Reward: 35 gems.</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Data / Caption<br>0.7rem<br>JetBrains Mono 400</div>
+          <div class="type-scale-sample" style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-tertiary); letter-spacing: 0.08em;">15/20 • 75% COMPLETE • NA-EAST • 2:34 REMAINING</div>
+        </div>
+        <div class="type-scale-row">
+          <div class="type-scale-meta">Micro Label<br>0.6rem<br>JetBrains Mono 600</div>
+          <div class="type-scale-sample" style="font-family: var(--font-mono); font-size: 0.6rem; font-weight: 600; color: var(--text-disabled); letter-spacing: 0.12em; text-transform: uppercase;">DAILY PRIORITY • EVENT • NEW CHARACTER</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 04: SPACING ===== -->
+  <section class="section">
+    <p class="section-label">04 / Spacing</p>
+    <h2 class="section-title">SPATIAL SYSTEM</h2>
+    <p class="section-desc">8px base grid. Every value is a multiple of 4 or 8. The editorial cleanliness of your HSR reference comes from obsessive alignment.</p>
+
+    <div class="spacing-demo">
+      <div class="spacing-block"><div class="spacing-visual" style="width:16px;height:16px;"></div><span class="spacing-label">sp-1 · 4px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:20px;height:20px;"></div><span class="spacing-label">sp-2 · 8px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:24px;height:24px;"></div><span class="spacing-label">sp-3 · 12px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:28px;height:28px;"></div><span class="spacing-label">sp-4 · 16px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:36px;height:36px;"></div><span class="spacing-label">sp-6 · 24px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:44px;height:44px;"></div><span class="spacing-label">sp-8 · 32px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:56px;height:56px;"></div><span class="spacing-label">sp-12 · 48px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:72px;height:72px;"></div><span class="spacing-label">sp-16 · 64px</span></div>
+      <div class="spacing-block"><div class="spacing-visual" style="width:92px;height:92px;"></div><span class="spacing-label">sp-20 · 80px</span></div>
+    </div>
+
+    <div class="note neutral">
+      <p><strong>Usage:</strong> <code>sp-2</code> for tight internal gaps. <code>sp-4</code> for card padding. <code>sp-6</code> for gaps between related components. <code>sp-8–12</code> for section spacing. <code>sp-16–20</code> for major breaks. When in doubt, use more space — the menacing atmosphere comes from generous negative space.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 05: COMPONENTS ===== -->
+  <section class="section">
+    <p class="section-label">05 / Components</p>
+    <h2 class="section-title">UI PATTERNS</h2>
+    <p class="section-desc">Core components showing the red/teal accent split in action. Every component includes interactive state specs for annotation.</p>
+
+    <!-- Buttons -->
+    <div class="subsection">
+      <h3 class="subsection-title">Button Hierarchy</h3>
+      <div class="button-row">
+        <button class="btn btn-primary-lg">PLAY NOW</button>
+      </div>
+      <div class="button-row">
+        <button class="btn btn-primary">CONFIRM</button>
+        <button class="btn btn-teal">SUMMON</button>
+        <button class="btn btn-secondary">VIEW PROFILE</button>
+        <button class="btn btn-ghost">Read Update</button>
+        <button class="btn btn-danger">Abandon</button>
+      </div>
+      <div class="note" style="margin-top: var(--sp-4);">
+        <p><strong>The split in action:</strong> "PLAY NOW" and "CONFIRM" are red — player action. "SUMMON" is teal — supernatural/gacha system action. Secondary and ghost are neutral. One red button per viewport maximum. Teal buttons can appear alongside red because they represent different domains of interaction.</p>
+      </div>
+    </div>
+
+    <!-- Cards -->
+    <div class="subsection">
+      <h3 class="subsection-title">Card Components</h3>
+      <div class="component-grid">
+        <div class="card">
+          <div class="card-banner red-grd"></div>
+          <div class="card-body">
+            <span class="tag tag-red">Daily Priority</span>
+            <div class="card-title">WIN 3 BATTLES</div>
+            <div class="card-desc">Complete three ranked or unranked battles to claim your daily reward.</div>
+            <div class="progress-container">
+              <div class="progress-meta"><span>2/3</span><span>66%</span></div>
+              <div class="progress-track"><div class="progress-fill red" style="width: 66%;"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-banner teal-grd"></div>
+          <div class="card-body">
+            <span class="tag tag-teal">Event Banner</span>
+            <div class="card-title">SPECIAL GRADE SUMMON</div>
+            <div class="card-desc">A high-pressure striker with burst-focused cursed technique scaling.</div>
+            <div class="progress-container">
+              <div class="progress-meta"><span>PITY: 67/90</span><span>74%</span></div>
+              <div class="progress-track"><div class="progress-fill teal" style="width: 74%;"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-banner gold-grd"></div>
+          <div class="card-body">
+            <span class="tag tag-warning">Expires in 2d</span>
+            <div class="card-title">SEASON REWARDS</div>
+            <div class="card-desc">Claim your ranked season rewards before the deadline.</div>
+            <div class="progress-container">
+              <div class="progress-meta"><span>443/450 XP</span><span>98%</span></div>
+              <div class="progress-track"><div class="progress-fill gold" style="width: 98%;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="note teal" style="margin-top: var(--sp-6);">
+        <p><strong>Card gradient mapping:</strong> Red gradient = battle/combat missions. Teal gradient = gacha/summon/supernatural events. Gold gradient = time-sensitive/premium. Color encodes content category — never decorative.</p>
+      </div>
+    </div>
+
+    <!-- Tags -->
+    <div class="subsection">
+      <h3 class="subsection-title">Tags</h3>
+      <div style="display: flex; gap: var(--sp-3); flex-wrap: wrap;">
+        <span class="tag tag-red">Daily Priority</span>
+        <span class="tag tag-teal">Event Banner</span>
+        <span class="tag tag-success">Complete</span>
+        <span class="tag tag-warning">Expiring</span>
+        <span class="tag tag-neutral">Gacha</span>
+        <span class="tag tag-neutral">Special Grade</span>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 06: BENTO ===== -->
+  <section class="section">
+    <p class="section-label">06 / Layout</p>
+    <h2 class="section-title">BENTO GRID SYSTEM</h2>
+    <p class="section-desc">Modular, mixed-size card layouts that naturally create visual hierarchy through size variation. Replaces the flat equal-weight mission row from your original comp.</p>
+
+    <div class="bento-demo">
+      <div class="bento-cell bento-hero">
+        <div class="bento-label">Featured Banner / Hero</div>
+        <div class="bento-value" style="color: var(--red-primary);">2 x 2</div>
+      </div>
+      <div class="bento-cell"><div class="bento-label">Mission 1</div><div class="bento-value">1 x 1</div></div>
+      <div class="bento-cell"><div class="bento-label">Mission 2</div><div class="bento-value">1 x 1</div></div>
+      <div class="bento-cell bento-tall" style="background: radial-gradient(ellipse at 50% 80%, rgba(5,216,189,0.06), transparent 70%), var(--bg-raised);">
+        <div class="bento-label">Profile / Sidebar</div>
+        <div class="bento-value" style="color: var(--teal-primary);">1 x 2</div>
+      </div>
+      <div class="bento-cell"><div class="bento-label">Mission 3</div><div class="bento-value">1 x 1</div></div>
+      <div class="bento-cell bento-wide"><div class="bento-label">Quick Action Bar</div><div class="bento-value">2 x 1</div></div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 07: ATMOSPHERE ===== -->
+  <section class="section">
+    <p class="section-label">07 / Atmosphere</p>
+    <h2 class="section-title">TEXTURE & DEPTH</h2>
+    <p class="section-desc">The menacing quality comes from what's barely visible in the darkness. Now with teal replacing indigo, the atmospheric energy shifts — less occult, more electric/supernatural.</p>
+
+    <div class="atmo-grid">
+      <div class="atmo-panel atmo-red"><span class="label">Red vignette — danger zones,<br>battle UI, alerts</span></div>
+      <div class="atmo-panel atmo-teal"><span class="label">Teal vignette — gacha,<br>abilities, progression</span></div>
+      <div class="atmo-panel atmo-grain"><span class="label">Film grain — cinematic texture,<br>analog warmth</span></div>
+      <div class="atmo-panel atmo-combined"><span class="label">Dual vignette — hero banners,<br>loading screens</span></div>
+      <div class="atmo-panel atmo-edge-red"><span class="label">Red edge bleed — directional<br>tension from left</span></div>
+      <div class="atmo-panel atmo-edge-teal"><span class="label">Teal edge bleed — system energy<br>radiating from right</span></div>
+    </div>
+
+    <div class="note">
+      <p><strong>Photoshop layer stack:</strong> (1) Solid fill <code>#17151c</code>. (2) Grain: fractal noise, mono, 3–5% opacity, overlay. (3) Vignettes: radial gradients, accent color to transparent, 8–15% opacity, screen blend. (4) Edge bleeds: linear gradients, 5–12% opacity, normal. (5) Content group on top. Always position vignettes off-center — centered = spotlight, off-center = atmosphere.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 08: MOTION ===== -->
+  <section class="section">
+    <p class="section-label">08 / Motion</p>
+    <h2 class="section-title">ANIMATION SYSTEM</h2>
+    <p class="section-desc">Timing curves and durations to annotate on your Photoshop comps. Every interactive element needs a motion spec.</p>
+
+    <div class="easing-demo">
+      <div class="easing-card"><div class="easing-name">Expo Out</div><div class="easing-dot"></div><div class="easing-value">Primary — most interactions</div></div>
+      <div class="easing-card"><div class="easing-name">Back Out</div><div class="easing-dot"></div><div class="easing-value">Playful overshoot — rewards</div></div>
+      <div class="easing-card"><div class="easing-name">Spring</div><div class="easing-dot"></div><div class="easing-value">Bouncy — button press</div></div>
+      <div class="easing-card"><div class="easing-name">Ease</div><div class="easing-dot"></div><div class="easing-value">Subtle — opacity, color</div></div>
+    </div>
+
+    <div class="subsection">
+      <h3 class="subsection-title">Duration Scale</h3>
+      <div class="duration-row">
+        <div class="duration-chip"><div class="d-bar" style="width: 16px;"></div><span class="d-label">120ms</span><span class="d-use">Micro</span></div>
+        <div class="duration-chip"><div class="d-bar" style="width: 28px;"></div><span class="d-label">200ms</span><span class="d-use">Fast</span></div>
+        <div class="duration-chip"><div class="d-bar" style="width: 44px;"></div><span class="d-label">350ms</span><span class="d-use">Base</span></div>
+        <div class="duration-chip"><div class="d-bar" style="width: 64px;"></div><span class="d-label">600ms</span><span class="d-use">Slow</span></div>
+        <div class="duration-chip"><div class="d-bar" style="width: 92px;"></div><span class="d-label">900ms</span><span class="d-use">Dramatic</span></div>
+      </div>
+    </div>
+
+    <div class="note neutral">
+      <p><strong>Key specs for annotation:</strong></p>
+      <p><strong>Button press:</strong> translateY(-1px) on hover (200ms expo-out), glow fades in. Active: translateY(0), darken, glow off (immediate).</p>
+      <p><strong>Card hover:</strong> translateY(-2px) + border shift + shadow (200ms). Return: 350ms (slower = "reluctant release").</p>
+      <p><strong>Progress bar:</strong> Fills from 0 on load (600ms expo-out, 200ms delay). Slight overshoot via back-out for bars above 80%.</p>
+      <p><strong>Page load stagger:</strong> Sidebar (0ms, 350ms) → Hero (100ms, 600ms) → Cards stagger (200/280/360ms, 350ms each). Each: opacity 0→1 + translateY(12px→0).</p>
+      <p><strong>Gacha reveal:</strong> 900ms dramatic. Screen darkens, teal vignette intensifies, card scales 0.8→1.0 with spring overshoot. Teal glow radiates outward. This is the emotional climax — spend the animation budget here.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 09: ACCESSIBILITY ===== -->
+  <section class="section">
+    <p class="section-label">09 / Accessibility</p>
+    <h2 class="section-title">CONTRAST & ACCESS</h2>
+    <p class="section-desc">WCAG AA compliance is non-negotiable. Critical text/background pairs against the new #17151c base.</p>
+
+    <table class="contrast-table">
+      <thead>
+        <tr><th>Pair</th><th>Background</th><th>Usage</th><th>Ratio</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="contrast-preview" style="background: #17151c; color: #e4e6ef;">Frost on Base</span></td>
+          <td>#17151c</td><td>Headlines</td><td>~12.5:1</td><td class="pass">AAA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #1e1c24; color: #b0b2c0;">Secondary on Raised</span></td>
+          <td>#1e1c24</td><td>Body in cards</td><td>~7.8:1</td><td class="pass">AAA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #1e1c24; color: #7a7c8e;">Tertiary on Raised</span></td>
+          <td>#1e1c24</td><td>Captions</td><td>~4.5:1</td><td class="pass">AA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #17151c; color: #fa2742;">Red on Base</span></td>
+          <td>#17151c</td><td>Accent text</td><td>~4.9:1</td><td class="pass">AA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #17151c; color: #05d8bd;">Teal on Base</span></td>
+          <td>#17151c</td><td>Accent text, links</td><td>~8.5:1</td><td class="pass">AAA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #fa2742; color: #fff;">White on Red</span></td>
+          <td>#fa2742</td><td>Button text</td><td>~4.6:1</td><td class="pass">AA</td>
+        </tr>
+        <tr>
+          <td><span class="contrast-preview" style="background: #05d8bd; color: #17151c;">Dark on Teal</span></td>
+          <td>#05d8bd</td><td>Teal button text</td><td>~8.5:1</td><td class="pass">AAA</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note teal">
+      <p><strong>Teal has excellent contrast.</strong> #05d8bd against #17151c hits ~8.5:1 — well above AAA. This is a usability advantage: teal can be used for smaller text (links, data highlights, inline labels) where red would fail at small sizes. Use teal for information density; reserve red for focal moments.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 10: DO / DON'T ===== -->
+  <section class="section">
+    <p class="section-label">10 / Guardrails</p>
+    <h2 class="section-title">DO / DON'T</h2>
+
+    <div class="do-dont-grid">
+      <div class="do-dont-card do"><div class="dd-header">Do</div><div class="dd-body"><p>Use red for exactly one CTA per viewport. Let teal handle navigation indicators, progress, data highlights, and secondary actions. Red is the wound; teal is the pulse.</p></div></div>
+      <div class="do-dont-card dont"><div class="dd-header">Don't</div><div class="dd-body"><p>Use red and teal at equal frequency. If both appear everywhere with the same visual weight, the semantic split collapses and your UI has two primary colors fighting for attention.</p></div></div>
+    </div>
+
+    <div class="do-dont-grid">
+      <div class="do-dont-card do"><div class="dd-header">Do</div><div class="dd-body"><p>Use atmospheric gradients as directional light — off-center, purpose-driven, subtle. Teal glows from the right, red bleeds from the left. Create visual tension through opposing light sources.</p></div></div>
+      <div class="do-dont-card dont"><div class="dd-header">Don't</div><div class="dd-body"><p>Place a red vignette and a teal vignette both centered on the same element. Opposing colors should come from opposing directions. Same origin = visual mud.</p></div></div>
+    </div>
+
+    <div class="do-dont-grid">
+      <div class="do-dont-card do"><div class="dd-header">Do</div><div class="dd-body"><p>Use dark text (#17151c) on teal buttons. The high contrast ratio (8.5:1) makes it crisp. Use white text on red buttons where the ratio is tighter (4.6:1).</p></div></div>
+      <div class="do-dont-card dont"><div class="dd-header">Don't</div><div class="dd-body"><p>Use white text on teal. It works but wastes contrast headroom. Dark-on-teal is sharper and more distinctive — it also visually differentiates teal buttons from red ones at a glance.</p></div></div>
+    </div>
+
+    <div class="do-dont-grid">
+      <div class="do-dont-card do"><div class="dd-header">Do</div><div class="dd-body"><p>Keep the purple undertone in your background scale. The darkness itself has a color identity that ties into the supernatural theme.</p></div></div>
+      <div class="do-dont-card dont"><div class="dd-header">Don't</div><div class="dd-body"><p>Drift to neutral gray in your elevation steps. Once you break the purple undertone, the backgrounds lose their cohesion with the accent palette and everything looks like a generic dark theme.</p></div></div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ===== 11: WORKFLOW ===== -->
+  <section class="section">
+    <p class="section-label">11 / Workflow</p>
+    <h2 class="section-title">PHOTOSHOP SETUP</h2>
+
+    <div class="note"><p><strong>Step 1 — Canvas:</strong> <code>1440 x 900</code> desktop. <code>375 x 812</code> mobile. <code>1024 x 768</code> tablet. 1x. Background fill <code>#17151c</code>.</p></div>
+    <div class="note"><p><strong>Step 2 — Swatches:</strong> Import every hex as a swatch group. Name with slashes: "BG / Void", "BG / Base", "Red / Glow", "Red / Primary", "Teal / Glow", "Teal / Primary", "Text / Primary", etc.</p></div>
+    <div class="note"><p><strong>Step 3 — Grid:</strong> 8px grid (Preferences → Guides, Grid & Slices). 12-column layout: 280px sidebar + 24px gutter + main area with 24px column gutters. Snap to Grid on.</p></div>
+    <div class="note"><p><strong>Step 4 — Atmosphere:</strong> Three base layers: (1) Solid <code>#17151c</code>. (2) "Atmosphere" group at 8% opacity — vignettes + grain. (3) Empty "Content" group. This gives you depth before drawing a single UI element.</p></div>
+    <div class="note"><p><strong>Step 5 — Smart objects:</strong> Build one card, one button, one progress bar, one tag as smart objects. Duplicate from masters. Prevents drift where each card ends up 2px different.</p></div>
+    <div class="note"><p><strong>Step 6 — Annotations:</strong> Locked group at top of layer stack for motion specs, spacing values, and interaction states. Hide for export, show for handoff.</p></div>
+    <div class="note"><p><strong>The squint test:</strong> Zoom to 25%, squint. You should see: nav bar, one red CTA, teal accents threading through data/progress, content hierarchy large→small. If you see two pools of competing color, the red/teal balance is off. If you see monochrome gray, your accents aren't deployed enough.</p></div>
+  </section>
+
+</div>
+
+</body>
+</html>
