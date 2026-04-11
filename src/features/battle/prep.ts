@@ -1,5 +1,5 @@
 import { ownedRosterCharacters } from '@/data/characters'
-import { defaultBattleSetup, battleRosterById } from '@/features/battle/data'
+import { battleRoster, defaultBattleSetup } from '@/features/battle/data'
 import {
   createStagedBattleSession,
   persistSelectedMatchMode,
@@ -78,22 +78,63 @@ function writeLocalStorage<T>(key: string, value: T) {
   }
 }
 
-export const battlePrepRoster: BattlePrepRosterEntry[] = ownedRosterCharacters
-  .filter((character) => Boolean(battleRosterById[character.id]))
-  .map((character) => {
-    const battleTemplate = battleRosterById[character.id]
+function mapBattleRarityToCharacter(rarity: BattleFighterTemplate['rarity']): CharacterRarity {
+  if (rarity === 'UR') return 'SSR'
+  return rarity
+}
+
+function gradeLabelFromRarity(rarity: CharacterRarity) {
+  if (rarity === 'SSR') return 'SPECIAL GRADE'
+  if (rarity === 'SR') return 'GRADE 1'
+  return 'GRADE 2'
+}
+
+function deriveArchetypesFromFighter(fighter: BattleFighterTemplate): Archetype[] {
+  const tags = new Set<Archetype>()
+  const roleParts = fighter.role.split('/').map((part) => part.trim().toLowerCase())
+
+  roleParts.forEach((part) => {
+    if (part.includes('blaster')) tags.add('BLASTER')
+    if (part.includes('striker') || part.includes('bruiser') || part.includes('burst')) tags.add('STRIKER')
+    if (part.includes('control') || part.includes('debuff')) tags.add('DISRUPTOR')
+    if (part.includes('utility') || part.includes('hybrid')) tags.add('AMPLIFIER')
+    if (part.includes('sustain') || part.includes('heal')) tags.add('RESTORER')
+    if (part.includes('guard') || part.includes('tank')) tags.add('GUARDIAN')
+  })
+
+  const allAbilities = fighter.abilities.concat(fighter.ultimate)
+  if (fighter.maxHp >= 108 || allAbilities.some((ability) => ability.kind === 'defend')) tags.add('GUARDIAN')
+  if (allAbilities.some((ability) => ability.kind === 'heal' || ability.tags.includes('HEAL'))) tags.add('RESTORER')
+  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY'))) tags.add('AMPLIFIER')
+  if (allAbilities.some((ability) => ability.kind === 'debuff' || ability.tags.includes('DEBUFF'))) tags.add('DISRUPTOR')
+  if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-all')) tags.add('BLASTER')
+  if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-single')) tags.add('STRIKER')
+
+  if (tags.size === 0) tags.add('STRIKER')
+  return Array.from(tags).slice(0, 2)
+}
+
+const ownedRosterById = Object.fromEntries(
+  ownedRosterCharacters.map((character) => [character.id, character]),
+) as Record<string, (typeof ownedRosterCharacters)[number]>
+
+export const battlePrepRoster: BattlePrepRosterEntry[] = battleRoster
+  .map((fighter) => {
+    const character = ownedRosterById[fighter.id]
+    const rarity = character?.rarity ?? mapBattleRarityToCharacter(fighter.rarity)
+    const renderSrc = character?.renderSrc ?? (fighter.renderSrc || fighter.boardPortraitSrc || undefined)
 
     return {
-      id: character.id,
-      name: battleTemplate.name,
-      rarity: character.rarity,
-      archetypes: character.archetypes,
-      renderSrc: character.renderSrc,
-      portraitFrame: character.portraitFrame,
-      gradeLabel: character.rarity === 'SSR' ? 'SPECIAL GRADE' : character.rarity === 'SR' ? 'GRADE 1' : 'GRADE 2',
-      role: battleTemplate.role,
-      passiveLabel: battleTemplate.passiveEffects?.[0]?.label ?? 'No passive loaded',
-      battleTemplate,
+      id: fighter.id,
+      name: fighter.name,
+      rarity,
+      archetypes: character?.archetypes ?? deriveArchetypesFromFighter(fighter),
+      renderSrc,
+      portraitFrame: character?.portraitFrame ?? fighter.portraitFrame,
+      gradeLabel: gradeLabelFromRarity(rarity),
+      role: fighter.role,
+      passiveLabel: fighter.passiveEffects?.[0]?.label ?? 'No passive loaded',
+      battleTemplate: fighter,
     }
   })
   .sort((left, right) => {

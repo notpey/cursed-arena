@@ -277,6 +277,7 @@ export function AdminControlPanelPage() {
   })
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(() => readAdminSelection()?.abilityId ?? null)
   const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(() => readAdminSelection()?.passiveIndex ?? 0)
+  const [creatorView, setCreatorView] = useState<'edit' | 'preview'>('edit')
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
   const [fighterJsonDraft, setFighterJsonDraft] = useState('')
 
@@ -750,6 +751,31 @@ export function AdminControlPanelPage() {
             {selectedFighter ? (
               <>
                 <EditorCard title="Character Creator" subtitle={selectedFighter.shortName.toUpperCase()}>
+                  <div className="mb-4 inline-flex gap-1 rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] p-1">
+                    <button
+                      type="button"
+                      onClick={() => setCreatorView('edit')}
+                      className={[
+                        'ca-mono-label rounded px-3 py-1.5 text-[0.42rem] transition',
+                        creatorView === 'edit' ? 'bg-ca-teal-wash text-ca-teal' : 'text-ca-text-3 hover:text-ca-text-2',
+                      ].join(' ')}
+                    >
+                      EDIT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreatorView('preview')}
+                      className={[
+                        'ca-mono-label rounded px-3 py-1.5 text-[0.42rem] transition',
+                        creatorView === 'preview' ? 'bg-ca-teal-wash text-ca-teal' : 'text-ca-text-3 hover:text-ca-text-2',
+                      ].join(' ')}
+                    >
+                      PREVIEW
+                    </button>
+                  </div>
+                  {creatorView === 'preview' ? (
+                    <FighterProfilePreview fighter={selectedFighter} />
+                  ) : (
                   <div className="space-y-5">
                     <div className="overflow-hidden rounded-[14px] border border-white/8 bg-[linear-gradient(135deg,rgba(250,39,66,0.12),rgba(250,39,66,0.02)_28%,rgba(5,216,189,0.08)_72%,rgba(255,255,255,0.03))] px-4 py-4 lg:px-5">
                       <div className="grid gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]">
@@ -816,6 +842,7 @@ export function AdminControlPanelPage() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </EditorCard>
 
 
@@ -1264,6 +1291,105 @@ function AbilityTilePreview({ ability, large = false }: { ability: BattleAbility
       </div>
       <div className="absolute bottom-1.5 left-1.5 rounded-[4px] bg-black/55 px-1.5 py-0.5">
         <span className="ca-mono-label text-[0.36rem] text-white">{ability.icon.label}</span>
+      </div>
+    </div>
+  )
+}
+
+function FighterProfilePreview({ fighter }: { fighter: BattleFighterTemplate }) {
+  const rarityTone: 'red' | 'teal' | 'frost' =
+    fighter.rarity === 'SSR' || fighter.rarity === 'UR' ? 'red' : fighter.rarity === 'SR' ? 'teal' : 'frost'
+
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-4 rounded-[12px] border border-white/10 bg-[linear-gradient(135deg,rgba(14,15,20,0.65),rgba(14,15,20,0.4))] px-4 py-4 sm:grid-cols-[8rem_minmax(0,1fr)_6rem]">
+        <div className="flex justify-center sm:justify-start">
+          <PortraitPreview fighter={fighter} />
+        </div>
+        <div className="min-w-0">
+          <p className="ca-display text-[1.8rem] leading-none text-ca-text sm:text-[2.1rem]">{fighter.name}</p>
+          <p className="ca-mono-label mt-1 text-[0.42rem] text-ca-text-3">{fighter.battleTitle?.toUpperCase() ?? fighter.role.toUpperCase()}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <StatusPill label={fighter.rarity} tone={rarityTone} />
+            <StatusPill label={fighter.role.toUpperCase()} tone="frost" />
+            <StatusPill label={fighter.affiliationLabel.toUpperCase()} tone="teal" />
+          </div>
+          <p className="mt-3 text-sm leading-6 text-ca-text-2">{fighter.bio}</p>
+        </div>
+        <div className="flex items-start justify-end">
+          <div className="rounded-[10px] border border-white/10 bg-[rgba(8,9,14,0.6)] px-3 py-2 text-right">
+            <p className="ca-mono-label text-[0.42rem] text-ca-text-3">HP POOL</p>
+            <p className="ca-display mt-1 text-3xl text-ca-text">{fighter.maxHp}</p>
+          </div>
+        </div>
+      </div>
+
+      {(fighter.passiveEffects ?? []).map((passive, index) => (
+        <div key={`${passive.label}-${index}`} className="rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash px-3 py-3">
+          <p className="ca-mono-label text-[0.42rem] text-ca-teal">PASSIVE — {passive.label.toUpperCase()}</p>
+          <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(passive)}</p>
+        </div>
+      ))}
+
+      <div className="grid gap-2 xl:grid-cols-2">
+        {fighter.abilities.concat(fighter.ultimate).map((ability) => (
+          <SkillProfileRow key={ability.id} ability={ability} isUltimate={fighter.ultimate.id === ability.id} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkillProfileRow({ ability, isUltimate }: { ability: BattleAbilityTemplate; isUltimate: boolean }) {
+  const costEntries = Object.entries(getAbilityEnergyCost(ability))
+  const targetLabel = ability.targetRule.toUpperCase().replace(/-/g, ' ')
+
+  return (
+    <div
+      className={[
+        'overflow-hidden rounded-[10px] border',
+        isUltimate ? 'border-amber-400/25 bg-[rgba(250,180,60,0.05)]' : 'border-white/10 bg-[rgba(255,255,255,0.03)]',
+      ].join(' ')}
+    >
+      <div
+        className={[
+          'flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2',
+          isUltimate
+            ? 'bg-[linear-gradient(90deg,rgba(218,160,55,0.85),rgba(150,100,25,0.88))]'
+            : 'bg-[linear-gradient(90deg,rgba(250,39,66,0.85),rgba(179,22,43,0.9))]',
+        ].join(' ')}
+      >
+        <div className="min-w-0">
+          <p className="ca-display truncate text-[1rem] leading-none text-white">{ability.name || 'Untitled Skill'}</p>
+          <p className="ca-mono-label mt-1 text-[0.36rem] text-white/75">
+            {isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'} · CD {ability.cooldown}
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 flex-wrap gap-1">
+          {costEntries.length > 0 ? (
+            costEntries.map(([type, value]) => (
+              <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
+                {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
+              </span>
+            ))
+          ) : (
+            <span className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">FREE</span>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-3 px-3 py-2.5">
+        <div className="flex-shrink-0">
+          <AbilityTilePreview ability={ability} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm leading-6 text-ca-text-2">{ability.description}</p>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {ability.tags.map((tag) => (
+              <StatusPill key={tag} label={tag} tone={tag === 'ULT' ? 'gold' : tag === 'DEBUFF' ? 'red' : 'teal'} />
+            ))}
+            <StatusPill label={targetLabel} tone="frost" />
+          </div>
+        </div>
       </div>
     </div>
   )
