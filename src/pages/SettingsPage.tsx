@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useAuth } from '@/features/auth/useAuth'
 import {
   defaultPlayerState,
   normalizeAvatarLabel,
@@ -12,18 +13,28 @@ import {
 } from '@/features/player/store'
 
 type SaveFlashState = 'idle' | 'saved' | 'reset'
+type AccountFlashState = 'idle' | 'sent' | 'saved' | 'signed-out' | 'error'
 
 export function SettingsPage() {
   const playerState = usePlayerState()
+  const auth = useAuth()
   const [profileDraft, setProfileDraft] = useState<PlayerProfile>(playerState.profile)
   const [settingsDraft, setSettingsDraft] = useState<PlayerSettings>(playerState.settings)
   const [copiedId, setCopiedId] = useState(false)
   const [saveFlash, setSaveFlash] = useState<SaveFlashState>('idle')
+  const [emailInput, setEmailInput] = useState(auth.user?.email ?? '')
+  const [accountFlash, setAccountFlash] = useState<AccountFlashState>('idle')
+  const [accountMessage, setAccountMessage] = useState<string | null>(null)
+  const [accountBusy, setAccountBusy] = useState(false)
 
   useEffect(() => {
     setProfileDraft(playerState.profile)
     setSettingsDraft(playerState.settings)
   }, [playerState])
+
+  useEffect(() => {
+    setEmailInput(auth.user?.email ?? '')
+  }, [auth.user?.email])
 
   useEffect(() => {
     if (!copiedId) return
@@ -36,6 +47,12 @@ export function SettingsPage() {
     const timer = window.setTimeout(() => setSaveFlash('idle'), 1500)
     return () => window.clearTimeout(timer)
   }, [saveFlash])
+
+  useEffect(() => {
+    if (accountFlash === 'idle') return
+    const timer = window.setTimeout(() => setAccountFlash('idle'), 2200)
+    return () => window.clearTimeout(timer)
+  }, [accountFlash])
 
   const avatarPreviewLabel = useMemo(
     () => normalizeAvatarLabel(profileDraft.avatarLabel, profileDraft.displayName),
@@ -51,7 +68,7 @@ export function SettingsPage() {
     }
   }
 
-  function saveChanges() {
+  async function saveChanges() {
     updatePlayerState((next) => {
       next.profile = {
         ...profileDraft,
@@ -61,6 +78,15 @@ export function SettingsPage() {
       }
       next.settings = settingsDraft
     })
+
+    if (auth.status === 'authenticated') {
+      const result = await auth.saveDisplayName(profileDraft.displayName)
+      if (result.error) {
+        setAccountFlash('error')
+        setAccountMessage(result.error)
+      }
+    }
+
     setSaveFlash('saved')
   }
 
@@ -72,6 +98,55 @@ export function SettingsPage() {
     setSaveFlash('reset')
   }
 
+  async function handleMagicLink() {
+    setAccountBusy(true)
+    const result = await auth.signInWithMagicLink(emailInput)
+    setAccountBusy(false)
+
+    if (result.error) {
+      setAccountFlash('error')
+      setAccountMessage(result.error)
+      return
+    }
+
+    setAccountFlash('sent')
+    setAccountMessage(`Magic link sent to ${emailInput.trim()}.`)
+  }
+
+  async function handleGoogle() {
+    setAccountBusy(true)
+    const result = await auth.signInWithGoogle()
+    if (result.error) {
+      setAccountBusy(false)
+      setAccountFlash('error')
+      setAccountMessage(result.error)
+    }
+  }
+
+  async function handleSignOut() {
+    setAccountBusy(true)
+    const result = await auth.signOut()
+    setAccountBusy(false)
+
+    if (result.error) {
+      setAccountFlash('error')
+      setAccountMessage(result.error)
+      return
+    }
+
+    setAccountFlash('signed-out')
+    setAccountMessage('Signed out of Supabase.')
+  }
+
+  const authStatusLabel =
+    auth.status === 'authenticated'
+      ? 'SYNCED'
+      : auth.status === 'loading'
+        ? 'SYNCING'
+        : auth.status === 'unconfigured'
+          ? 'OFFLINE'
+          : 'SIGNED OUT'
+
   return (
     <section className="py-4 sm:py-6">
       <div className="mx-auto w-full max-w-[640px]">
@@ -81,7 +156,7 @@ export function SettingsPage() {
               <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Settings</p>
               <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">System</h1>
               <p className="mt-2 text-sm text-ca-text-3">
-                Configure account, audio, graphics, and gameplay behavior. Changes save locally on this device.
+                Configure account, audio, graphics, and gameplay behavior. Auth now syncs through Supabase while the rest of these controls stay local.
               </p>
             </div>
             {saveFlash !== 'idle' ? (
@@ -94,6 +169,88 @@ export function SettingsPage() {
 
         <div className="space-y-4">
           <SettingsSection title="Account">
+            <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Supabase Auth</p>
+                  <p className="mt-2 text-sm text-ca-text-2">
+                    {auth.status === 'authenticated'
+                      ? `Signed in as ${auth.user?.email ?? profileDraft.displayName}.`
+                      : auth.status === 'unconfigured'
+                        ? 'Supabase environment variables are missing.'
+                        : 'Use a magic link or Google sign-in to load your live profile and role.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={auth.status === 'authenticated' ? 'teal' : auth.status === 'loading' ? 'frost' : 'red'}>
+                    {authStatusLabel}
+                  </Badge>
+                  {auth.profile?.role ? <Badge tone={auth.profile.role === 'admin' ? 'red' : 'teal'}>{auth.profile.role.toUpperCase()}</Badge> : null}
+                </div>
+              </div>
+
+              {accountMessage || auth.error ? (
+                <p className={`mt-3 text-sm ${accountFlash === 'error' || auth.error ? 'text-ca-red' : 'text-ca-teal'}`}>
+                  {accountMessage ?? auth.error}
+                </p>
+              ) : null}
+
+              {auth.status !== 'authenticated' ? (
+                <div className="mt-4 space-y-3">
+                  <Field label="Email Magic Link">
+                    <div className="flex gap-2">
+                      <TextInput
+                        value={emailInput}
+                        onChange={setEmailInput}
+                        placeholder="you@domain.com"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleMagicLink}
+                        disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
+                        className="ca-display shrink-0 rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        SEND
+                      </button>
+                    </div>
+                  </Field>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <LinkAccountButton
+                      provider="Google"
+                      linked={playerState.settings.accountLinks.google}
+                      actionLabel="LOGIN"
+                      onClick={handleGoogle}
+                      disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
+                    />
+                    <LinkAccountButton
+                      provider="Email"
+                      linked={playerState.settings.accountLinks.email}
+                      actionLabel="MAGIC LINK"
+                      onClick={handleMagicLink}
+                      disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
+                    />
+                    <LinkAccountButton provider="Apple" linked={false} actionLabel="SOON" disabled />
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-white/8 bg-[rgba(0,0,0,0.16)] px-3 py-3">
+                  <div>
+                    <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Connected Account</p>
+                    <p className="mt-1 text-sm text-ca-text">{auth.user?.email ?? profileDraft.displayName}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    disabled={accountBusy}
+                    className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red hover:bg-ca-red-wash disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    SIGN OUT
+                  </button>
+                </div>
+              )}
+            </div>
+
             <Field label="Display Name">
               <TextInput
                 value={profileDraft.displayName}
@@ -133,41 +290,6 @@ export function SettingsPage() {
                   onChange={(value) => setProfileDraft((current) => ({ ...current, avatarLabel: value }))}
                   placeholder="Auto"
                   maxLength={2}
-                />
-              </div>
-            </Field>
-
-            <Field label="Link Accounts">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <LinkAccountButton
-                  provider="Google"
-                  linked={settingsDraft.accountLinks.google}
-                  onToggle={() =>
-                    setSettingsDraft((current) => ({
-                      ...current,
-                      accountLinks: { ...current.accountLinks, google: !current.accountLinks.google },
-                    }))
-                  }
-                />
-                <LinkAccountButton
-                  provider="Apple"
-                  linked={settingsDraft.accountLinks.apple}
-                  onToggle={() =>
-                    setSettingsDraft((current) => ({
-                      ...current,
-                      accountLinks: { ...current.accountLinks, apple: !current.accountLinks.apple },
-                    }))
-                  }
-                />
-                <LinkAccountButton
-                  provider="Email"
-                  linked={settingsDraft.accountLinks.email}
-                  onToggle={() =>
-                    setSettingsDraft((current) => ({
-                      ...current,
-                      accountLinks: { ...current.accountLinks, email: !current.accountLinks.email },
-                    }))
-                  }
                 />
               </div>
             </Field>
@@ -327,7 +449,7 @@ export function SettingsPage() {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.16)] px-4 py-4 sm:px-5">
           <button
             type="button"
-            onClick={saveChanges}
+            onClick={() => { void saveChanges() }}
             className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal shadow-[0_0_18px_rgba(5,216,189,0.08)]"
           >
             {saveFlash === 'saved' ? 'Saved' : 'Save Changes'}
@@ -390,21 +512,36 @@ function TextInput({
   )
 }
 
+function Badge({ tone, children }: { tone: 'red' | 'teal' | 'frost'; children: ReactNode }) {
+  const toneClass = tone === 'red'
+    ? 'border-ca-red/25 bg-ca-red-wash text-ca-red'
+    : tone === 'teal'
+      ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal'
+      : 'border-white/12 bg-white/5 text-ca-text-2'
+
+  return <span className={`ca-mono-label rounded-md border px-2 py-1 text-[0.44rem] ${toneClass}`}>{children}</span>
+}
+
 function LinkAccountButton({
   provider,
   linked,
-  onToggle,
+  actionLabel,
+  onClick,
+  disabled = false,
 }: {
   provider: 'Google' | 'Apple' | 'Email'
   linked: boolean
-  onToggle: () => void
+  actionLabel?: string
+  onClick?: () => void
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onClick}
+      disabled={disabled || !onClick}
       className={[
-        'flex items-center justify-between rounded-md border px-3 py-2 text-left transition',
+        'flex items-center justify-between rounded-md border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50',
         linked
           ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-text'
           : 'border-white/10 bg-[rgba(255,255,255,0.02)] text-ca-text-2 hover:border-white/16',
@@ -412,7 +549,7 @@ function LinkAccountButton({
     >
       <span className="text-sm">{provider}</span>
       <span className={`ca-mono-label text-[0.45rem] ${linked ? 'text-ca-teal' : 'text-ca-text-3'}`}>
-        {linked ? 'LINKED' : 'LINK'}
+        {linked ? 'LINKED' : actionLabel ?? 'LINK'}
       </span>
     </button>
   )

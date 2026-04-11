@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import type { NavItemKey } from '@/components/layout/AppShell'
 import { adminPanelConfig, canAccessAdminPanel } from '@/config/features'
-import { usePlayerState } from '@/features/player/store'
+import { useAuth } from '@/features/auth/useAuth'
 
 type SidebarNavProps = {
   activeNav: NavItemKey
@@ -26,12 +26,12 @@ const secondaryNavItems: SidebarItem[] = [
 ]
 
 export function SidebarNav({ activeNav }: SidebarNavProps) {
-  const { profile } = usePlayerState()
+  const { profile } = useAuth()
   const navItems = [
     ...primaryNavItems,
     ...secondaryNavItems.filter((item) => {
       if (item.key !== 'admin') return true
-      return adminPanelConfig.visibleInNav && canAccessAdminPanel(profile.role)
+      return adminPanelConfig.visibleInNav && canAccessAdminPanel(profile?.role)
     }),
   ]
 

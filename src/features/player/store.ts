@@ -62,7 +62,7 @@ export const defaultPlayerState: PlayerState = {
     playerId: '#7742',
     title: 'DOMAIN MASTER',
     avatarLabel: 'PN',
-    role: 'tester',
+    role: 'player',
   },
   economy: {
     gems: 6920,
@@ -70,9 +70,9 @@ export const defaultPlayerState: PlayerState = {
   },
   settings: {
     accountLinks: {
-      google: true,
+      google: false,
       apple: false,
-      email: true,
+      email: false,
     },
     audio: {
       master: 82,
@@ -126,7 +126,7 @@ export function normalizeAvatarLabel(value: string | null | undefined, displayNa
   )
 }
 
-function normalizePlayerRole(role?: string | null): PlayerRole {
+export function normalizePlayerRole(role?: string | null): PlayerRole {
   if (role === 'admin' || role === 'tester' || role === 'player') return role
   return defaultPlayerState.profile.role
 }

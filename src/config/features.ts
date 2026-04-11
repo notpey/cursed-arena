@@ -6,7 +6,7 @@ export const featureFlags = {
 
 export const adminPanelConfig = {
   visibleInNav: true,
-  accessMode: 'public' as AdminAccessMode,
+  accessMode: 'role' as AdminAccessMode,
   allowedRoles: ['admin'] as const,
 } as const
 
@@ -17,6 +17,5 @@ export function isFeatureEnabled(feature: keyof typeof featureFlags) {
 }
 
 export function canAccessAdminPanel(role?: string | null) {
-  if (adminPanelConfig.accessMode === 'public') return true
   return !!role && adminPanelConfig.allowedRoles.includes(role as AdminRole)
 }
