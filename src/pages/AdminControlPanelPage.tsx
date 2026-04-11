@@ -702,6 +702,105 @@ export function AdminControlPanelPage() {
           <section className="space-y-4">
             {selectedFighter ? (
               <>
+                <EditorCard title="Character Creator" subtitle={selectedFighter.shortName.toUpperCase()}>
+                  <div className="space-y-4">
+                    <CharacterCreatorHero fighter={selectedFighter} />
+                    <div className="grid gap-3 xl:grid-cols-2">
+                      {selectedFighter.abilities.concat(selectedFighter.ultimate).map((ability) => {
+                        const active = selectedAbility?.id === ability.id
+                        return (
+                          <CreatorAbilityCard
+                            key={ability.id}
+                            ability={ability}
+                            active={active}
+                            isUltimate={selectedFighter.ultimate.id === ability.id}
+                            onSelect={() => setSelectedAbilityId(ability.id)}
+                          >
+                            <div className="grid gap-3 md:grid-cols-[7rem_minmax(0,1fr)]">
+                              <AbilityTilePreview ability={ability} large />
+                              <div className="space-y-3">
+                                <div className="grid gap-3 md:grid-cols-2">
+                                  <InputField
+                                    label="Skill Name"
+                                    value={ability.name}
+                                    onChange={(value) => {
+                                      setSelectedAbilityId(ability.id)
+                                      updateSelectedAbility((current) => {
+                                        if (current.id !== ability.id) return
+                                        current.name = value
+                                        syncAbilityPresentation(current)
+                                      })
+                                    }}
+                                  />
+                                  <NumberField
+                                    label="Cooldown"
+                                    value={ability.cooldown}
+                                    onChange={(value) => {
+                                      setSelectedAbilityId(ability.id)
+                                      updateSelectedAbility((current) => {
+                                        if (current.id !== ability.id) return
+                                        current.cooldown = value
+                                      })
+                                    }}
+                                  />
+                                  <SelectField
+                                    label="Skill Logic"
+                                    value={ability.kind}
+                                    options={abilityKinds.map((value) => ({ value, label: value.toUpperCase() }))}
+                                    onChange={(value) => {
+                                      setSelectedAbilityId(ability.id)
+                                      updateSelectedAbility((current) => {
+                                        if (current.id !== ability.id) return
+                                        current.kind = value as BattleAbilityKind
+                                        syncAbilityPresentation(current)
+                                      })
+                                    }}
+                                  />
+                                  <SelectField
+                                    label="Targeting"
+                                    value={ability.targetRule}
+                                    options={targetRules.map((value) => ({ value, label: value.toUpperCase() }))}
+                                    onChange={(value) => {
+                                      setSelectedAbilityId(ability.id)
+                                      updateSelectedAbility((current) => {
+                                        if (current.id !== ability.id) return
+                                        current.targetRule = value as BattleTargetRule
+                                      })
+                                    }}
+                                  />
+                                </div>
+                                <TextAreaField
+                                  label="Skill Copy"
+                                  value={ability.description}
+                                  onChange={(value) => {
+                                    setSelectedAbilityId(ability.id)
+                                    updateSelectedAbility((current) => {
+                                      if (current.id !== ability.id) return
+                                      current.description = value
+                                    })
+                                  }}
+                                  rows={3}
+                                />
+                                <div className="flex flex-wrap gap-1.5">
+                                  {ability.tags.map((tag) => (
+                                    <StatusPill key={tag} label={tag} tone={tag === 'ULT' ? 'gold' : tag === 'DEBUFF' ? 'red' : 'teal'} />
+                                  ))}
+                                  {Object.entries(getAbilityEnergyCost(ability)).map(([type, value]) => (
+                                    <StatusPill key={type} label={battleEnergyMeta[type as keyof typeof battleEnergyMeta].short + ' ' + value} tone="frost" />
+                                  ))}
+                                  {Object.entries(getAbilityEnergyCost(ability)).length === 0 ? <StatusPill label="FREE" tone="frost" /> : null}
+                                </div>
+                                <p className="text-sm leading-6 text-ca-text-2">{(ability.effects ?? []).length > 0 ? describeEffect((ability.effects ?? [])[0]) : explainCostRule(ability)}</p>
+                              </div>
+                            </div>
+                          </CreatorAbilityCard>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </EditorCard>
+
+
                 <EditorCard title="Fighter Editor" subtitle={selectedFighter.id.toUpperCase()}>
                   <div className="grid gap-4 lg:grid-cols-[8rem_minmax(0,1fr)]">
                     <PortraitPreview fighter={selectedFighter} />
@@ -1284,9 +1383,14 @@ function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterT
   )
 }
 
-function AbilityTilePreview({ ability }: { ability: BattleAbilityTemplate }) {
+function AbilityTilePreview({ ability, large = false }: { ability: BattleAbilityTemplate; large?: boolean }) {
+  const sizeClass = large ? 'h-[7.5rem] w-[7.5rem]' : 'h-[6rem] w-[6rem]'
+
   return (
-    <div className="relative h-[6rem] w-[6rem] overflow-hidden rounded-[10px] border border-white/12 bg-[rgba(12,12,18,0.85)]">
+    <div className={[
+      'relative overflow-hidden rounded-[10px] border border-white/12 bg-[rgba(12,12,18,0.85)]',
+      sizeClass,
+    ].join(' ')}>
       {ability.icon.src ? <img src={ability.icon.src} alt={ability.name} className="absolute inset-0 h-full w-full object-cover" /> : null}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.35))]" />
       <div className="absolute inset-0 grid place-items-center">
@@ -1296,6 +1400,70 @@ function AbilityTilePreview({ ability }: { ability: BattleAbilityTemplate }) {
         <span className="ca-mono-label text-[0.36rem] text-white">{ability.icon.label}</span>
       </div>
     </div>
+  )
+}
+
+function CharacterCreatorHero({ fighter }: { fighter: BattleFighterTemplate }) {
+  return (
+    <div className="overflow-hidden rounded-[14px] border border-white/8 bg-[linear-gradient(135deg,rgba(250,39,66,0.12),rgba(250,39,66,0.02)_28%,rgba(5,216,189,0.08)_72%,rgba(255,255,255,0.03))]">
+      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[10rem_minmax(0,1fr)] lg:px-5">
+        <div className="flex justify-center lg:justify-start">
+          <div className="rounded-[12px] border border-white/10 bg-[rgba(8,9,14,0.8)] p-2 shadow-[0_18px_44px_rgba(0,0,0,0.26)]">
+            <PortraitPreview fighter={fighter} />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="ca-display text-[2rem] leading-none text-ca-text sm:text-[2.4rem]">{fighter.name}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusPill label={fighter.rarity} tone={fighter.rarity === 'SSR' || fighter.rarity === 'UR' ? 'red' : fighter.rarity === 'SR' ? 'teal' : 'frost'} />
+                <StatusPill label={fighter.role.toUpperCase()} tone="frost" />
+                <StatusPill label={fighter.affiliationLabel.toUpperCase()} tone="teal" />
+              </div>
+            </div>
+            <div className="rounded-[10px] border border-white/8 bg-[rgba(8,9,14,0.42)] px-3 py-2 text-right">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">HP POOL</p>
+              <p className="ca-display mt-1 text-3xl text-ca-text">{fighter.maxHp}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-sm leading-7 text-ca-text-2">{fighter.bio}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CreatorAbilityCard({
+  ability,
+  active,
+  isUltimate,
+  onSelect,
+  children,
+}: {
+  ability: BattleAbilityTemplate
+  active: boolean
+  isUltimate: boolean
+  onSelect: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={[
+        'w-full rounded-[14px] border p-0 text-left transition',
+        active ? 'border-ca-red/28 bg-[rgba(250,39,66,0.08)] shadow-[0_16px_38px_rgba(0,0,0,0.24)]' : 'border-white/8 bg-[rgba(255,255,255,0.03)] hover:border-white/14',
+      ].join(' ')}>
+      <div className="flex items-center justify-between gap-3 border-b border-white/8 bg-[linear-gradient(90deg,rgba(250,39,66,0.9),rgba(179,22,43,0.92))] px-3 py-2.5">
+        <div>
+          <p className="ca-display text-[1.1rem] leading-none text-white">{ability.name}</p>
+          <p className="ca-mono-label mt-1 text-[0.38rem] text-white/75">{isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'}</p>
+        </div>
+        <span className="ca-mono-label rounded-md border border-white/18 bg-black/20 px-2 py-1 text-[0.38rem] text-white">CD {ability.cooldown}</span>
+      </div>
+      <div className="px-3 py-3">{children}</div>
+    </button>
   )
 }
 
