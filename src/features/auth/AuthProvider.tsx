@@ -185,23 +185,49 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, [])
 
-  async function signInWithMagicLink(email: string) {
+  async function signInWithPassword(email: string, password: string) {
     const client = getSupabaseClient()
     if (!client) return { error: 'Supabase is not configured.' }
 
     const normalizedEmail = email.trim()
-    if (!normalizedEmail) return { error: 'Enter an email address first.' }
+    if (!normalizedEmail || !password) return { error: 'Enter both email and password.' }
 
-    const { error: signInError } = await client.auth.signInWithOtp({
+    const { error: signInError } = await client.auth.signInWithPassword({
       email: normalizedEmail,
-      options: {
-        emailRedirectTo: resolveRedirectUrl(),
-      },
+      password,
     })
 
     const nextError = signInError?.message ?? null
     setError(nextError)
     return { error: nextError }
+  }
+
+  async function signUpWithPassword(email: string, password: string, displayName: string) {
+    const client = getSupabaseClient()
+    if (!client) return { error: 'Supabase is not configured.', needsEmailConfirmation: false }
+
+    const normalizedEmail = email.trim()
+    const normalizedDisplayName = displayName.trim() || normalizedEmail.split('@')[0] || defaultPlayerState.profile.displayName
+    if (!normalizedEmail || !password) return { error: 'Enter email and password to create an account.', needsEmailConfirmation: false }
+
+    const { data, error: signUpError } = await client.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        emailRedirectTo: resolveRedirectUrl(),
+        data: {
+          display_name: normalizedDisplayName,
+          full_name: normalizedDisplayName,
+          name: normalizedDisplayName,
+        },
+      },
+    })
+
+    const nextError = signUpError?.message ?? null
+    setError(nextError)
+
+    const needsEmailConfirmation = Boolean(data.user && !data.session)
+    return { error: nextError, needsEmailConfirmation }
   }
 
   async function signInWithGoogle() {
@@ -277,7 +303,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     isConfigured: isSupabaseConfigured(),
     isAdmin: canAccessAdminPanel(profile?.role),
     error,
-    signInWithMagicLink,
+    signInWithPassword,
+    signUpWithPassword,
     signInWithGoogle,
     signOut,
     saveDisplayName,

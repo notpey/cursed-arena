@@ -19,7 +19,8 @@ export type AuthContextValue = {
   isConfigured: boolean
   isAdmin: boolean
   error: string | null
-  signInWithMagicLink: (email: string) => Promise<{ error: string | null }>
+  signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>
+  signUpWithPassword: (email: string, password: string, displayName: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>
   signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<{ error: string | null }>
   saveDisplayName: (displayName: string) => Promise<{ error: string | null }>

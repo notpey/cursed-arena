@@ -13,7 +13,8 @@ import {
 } from '@/features/player/store'
 
 type SaveFlashState = 'idle' | 'saved' | 'reset'
-type AccountFlashState = 'idle' | 'sent' | 'saved' | 'signed-out' | 'error'
+type AccountFlashState = 'idle' | 'saved' | 'signed-out' | 'error' | 'confirm'
+type AuthFormMode = 'login' | 'signup'
 
 export function SettingsPage() {
   const playerState = usePlayerState()
@@ -22,7 +23,11 @@ export function SettingsPage() {
   const [settingsDraft, setSettingsDraft] = useState<PlayerSettings>(playerState.settings)
   const [copiedId, setCopiedId] = useState(false)
   const [saveFlash, setSaveFlash] = useState<SaveFlashState>('idle')
+  const [authMode, setAuthMode] = useState<AuthFormMode>('login')
   const [emailInput, setEmailInput] = useState(auth.user?.email ?? '')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('')
+  const [signupDisplayName, setSignupDisplayName] = useState('')
   const [accountFlash, setAccountFlash] = useState<AccountFlashState>('idle')
   const [accountMessage, setAccountMessage] = useState<string | null>(null)
   const [accountBusy, setAccountBusy] = useState(false)
@@ -50,7 +55,7 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (accountFlash === 'idle') return
-    const timer = window.setTimeout(() => setAccountFlash('idle'), 2200)
+    const timer = window.setTimeout(() => setAccountFlash('idle'), 2500)
     return () => window.clearTimeout(timer)
   }, [accountFlash])
 
@@ -98,9 +103,9 @@ export function SettingsPage() {
     setSaveFlash('reset')
   }
 
-  async function handleMagicLink() {
+  async function handlePasswordLogin() {
     setAccountBusy(true)
-    const result = await auth.signInWithMagicLink(emailInput)
+    const result = await auth.signInWithPassword(emailInput, passwordInput)
     setAccountBusy(false)
 
     if (result.error) {
@@ -109,8 +114,39 @@ export function SettingsPage() {
       return
     }
 
-    setAccountFlash('sent')
-    setAccountMessage(`Magic link sent to ${emailInput.trim()}.`)
+    setAccountMessage(null)
+    setPasswordInput('')
+  }
+
+  async function handleSignup() {
+    if (passwordInput !== confirmPasswordInput) {
+      setAccountFlash('error')
+      setAccountMessage('Password confirmation does not match.')
+      return
+    }
+
+    setAccountBusy(true)
+    const result = await auth.signUpWithPassword(emailInput, passwordInput, signupDisplayName)
+    setAccountBusy(false)
+
+    if (result.error) {
+      setAccountFlash('error')
+      setAccountMessage(result.error)
+      return
+    }
+
+    setPasswordInput('')
+    setConfirmPasswordInput('')
+
+    if (result.needsEmailConfirmation) {
+      setAccountFlash('confirm')
+      setAccountMessage(`Account created. Check ${emailInput.trim()} and confirm your email before logging in.`)
+      setAuthMode('login')
+      return
+    }
+
+    setAccountFlash('saved')
+    setAccountMessage('Account created and signed in.')
   }
 
   async function handleGoogle() {
@@ -178,7 +214,7 @@ export function SettingsPage() {
                       ? `Signed in as ${auth.user?.email ?? profileDraft.displayName}.`
                       : auth.status === 'unconfigured'
                         ? 'Supabase environment variables are missing.'
-                        : 'Use a magic link or Google sign-in to load your live profile and role.'}
+                        : 'Use email and password to log in. New accounts still require email confirmation through Supabase.'}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -196,41 +232,99 @@ export function SettingsPage() {
               ) : null}
 
               {auth.status !== 'authenticated' ? (
-                <div className="mt-4 space-y-3">
-                  <Field label="Email Magic Link">
-                    <div className="flex gap-2">
+                <div className="mt-4 space-y-4">
+                  <div className="inline-flex overflow-hidden rounded-md border border-white/10 bg-[rgba(15,16,22,0.42)]">
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('login')}
+                      className={[
+                        'ca-mono-label border-r border-white/8 px-4 py-2 text-[0.5rem] transition',
+                        authMode === 'login' ? 'bg-white/[0.06] text-ca-text' : 'text-ca-text-3 hover:bg-white/[0.03]',
+                      ].join(' ')}
+                    >
+                      LOG IN
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode('signup')}
+                      className={[
+                        'ca-mono-label px-4 py-2 text-[0.5rem] transition',
+                        authMode === 'signup' ? 'bg-white/[0.06] text-ca-text' : 'text-ca-text-3 hover:bg-white/[0.03]',
+                      ].join(' ')}
+                    >
+                      CREATE ACCOUNT
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Email">
                       <TextInput
                         value={emailInput}
                         onChange={setEmailInput}
                         placeholder="you@domain.com"
+                        type="email"
                       />
-                      <button
-                        type="button"
-                        onClick={handleMagicLink}
-                        disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
-                        className="ca-display shrink-0 rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        SEND
-                      </button>
-                    </div>
-                  </Field>
+                    </Field>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <LinkAccountButton
-                      provider="Google"
-                      linked={playerState.settings.accountLinks.google}
-                      actionLabel="LOGIN"
-                      onClick={handleGoogle}
+                    {authMode === 'signup' ? (
+                      <Field label="Display Name">
+                        <TextInput
+                          value={signupDisplayName}
+                          onChange={setSignupDisplayName}
+                          placeholder="Your in-game name"
+                        />
+                      </Field>
+                    ) : (
+                      <Field label="Password">
+                        <TextInput
+                          value={passwordInput}
+                          onChange={setPasswordInput}
+                          placeholder="Password"
+                          type="password"
+                        />
+                      </Field>
+                    )}
+                  </div>
+
+                  {authMode === 'signup' ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Password">
+                        <TextInput
+                          value={passwordInput}
+                          onChange={setPasswordInput}
+                          placeholder="Create a password"
+                          type="password"
+                        />
+                      </Field>
+                      <Field label="Confirm Password">
+                        <TextInput
+                          value={confirmPasswordInput}
+                          onChange={setConfirmPasswordInput}
+                          placeholder="Repeat password"
+                          type="password"
+                        />
+                      </Field>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { void (authMode === 'login' ? handlePasswordLogin() : handleSignup()) }}
                       disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
-                    />
-                    <LinkAccountButton
-                      provider="Email"
-                      linked={playerState.settings.accountLinks.email}
-                      actionLabel="MAGIC LINK"
-                      onClick={handleMagicLink}
+                      className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {authMode === 'login' ? 'LOG IN' : 'CREATE'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { void handleGoogle() }}
                       disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
-                    />
-                    <LinkAccountButton provider="Apple" linked={false} actionLabel="SOON" disabled />
+                      className="ca-mono-label rounded-lg border border-white/10 bg-[rgba(255,255,255,0.02)] px-4 py-3 text-[0.55rem] text-ca-text-2 hover:border-white/16 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      CONTINUE WITH GOOGLE
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -241,7 +335,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={handleSignOut}
+                    onClick={() => { void handleSignOut() }}
                     disabled={accountBusy}
                     className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red hover:bg-ca-red-wash disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -492,16 +586,18 @@ function TextInput({
   placeholder,
   readOnly = false,
   maxLength,
+  type = 'text',
 }: {
   value: string
   onChange?: (value: string) => void
   placeholder?: string
   readOnly?: boolean
   maxLength?: number
+  type?: 'text' | 'email' | 'password'
 }) {
   return (
     <input
-      type="text"
+      type={type}
       value={value}
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
       placeholder={placeholder}
@@ -520,39 +616,6 @@ function Badge({ tone, children }: { tone: 'red' | 'teal' | 'frost'; children: R
       : 'border-white/12 bg-white/5 text-ca-text-2'
 
   return <span className={`ca-mono-label rounded-md border px-2 py-1 text-[0.44rem] ${toneClass}`}>{children}</span>
-}
-
-function LinkAccountButton({
-  provider,
-  linked,
-  actionLabel,
-  onClick,
-  disabled = false,
-}: {
-  provider: 'Google' | 'Apple' | 'Email'
-  linked: boolean
-  actionLabel?: string
-  onClick?: () => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || !onClick}
-      className={[
-        'flex items-center justify-between rounded-md border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50',
-        linked
-          ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-text'
-          : 'border-white/10 bg-[rgba(255,255,255,0.02)] text-ca-text-2 hover:border-white/16',
-      ].join(' ')}
-    >
-      <span className="text-sm">{provider}</span>
-      <span className={`ca-mono-label text-[0.45rem] ${linked ? 'text-ca-teal' : 'text-ca-text-3'}`}>
-        {linked ? 'LINKED' : actionLabel ?? 'LINK'}
-      </span>
-    </button>
-  )
 }
 
 function SliderRow({
