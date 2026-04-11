@@ -13,11 +13,9 @@ type SidebarItem = {
 
 const navItems: SidebarItem[] = [
   { key: 'home', label: 'Home', to: '/' },
-  { key: 'battle', label: 'Battle', to: '/battle' },
-  { key: 'roster', label: 'Roster', to: '/roster' },
-  { key: 'summon', label: 'Summon', to: '/summon' },
+  { key: 'battle', label: 'Battle', to: '/battle/prep' },
   { key: 'story', label: 'Story', to: '/story' },
-  { key: 'inventory', label: 'Inventory', to: '/inventory' },
+  { key: 'profile', label: 'Profile', to: '/profile' },
 ]
 
 export function SidebarNav({ activeNav }: SidebarNavProps) {
@@ -99,32 +97,11 @@ function SidebarGlyph({ kind }: { kind: NavItemKey }) {
           <path d="M17 7L6 18" />
         </svg>
       )
-    case 'roster':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
-          <circle cx="12" cy="8" r="3" />
-          <path d="M5.5 19c1.4-3 4-4.5 6.5-4.5S17 16 18.5 19" />
-        </svg>
-      )
-    case 'summon':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
-          <path d="M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z" />
-        </svg>
-      )
     case 'story':
       return (
         <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
           <rect x="5" y="4" width="14" height="16" rx="2" />
           <path d="M9 8h6M9 12h6M9 16h4" />
-        </svg>
-      )
-    case 'inventory':
-      return (
-        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
-          <path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
-          <path d="M9 8V6a3 3 0 1 1 6 0v2" />
-          <path d="M9 12h6" />
         </svg>
       )
     case 'settings':
@@ -139,6 +116,12 @@ function SidebarGlyph({ kind }: { kind: NavItemKey }) {
         <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
           <circle cx="12" cy="9" r="3.5" />
           <path d="M5.5 19c1.7-3.2 4.2-4.7 6.5-4.7s4.8 1.5 6.5 4.7" />
+        </svg>
+      )
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
+          <circle cx="12" cy="12" r="8" />
         </svg>
       )
   }

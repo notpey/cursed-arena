@@ -1,4 +1,3 @@
-import { ProgressBar } from '@/components/ui/ProgressBar'
 import type { CharacterRarity, CharacterRosterCard } from '@/types/characters'
 
 export type { CharacterRarity, CharacterRosterCard }
@@ -132,39 +131,6 @@ export function CharacterCard({ character }: CharacterCardProps) {
               {tag}
             </span>
           ))}
-        </div>
-
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="ca-mono-label text-[0.45rem] text-ca-text-disabled">
-              LV {character.level}
-            </span>
-            <span className="ca-mono-label text-[0.42rem] text-ca-text-3">
-              {Math.round(character.levelProgress)}%
-            </span>
-          </div>
-          <ProgressBar
-            value={character.levelProgress}
-            tone={character.owned ? 'teal' : 'gold'}
-            className="h-1 bg-ca-highlight/50"
-          />
-        </div>
-
-        <div className="flex items-center gap-1">
-          {Array.from({ length: 6 }, (_, index) => {
-            const filled = index < character.limitBreak
-            return (
-              <span
-                key={`${character.id}-star-${index}`}
-                className="inline-block h-1.5 w-1.5 rounded-full border"
-                style={{
-                  background: filled ? 'var(--warning)' : 'rgba(228,230,239,0.05)',
-                  borderColor: filled ? 'rgba(245,166,35,0.4)' : 'rgba(228,230,239,0.12)',
-                  boxShadow: filled ? '0 0 8px rgba(245,166,35,0.22)' : 'none',
-                }}
-              />
-            )
-          })}
         </div>
       </div>
     </article>

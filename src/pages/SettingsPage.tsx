@@ -1,79 +1,29 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  defaultPlayerState,
+  normalizeAvatarLabel,
+  updatePlayerState,
+  usePlayerState,
+  type AnimationSpeed,
+  type AutoBattleSpeed,
+  type PlayerProfile,
+  type PlayerSettings,
+  type QualityPreset,
+} from '@/features/player/store'
 
-type QualityPreset = 'LOW' | 'MEDIUM' | 'HIGH'
-type AnimationSpeed = '1x' | '1.5x' | '2x'
-type AutoBattleSpeed = 'NORMAL (1x)' | 'FAST (1.5x)' | 'MAX (2x)'
-
-type SettingsState = {
-  displayName: string
-  playerId: string
-  avatarLabel: string
-  accountLinks: {
-    google: boolean
-    apple: boolean
-    email: boolean
-  }
-  audio: {
-    master: number
-    music: number
-    sfx: number
-    voice: number
-  }
-  graphics: {
-    qualityPreset: QualityPreset
-    animationSpeed: AnimationSpeed
-    skipUltimates: boolean
-    reduceParticles: boolean
-  }
-  notifications: {
-    push: boolean
-    energyRefill: boolean
-    bannerReminder: boolean
-  }
-  gameplay: {
-    autoBattleDefaultSpeed: AutoBattleSpeed
-    confirmBeforeSpendingGems: boolean
-    showDamageNumbers: boolean
-  }
-}
-
-const defaultSettings: SettingsState = {
-  displayName: 'PLAYER_NAME',
-  playerId: '#7742',
-  avatarLabel: 'PN',
-  accountLinks: {
-    google: true,
-    apple: false,
-    email: true,
-  },
-  audio: {
-    master: 82,
-    music: 64,
-    sfx: 76,
-    voice: 71,
-  },
-  graphics: {
-    qualityPreset: 'HIGH',
-    animationSpeed: '1x',
-    skipUltimates: false,
-    reduceParticles: false,
-  },
-  notifications: {
-    push: true,
-    energyRefill: true,
-    bannerReminder: true,
-  },
-  gameplay: {
-    autoBattleDefaultSpeed: 'FAST (1.5x)',
-    confirmBeforeSpendingGems: true,
-    showDamageNumbers: true,
-  },
-}
+type SaveFlashState = 'idle' | 'saved' | 'reset'
 
 export function SettingsPage() {
-  const [settings, setSettings] = useState<SettingsState>(defaultSettings)
+  const playerState = usePlayerState()
+  const [profileDraft, setProfileDraft] = useState<PlayerProfile>(playerState.profile)
+  const [settingsDraft, setSettingsDraft] = useState<PlayerSettings>(playerState.settings)
   const [copiedId, setCopiedId] = useState(false)
-  const [saveFlash, setSaveFlash] = useState<'idle' | 'saved'>('idle')
+  const [saveFlash, setSaveFlash] = useState<SaveFlashState>('idle')
+
+  useEffect(() => {
+    setProfileDraft(playerState.profile)
+    setSettingsDraft(playerState.settings)
+  }, [playerState])
 
   useEffect(() => {
     if (!copiedId) return
@@ -82,14 +32,19 @@ export function SettingsPage() {
   }, [copiedId])
 
   useEffect(() => {
-    if (saveFlash !== 'saved') return
+    if (saveFlash === 'idle') return
     const timer = window.setTimeout(() => setSaveFlash('idle'), 1500)
     return () => window.clearTimeout(timer)
   }, [saveFlash])
 
+  const avatarPreviewLabel = useMemo(
+    () => normalizeAvatarLabel(profileDraft.avatarLabel, profileDraft.displayName),
+    [profileDraft.avatarLabel, profileDraft.displayName],
+  )
+
   async function copyPlayerId() {
     try {
-      await navigator.clipboard.writeText(settings.playerId)
+      await navigator.clipboard.writeText(profileDraft.playerId)
       setCopiedId(true)
     } catch {
       setCopiedId(false)
@@ -97,31 +52,67 @@ export function SettingsPage() {
   }
 
   function saveChanges() {
+    updatePlayerState((next) => {
+      next.profile = {
+        ...profileDraft,
+        displayName: profileDraft.displayName.trim() || defaultPlayerState.profile.displayName,
+        title: profileDraft.title.trim() || defaultPlayerState.profile.title,
+        avatarLabel: normalizeAvatarLabel(profileDraft.avatarLabel, profileDraft.displayName),
+      }
+      next.settings = settingsDraft
+    })
     setSaveFlash('saved')
+  }
+
+  function resetToDefaults() {
+    updatePlayerState((next) => {
+      next.profile = { ...defaultPlayerState.profile }
+      next.settings = { ...defaultPlayerState.settings }
+    })
+    setSaveFlash('reset')
   }
 
   return (
     <section className="py-4 sm:py-6">
       <div className="mx-auto w-full max-w-[640px]">
         <div className="mb-4 rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.16)] px-4 py-4 sm:px-5">
-          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Settings</p>
-          <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">System</h1>
-          <p className="mt-2 text-sm text-ca-text-3">Configure account, audio, graphics, and gameplay behavior.</p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Settings</p>
+              <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">System</h1>
+              <p className="mt-2 text-sm text-ca-text-3">
+                Configure account, audio, graphics, and gameplay behavior. Changes save locally on this device.
+              </p>
+            </div>
+            {saveFlash !== 'idle' ? (
+              <span className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-3 py-2 text-[0.48rem] text-ca-teal">
+                {saveFlash === 'saved' ? 'SETTINGS SAVED' : 'DEFAULTS RESTORED'}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="space-y-4">
           <SettingsSection title="Account">
             <Field label="Display Name">
               <TextInput
-                value={settings.displayName}
-                onChange={(value) => setSettings((s) => ({ ...s, displayName: value }))}
+                value={profileDraft.displayName}
+                onChange={(value) => setProfileDraft((current) => ({ ...current, displayName: value }))}
                 placeholder="Display name"
+              />
+            </Field>
+
+            <Field label="Player Title">
+              <TextInput
+                value={profileDraft.title}
+                onChange={(value) => setProfileDraft((current) => ({ ...current, title: value }))}
+                placeholder="Player title"
               />
             </Field>
 
             <Field label="Player ID">
               <div className="flex gap-2">
-                <TextInput value={settings.playerId} readOnly />
+                <TextInput value={profileDraft.playerId} readOnly />
                 <button
                   type="button"
                   onClick={copyPlayerId}
@@ -132,20 +123,17 @@ export function SettingsPage() {
               </div>
             </Field>
 
-            <Field label="Profile Avatar">
-              <div className="flex items-center justify-between gap-3 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-full border border-ca-red/30 bg-gradient-to-br from-ca-red-wash-mid to-transparent">
-                    <span className="ca-display text-lg text-ca-text">{settings.avatarLabel}</span>
-                  </div>
-                  <span className="text-sm text-ca-text-2">Current avatar</span>
+            <Field label="Avatar Label">
+              <div className="flex items-center gap-3 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-3">
+                <div className="grid h-10 w-10 place-items-center rounded-full border border-ca-red/30 bg-gradient-to-br from-ca-red-wash-mid to-transparent">
+                  <span className="ca-display text-lg text-ca-text">{avatarPreviewLabel}</span>
                 </div>
-                <button
-                  type="button"
-                  className="ca-mono-label rounded-md border border-white/10 px-3 py-2 text-[0.5rem] text-ca-text-2 hover:border-ca-teal/30 hover:text-ca-teal"
-                >
-                  CHANGE
-                </button>
+                <TextInput
+                  value={profileDraft.avatarLabel}
+                  onChange={(value) => setProfileDraft((current) => ({ ...current, avatarLabel: value }))}
+                  placeholder="Auto"
+                  maxLength={2}
+                />
               </div>
             </Field>
 
@@ -153,31 +141,31 @@ export function SettingsPage() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <LinkAccountButton
                   provider="Google"
-                  linked={settings.accountLinks.google}
+                  linked={settingsDraft.accountLinks.google}
                   onToggle={() =>
-                    setSettings((s) => ({
-                      ...s,
-                      accountLinks: { ...s.accountLinks, google: !s.accountLinks.google },
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      accountLinks: { ...current.accountLinks, google: !current.accountLinks.google },
                     }))
                   }
                 />
                 <LinkAccountButton
                   provider="Apple"
-                  linked={settings.accountLinks.apple}
+                  linked={settingsDraft.accountLinks.apple}
                   onToggle={() =>
-                    setSettings((s) => ({
-                      ...s,
-                      accountLinks: { ...s.accountLinks, apple: !s.accountLinks.apple },
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      accountLinks: { ...current.accountLinks, apple: !current.accountLinks.apple },
                     }))
                   }
                 />
                 <LinkAccountButton
                   provider="Email"
-                  linked={settings.accountLinks.email}
+                  linked={settingsDraft.accountLinks.email}
                   onToggle={() =>
-                    setSettings((s) => ({
-                      ...s,
-                      accountLinks: { ...s.accountLinks, email: !s.accountLinks.email },
+                    setSettingsDraft((current) => ({
+                      ...current,
+                      accountLinks: { ...current.accountLinks, email: !current.accountLinks.email },
                     }))
                   }
                 />
@@ -188,23 +176,23 @@ export function SettingsPage() {
           <SettingsSection title="Audio">
             <SliderRow
               label="Master Volume"
-              value={settings.audio.master}
-              onChange={(value) => setSettings((s) => ({ ...s, audio: { ...s.audio, master: value } }))}
+              value={settingsDraft.audio.master}
+              onChange={(value) => setSettingsDraft((current) => ({ ...current, audio: { ...current.audio, master: value } }))}
             />
             <SliderRow
               label="Music Volume"
-              value={settings.audio.music}
-              onChange={(value) => setSettings((s) => ({ ...s, audio: { ...s.audio, music: value } }))}
+              value={settingsDraft.audio.music}
+              onChange={(value) => setSettingsDraft((current) => ({ ...current, audio: { ...current.audio, music: value } }))}
             />
             <SliderRow
               label="SFX Volume"
-              value={settings.audio.sfx}
-              onChange={(value) => setSettings((s) => ({ ...s, audio: { ...s.audio, sfx: value } }))}
+              value={settingsDraft.audio.sfx}
+              onChange={(value) => setSettingsDraft((current) => ({ ...current, audio: { ...current.audio, sfx: value } }))}
             />
             <SliderRow
               label="Voice Volume"
-              value={settings.audio.voice}
-              onChange={(value) => setSettings((s) => ({ ...s, audio: { ...s.audio, voice: value } }))}
+              value={settingsDraft.audio.voice}
+              onChange={(value) => setSettingsDraft((current) => ({ ...current, audio: { ...current.audio, voice: value } }))}
             />
           </SettingsSection>
 
@@ -212,9 +200,12 @@ export function SettingsPage() {
             <Field label="Quality Preset">
               <SegmentedControl<QualityPreset>
                 options={['LOW', 'MEDIUM', 'HIGH']}
-                value={settings.graphics.qualityPreset}
+                value={settingsDraft.graphics.qualityPreset}
                 onChange={(value) =>
-                  setSettings((s) => ({ ...s, graphics: { ...s.graphics, qualityPreset: value } }))
+                  setSettingsDraft((current) => ({
+                    ...current,
+                    graphics: { ...current.graphics, qualityPreset: value },
+                  }))
                 }
               />
             </Field>
@@ -222,25 +213,34 @@ export function SettingsPage() {
             <Field label="Animation Speed">
               <SegmentedControl<AnimationSpeed>
                 options={['1x', '1.5x', '2x']}
-                value={settings.graphics.animationSpeed}
+                value={settingsDraft.graphics.animationSpeed}
                 onChange={(value) =>
-                  setSettings((s) => ({ ...s, graphics: { ...s.graphics, animationSpeed: value } }))
+                  setSettingsDraft((current) => ({
+                    ...current,
+                    graphics: { ...current.graphics, animationSpeed: value },
+                  }))
                 }
               />
             </Field>
 
             <ToggleRow
               label="Skip Ultimate animations"
-              checked={settings.graphics.skipUltimates}
+              checked={settingsDraft.graphics.skipUltimates}
               onChange={(checked) =>
-                setSettings((s) => ({ ...s, graphics: { ...s.graphics, skipUltimates: checked } }))
+                setSettingsDraft((current) => ({
+                  ...current,
+                  graphics: { ...current.graphics, skipUltimates: checked },
+                }))
               }
             />
             <ToggleRow
               label="Reduce particle effects"
-              checked={settings.graphics.reduceParticles}
+              checked={settingsDraft.graphics.reduceParticles}
               onChange={(checked) =>
-                setSettings((s) => ({ ...s, graphics: { ...s.graphics, reduceParticles: checked } }))
+                setSettingsDraft((current) => ({
+                  ...current,
+                  graphics: { ...current.graphics, reduceParticles: checked },
+                }))
               }
             />
           </SettingsSection>
@@ -248,28 +248,31 @@ export function SettingsPage() {
           <SettingsSection title="Notifications">
             <ToggleRow
               label="Push notifications"
-              checked={settings.notifications.push}
+              checked={settingsDraft.notifications.push}
               onChange={(checked) =>
-                setSettings((s) => ({ ...s, notifications: { ...s.notifications, push: checked } }))
+                setSettingsDraft((current) => ({
+                  ...current,
+                  notifications: { ...current.notifications, push: checked },
+                }))
               }
             />
             <ToggleRow
               label="Energy refill alert"
-              checked={settings.notifications.energyRefill}
+              checked={settingsDraft.notifications.energyRefill}
               onChange={(checked) =>
-                setSettings((s) => ({
-                  ...s,
-                  notifications: { ...s.notifications, energyRefill: checked },
+                setSettingsDraft((current) => ({
+                  ...current,
+                  notifications: { ...current.notifications, energyRefill: checked },
                 }))
               }
             />
             <ToggleRow
               label="Banner ending reminder"
-              checked={settings.notifications.bannerReminder}
+              checked={settingsDraft.notifications.bannerReminder}
               onChange={(checked) =>
-                setSettings((s) => ({
-                  ...s,
-                  notifications: { ...s.notifications, bannerReminder: checked },
+                setSettingsDraft((current) => ({
+                  ...current,
+                  notifications: { ...current.notifications, bannerReminder: checked },
                 }))
               }
             />
@@ -278,12 +281,12 @@ export function SettingsPage() {
           <SettingsSection title="Gameplay">
             <Field label="Auto-battle default speed">
               <select
-                value={settings.gameplay.autoBattleDefaultSpeed}
+                value={settingsDraft.gameplay.autoBattleDefaultSpeed}
                 onChange={(event) =>
-                  setSettings((s) => ({
-                    ...s,
+                  setSettingsDraft((current) => ({
+                    ...current,
                     gameplay: {
-                      ...s.gameplay,
+                      ...current.gameplay,
                       autoBattleDefaultSpeed: event.target.value as AutoBattleSpeed,
                     },
                   }))
@@ -300,21 +303,21 @@ export function SettingsPage() {
 
             <ToggleRow
               label="Confirm before spending gems"
-              checked={settings.gameplay.confirmBeforeSpendingGems}
+              checked={settingsDraft.gameplay.confirmBeforeSpendingGems}
               onChange={(checked) =>
-                setSettings((s) => ({
-                  ...s,
-                  gameplay: { ...s.gameplay, confirmBeforeSpendingGems: checked },
+                setSettingsDraft((current) => ({
+                  ...current,
+                  gameplay: { ...current.gameplay, confirmBeforeSpendingGems: checked },
                 }))
               }
             />
             <ToggleRow
               label="Show damage numbers"
-              checked={settings.gameplay.showDamageNumbers}
+              checked={settingsDraft.gameplay.showDamageNumbers}
               onChange={(checked) =>
-                setSettings((s) => ({
-                  ...s,
-                  gameplay: { ...s.gameplay, showDamageNumbers: checked },
+                setSettingsDraft((current) => ({
+                  ...current,
+                  gameplay: { ...current.gameplay, showDamageNumbers: checked },
                 }))
               }
             />
@@ -332,9 +335,10 @@ export function SettingsPage() {
 
           <button
             type="button"
+            onClick={resetToDefaults}
             className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red hover:bg-ca-red-wash"
           >
-            LOG OUT
+            RESET DEFAULTS
           </button>
         </div>
       </div>
@@ -342,7 +346,7 @@ export function SettingsPage() {
   )
 }
 
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.16)] px-4 py-4 sm:px-5">
       <h2 className="ca-display border-b border-white/6 pb-3 text-2xl text-ca-text">{title}</h2>
@@ -351,7 +355,7 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-2 block text-[0.8rem] text-ca-text-2">{label}</span>
@@ -365,11 +369,13 @@ function TextInput({
   onChange,
   placeholder,
   readOnly = false,
+  maxLength,
 }: {
   value: string
   onChange?: (value: string) => void
   placeholder?: string
   readOnly?: boolean
+  maxLength?: number
 }) {
   return (
     <input
@@ -378,6 +384,7 @@ function TextInput({
       onChange={onChange ? (event) => onChange(event.target.value) : undefined}
       placeholder={placeholder}
       readOnly={readOnly}
+      maxLength={maxLength}
       className="w-full rounded-md border border-white/10 bg-[rgba(15,16,22,0.62)] px-3 py-2 text-sm text-ca-text outline-none transition placeholder:text-ca-text-disabled focus:border-ca-teal/35"
     />
   )
@@ -434,7 +441,7 @@ function SliderRow({
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
         className="ca-slider w-full"
-        style={{ ['--slider-fill' as any]: `${value}%` }}
+        style={{ '--slider-fill': `${value}%` } as CSSProperties}
       />
     </div>
   )
@@ -459,9 +466,7 @@ function ToggleRow({
         onClick={() => onChange(!checked)}
         className={[
           'relative h-6 w-10 rounded-full border transition',
-          checked
-            ? 'border-ca-teal/35 bg-ca-teal-wash'
-            : 'border-white/10 bg-ca-highlight/65',
+          checked ? 'border-ca-teal/35 bg-ca-teal-wash' : 'border-white/10 bg-ca-highlight/65',
         ].join(' ')}
       >
         <span

@@ -1,6 +1,6 @@
 type ProgressBarProps = {
   value: number
-  tone?: 'teal' | 'red' | 'gold'
+  tone?: 'teal' | 'red' | 'gold' | 'green' | 'green-muted'
   className?: string
 }
 
@@ -10,15 +10,18 @@ export function ProgressBar({ value, tone = 'teal', className = '' }: ProgressBa
       ? 'bg-gradient-to-r from-ca-red to-ca-red-glow'
       : tone === 'gold'
         ? 'bg-gradient-to-r from-amber-400 to-ca-gold'
-        : 'bg-gradient-to-r from-ca-teal to-ca-teal-glow'
+        : tone === 'green'
+          ? 'bg-gradient-to-r from-green-600 to-green-400'
+          : tone === 'green-muted'
+            ? 'bg-gradient-to-r from-green-800 to-green-600'
+            : 'bg-gradient-to-r from-ca-teal to-ca-teal-glow'
 
   return (
-    <div className={`h-1.5 w-full rounded-full bg-ca-highlight/70 ${className}`.trim()}>
+    <div className={`w-full ${className}`.trim()}>
       <div
-        className={`h-full rounded-full ${fillClass} transition-[width] duration-300`}
+        className={`h-full ${fillClass} transition-[width] duration-300`}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
   )
 }
-

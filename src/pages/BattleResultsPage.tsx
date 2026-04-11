@@ -1,0 +1,210 @@
+import { Link } from 'react-router-dom'
+import { battleRosterById } from '@/features/battle/data'
+import {
+  formatMatchTimestamp,
+  getModeLabel,
+  readLastBattleResult,
+  readRecentMatchHistory,
+} from '@/features/battle/matches'
+
+function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {ids.map((id) => (
+          <span
+            key={`${label}-${id}`}
+            className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-2"
+          >
+            {battleRosterById[id]?.shortName ?? id.toUpperCase()}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RankShiftBanner({ shift, rankBefore, rankAfter }: { shift: 'promoted' | 'demoted' | 'steady'; rankBefore: string; rankAfter: string }) {
+  const tone = shift === 'promoted' ? 'text-ca-teal border-ca-teal/22 bg-ca-teal-wash' : shift === 'demoted' ? 'text-ca-red border-ca-red/22 bg-ca-red-wash' : 'text-ca-text-2 border-white/10 bg-[rgba(255,255,255,0.03)]'
+  const label = shift === 'promoted' ? 'PROMOTION' : shift === 'demoted' ? 'DEMOTION' : 'RANK HELD'
+
+  return (
+    <div className={`mt-4 rounded-[10px] border px-3 py-3 ${tone}`}>
+      <p className="ca-mono-label text-[0.42rem]">{label}</p>
+      <p className="ca-display mt-2 text-[1.5rem]">{rankBefore} / {rankAfter}</p>
+    </div>
+  )
+}
+
+export function BattleResultsPage() {
+  const result = readLastBattleResult()
+  const recentHistory = readRecentMatchHistory().slice(0, 5)
+
+  if (!result) {
+    return (
+      <section className="grid min-h-[calc(100vh-8rem)] place-items-center py-6">
+        <div className="ca-card w-full max-w-2xl p-8 text-center">
+          <p className="ca-mono-label text-[0.58rem] text-ca-text-3">Battle Results</p>
+          <h1 className="ca-display mt-3 text-5xl text-ca-text">No Match Recorded</h1>
+          <p className="mt-3 text-sm text-ca-text-2">Finish a battle to generate a results summary and match history entry.</p>
+          <Link
+            to="/battle/prep"
+            className="ca-display mt-6 inline-flex rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2 text-xl text-white"
+          >
+            Return To Lobby
+          </Link>
+        </div>
+      </section>
+    )
+  }
+
+  const won = result.result === 'WIN'
+
+  return (
+    <section className="py-4 sm:py-6">
+      <div className="grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] xl:gap-5">
+        <div className="space-y-4">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Battle Results</p>
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h1 className={`ca-display text-5xl ${won ? 'text-ca-teal' : 'text-ca-red'}`}>{won ? 'Victory' : 'Defeat'}</h1>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.46rem] text-ca-text-2">
+                    {getModeLabel(result.mode)}
+                  </span>
+                  <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.46rem] text-ca-text-2">
+                    VS {result.opponentName}
+                  </span>
+                  <span className="ca-mono-label text-[0.46rem] text-ca-text-3">{formatMatchTimestamp(result.timestamp)}</span>
+                </div>
+                <p className="mt-3 text-sm text-ca-text-2">
+                  {result.opponentTitle}
+                  {result.opponentRankLabel ? ` • ${result.opponentRankLabel}` : ''}
+                  {result.roomCode ? ` • ${result.roomCode}` : ''}
+                </p>
+              </div>
+
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-right">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ROUNDS</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.rounds}</p>
+                <p className={`ca-mono-label mt-2 text-[0.5rem] ${result.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                  {result.mode === 'ranked' ? `LP ${result.lpDelta >= 0 ? `+${result.lpDelta}` : result.lpDelta}` : 'UNRANKED'}
+                </p>
+              </div>
+            </div>
+
+            <RankShiftBanner shift={result.rankShift} rankBefore={result.rankBefore} rankAfter={result.rankAfter} />
+          </section>
+
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+            <p className="ca-display text-3xl text-ca-text">Rank Readout</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP BEFORE</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.lpBefore}</p>
+              </div>
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP DELTA</p>
+                <p className={`ca-display mt-2 text-3xl ${result.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                  {result.lpDelta >= 0 ? `+${result.lpDelta}` : result.lpDelta}
+                </p>
+              </div>
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP AFTER</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.lpAfter}</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+            <p className="ca-display text-3xl text-ca-text">Lineups</p>
+            <div className="mt-4 space-y-3">
+              <TeamPillRow ids={result.yourTeam} label="YOU" />
+              <TeamPillRow ids={result.theirTeam} label="THEM" />
+            </div>
+          </section>
+
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+            <p className="ca-display text-3xl text-ca-text">Recent History</p>
+            <div className="mt-4 space-y-2.5">
+              {recentHistory.map((match) => {
+                const matchWon = match.result === 'WIN'
+                return (
+                  <div key={match.id} className="rounded-[10px] border border-white/7 bg-[rgba(16,17,22,0.16)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`ca-mono-label text-[0.46rem] ${matchWon ? 'text-ca-teal' : 'text-ca-red'}`}>{match.result}</span>
+                        <span className="ca-mono-label text-[0.44rem] text-ca-text-2">{getModeLabel(match.mode)}</span>
+                        <span className="ca-mono-label text-[0.44rem] text-ca-text-3">VS {match.opponentName}</span>
+                        <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{match.rounds} ROUNDS</span>
+                        {match.mode === 'ranked' ? (
+                          <span className={`ca-mono-label text-[0.44rem] ${match.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                            {match.lpDelta >= 0 ? `+${match.lpDelta} LP` : `${match.lpDelta} LP`}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{formatMatchTimestamp(match.timestamp)}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-ca-text-2">
+                      {match.rankBefore} / {match.rankAfter}
+                      {match.roomCode ? ` / ${match.roomCode}` : ''}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+
+        <div className="space-y-4">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Updated Profile</p>
+            <h2 className="ca-display mt-2 text-4xl text-ca-text">{result.profileSnapshot.rank}</h2>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">WINS</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.wins}</p>
+              </div>
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LOSSES</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.losses}</p>
+              </div>
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">CURRENT STREAK</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.currentStreak}</p>
+              </div>
+              <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">BEST STREAK</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.bestStreak}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">MATCHES PLAYED</p>
+              <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.matchesPlayed}</p>
+              <p className="mt-2 text-sm text-ca-text-3">Peak Rank: {result.profileSnapshot.peakRank}</p>
+            </div>
+          </section>
+
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+            <div className="flex flex-col gap-3">
+              <Link
+                to="/battle/prep"
+                className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2.5 text-center text-[1.2rem] text-white"
+              >
+                Back To Lobby
+              </Link>
+              <Link
+                to="/profile"
+                className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-4 py-2.5 text-center text-[1rem] text-ca-text"
+              >
+                Open Profile
+              </Link>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  )
+}

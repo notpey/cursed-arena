@@ -1,7 +1,19 @@
+import { useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { SurfaceCard } from '@/components/ui/SurfaceCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import sukunaHome from '@/assets/renders/sukuna-home.png'
+import sukunaHome from '@/assets/renders/sukuna-home.webp'
+import {
+  getModeDescription,
+  getModeLabel,
+  readBattleProfileStats,
+  readLastBattleResult,
+  readRecentMatchHistory,
+  persistSelectedMatchMode,
+  type BattleMatchMode,
+} from '@/features/battle/matches'
+import { usePlayerState } from '@/features/player/store'
 
 type Mission = {
   id: string
@@ -97,6 +109,18 @@ const homeHeroRender: HomeHeroRenderConfig = {
 }
 
 export function HomePage() {
+  const navigate = useNavigate()
+  const { profile } = usePlayerState()
+  const profileStats = useMemo(() => readBattleProfileStats(), [])
+  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 3), [])
+  const lastResult = useMemo(() => readLastBattleResult(), [])
+  const selectedMode: BattleMatchMode = lastResult?.mode ?? 'ranked'
+
+  function handleLaunchMode(mode: BattleMatchMode) {
+    persistSelectedMatchMode(mode)
+    navigate('/battle/prep')
+  }
+
   return (
     <div className="relative isolate grid h-full grid-cols-1 gap-4 overflow-hidden py-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:gap-5 xl:py-6">
       <section className="relative z-10 min-w-0 space-y-4">
@@ -109,11 +133,16 @@ export function HomePage() {
 
         <BattlePassCard />
         <StoryContinueCard />
-        <ProfileSummaryCard />
+        <ProfileSummaryCard profileStats={profileStats} avatarLabel={profile.avatarLabel} />
       </section>
 
       <aside className="relative z-10 min-w-0">
-        <HeroPlayPanel />
+        <HeroPlayPanel
+          profileStats={profileStats}
+          recentMatches={recentMatches}
+          selectedMode={selectedMode}
+          onLaunchMode={handleLaunchMode}
+        />
       </aside>
     </div>
   )
@@ -247,30 +276,39 @@ function StoryContinueCard() {
   )
 }
 
-function ProfileSummaryCard() {
+function ProfileSummaryCard({
+  profileStats,
+  avatarLabel,
+}: {
+  profileStats: ReturnType<typeof readBattleProfileStats>
+  avatarLabel: string
+}) {
+  const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
+
   return (
     <SurfaceCard className="border-white/8 bg-[rgba(15,15,21,0.22)] shadow-[0_7px_18px_rgba(0,0,0,0.14)]">
       <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
         <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-12 w-12 place-items-center rounded-full border border-ca-red/35 bg-gradient-to-br from-ca-red-wash-mid to-transparent p-[2px]">
             <div className="grid h-full w-full place-items-center rounded-full bg-ca-surface text-xs font-semibold">
-              PN
+              {avatarLabel}
             </div>
           </div>
           <div className="min-w-0">
-            <p className="ca-display truncate text-2xl">Player_Name</p>
-            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Platinum II - Season 3</p>
+            <p className="ca-display truncate text-2xl">{profileStats.playerName}</p>
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">{profileStats.rank} - {profileStats.season}</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <RecordStat label="W" value="47" />
-          <RecordStat label="L" value="31" />
-          <RecordStat label="WR" value="60%" />
+          <RecordStat label="W" value={`${profileStats.wins}`} />
+          <RecordStat label="L" value={`${profileStats.losses}`} />
+          <RecordStat label="WR" value={`${winRate}%`} />
         </div>
       </div>
     </SurfaceCard>
   )
 }
+
 
 function RecordStat({ label, value }: { label: string; value: string }) {
   return (
@@ -281,9 +319,21 @@ function RecordStat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function HeroPlayPanel() {
+function HeroPlayPanel({
+  profileStats,
+  recentMatches,
+  selectedMode,
+  onLaunchMode,
+}: {
+  profileStats: ReturnType<typeof readBattleProfileStats>
+  recentMatches: ReturnType<typeof readRecentMatchHistory>
+  selectedMode: BattleMatchMode
+  onLaunchMode: (mode: BattleMatchMode) => void
+}) {
   const hero = homeHeroRender
   const ctaWidth = '22rem'
+  const activeMatch = recentMatches[0]
+  const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
 
   return (
     <SurfaceCard className="relative h-full min-h-[480px] overflow-hidden border-transparent bg-transparent shadow-none backdrop-blur-0 xl:min-h-[720px]">
@@ -327,9 +377,7 @@ function HeroPlayPanel() {
             top: '46%',
             background: `radial-gradient(circle, rgba(250,39,66,${(hero.glowRed * 0.22).toFixed(
               2,
-            )}) 0%, rgba(228,230,239,${(hero.glowFrost * 0.16).toFixed(
-              2,
-            )}) 34%, transparent 74%)`,
+            )}) 0%, rgba(228,230,239,${(hero.glowFrost * 0.16).toFixed(2)}) 34%, transparent 74%)`,
           }}
         />
       </div>
@@ -400,8 +448,28 @@ function HeroPlayPanel() {
       </div>
 
       <div className="relative z-10 flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
+        <div className="mx-auto w-full rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm" style={{ maxWidth: ctaWidth }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Battle Queue</p>
+              <p className="ca-display mt-1 text-[1.5rem] text-ca-text">{getModeLabel(selectedMode)}</p>
+            </div>
+            <div className="text-right">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">RANK</p>
+              <p className="ca-display mt-1 text-[1.2rem] text-ca-text">{profileStats.rank}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-ca-text-2">{getModeDescription(selectedMode)}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <RecordStat label="W" value={`${profileStats.wins}`} />
+            <RecordStat label="L" value={`${profileStats.losses}`} />
+            <RecordStat label="WR" value={`${winRate}%`} />
+          </div>
+        </div>
+
         <button
           type="button"
+          onClick={() => onLaunchMode(selectedMode)}
           className="ca-display relative mx-auto w-full rounded-xl border border-ca-red/55 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] px-6 py-8 text-6xl text-white shadow-[0_20px_60px_rgba(250,39,66,0.24)] transition hover:scale-[1.01] hover:shadow-[0_25px_70px_rgba(250,39,66,0.3)] sm:text-7xl"
           style={{ maxWidth: ctaWidth }}
         >
@@ -410,15 +478,52 @@ function HeroPlayPanel() {
         </button>
 
         <div className="mx-auto grid w-full grid-cols-3 gap-2.5" style={{ maxWidth: ctaWidth }}>
-          {['Ranked', 'Quick', 'Custom'].map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              className="ca-display rounded-xl border border-ca-red/35 bg-[rgba(12,12,18,0.18)] px-3 py-3 text-xl text-ca-text transition hover:border-ca-red/55 hover:bg-ca-red-wash"
-            >
-              {mode}
-            </button>
-          ))}
+          {(['ranked', 'quick', 'private'] as BattleMatchMode[]).map((mode) => {
+            const active = selectedMode === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onLaunchMode(mode)}
+                className={[
+                  'ca-display rounded-xl border px-3 py-3 text-xl transition',
+                  active
+                    ? 'border-ca-red/55 bg-ca-red-wash text-ca-text'
+                    : 'border-ca-red/35 bg-[rgba(12,12,18,0.18)] text-ca-text hover:border-ca-red/55 hover:bg-ca-red-wash',
+                ].join(' ')}
+              >
+                {getModeLabel(mode)}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mx-auto grid w-full gap-2.5" style={{ maxWidth: ctaWidth }}>
+          <div className="rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Recent Match</p>
+              {activeMatch ? (
+                <span
+                  className={[
+                    'ca-mono-label text-[0.46rem]',
+                    activeMatch.result === 'WIN' ? 'text-ca-teal' : 'text-ca-red',
+                  ].join(' ')}
+                >
+                  {activeMatch.result}
+                </span>
+              ) : null}
+            </div>
+            {activeMatch ? (
+              <>
+                <p className="mt-2 ca-display text-[1.35rem] text-ca-text">VS {activeMatch.opponentName}</p>
+                <p className="mt-1 text-xs leading-5 text-ca-text-2">
+                  {getModeLabel(activeMatch.mode)} / {activeMatch.rounds} ROUNDS / {activeMatch.rankAfter}
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs leading-5 text-ca-text-2">No recent battle data.</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -441,3 +546,7 @@ function Tag({ text, tone }: { text: string; tone: 'red' | 'teal' }) {
     </span>
   )
 }
+
+
+
+

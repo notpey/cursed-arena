@@ -1,0 +1,232 @@
+import { EnergyCostRow } from '@/components/battle/BattleEnergy'
+import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { cn } from '@/components/battle/battleDisplay'
+import { getAbilityEnergyCost } from '@/features/battle/energy'
+import { getAbilityById } from '@/features/battle/engine'
+import type { BattleAbilityTemplate, BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
+
+function SkillTile({
+  ability,
+  active,
+  queued,
+  locked,
+  onSelect,
+  onHover,
+  onLeave,
+}: {
+  ability: BattleAbilityTemplate
+  active: boolean
+  queued: boolean
+  locked: boolean
+  onSelect?: () => void
+  onHover?: () => void
+  onLeave?: () => void
+}) {
+  const cost = getAbilityEnergyCost(ability)
+
+  return (
+    <button
+      type="button"
+      onClick={locked ? undefined : onSelect}
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onFocus={onHover}
+      onBlur={onLeave}
+      disabled={locked}
+      title={ability.name}
+      className={cn(
+        'group relative h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[4.8rem] sm:w-[4.8rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
+        queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
+        locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
+        !locked && !active && !queued && 'hover:border-white/30',
+      )}
+    >
+      <div className="absolute inset-0 grid place-items-center">
+        {ability.icon.src ? (
+          <img src={ability.icon.src} alt={ability.name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="grid h-full w-full place-items-center bg-[rgba(15,15,20,0.95)] text-[1.2rem] font-black text-white/30">?</div>
+        )}
+      </div>
+
+      <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
+        <EnergyCostRow cost={cost} compact />
+      </div>
+    </button>
+  )
+}
+
+function QueuedSlot({
+  actor,
+  queuedAction,
+  onDequeue,
+}: {
+  actor: BattleFighterState
+  queuedAction?: QueuedBattleAction
+  onDequeue?: () => void
+}) {
+  const queuedAbility = queuedAction ? getAbilityById(actor, queuedAction.abilityId) : null
+  const hasQueued = Boolean(queuedAbility)
+
+  return (
+    <button
+      type="button"
+      onDoubleClick={hasQueued ? onDequeue : undefined}
+      disabled={!hasQueued}
+      title={hasQueued ? `${queuedAbility!.name} (double-click to remove)` : 'No technique queued'}
+      className={cn(
+        'group relative h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.8rem] sm:w-[4.8rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        hasQueued
+          ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
+          : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
+        hasQueued && 'cursor-pointer',
+      )}
+    >
+      <div className="absolute inset-0 grid place-items-center">
+        {queuedAbility ? (
+          queuedAbility.icon.src ? (
+            <img src={queuedAbility.icon.src} alt={queuedAbility.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-[rgba(5,216,189,0.06)] text-[1.2rem] font-black text-ca-teal/60">?</div>
+          )
+        ) : (
+          <div className="flex flex-col items-center gap-1">
+            <div className="h-[2px] w-4 rounded-full bg-white/12" />
+          </div>
+        )}
+      </div>
+
+      {hasQueued ? (
+        <div className="absolute bottom-0.5 left-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
+          <span className="ca-mono-label text-[0.42rem] text-ca-teal">QUEUED</span>
+        </div>
+      ) : null}
+    </button>
+  )
+}
+
+function StatusEffectPip({ label }: { label: string }) {
+  return (
+    <div
+      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-[0.15rem] border border-white/15 bg-[rgba(15,15,20,0.9)] sm:h-8 sm:w-8"
+      title={label}
+    >
+      <span className="ca-mono-label select-none text-[0.34rem] text-white/50 sm:text-[0.4rem]">{label}</span>
+    </div>
+  )
+}
+
+export function BattleAbilityStrip({
+  fighter,
+  selected,
+  actorTargetable,
+  actorSelectedTarget,
+  actorMuted,
+  pendingAbilityId,
+  queuedAction,
+  validAbility,
+  statusLabels,
+  carryoverLabels = [],
+  onActorClick,
+  onAbilityClick,
+  onHoverAbility,
+  onLeaveAbility,
+  onDequeue,
+}: {
+  fighter: BattleFighterState
+  selected?: boolean
+  actorTargetable?: boolean
+  actorSelectedTarget?: boolean
+  actorMuted?: boolean
+  pendingAbilityId?: string | null
+  queuedAction?: QueuedBattleAction
+  validAbility?: (abilityId: string) => boolean
+  statusLabels?: string[]
+  carryoverLabels?: string[]
+  onActorClick?: () => void
+  onAbilityClick?: (abilityId: string) => void
+  onHoverAbility?: (abilityId: string) => void
+  onLeaveAbility?: () => void
+  onDequeue?: () => void
+}) {
+  const abilities = fighter.abilities.concat(fighter.ultimate)
+  const effects = statusLabels ?? []
+  const hpValue = (fighter.hp / fighter.maxHp) * 100
+  const disabledLabel = fighter.hp <= 0
+    ? 'KO'
+    : fighter.statuses.stun > 0
+      ? 'STUNNED'
+      : fighter.statuses.invincible > 0
+        ? 'VOID'
+        : null
+
+  return (
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+        selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
+        actorTargetable && 'ring-2 ring-amber-300/30',
+        actorMuted && 'opacity-50 saturate-75',
+      )}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
+
+      <div className="relative border-b border-white/6 bg-black/40">
+        <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
+        <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+          {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
+        </span>
+        {disabledLabel ? (
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
+            {disabledLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="relative flex items-end gap-2 px-2 pb-2.5 pt-2 sm:gap-3 sm:px-2.5 sm:pb-3">
+        <div className="shrink-0">
+          <BattlePortraitSlot
+            fighter={fighter}
+            accent="teal"
+            active={Boolean(selected)}
+            targetable={Boolean(actorTargetable)}
+            selectedTarget={Boolean(actorSelectedTarget)}
+            muted={Boolean(actorMuted)}
+            hideHp
+            carryoverLabels={carryoverLabels}
+            onClick={onActorClick}
+          />
+        </div>
+
+        <div className="flex min-w-0 flex-col justify-end gap-2 overflow-x-auto pb-1">
+          {effects.length > 0 ? (
+            <div className="flex items-center gap-1">
+              {effects.map((label) => (
+                <StatusEffectPip key={`${fighter.instanceId}-${label}`} label={label} />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex items-end gap-1.5 sm:gap-2">
+            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+
+            {abilities.map((ability) => (
+              <SkillTile
+                key={ability.id}
+                ability={ability}
+                active={pendingAbilityId === ability.id}
+                queued={queuedAction?.abilityId === ability.id}
+                locked={!(validAbility?.(ability.id) ?? true)}
+                onSelect={onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+                onHover={onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+                onLeave={onLeaveAbility}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

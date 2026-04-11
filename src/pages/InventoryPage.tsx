@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ownedRosterCharacters } from '@/data/characters'
 import type { CharacterRarity } from '@/types/characters'
@@ -200,16 +200,13 @@ export function InventoryPage() {
       return a.setKey.localeCompare(b.setKey) || b.level - a.level
     })
 
-  useEffect(() => {
-    if (!filteredPieces.length) return
-    if (!filteredPieces.some((piece) => piece.id === selectedPieceId)) {
-      setSelectedPieceId(filteredPieces[0].id)
-    }
-  }, [filteredPieces, selectedPieceId])
+  const resolvedSelectedPieceId = filteredPieces.some((piece) => piece.id === selectedPieceId)
+    ? selectedPieceId
+    : filteredPieces[0]?.id ?? ''
 
   const selectedPiece =
-    filteredPieces.find((piece) => piece.id === selectedPieceId) ??
-    pieces.find((piece) => piece.id === selectedPieceId) ??
+    filteredPieces.find((piece) => piece.id === resolvedSelectedPieceId) ??
+    pieces.find((piece) => piece.id === resolvedSelectedPieceId) ??
     null
 
   function clearFilters() {
@@ -236,7 +233,7 @@ export function InventoryPage() {
           onSetFilterChange={setSetFilter}
           sortBy={sortBy}
           onSortByChange={setSortBy}
-          selectedPieceId={selectedPieceId}
+          selectedPieceId={resolvedSelectedPieceId}
           onSelectPiece={setSelectedPieceId}
           onClearFilters={clearFilters}
         />

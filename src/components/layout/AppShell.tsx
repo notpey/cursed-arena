@@ -1,15 +1,12 @@
 import type { PropsWithChildren } from 'react'
 import { SidebarNav } from '@/components/layout/SidebarNav'
 import { TopBar } from '@/components/layout/TopBar'
-import homeBgBase from '@/assets/backgrounds/home-bg-base.png'
+import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 
 export type NavItemKey =
   | 'home'
   | 'battle'
-  | 'roster'
-  | 'summon'
   | 'story'
-  | 'inventory'
   | 'profile'
   | 'settings'
 
@@ -80,3 +77,4 @@ function HomeRouteBackdrop() {
     </div>
   )
 }
+

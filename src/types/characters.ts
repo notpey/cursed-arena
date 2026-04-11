@@ -1,3 +1,5 @@
+import type { BattleEnergyCost } from '@/features/battle/energy'
+
 export type CharacterRarity = 'R' | 'SR' | 'SSR'
 
 export type Archetype =
@@ -13,9 +15,6 @@ export type CharacterRosterCard = {
   name: string
   rarity: CharacterRarity
   archetypes: Archetype[]
-  level: number
-  levelProgress: number
-  limitBreak: number
   owned: boolean
   renderSrc?: string
   portraitFrame?: {
@@ -26,66 +25,36 @@ export type CharacterRosterCard = {
   }
 }
 
-export type CharacterStats = {
-  hp: number
-  atk: number
-  def: number
-  ceMax: number
-  ct: number
-}
-
 export type CharacterSkill = {
   id: string
   name: string
   type: 'ATK' | 'DEF' | 'STN' | 'SUP'
   ceCost: number
+  energyCost?: BattleEnergyCost
   description: string
   cooldown?: number
+  targetLabel?: string
+  classes?: string[]
+  basePower?: number
 }
 
 export type CharacterUltimate = CharacterSkill & {
   tag: 'ULTIMATE'
 }
 
-export type BindingVow = {
-  id: string
-  name: string
-  condition: string
-  sacrifice: string
-  reward: string
-}
-
-export type EquipmentSlotKey = 'CROWN SEAL' | 'CORE SEAL' | 'GRASP SEAL' | 'RELIC'
-
-export type EquipmentSealSlot = {
-  slot: EquipmentSlotKey
-  equipped: boolean
-  itemName?: string
-  mainStat?: string
-  subStats?: string[]
-  setName?: string
-}
-
-export type InscriptionSlot = {
-  equipped: boolean
-  name?: string
-  passive?: string
-  level?: number
+export type CharacterPassive = {
+  label: string
+  description: string
+  triggerLabel?: string
 }
 
 export type CharacterDetailProfile = CharacterRosterCard & {
   gradeLabel: string
-  levelCap: number
-  xpCurrent: number
-  xpToNext: number
-  stats: CharacterStats
-  statMax: CharacterStats
+  hp: number
+  role?: string
   skills: CharacterSkill[]
   ultimate: CharacterUltimate
-  bindingVow: BindingVow
-  equipmentSlots: EquipmentSealSlot[]
-  inscription: InscriptionSlot
-  setBonus: string
+  passive: CharacterPassive
   lore: {
     backstory: string[]
     voiceLines: Array<{ id: string; title: string; text: string }>
@@ -99,4 +68,3 @@ export type CharacterDetailProfile = CharacterRosterCard & {
     nameOffsetY?: string
   }
 }
-

@@ -1,10 +1,11 @@
 import type {
   Archetype,
   CharacterDetailProfile,
+  CharacterPassive,
   CharacterRarity,
   CharacterRosterCard,
   CharacterSkill,
-  EquipmentSealSlot,
+  CharacterUltimate,
 } from '@/types/characters'
 import aoiTodoRender from '@/assets/renders/Aoi_Todo_Cursed_Clash.webp'
 import chosoRender from '@/assets/renders/Choso_Cursed_Clash.webp'
@@ -18,17 +19,15 @@ import satoruGojoRender from '@/assets/renders/Satoru_Gojo_Cursed_Clash.webp'
 import togeInumakiRender from '@/assets/renders/Toge_Inumaki_Cursed_Clash.webp'
 import yujiItadoriRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
 import yutaOkkotsuRender from '@/assets/renders/Yuta_Okkotsu_Cursed_Clash.webp'
-
-export const TOTAL_CHARACTER_CAP = 40
+import { battleRosterById } from '@/features/battle/data'
+import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
+import type { BattleAbilityTemplate, BattleFighterTemplate, PassiveEffect, SkillEffect } from '@/features/battle/types'
 
 type BaseCharacterSeed = {
   id: string
   name: string
   rarity: CharacterRarity
   archetypes: Archetype[]
-  level: number
-  levelProgress: number
-  limitBreak: number
   renderSrc: string
   obtainedOrder: number
   portraitFrame?: CharacterRosterCard['portraitFrame']
@@ -41,9 +40,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Satoru Gojo',
     rarity: 'SSR',
     archetypes: ['BLASTER', 'AMPLIFIER'],
-    level: 80,
-    levelProgress: 72,
-    limitBreak: 5,
     renderSrc: satoruGojoRender,
     obtainedOrder: 11,
     portraitFrame: { scale: 1.8, y: '14%' },
@@ -54,9 +50,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Yuji Itadori',
     rarity: 'SSR',
     archetypes: ['STRIKER'],
-    level: 76,
-    levelProgress: 48,
-    limitBreak: 4,
     renderSrc: yujiItadoriRender,
     obtainedOrder: 10,
     portraitFrame: { scale: 1.74, y: '13%' },
@@ -67,9 +60,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Yuta Okkotsu',
     rarity: 'SSR',
     archetypes: ['AMPLIFIER', 'STRIKER'],
-    level: 73,
-    levelProgress: 41,
-    limitBreak: 3,
     renderSrc: yutaOkkotsuRender,
     obtainedOrder: 9,
     portraitFrame: { scale: 1.72, y: '12%' },
@@ -80,9 +70,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Kento Nanami',
     rarity: 'SR',
     archetypes: ['GUARDIAN', 'STRIKER'],
-    level: 68,
-    levelProgress: 64,
-    limitBreak: 3,
     renderSrc: kentoNanamiRender,
     obtainedOrder: 8,
     portraitFrame: { scale: 1.64, y: '13%' },
@@ -93,9 +80,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Aoi Todo',
     rarity: 'SR',
     archetypes: ['STRIKER', 'DISRUPTOR'],
-    level: 65,
-    levelProgress: 22,
-    limitBreak: 2,
     renderSrc: aoiTodoRender,
     obtainedOrder: 7,
     portraitFrame: { scale: 1.62, y: '11%' },
@@ -106,9 +90,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Toge Inumaki',
     rarity: 'SR',
     archetypes: ['DISRUPTOR', 'AMPLIFIER'],
-    level: 62,
-    levelProgress: 87,
-    limitBreak: 2,
     renderSrc: togeInumakiRender,
     obtainedOrder: 6,
     portraitFrame: { scale: 1.68, y: '14%' },
@@ -119,9 +100,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Choso',
     rarity: 'SR',
     archetypes: ['BLASTER', 'DISRUPTOR'],
-    level: 60,
-    levelProgress: 30,
-    limitBreak: 1,
     renderSrc: chosoRender,
     obtainedOrder: 5,
     portraitFrame: { scale: 1.62, y: '12%' },
@@ -132,9 +110,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Maki Zenin',
     rarity: 'SR',
     archetypes: ['STRIKER', 'GUARDIAN'],
-    level: 57,
-    levelProgress: 53,
-    limitBreak: 2,
     renderSrc: makiZeninRender,
     obtainedOrder: 4,
     portraitFrame: { scale: 1.68, y: '13%' },
@@ -145,9 +120,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Mai Zenin',
     rarity: 'R',
     archetypes: ['BLASTER'],
-    level: 44,
-    levelProgress: 18,
-    limitBreak: 1,
     renderSrc: maiZeninRender,
     obtainedOrder: 3,
     portraitFrame: { scale: 1.62, y: '13%' },
@@ -158,9 +130,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Kasumi Miwa',
     rarity: 'R',
     archetypes: ['GUARDIAN', 'RESTORER'],
-    level: 41,
-    levelProgress: 69,
-    limitBreak: 0,
     renderSrc: kasumiMiwaRender,
     obtainedOrder: 2,
     portraitFrame: { scale: 1.72, y: '13%' },
@@ -171,9 +140,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Noritoshi Kamo',
     rarity: 'R',
     archetypes: ['BLASTER', 'DISRUPTOR'],
-    level: 38,
-    levelProgress: 27,
-    limitBreak: 0,
     renderSrc: noritoshiKamoRender,
     obtainedOrder: 1,
     portraitFrame: { scale: 1.68, y: '10%' },
@@ -184,9 +150,6 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     name: 'Panda',
     rarity: 'R',
     archetypes: ['GUARDIAN'],
-    level: 35,
-    levelProgress: 45,
-    limitBreak: 1,
     renderSrc: pandaRender,
     obtainedOrder: 0,
     portraitFrame: { scale: 1.8, y: '14%' },
@@ -199,37 +162,169 @@ export type RosterCharacter = CharacterRosterCard & {
   obtainedOrder: number
 }
 
-export const ownedRosterCharacters: RosterCharacter[] = baseOwnedCharacterSeeds.map((seed) => ({
-  id: seed.id,
-  name: seed.name,
-  rarity: seed.rarity,
-  archetypes: seed.archetypes,
-  level: seed.level,
-  levelProgress: seed.levelProgress,
-  limitBreak: seed.limitBreak,
-  owned: true,
-  renderSrc: seed.renderSrc,
-  obtainedOrder: seed.obtainedOrder,
-  portraitFrame: seed.portraitFrame,
-}))
+function mapBattleRarity(rarity: BattleFighterTemplate['rarity']): CharacterRarity {
+  if (rarity === 'UR') return 'SSR'
+  return rarity
+}
 
-function buildStats(seed: BaseCharacterSeed) {
-  const rarityMultiplier = seed.rarity === 'SSR' ? 1.18 : seed.rarity === 'SR' ? 1.04 : 0.92
-  const hp = Math.round((850 + seed.level * 28) * rarityMultiplier)
-  const atk = Math.round((140 + seed.level * 7.2) * rarityMultiplier)
-  const def = Math.round((110 + seed.level * 5.8) * rarityMultiplier)
-  const ceMax = Math.round((90 + seed.level * 4.5) * rarityMultiplier)
-  const ct = Math.round((70 + seed.level * 4.8) * rarityMultiplier)
+function gradeLabelFromRarity(rarity: CharacterRarity) {
+  if (rarity === 'SSR') return 'SPECIAL GRADE'
+  if (rarity === 'SR') return 'GRADE 1'
+  return 'GRADE 2'
+}
+
+function getAbilityTargetLabel(ability: BattleAbilityTemplate) {
+  switch (ability.targetRule) {
+    case 'enemy-single':
+      return 'ENEMY'
+    case 'enemy-all':
+      return 'ENEMY ALL'
+    case 'ally-single':
+      return 'ALLY'
+    case 'ally-all':
+      return 'ALLY ALL'
+    case 'self':
+      return 'SELF'
+    default:
+      return 'FIELD'
+  }
+}
+
+function getAbilityClasses(ability: BattleAbilityTemplate) {
+  return Array.from(new Set([ability.kind.toUpperCase(), ...ability.tags.filter((tag) => tag !== 'ULT')]))
+}
+
+function mapAbilityType(ability: BattleAbilityTemplate): CharacterSkill['type'] {
+  if (ability.kind === 'defend') return 'DEF'
+  if (ability.kind === 'debuff' || ability.tags.includes('DEBUFF')) return 'STN'
+  if (ability.kind === 'heal' || ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('HEAL') || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY')) {
+    return 'SUP'
+  }
+  return 'ATK'
+}
+
+function deriveArchetypes(seed: BaseCharacterSeed, battleTemplate?: BattleFighterTemplate): Archetype[] {
+  if (!battleTemplate) return seed.archetypes
+
+  const tags = new Set<Archetype>()
+  const roleParts = battleTemplate.role.split('/').map((part) => part.trim().toLowerCase())
+
+  roleParts.forEach((part) => {
+    if (part.includes('blaster')) tags.add('BLASTER')
+    if (part.includes('striker') || part.includes('bruiser') || part.includes('execute') || part.includes('burst')) tags.add('STRIKER')
+    if (part.includes('control') || part.includes('debuff')) tags.add('DISRUPTOR')
+    if (part.includes('utility') || part.includes('hybrid')) tags.add('AMPLIFIER')
+    if (part.includes('sustain') || part.includes('heal')) tags.add('RESTORER')
+  })
+
+  const allAbilities = battleTemplate.abilities.concat(battleTemplate.ultimate)
+  if (battleTemplate.maxHp >= 108 || allAbilities.some((ability) => ability.kind === 'defend')) tags.add('GUARDIAN')
+  if (allAbilities.some((ability) => ability.kind === 'heal' || ability.tags.includes('HEAL'))) tags.add('RESTORER')
+  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY'))) tags.add('AMPLIFIER')
+  if (allAbilities.some((ability) => ability.kind === 'debuff' || ability.tags.includes('DEBUFF'))) tags.add('DISRUPTOR')
+  if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-all')) tags.add('BLASTER')
+  if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-single')) tags.add('STRIKER')
+
+  return Array.from(tags).slice(0, 2)
+}
+
+function describeSkillEffect(effect: SkillEffect) {
+  switch (effect.type) {
+    case 'damage':
+      return `deal ${effect.power} damage`
+    case 'heal':
+      return `restore ${effect.power} HP`
+    case 'stun':
+      return `stun for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'invulnerable':
+      return `become invulnerable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'attackUp':
+      return `gain +${effect.amount} bonus damage for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'mark':
+      return `mark for +${effect.bonus} damage for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'burn':
+      return `burn for ${effect.damage} across ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'cooldownReduction':
+      return `reduce cooldowns by ${effect.amount} extra each round`
+    case 'damageBoost':
+      return `gain ${Math.round(effect.amount * 100)}% bonus damage`
+  }
+}
+
+function describePassive(passive: PassiveEffect): CharacterPassive {
+  const triggerLabel =
+    passive.trigger === 'whileAlive'
+      ? 'While Alive'
+      : passive.trigger === 'onRoundStart'
+        ? 'Round Start'
+        : passive.trigger === 'onDealDamage'
+          ? 'On Deal Damage'
+          : 'Execute Window'
+
+  const thresholdPrefix =
+    passive.trigger === 'onTargetBelow' && passive.threshold != null
+      ? `Against targets below ${Math.round(passive.threshold * 100)}% HP, `
+      : passive.trigger === 'whileAlive'
+        ? 'While alive, '
+        : passive.trigger === 'onRoundStart'
+          ? 'At the start of each round, '
+          : passive.trigger === 'onDealDamage'
+            ? 'After dealing damage, '
+            : ''
+
+  const effectText = passive.effects.map(describeSkillEffect).join(', ')
 
   return {
-    current: { hp, atk, def, ceMax, ct },
-    max: {
-      hp: Math.round(hp * 1.25),
-      atk: Math.round(atk * 1.2),
-      def: Math.round(def * 1.18),
-      ceMax: Math.round(ceMax * 1.22),
-      ct: Math.round(ct * 1.24),
-    },
+    label: passive.label,
+    description: `${thresholdPrefix}${effectText}.`.replace(/^./, (letter) => letter.toUpperCase()),
+    triggerLabel,
+  }
+}
+
+
+function getBasePower(ability: BattleAbilityTemplate) {
+  const damageEffect = ability.effects?.find((effect): effect is Extract<SkillEffect, { type: 'damage' }> => effect.type === 'damage')
+  const healEffect = ability.effects?.find((effect): effect is Extract<SkillEffect, { type: 'heal' }> => effect.type === 'heal')
+  return damageEffect?.power ?? healEffect?.power ?? ability.power ?? ability.healPower
+}
+
+function mapBattleAbilityToSkill(ability: BattleAbilityTemplate): CharacterSkill {
+  const energyCost = getAbilityEnergyCost(ability)
+
+  return {
+    id: ability.id,
+    name: ability.name,
+    type: mapAbilityType(ability),
+    ceCost: countEnergyCost(energyCost),
+    energyCost,
+    description: ability.description,
+    cooldown: ability.cooldown,
+    targetLabel: getAbilityTargetLabel(ability),
+    classes: getAbilityClasses(ability),
+    basePower: getBasePower(ability),
+  }
+}
+
+function createFallbackUltimate(seed: BaseCharacterSeed): CharacterUltimate {
+  return {
+    id: `${seed.id}-ultimate`,
+    name: 'Domain Break: Final Exchange',
+    type: 'ATK',
+    ceCost: 3,
+    description: 'Unleashes a high-impact finishing technique that closes a single target.',
+    cooldown: 4,
+    targetLabel: 'ENEMY',
+    classes: ['ATTACK', 'ULT'],
+    tag: 'ULTIMATE',
+    basePower: 60,
+  }
+}
+
+function createFallbackPassive(): CharacterPassive {
+  return {
+    label: 'Edge of Resolve',
+    description: 'After using a high-cost skill, gain bonus damage for the next exchange.',
+    triggerLabel: 'Loadout Trait',
   }
 }
 
@@ -239,85 +334,46 @@ function defaultSkills(seed: BaseCharacterSeed): CharacterSkill[] {
       id: `${seed.id}-skill-1`,
       name: `${seed.name.split(' ')[0]} Strike`,
       type: 'ATK',
-      ceCost: 2,
-      description: 'Deals targeted damage and applies a short pressure debuff to the enemy frontline.',
+      ceCost: 1,
+      description: 'Deals direct single-target damage.',
       cooldown: 1,
+      targetLabel: 'ENEMY',
+      classes: ['ATTACK'],
+      basePower: 30,
     },
     {
       id: `${seed.id}-skill-2`,
       name: 'Cursed Flow',
       type: 'SUP',
-      ceCost: 3,
-      description: 'Stabilizes CE output, granting turn-meter acceleration and minor shield value.',
+      ceCost: 1,
+      description: 'Stabilizes the next exchange and grants a utility effect.',
       cooldown: 2,
+      targetLabel: 'SELF',
+      classes: ['UTILITY', 'BUFF'],
     },
     {
       id: `${seed.id}-skill-3`,
       name: 'Zone Break',
       type: 'STN',
-      ceCost: 4,
-      description: 'Pressures a guarded target and has a chance to inflict stagger for 1 turn.',
-      cooldown: 3,
-    },
-    {
-      id: `${seed.id}-skill-4`,
-      name: 'Guard Pulse',
-      type: 'DEF',
       ceCost: 2,
-      description: 'Raises defense and redirects a portion of incoming damage for the next exchange.',
-      cooldown: 2,
+      description: 'Pressures a guarded target and can disrupt their next turn.',
+      cooldown: 3,
+      targetLabel: 'ENEMY',
+      classes: ['DEBUFF'],
     },
   ]
 }
 
-function defaultEquipmentSlots(seed: BaseCharacterSeed): EquipmentSealSlot[] {
-  const equippedNames = [
-    `${seed.name.split(' ')[0]} Crown Sigil`,
-    `${seed.name.split(' ')[0]} Core Matrix`,
-  ]
+function profileLore(seed: BaseCharacterSeed, battleTemplate?: BattleFighterTemplate, passive?: CharacterPassive) {
+  const battleLine = battleTemplate
+    ? `${seed.name} fills a ${battleTemplate.role.toLowerCase()} role in arena combat, with ${passive?.label ?? 'signature passives'} shaping their timing windows.`
+    : `${seed.name} is a combat-ready sorcerer whose style emphasizes ${seed.archetypes.join(' / ').toLowerCase()} patterns in team compositions.`
 
-  return [
-    {
-      slot: 'CROWN SEAL',
-      equipped: true,
-      itemName: equippedNames[0],
-      mainStat: '+12% Crit Rate',
-      subStats: ['+4% ATK', '+18 CE', '+6 SPD'],
-      setName: 'Exorcist Regalia',
-    },
-    {
-      slot: 'CORE SEAL',
-      equipped: true,
-      itemName: equippedNames[1],
-      mainStat: '+10% Skill Damage',
-      subStats: ['+7% HP', '+8 DEF', '+5% CT'],
-      setName: 'Exorcist Regalia',
-    },
-    {
-      slot: 'GRASP SEAL',
-      equipped: false,
-    },
-    {
-      slot: 'RELIC',
-      equipped: false,
-    },
-  ]
-}
-
-function gradeLabelFromRarity(rarity: CharacterRarity) {
-  if (rarity === 'SSR') return 'SPECIAL GRADE'
-  if (rarity === 'SR') return 'GRADE 1'
-  return 'GRADE 2'
-}
-
-function profileLore(seed: BaseCharacterSeed) {
   return {
     backstory: [
-      `${seed.name} is a combat-ready sorcerer whose style emphasizes ${seed.archetypes
-        .join(' / ')
-        .toLowerCase()} patterns in team compositions.`,
-      'Within the Cursed Arena system, this profile tracks progression, equipment optimization, and tactical role fit across PvP and story content.',
-      'A prized roster unit should feel like a maintained weapon: tuned, upgraded, and clearly understood before deployment.',
+      battleLine,
+      'Within Cursed Arena, this profile exists to explain the fighter kit clearly before a match starts.',
+      'The focus is tactical readability: HP pool, passive identity, and the exact techniques that define the character.',
     ],
     voiceLines: [
       { id: `${seed.id}-voice-1`, title: 'Lobby Greeting', text: 'Ready when you are. Do not waste the opening.' },
@@ -327,57 +383,48 @@ function profileLore(seed: BaseCharacterSeed) {
   }
 }
 
-export const characterProfiles: CharacterDetailProfile[] = baseOwnedCharacterSeeds.map((seed) => {
-  const { current, max } = buildStats(seed)
-  const levelCap = seed.rarity === 'SSR' ? 80 : seed.rarity === 'SR' ? 70 : 60
-  const xpToNext = 1000
-  const xpCurrent = Math.round((seed.levelProgress / 100) * xpToNext)
+export const ownedRosterCharacters: RosterCharacter[] = baseOwnedCharacterSeeds.map((seed) => {
+  const battleTemplate = battleRosterById[seed.id]
+  const rarity = battleTemplate ? mapBattleRarity(battleTemplate.rarity) : seed.rarity
 
   return {
     id: seed.id,
-    name: seed.name,
-    rarity: seed.rarity,
-    archetypes: seed.archetypes,
-    level: seed.level,
-    levelProgress: seed.levelProgress,
-    limitBreak: seed.limitBreak,
+    name: battleTemplate?.name ?? seed.name,
+    rarity,
+    archetypes: deriveArchetypes(seed, battleTemplate),
+    owned: true,
+    renderSrc: seed.renderSrc,
+    obtainedOrder: seed.obtainedOrder,
+    portraitFrame: seed.portraitFrame,
+  }
+})
+
+export const characterProfiles: CharacterDetailProfile[] = baseOwnedCharacterSeeds.map((seed) => {
+  const battleTemplate = battleRosterById[seed.id]
+  const rarity = battleTemplate ? mapBattleRarity(battleTemplate.rarity) : seed.rarity
+  const archetypes = deriveArchetypes(seed, battleTemplate)
+  const passive = battleTemplate?.passiveEffects?.[0] ? describePassive(battleTemplate.passiveEffects[0]) : createFallbackPassive()
+  const skills = battleTemplate ? battleTemplate.abilities.map(mapBattleAbilityToSkill) : defaultSkills(seed)
+  const ultimate = battleTemplate
+    ? ({ ...mapBattleAbilityToSkill(battleTemplate.ultimate), tag: 'ULTIMATE' } satisfies CharacterUltimate)
+    : createFallbackUltimate(seed)
+
+  return {
+    id: seed.id,
+    name: battleTemplate?.name ?? seed.name,
+    rarity,
+    archetypes,
     owned: true,
     renderSrc: seed.renderSrc,
     portraitFrame: seed.portraitFrame,
     detailRenderFrame: seed.detailRenderFrame,
-    gradeLabel: gradeLabelFromRarity(seed.rarity),
-    levelCap,
-    xpCurrent,
-    xpToNext,
-    stats: current,
-    statMax: max,
-    skills: defaultSkills(seed),
-    ultimate: {
-      id: `${seed.id}-ultimate`,
-      name: 'Domain Break: Final Exchange',
-      type: 'ATK',
-      ceCost: 8,
-      description:
-        'Unleashes a high-impact finishing technique that scales with missing CE and applies a control effect on hit.',
-      cooldown: 4,
-      tag: 'ULTIMATE',
-    },
-    bindingVow: {
-      id: `${seed.id}-vow`,
-      name: 'Measured Sacrifice',
-      condition: 'Trigger below 50% HP at the start of turn.',
-      sacrifice: 'Lose 20% current CE and disable Guard Pulse for 1 turn.',
-      reward: 'Gain +25% ATK and +20% CT potency for 2 turns.',
-    },
-    equipmentSlots: defaultEquipmentSlots(seed),
-    inscription: {
-      equipped: true,
-      name: 'Edge of Resolve',
-      passive: 'After using a 3+ CE skill, gain 8% damage reduction for 1 turn.',
-      level: 4,
-    },
-    setBonus: '2-PIECE: +15% Skill Damage',
-    lore: profileLore(seed),
+    gradeLabel: gradeLabelFromRarity(rarity),
+    hp: battleTemplate?.maxHp ?? 100,
+    role: battleTemplate?.role,
+    skills,
+    ultimate,
+    passive,
+    lore: profileLore(seed, battleTemplate, passive),
   }
 })
 

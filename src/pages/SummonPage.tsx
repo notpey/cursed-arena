@@ -1,6 +1,6 @@
-ï»¿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import gojoRender from '@/assets/renders/Satoru_Gojo_Cursed_Clash.webp'
-import sukunaHome from '@/assets/renders/sukuna-home.png'
+import sukunaHome from '@/assets/renders/sukuna-home.webp'
 import yujiRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
 import megumiRender from '@/assets/renders/Megumi_Fushiguro_Cursed_Clash.webp'
 import nobaraRender from '@/assets/renders/Nobara_Kugisaki_Cursed_Clash.webp'
@@ -63,7 +63,7 @@ const summonBanners: SummonBanner[] = [
     navLabel: 'LIMITED: GOJO',
     bannerType: 'LIMITED BANNER',
     title: 'GOJO SATORU',
-    subtitle: 'Limitless Â· Six Eyes',
+    subtitle: 'Limitless · Six Eyes',
     wordmark: 'GOJO',
     heroRender: gojoRender,
     heroFrame: {
@@ -88,7 +88,7 @@ const summonBanners: SummonBanner[] = [
       { name: 'Yuta', image: yutaRender, frame: { scale: 1.7, y: '10%' } },
       { name: 'Megumi', image: megumiRender, frame: { scale: 1.7, y: '10%' } },
     ],
-    ssrRateText: 'SSR Rate: 0.6% Â· Pity: 67/90',
+    ssrRateText: 'SSR Rate: 0.6% · Pity: 67/90',
     pityCurrent: 67,
     pityCap: 90,
     pityTrackMax: 180,
@@ -100,7 +100,7 @@ const summonBanners: SummonBanner[] = [
     navLabel: 'LIMITED: SUKUNA',
     bannerType: 'LIMITED BANNER',
     title: 'RYOMEN SUKUNA',
-    subtitle: 'Malevolent Shrine Â· Cleave / Dismantle',
+    subtitle: 'Malevolent Shrine · Cleave / Dismantle',
     wordmark: 'SUKUNA',
     heroRender: sukunaHome,
     heroFrame: {
@@ -125,7 +125,7 @@ const summonBanners: SummonBanner[] = [
       { name: 'Jogo', image: jogoRender, frame: { scale: 1.72, y: '12%' } },
       { name: 'Mahito', image: mahitoRender, frame: { scale: 1.68, y: '12%' } },
     ],
-    ssrRateText: 'SSR Rate: 0.6% Â· Pity: 12/90',
+    ssrRateText: 'SSR Rate: 0.6% · Pity: 12/90',
     pityCurrent: 12,
     pityCap: 90,
     pityTrackMax: 180,
@@ -137,7 +137,7 @@ const summonBanners: SummonBanner[] = [
     navLabel: 'STANDARD',
     bannerType: 'STANDARD BANNER',
     title: 'CURSED ARCHIVE',
-    subtitle: 'Open Pool Â· Core Sorcerers',
+    subtitle: 'Open Pool · Core Sorcerers',
     wordmark: 'ARCHIVE',
     heroRender: yujiRender,
     heroFrame: {
@@ -162,7 +162,7 @@ const summonBanners: SummonBanner[] = [
       { name: 'Megumi', image: megumiRender, frame: { scale: 1.72, y: '10%' } },
       { name: 'Nobara', image: nobaraRender, frame: { scale: 1.72, y: '9%' } },
     ],
-    ssrRateText: 'SSR Rate: 1.2% Â· Pity: 34/90',
+    ssrRateText: 'SSR Rate: 1.2% · Pity: 34/90',
     pityCurrent: 34,
     pityCap: 90,
     pityTrackMax: 180,
@@ -652,4 +652,5 @@ function RatesModal({ onClose }: { onClose: () => void }) {
     </div>
   )
 }
+
 
