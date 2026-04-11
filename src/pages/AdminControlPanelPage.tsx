@@ -159,12 +159,92 @@ function readFileAsDataUrl(file: File) {
   })
 }
 
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function createBlankAbility(id: string, name: string, overrides: Partial<BattleAbilityTemplate> = {}): BattleAbilityTemplate {
+  const ability: BattleAbilityTemplate = {
+    id,
+    name,
+    description: 'Describe what this technique does in battle.',
+    kind: 'attack',
+    targetRule: 'enemy-single',
+    tags: ['ATK'],
+    icon: { label: deriveAbilityLabel(name), tone: 'red' },
+    cooldown: 1,
+    effects: [{ type: 'damage', power: 30, target: 'inherit' }],
+    ...overrides,
+  }
+  syncAbilityPresentation(ability)
+  return ability
+}
+
+function createBlankFighter(index: number): BattleFighterTemplate {
+  const shortName = 'Fighter ' + index
+  return {
+    id: 'fighter-' + index,
+    name: 'New Fighter ' + index,
+    shortName,
+    rarity: 'SR',
+    role: 'Hybrid',
+    affiliationLabel: 'Custom',
+    battleTitle: 'Arena Recruit',
+    bio: 'New combatant awaiting authored battle identity.',
+    renderSrc: '',
+    boardPortraitSrc: '',
+    maxHp: 100,
+    passiveEffects: [
+      {
+        label: 'New Passive',
+        trigger: 'whileAlive',
+        effects: [{ type: 'damageBoost', amount: 0.1, target: 'self' }],
+      },
+    ],
+    abilities: [
+      createBlankAbility('fighter-' + index + '-skill-1', 'New Strike'),
+      createBlankAbility('fighter-' + index + '-skill-2', 'New Technique', { kind: 'utility', targetRule: 'self', tags: ['UTILITY'], effects: [createEffect('cooldownReduction')] }),
+    ],
+    ultimate: createBlankAbility('fighter-' + index + '-ultimate', 'New Ultimate', {
+      kind: 'attack',
+      targetRule: 'enemy-all',
+      tags: ['ATK', 'ULT'],
+      cooldown: 5,
+      effects: [{ type: 'damage', power: 60, target: 'all-enemies' }],
+    }),
+  }
+}
+
+function normalizeFighterImport(input: BattleFighterTemplate): BattleFighterTemplate {
+  const fighter = JSON.parse(JSON.stringify(input)) as BattleFighterTemplate
+  fighter.passiveEffects = fighter.passiveEffects ?? []
+  fighter.abilities = fighter.abilities ?? []
+  fighter.abilities.forEach(syncAbilityPresentation)
+  syncAbilityPresentation(fighter.ultimate)
+  return fighter
+}
+
+function sanitizeDefaultSetup(snapshot: BattleContentSnapshot) {
+  const rosterIds = snapshot.roster.map((fighter) => fighter.id)
+  if (rosterIds.length === 0) return
+
+  const fillTeam = (teamIds: string[]) =>
+    teamIds.map((id, index) => (rosterIds.includes(id) ? id : rosterIds[Math.min(index, rosterIds.length - 1)] ?? rosterIds[0]))
+
+  snapshot.defaultSetup.playerTeamIds = fillTeam(snapshot.defaultSetup.playerTeamIds)
+  snapshot.defaultSetup.enemyTeamIds = fillTeam(snapshot.defaultSetup.enemyTeamIds)
+}
+
 export function AdminControlPanelPage() {
   const [draft, setDraft] = useState<BattleContentSnapshot>(() => readDraftBattleContent(liveContent))
   const [selectedFighterId, setSelectedFighterId] = useState(() => liveContent.roster[0]?.id ?? '')
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(0)
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
+  const [fighterJsonDraft, setFighterJsonDraft] = useState('')
 
   const selectedFighter = draft.roster.find((fighter) => fighter.id === selectedFighterId) ?? draft.roster[0] ?? null
   const selectedAbilityIdResolved = selectedFighter
@@ -283,6 +363,153 @@ export function AdminControlPanelPage() {
     })
     setSelectedPassiveIndex(selectedFighter?.passiveEffects?.length ?? 0)
     setStatusFlash('PASSIVE ADDED')
+  }
+
+  function handleRemovePassive() {
+    if (!selectedFighter || !selectedPassive) return
+    updateSelectedFighter((fighter) => {
+      fighter.passiveEffects = (fighter.passiveEffects ?? []).filter((_, index) => index !== selectedPassiveIndexResolved)
+    })
+    setSelectedPassiveIndex(Math.max(0, selectedPassiveIndexResolved - 1))
+    setStatusFlash('PASSIVE REMOVED')
+  }
+
+  function handleAddFighter() {
+    const fighter = createBlankFighter(draft.roster.length + 1)
+    updateDraft((next) => {
+      next.roster.push(fighter)
+      sanitizeDefaultSetup(next)
+    })
+    setSelectedFighterId(fighter.id)
+    setSelectedAbilityId(fighter.abilities[0]?.id ?? fighter.ultimate.id)
+    setSelectedPassiveIndex(0)
+    setFighterJsonDraft(JSON.stringify(fighter, null, 2))
+    setStatusFlash('FIGHTER ADDED')
+  }
+
+  function handleDuplicateFighter() {
+    if (!selectedFighter) return
+    const copy = normalizeFighterImport(selectedFighter)
+    const baseId = slugify(copy.id || copy.shortName || copy.name) || 'fighter-copy'
+    let nextId = baseId + '-copy'
+    let suffix = 2
+    while (draft.roster.some((fighter) => fighter.id === nextId)) {
+      nextId = baseId + '-copy-' + suffix
+      suffix += 1
+    }
+    copy.id = nextId
+    copy.name = copy.name + ' Copy'
+    copy.shortName = copy.shortName + ' Copy'
+    copy.abilities = copy.abilities.map((ability, index) => createBlankAbility(nextId + '-skill-' + (index + 1), ability.name, { ...ability, id: nextId + '-skill-' + (index + 1) }))
+    copy.ultimate = createBlankAbility(nextId + '-ultimate', copy.ultimate.name, { ...copy.ultimate, id: nextId + '-ultimate' })
+
+    updateDraft((next) => {
+      next.roster.push(copy)
+      sanitizeDefaultSetup(next)
+    })
+    setSelectedFighterId(copy.id)
+    setSelectedAbilityId(copy.abilities[0]?.id ?? copy.ultimate.id)
+    setSelectedPassiveIndex(0)
+    setFighterJsonDraft(JSON.stringify(copy, null, 2))
+    setStatusFlash('FIGHTER DUPLICATED')
+  }
+
+  function handleDeleteFighter() {
+    if (!selectedFighter || draft.roster.length <= 1) {
+      setStatusFlash('KEEP ONE FIGHTER')
+      return
+    }
+
+    const fallback = draft.roster.find((fighter) => fighter.id !== selectedFighter.id) ?? null
+    updateDraft((next) => {
+      next.roster = next.roster.filter((fighter) => fighter.id !== selectedFighter.id)
+      sanitizeDefaultSetup(next)
+    })
+    setSelectedFighterId(fallback?.id ?? '')
+    setSelectedAbilityId(fallback?.abilities[0]?.id ?? fallback?.ultimate.id ?? null)
+    setSelectedPassiveIndex(0)
+    setFighterJsonDraft('')
+    setStatusFlash('FIGHTER DELETED')
+  }
+
+  function handleCopyFighterJson() {
+    if (!selectedFighter) return
+    const payload = JSON.stringify(selectedFighter, null, 2)
+    setFighterJsonDraft(payload)
+    void navigator.clipboard.writeText(payload).then(
+      () => setStatusFlash('FIGHTER JSON COPIED'),
+      () => setStatusFlash('COPY FAILED'),
+    )
+  }
+
+  function handleImportFighter(mode: 'append' | 'replace') {
+    try {
+      const parsed = normalizeFighterImport(JSON.parse(fighterJsonDraft) as BattleFighterTemplate)
+      updateDraft((next) => {
+        if (mode === 'replace' && selectedFighter) {
+          next.roster = next.roster.map((fighter) => (fighter.id === selectedFighter.id ? parsed : fighter))
+        } else {
+          let nextId = parsed.id || slugify(parsed.shortName || parsed.name) || 'fighter-import'
+          let suffix = 2
+          while (next.roster.some((fighter) => fighter.id === nextId)) {
+            nextId = (parsed.id || 'fighter-import') + '-' + suffix
+            suffix += 1
+          }
+          parsed.id = nextId
+          next.roster.push(parsed)
+        }
+        sanitizeDefaultSetup(next)
+      })
+      setSelectedFighterId(parsed.id)
+      setSelectedAbilityId(parsed.abilities[0]?.id ?? parsed.ultimate.id)
+      setSelectedPassiveIndex(0)
+      setStatusFlash(mode === 'replace' ? 'FIGHTER REPLACED' : 'FIGHTER IMPORTED')
+    } catch {
+      setStatusFlash('INVALID FIGHTER JSON')
+    }
+  }
+
+  function handleAddAbility() {
+    if (!selectedFighter) return
+    const ability = createBlankAbility(selectedFighter.id + '-skill-' + (selectedFighter.abilities.length + 1), 'New Ability')
+    updateSelectedFighter((fighter) => {
+      fighter.abilities.push(ability)
+    })
+    setSelectedAbilityId(ability.id)
+    setStatusFlash('ABILITY ADDED')
+  }
+
+  function handleDuplicateAbility() {
+    if (!selectedFighter || !selectedAbility) return
+    if (selectedFighter.ultimate.id === selectedAbility.id) {
+      setStatusFlash('DUPLICATE NORMAL SKILLS ONLY')
+      return
+    }
+
+    const duplicate = createBlankAbility(selectedFighter.id + '-skill-' + (selectedFighter.abilities.length + 1), selectedAbility.name + ' Copy', { ...JSON.parse(JSON.stringify(selectedAbility)), id: selectedFighter.id + '-skill-' + (selectedFighter.abilities.length + 1) })
+    updateSelectedFighter((fighter) => {
+      fighter.abilities.push(duplicate)
+    })
+    setSelectedAbilityId(duplicate.id)
+    setStatusFlash('ABILITY DUPLICATED')
+  }
+
+  function handleDeleteAbility() {
+    if (!selectedFighter || !selectedAbility) return
+    if (selectedFighter.ultimate.id === selectedAbility.id) {
+      setStatusFlash('KEEP AN ULTIMATE')
+      return
+    }
+    if (selectedFighter.abilities.length <= 1) {
+      setStatusFlash('KEEP ONE SKILL')
+      return
+    }
+    const fallback = selectedFighter.abilities.find((ability) => ability.id !== selectedAbility.id) ?? null
+    updateSelectedFighter((fighter) => {
+      fighter.abilities = fighter.abilities.filter((ability) => ability.id !== selectedAbility.id)
+    })
+    setSelectedAbilityId(fallback?.id ?? selectedFighter.ultimate.id)
+    setStatusFlash('ABILITY REMOVED')
   }
 
   function updateJsonField<T>(raw: string, apply: (value: T) => void, successMessage: string) {
@@ -416,12 +643,26 @@ export function AdminControlPanelPage() {
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Fighters</p>
             <p className="ca-display mt-2 text-3xl text-ca-text">Registry</p>
-            <div className="mt-4 space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" onClick={handleAddFighter} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal">
+                ADD FIGHTER
+              </button>
+              <button type="button" onClick={handleDuplicateFighter} disabled={!selectedFighter} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
+                DUPLICATE
+              </button>
+              <button type="button" onClick={handleDeleteFighter} disabled={!selectedFighter || draft.roster.length <= 1} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2.5 py-1.5 text-[0.42rem] text-ca-red disabled:opacity-50">
+                DELETE
+              </button>
+            </div>
+            <div className="mt-4 space-y-2 max-h-[44vh] overflow-y-auto pr-1">
               {draft.roster.map((fighter) => (
                 <button
                   key={fighter.id}
                   type="button"
-                  onClick={() => setSelectedFighterId(fighter.id)}
+                  onClick={() => {
+                    setSelectedFighterId(fighter.id)
+                    setFighterJsonDraft(JSON.stringify(fighter, null, 2))
+                  }}
                   className={[
                     'w-full rounded-[10px] border px-3 py-3 text-left transition',
                     selectedFighterId === fighter.id
@@ -429,11 +670,33 @@ export function AdminControlPanelPage() {
                       : 'border-white/8 bg-[rgba(255,255,255,0.03)] hover:border-white/15',
                   ].join(' ')}
                 >
-                  <p className="ca-display text-[1.1rem] text-ca-text">{fighter.shortName}</p>
-                  <p className="mt-1 text-xs text-ca-text-3">{fighter.role}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="ca-display text-[1.1rem] text-ca-text">{fighter.shortName}</p>
+                      <p className="mt-1 text-xs text-ca-text-3">{fighter.role}</p>
+                    </div>
+                    <span className="ca-mono-label text-[0.38rem] text-ca-text-3">{fighter.id}</span>
+                  </div>
                 </button>
               ))}
             </div>
+            <details className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+              <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">FIGHTER JSON</summary>
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={handleCopyFighterJson} disabled={!selectedFighter} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
+                    COPY SELECTED JSON
+                  </button>
+                  <button type="button" onClick={() => handleImportFighter('append')} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal">
+                    IMPORT AS NEW
+                  </button>
+                  <button type="button" onClick={() => handleImportFighter('replace')} disabled={!selectedFighter} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
+                    REPLACE SELECTED
+                  </button>
+                </div>
+                <TextAreaField label="Fighter JSON" value={fighterJsonDraft} onChange={setFighterJsonDraft} rows={14} mono />
+              </div>
+            </details>
           </section>
 
           <section className="space-y-4">
@@ -465,6 +728,17 @@ export function AdminControlPanelPage() {
                 </EditorCard>
 
                 <EditorCard title="Ability Editor" subtitle={selectedAbility?.id ?? 'NO ABILITY'}>
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={handleAddAbility} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.42rem] text-ca-teal">
+                      ADD SKILL
+                    </button>
+                    <button type="button" onClick={handleDuplicateAbility} disabled={!selectedAbility || selectedFighter?.ultimate.id === selectedAbility.id} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
+                      DUPLICATE SKILL
+                    </button>
+                    <button type="button" onClick={handleDeleteAbility} disabled={!selectedAbility || selectedFighter?.ultimate.id === selectedAbility.id || (selectedFighter?.abilities.length ?? 0) <= 1} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.42rem] text-ca-red disabled:opacity-50">
+                      DELETE SKILL
+                    </button>
+                  </div>
                   <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
                     <SelectField
                       label="Selected Ability"
@@ -585,6 +859,9 @@ export function AdminControlPanelPage() {
                     <div className="flex flex-wrap gap-2">
                       <button type="button" onClick={handleAddPassive} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.42rem] text-ca-teal">
                         ADD PASSIVE
+                      </button>
+                      <button type="button" onClick={handleRemovePassive} disabled={!selectedPassive} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.42rem] text-ca-red disabled:opacity-50">
+                        REMOVE PASSIVE
                       </button>
                     </div>
                     {(selectedFighter.passiveEffects?.length ?? 0) > 0 && selectedPassive ? (
