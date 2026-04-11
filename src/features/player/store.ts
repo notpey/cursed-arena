@@ -5,12 +5,14 @@ const playerStateStorageKey = 'ca-player-state-v1'
 export type QualityPreset = 'LOW' | 'MEDIUM' | 'HIGH'
 export type AnimationSpeed = '1x' | '1.5x' | '2x'
 export type AutoBattleSpeed = 'NORMAL (1x)' | 'FAST (1.5x)' | 'MAX (2x)'
+export type PlayerRole = 'player' | 'tester' | 'admin'
 
 export type PlayerProfile = {
   displayName: string
   playerId: string
   title: string
   avatarLabel: string
+  role: PlayerRole
 }
 
 export type PlayerEconomy = {
@@ -60,6 +62,7 @@ export const defaultPlayerState: PlayerState = {
     playerId: '#7742',
     title: 'DOMAIN MASTER',
     avatarLabel: 'PN',
+    role: 'tester',
   },
   economy: {
     gems: 6920,
@@ -123,6 +126,11 @@ export function normalizeAvatarLabel(value: string | null | undefined, displayNa
   )
 }
 
+function normalizePlayerRole(role?: string | null): PlayerRole {
+  if (role === 'admin' || role === 'tester' || role === 'player') return role
+  return defaultPlayerState.profile.role
+}
+
 function normalizePlayerState(state?: Partial<PlayerState> | null): PlayerState {
   const displayName = state?.profile?.displayName?.trim() || defaultPlayerState.profile.displayName
 
@@ -132,6 +140,7 @@ function normalizePlayerState(state?: Partial<PlayerState> | null): PlayerState 
       playerId: state?.profile?.playerId?.trim() || defaultPlayerState.profile.playerId,
       title: state?.profile?.title?.trim() || defaultPlayerState.profile.title,
       avatarLabel: normalizeAvatarLabel(state?.profile?.avatarLabel, displayName),
+      role: normalizePlayerRole(state?.profile?.role),
     },
     economy: {
       gems: Number.isFinite(state?.economy?.gems)

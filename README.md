@@ -12,7 +12,8 @@ Prompt-kit Step 0 scaffold for a long-lived UI codebase:
 
 1. Save your canonical screenshot to `reference/home-screen.png`
 2. `npm install`
-3. `npm run dev`
+3. Copy `.env.example` to `.env.local` if you are wiring Supabase locally
+4. `npm run dev`
 
 ## Scripts
 
@@ -21,6 +22,23 @@ Prompt-kit Step 0 scaffold for a long-lived UI codebase:
 - `npm run typecheck` - TypeScript only
 - `npm run lint` - ESLint
 - `npm run preview` - preview production build
+- `npm test` - Vitest suite
+
+## Deploy + Auth
+
+For Vercel:
+
+- Framework preset: `Vite`
+- Build command: `npm run build`
+- Output directory: `dist`
+- `vercel.json` already rewrites all routes to `index.html` for SPA routing
+
+For Supabase:
+
+- Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel project settings
+- Set Supabase Auth `SITE_URL` to your production Vercel domain
+- Add local and preview redirect URLs in Supabase Auth for `http://localhost:5173/*` and your `*.vercel.app` preview domain pattern
+- Client bootstrap lives in `src/lib/supabase.ts`
 
 ## Structure
 
@@ -28,6 +46,7 @@ Prompt-kit Step 0 scaffold for a long-lived UI codebase:
 - `reference/` - screenshot + design-system source docs
 - `src/components/layout/` - shared shell (`AppShell`, `SidebarNav`, `TopBar`)
 - `src/components/ui/` - reusable UI primitives
+- `src/features/` - feature state and battle logic
+- `src/lib/supabase.ts` - Supabase client bootstrap
 - `src/pages/` - page screens and placeholders
 - `src/styles/tokens.css` - extracted CSS variables from the design system
-

@@ -9,6 +9,7 @@ export type NavItemKey =
   | 'story'
   | 'profile'
   | 'settings'
+  | 'admin'
 
 type AppShellProps = PropsWithChildren<{
   activeNav: NavItemKey
@@ -77,4 +78,3 @@ function HomeRouteBackdrop() {
     </div>
   )
 }
-

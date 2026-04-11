@@ -2,6 +2,7 @@ import { Suspense, lazy, type ReactNode } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 
 const ShellLayout = lazy(async () => ({ default: (await import('@/app/ShellLayout')).ShellLayout }))
+const AdminRoute = lazy(async () => ({ default: (await import('@/app/AdminRoute')).AdminRoute }))
 const HomePage = lazy(async () => ({ default: (await import('@/pages/HomePage')).HomePage }))
 const BattlePage = lazy(async () => ({ default: (await import('@/pages/BattlePage')).BattlePage }))
 const BattlePrepPage = lazy(async () => ({ default: (await import('@/pages/BattlePrepPage')).BattlePrepPage }))
@@ -30,6 +31,7 @@ const shellRoutes = [
   { path: 'story', element: withRouteSuspense(<StoryPage />) },
   { path: 'profile', element: withRouteSuspense(<ProfilePage />) },
   { path: 'settings', element: withRouteSuspense(<SettingsPage />) },
+  { path: 'admin', element: withRouteSuspense(<AdminRoute />) },
   { path: '*', element: withRouteSuspense(<NotFoundPage />) },
 ]
 

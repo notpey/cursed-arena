@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import type { NavItemKey } from '@/components/layout/AppShell'
+import { adminPanelConfig, canAccessAdminPanel } from '@/config/features'
+import { usePlayerState } from '@/features/player/store'
 
 type SidebarNavProps = {
   activeNav: NavItemKey
@@ -11,14 +13,28 @@ type SidebarItem = {
   to: string
 }
 
-const navItems: SidebarItem[] = [
+const primaryNavItems: SidebarItem[] = [
   { key: 'home', label: 'Home', to: '/' },
   { key: 'battle', label: 'Battle', to: '/battle/prep' },
   { key: 'story', label: 'Story', to: '/story' },
   { key: 'profile', label: 'Profile', to: '/profile' },
 ]
 
+const secondaryNavItems: SidebarItem[] = [
+  { key: 'settings', label: 'Settings', to: '/settings' },
+  { key: 'admin', label: 'Admin', to: '/admin' },
+]
+
 export function SidebarNav({ activeNav }: SidebarNavProps) {
+  const { profile } = usePlayerState()
+  const navItems = [
+    ...primaryNavItems,
+    ...secondaryNavItems.filter((item) => {
+      if (item.key !== 'admin') return true
+      return adminPanelConfig.visibleInNav && canAccessAdminPanel(profile.role)
+    }),
+  ]
+
   return (
     <aside className="sticky top-0 flex h-screen w-[72px] shrink-0 flex-col items-center border-r border-ca-border-subtle/70 bg-black/25 px-2 py-4 backdrop-blur-md">
       <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-ca-red/30 bg-gradient-to-br from-ca-red/90 to-ca-red-deep shadow-[0_0_18px_rgba(250,39,66,0.25)]" />
@@ -56,23 +72,6 @@ export function SidebarNav({ activeNav }: SidebarNavProps) {
           </NavLink>
         ))}
       </nav>
-
-      <NavLink
-        to="/settings"
-        className={({ isActive }) =>
-          [
-            'group mt-2 flex w-full flex-col items-center gap-1 rounded-xl border px-1 py-2 transition',
-            isActive || activeNav === 'settings'
-              ? 'border-ca-border bg-white/[0.05]'
-              : 'border-transparent hover:border-ca-border hover:bg-white/[0.04]',
-          ].join(' ')
-        }
-      >
-        <span className="grid h-8 w-8 place-items-center rounded-lg border border-ca-border-subtle bg-ca-surface/70">
-          <SidebarGlyph kind="settings" />
-        </span>
-        <span className="ca-mono-label text-[0.45rem] leading-none text-ca-text-2">Settings</span>
-      </NavLink>
     </aside>
   )
 }
@@ -109,6 +108,13 @@ function SidebarGlyph({ kind }: { kind: NavItemKey }) {
         <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
           <circle cx="12" cy="12" r="3.5" />
           <path d="M12 2.8v2.3M12 18.9v2.3M21.2 12h-2.3M5.1 12H2.8M18.5 5.5l-1.6 1.6M7.1 16.9l-1.6 1.6M18.5 18.5l-1.6-1.6M7.1 7.1 5.5 5.5" />
+        </svg>
+      )
+    case 'admin':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
+          <path d="M12 3.5 5.5 6v5.4c0 4.2 2.5 7.1 6.5 9.1 4-2 6.5-4.9 6.5-9.1V6L12 3.5Z" />
+          <path d="M9.2 11.9 11 13.7l3.8-4.1" />
         </svg>
       )
     case 'profile':

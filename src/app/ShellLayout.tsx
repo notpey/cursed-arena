@@ -7,6 +7,7 @@ const pathToNav: Record<string, NavItemKey> = {
   '/story': 'story',
   '/profile': 'profile',
   '/settings': 'settings',
+  '/admin': 'admin',
 }
 
 export function ShellLayout() {
@@ -20,7 +21,11 @@ export function ShellLayout() {
         ? 'profile'
         : pathname.startsWith('/story')
           ? 'story'
-          : 'home')
+          : pathname.startsWith('/settings')
+            ? 'settings'
+            : pathname.startsWith('/admin')
+              ? 'admin'
+              : 'home')
 
   return (
     <AppShell activeNav={activeNav}>
@@ -28,4 +33,3 @@ export function ShellLayout() {
     </AppShell>
   )
 }
-
