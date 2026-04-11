@@ -39,6 +39,34 @@ const liveContent = createContentSnapshot(battleRoster, {
   enemyTeamIds: defaultBattleSetup.enemyTeamIds,
 })
 
+const adminSelectionStorageKey = 'ca-admin-selection-v1'
+
+type AdminSelection = {
+  fighterId: string
+  abilityId: string | null
+  passiveIndex: number
+}
+
+function readAdminSelection(): AdminSelection | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(adminSelectionStorageKey)
+    if (!raw) return null
+    return JSON.parse(raw) as AdminSelection
+  } catch {
+    return null
+  }
+}
+
+function writeAdminSelection(selection: AdminSelection) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(adminSelectionStorageKey, JSON.stringify(selection))
+  } catch {
+    // ignore storage write failures
+  }
+}
+
 function cloneSnapshot(snapshot: BattleContentSnapshot) {
   return JSON.parse(JSON.stringify(snapshot)) as BattleContentSnapshot
 }
@@ -240,9 +268,15 @@ function sanitizeDefaultSetup(snapshot: BattleContentSnapshot) {
 
 export function AdminControlPanelPage() {
   const [draft, setDraft] = useState<BattleContentSnapshot>(() => readDraftBattleContent(liveContent))
-  const [selectedFighterId, setSelectedFighterId] = useState(() => liveContent.roster[0]?.id ?? '')
-  const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
-  const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(0)
+  const [selectedFighterId, setSelectedFighterId] = useState(() => {
+    const saved = readAdminSelection()
+    if (saved && liveContent.roster.some((fighter) => fighter.id === saved.fighterId)) {
+      return saved.fighterId
+    }
+    return liveContent.roster[0]?.id ?? ''
+  })
+  const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(() => readAdminSelection()?.abilityId ?? null)
+  const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(() => readAdminSelection()?.passiveIndex ?? 0)
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
   const [fighterJsonDraft, setFighterJsonDraft] = useState('')
 
@@ -265,6 +299,14 @@ export function AdminControlPanelPage() {
     const timeout = window.setTimeout(() => setStatusFlash(null), 1800)
     return () => window.clearTimeout(timeout)
   }, [statusFlash])
+
+  useEffect(() => {
+    writeAdminSelection({
+      fighterId: selectedFighterId,
+      abilityId: selectedAbilityId,
+      passiveIndex: selectedPassiveIndex,
+    })
+  }, [selectedFighterId, selectedAbilityId, selectedPassiveIndex])
 
   const validationReport = useMemo(
     () => validateBattleContent(draft.roster, draft.defaultSetup),
@@ -309,19 +351,25 @@ export function AdminControlPanelPage() {
     })
   }
 
-  function updateSelectedAbility(mutator: (ability: BattleAbilityTemplate) => void) {
-    if (!selectedFighter || !selectedAbility) return
+  function updateAbilityById(abilityId: string, mutator: (ability: BattleAbilityTemplate) => void) {
+    if (!selectedFighter) return
     updateSelectedFighter((fighter) => {
-      if (fighter.ultimate.id === selectedAbility.id) {
+      if (fighter.ultimate.id === abilityId) {
         mutator(fighter.ultimate)
         syncAbilityPresentation(fighter.ultimate)
         return
       }
-      const ability = fighter.abilities.find((entry) => entry.id === selectedAbility.id)
+      const ability = fighter.abilities.find((entry) => entry.id === abilityId)
       if (ability) {
         mutator(ability)
         syncAbilityPresentation(ability)
       }
+    })
+  }
+
+  function updateAbilityEffectsById(abilityId: string, effects: SkillEffect[]) {
+    updateAbilityById(abilityId, (ability) => {
+      ability.effects = effects.map((effect) => JSON.parse(JSON.stringify(effect)) as SkillEffect)
     })
   }
 
@@ -330,12 +378,6 @@ export function AdminControlPanelPage() {
     updateSelectedFighter((fighter) => {
       const passive = fighter.passiveEffects?.[selectedPassiveIndexResolved]
       if (passive) mutator(passive)
-    })
-  }
-
-  function updateSelectedAbilityEffects(mutator: (effects: SkillEffect[]) => SkillEffect[]) {
-    updateSelectedAbility((ability) => {
-      ability.effects = mutator((ability.effects ?? []).map((effect) => JSON.parse(JSON.stringify(effect)) as SkillEffect))
     })
   }
 
@@ -546,6 +588,11 @@ export function AdminControlPanelPage() {
       return
     }
 
+    writeAdminSelection({
+      fighterId: selectedFighterId,
+      abilityId: selectedAbilityId,
+      passiveIndex: selectedPassiveIndex,
+    })
     publishBattleContent(draft)
     window.location.reload()
   }
@@ -703,255 +750,74 @@ export function AdminControlPanelPage() {
             {selectedFighter ? (
               <>
                 <EditorCard title="Character Creator" subtitle={selectedFighter.shortName.toUpperCase()}>
-                  <div className="space-y-4">
-                    <CharacterCreatorHero fighter={selectedFighter} />
-                    <div className="grid gap-3 xl:grid-cols-2">
-                      {selectedFighter.abilities.concat(selectedFighter.ultimate).map((ability) => {
-                        const active = selectedAbility?.id === ability.id
-                        return (
-                          <CreatorAbilityCard
-                            key={ability.id}
-                            ability={ability}
-                            active={active}
-                            isUltimate={selectedFighter.ultimate.id === ability.id}
-                            onSelect={() => setSelectedAbilityId(ability.id)}
-                          >
-                            <div className="grid gap-3 md:grid-cols-[7rem_minmax(0,1fr)]">
-                              <AbilityTilePreview ability={ability} large />
-                              <div className="space-y-3">
-                                <div className="grid gap-3 md:grid-cols-2">
-                                  <InputField
-                                    label="Skill Name"
-                                    value={ability.name}
-                                    onChange={(value) => {
-                                      setSelectedAbilityId(ability.id)
-                                      updateSelectedAbility((current) => {
-                                        if (current.id !== ability.id) return
-                                        current.name = value
-                                        syncAbilityPresentation(current)
-                                      })
-                                    }}
-                                  />
-                                  <NumberField
-                                    label="Cooldown"
-                                    value={ability.cooldown}
-                                    onChange={(value) => {
-                                      setSelectedAbilityId(ability.id)
-                                      updateSelectedAbility((current) => {
-                                        if (current.id !== ability.id) return
-                                        current.cooldown = value
-                                      })
-                                    }}
-                                  />
-                                  <SelectField
-                                    label="Skill Logic"
-                                    value={ability.kind}
-                                    options={abilityKinds.map((value) => ({ value, label: value.toUpperCase() }))}
-                                    onChange={(value) => {
-                                      setSelectedAbilityId(ability.id)
-                                      updateSelectedAbility((current) => {
-                                        if (current.id !== ability.id) return
-                                        current.kind = value as BattleAbilityKind
-                                        syncAbilityPresentation(current)
-                                      })
-                                    }}
-                                  />
-                                  <SelectField
-                                    label="Targeting"
-                                    value={ability.targetRule}
-                                    options={targetRules.map((value) => ({ value, label: value.toUpperCase() }))}
-                                    onChange={(value) => {
-                                      setSelectedAbilityId(ability.id)
-                                      updateSelectedAbility((current) => {
-                                        if (current.id !== ability.id) return
-                                        current.targetRule = value as BattleTargetRule
-                                      })
-                                    }}
-                                  />
-                                </div>
-                                <TextAreaField
-                                  label="Skill Copy"
-                                  value={ability.description}
-                                  onChange={(value) => {
-                                    setSelectedAbilityId(ability.id)
-                                    updateSelectedAbility((current) => {
-                                      if (current.id !== ability.id) return
-                                      current.description = value
-                                    })
-                                  }}
-                                  rows={3}
-                                />
-                                <div className="flex flex-wrap gap-1.5">
-                                  {ability.tags.map((tag) => (
-                                    <StatusPill key={tag} label={tag} tone={tag === 'ULT' ? 'gold' : tag === 'DEBUFF' ? 'red' : 'teal'} />
-                                  ))}
-                                  {Object.entries(getAbilityEnergyCost(ability)).map(([type, value]) => (
-                                    <StatusPill key={type} label={battleEnergyMeta[type as keyof typeof battleEnergyMeta].short + ' ' + value} tone="frost" />
-                                  ))}
-                                  {Object.entries(getAbilityEnergyCost(ability)).length === 0 ? <StatusPill label="FREE" tone="frost" /> : null}
-                                </div>
-                                <p className="text-sm leading-6 text-ca-text-2">{(ability.effects ?? []).length > 0 ? describeEffect((ability.effects ?? [])[0]) : explainCostRule(ability)}</p>
-                              </div>
-                            </div>
-                          </CreatorAbilityCard>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </EditorCard>
-
-
-                <EditorCard title="Fighter Editor" subtitle={selectedFighter.id.toUpperCase()}>
-                  <div className="grid gap-4 lg:grid-cols-[8rem_minmax(0,1fr)]">
-                    <PortraitPreview fighter={selectedFighter} />
-                    <div className="space-y-3">
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <InputField label="Name" value={selectedFighter.name} onChange={(value) => updateSelectedFighter((fighter) => { fighter.name = value })} />
-                        <InputField label="Short Name" value={selectedFighter.shortName} onChange={(value) => updateSelectedFighter((fighter) => { fighter.shortName = value })} />
-                        <InputField label="Role" value={selectedFighter.role} onChange={(value) => updateSelectedFighter((fighter) => { fighter.role = value })} />
-                        <SelectField label="Rarity" value={selectedFighter.rarity} options={rarityOptions.map((value) => ({ value, label: value }))} onChange={(value) => updateSelectedFighter((fighter) => { fighter.rarity = value as BattleFighterTemplate['rarity'] })} />
-                        <NumberField label="Max HP" value={selectedFighter.maxHp} onChange={(value) => updateSelectedFighter((fighter) => { fighter.maxHp = value })} />
-                        <InputField label="Affiliation" value={selectedFighter.affiliationLabel} onChange={(value) => updateSelectedFighter((fighter) => { fighter.affiliationLabel = value })} />
-                      </div>
-                      <AssetField
-                        fieldId={`fighter-portrait-${selectedFighter.id}`}
-                        label="Portrait Image"
-                        value={selectedFighter.boardPortraitSrc}
-                        onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value })}
-                        onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, 'PORTRAIT UPDATED')}
-                        helper="Square crop. Recommended 512x512. Preferred master 1024x1024 for future-proofing."
-                      />
-                      <TextAreaField label="Bio" value={selectedFighter.bio} onChange={(value) => updateSelectedFighter((fighter) => { fighter.bio = value })} rows={4} />
-                    </div>
-                  </div>
-                </EditorCard>
-
-                <EditorCard title="Ability Editor" subtitle={selectedAbility?.id ?? 'NO ABILITY'}>
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={handleAddAbility} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.42rem] text-ca-teal">
-                      ADD SKILL
-                    </button>
-                    <button type="button" onClick={handleDuplicateAbility} disabled={!selectedAbility || selectedFighter?.ultimate.id === selectedAbility.id} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
-                      DUPLICATE SKILL
-                    </button>
-                    <button type="button" onClick={handleDeleteAbility} disabled={!selectedAbility || selectedFighter?.ultimate.id === selectedAbility.id || (selectedFighter?.abilities.length ?? 0) <= 1} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.42rem] text-ca-red disabled:opacity-50">
-                      DELETE SKILL
-                    </button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-                    <SelectField
-                      label="Selected Ability"
-                      value={selectedAbility?.id ?? ''}
-                      options={selectedFighter.abilities.concat(selectedFighter.ultimate).map((ability) => ({ value: ability.id, label: ability.name }))}
-                      onChange={setSelectedAbilityId}
-                    />
-                    {selectedAbility ? (
-                      <div className="space-y-3">
-                        <div className="grid gap-4 lg:grid-cols-[7rem_minmax(0,1fr)]">
-                          <AbilityTilePreview ability={selectedAbility} />
-                          <div className="space-y-3">
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <InputField label="Name" value={selectedAbility.name} onChange={(value) => updateSelectedAbility((ability) => { ability.name = value; syncAbilityPresentation(ability) })} />
-                              <NumberField label="Cooldown" value={selectedAbility.cooldown} onChange={(value) => updateSelectedAbility((ability) => { ability.cooldown = value })} />
-                              <SelectField
-                                label="Kind"
-                                value={selectedAbility.kind}
-                                options={abilityKinds.map((value) => ({ value, label: value.toUpperCase() }))}
-                                onChange={(value) => updateSelectedAbility((ability) => { ability.kind = value as BattleAbilityKind; syncAbilityPresentation(ability) })}
-                              />
-                              <SelectField
-                                label="Target Rule"
-                                value={selectedAbility.targetRule}
-                                options={targetRules.map((value) => ({ value, label: value.toUpperCase() }))}
-                                onChange={(value) => updateSelectedAbility((ability) => { ability.targetRule = value as BattleTargetRule })}
-                              />
-                            </div>
-                            <InputField
-                              label="Tags"
-                              value={selectedAbility.tags.join(', ')}
-                              onChange={(value) =>
-                                updateSelectedAbility((ability) => {
-                                  ability.tags = value
-                                    .split(',')
-                                    .map((part) => part.trim().toUpperCase())
-                                    .filter((part): part is BattleAbilityTag => tagOptions.includes(part as BattleAbilityTag))
-                                  syncAbilityPresentation(ability)
-                                })
-                              }
-                            />
-                            <AssetField
-                              fieldId={`ability-icon-${selectedAbility.id}`}
-                              label="Ability Icon"
-                              value={selectedAbility.icon.src ?? ''}
-                              onChange={(value) => updateSelectedAbility((ability) => { ability.icon.src = value || undefined })}
-                              onImport={(file) => handleImageImport((value) => updateSelectedAbility((ability) => { ability.icon.src = value }), file, 'ABILITY ICON UPDATED')}
-                              helper="Square icon. Recommended 256x256. Preferred master 512x512."
-                            />
-                            <TextAreaField label="Description" value={selectedAbility.description} onChange={(value) => updateSelectedAbility((ability) => { ability.description = value })} rows={3} />
-                            <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL COST</p>
-                                <button
-                                  type="button"
-                                  onClick={() => updateSelectedAbility((ability) => { ability.energyCost = ability.energyCost ? undefined : {} })}
-                                  className={[
-                                    'ca-mono-label rounded-md border px-2 py-1 text-[0.38rem] transition',
-                                    selectedAbility.energyCost
-                                      ? 'border-ca-teal/22 bg-ca-teal-wash text-ca-teal'
-                                      : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2',
-                                  ].join(' ')}
-                                >
-                                  {selectedAbility.energyCost ? 'MANUAL' : 'AUTO'}
-                                </button>
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {Object.entries(getAbilityEnergyCost(selectedAbility)).length > 0 ? (
-                                  Object.entries(getAbilityEnergyCost(selectedAbility)).map(([type, value]) => (
-                                    <span key={type} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">
-                                      {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">FREE</span>
-                                )}
-                              </div>
-                              {selectedAbility.energyCost ? (
-                                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                  {battleEnergyOrder.map((type) => (
-                                    <NumberField
-                                      key={`${selectedAbility.id}-${type}`}
-                                      label={battleEnergyMeta[type].short}
-                                      value={selectedAbility.energyCost?.[type] ?? 0}
-                                      onChange={(value) => updateSelectedAbility((ability) => {
-                                        const next = { ...(ability.energyCost ?? {}) }
-                                        const sanitized = Math.max(0, Math.floor(value))
-                                        if (sanitized === 0) {
-                                          delete next[type]
-                                        } else {
-                                          next[type] = sanitized
-                                        }
-                                        ability.energyCost = Object.keys(next).length > 0 ? next : {}
-                                      })}
-                                    />
-                                  ))}
-                                </div>
-                              ) : null}
-                              <p className="mt-2 text-sm leading-6 text-ca-text-2">{explainCostRule(selectedAbility)}</p>
-                            </div>
+                  <div className="space-y-5">
+                    <div className="overflow-hidden rounded-[14px] border border-white/8 bg-[linear-gradient(135deg,rgba(250,39,66,0.12),rgba(250,39,66,0.02)_28%,rgba(5,216,189,0.08)_72%,rgba(255,255,255,0.03))] px-4 py-4 lg:px-5">
+                      <div className="grid gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]">
+                        <div className="space-y-3">
+                          <div className="rounded-[12px] border border-white/10 bg-[rgba(8,9,14,0.8)] p-2 shadow-[0_18px_44px_rgba(0,0,0,0.26)]">
+                            <PortraitPreview fighter={selectedFighter} />
                           </div>
+                          <AssetField
+                            fieldId={`fighter-portrait-${selectedFighter.id}`}
+                            label="Portrait Image"
+                            value={selectedFighter.boardPortraitSrc}
+                            onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value })}
+                            onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, 'PORTRAIT UPDATED')}
+                            helper="Square crop. Recommended 512x512."
+                          />
                         </div>
-                        <EffectListEditor
-                          title="Technique Results"
-                          helper="Use effect rows to describe the real in-battle outcome of this skill."
-                          effects={selectedAbility.effects ?? []}
-                          onChange={(effects) => updateSelectedAbilityEffects(() => effects)}
-                          advancedJson={JSON.stringify(selectedAbility.effects ?? [], null, 2)}
-                          onAdvancedJsonChange={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedAbility((ability) => { ability.effects = parsed }), 'ABILITY EFFECTS UPDATED')}
-                        />
+                        <div className="space-y-3">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <InputField label="Name" value={selectedFighter.name} onChange={(value) => updateSelectedFighter((fighter) => { fighter.name = value })} />
+                            <InputField label="Short Name" value={selectedFighter.shortName} onChange={(value) => updateSelectedFighter((fighter) => { fighter.shortName = value })} />
+                            <InputField label="Role" value={selectedFighter.role} onChange={(value) => updateSelectedFighter((fighter) => { fighter.role = value })} />
+                            <SelectField label="Rarity" value={selectedFighter.rarity} options={rarityOptions.map((value) => ({ value, label: value }))} onChange={(value) => updateSelectedFighter((fighter) => { fighter.rarity = value as BattleFighterTemplate['rarity'] })} />
+                            <InputField label="Affiliation" value={selectedFighter.affiliationLabel} onChange={(value) => updateSelectedFighter((fighter) => { fighter.affiliationLabel = value })} />
+                            <NumberField label="Max HP" value={selectedFighter.maxHp} onChange={(value) => updateSelectedFighter((fighter) => { fighter.maxHp = value })} />
+                          </div>
+                          <TextAreaField label="Bio" value={selectedFighter.bio} onChange={(value) => updateSelectedFighter((fighter) => { fighter.bio = value })} rows={3} />
+                        </div>
                       </div>
-                    ) : null}
+                    </div>
+
+                    <div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="ca-mono-label text-[0.42rem] text-ca-text-3">SKILLS AND ULTIMATE</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={handleAddAbility} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal">
+                            ADD SKILL
+                          </button>
+                          <button type="button" onClick={handleDuplicateAbility} disabled={!selectedAbility || selectedFighter.ultimate.id === selectedAbility.id} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 disabled:opacity-50">
+                            DUPLICATE SELECTED
+                          </button>
+                          <button type="button" onClick={handleDeleteAbility} disabled={!selectedAbility || selectedFighter.ultimate.id === selectedAbility.id || selectedFighter.abilities.length <= 1} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2.5 py-1.5 text-[0.42rem] text-ca-red disabled:opacity-50">
+                            DELETE SELECTED
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        {selectedFighter.abilities.concat(selectedFighter.ultimate).map((ability) => {
+                          const isUltimate = selectedFighter.ultimate.id === ability.id
+                          const active = selectedAbility?.id === ability.id
+                          return (
+                            <SkillEditorCard
+                              key={ability.id}
+                              ability={ability}
+                              isUltimate={isUltimate}
+                              active={active}
+                              onSelect={() => setSelectedAbilityId(ability.id)}
+                              onUpdate={(mutator) => updateAbilityById(ability.id, mutator)}
+                              onUpdateEffects={(effects) => updateAbilityEffectsById(ability.id, effects)}
+                              onImportIcon={(file) => handleImageImport((value) => updateAbilityById(ability.id, (current) => { current.icon.src = value }), file, 'ABILITY ICON UPDATED')}
+                              onAdvancedEffectsJson={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateAbilityById(ability.id, (current) => { current.effects = parsed }), 'ABILITY EFFECTS UPDATED')}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </EditorCard>
+
 
                 <EditorCard title="Passive Editor" subtitle={selectedPassive?.label ?? 'NO PASSIVE'}>
                   <div className="space-y-3">
@@ -1403,67 +1269,168 @@ function AbilityTilePreview({ ability, large = false }: { ability: BattleAbility
   )
 }
 
-function CharacterCreatorHero({ fighter }: { fighter: BattleFighterTemplate }) {
+function SkillEditorCard({
+  ability,
+  isUltimate,
+  active,
+  onSelect,
+  onUpdate,
+  onUpdateEffects,
+  onImportIcon,
+  onAdvancedEffectsJson,
+}: {
+  ability: BattleAbilityTemplate
+  isUltimate: boolean
+  active: boolean
+  onSelect: () => void
+  onUpdate: (mutator: (ability: BattleAbilityTemplate) => void) => void
+  onUpdateEffects: (effects: SkillEffect[]) => void
+  onImportIcon: (file: File | null) => void
+  onAdvancedEffectsJson: (value: string) => void
+}) {
   return (
-    <div className="overflow-hidden rounded-[14px] border border-white/8 bg-[linear-gradient(135deg,rgba(250,39,66,0.12),rgba(250,39,66,0.02)_28%,rgba(5,216,189,0.08)_72%,rgba(255,255,255,0.03))]">
-      <div className="grid gap-4 px-4 py-4 lg:grid-cols-[10rem_minmax(0,1fr)] lg:px-5">
-        <div className="flex justify-center lg:justify-start">
-          <div className="rounded-[12px] border border-white/10 bg-[rgba(8,9,14,0.8)] p-2 shadow-[0_18px_44px_rgba(0,0,0,0.26)]">
-            <PortraitPreview fighter={fighter} />
+    <div
+      onFocus={onSelect}
+      className={[
+        'rounded-[14px] border transition',
+        active
+          ? 'border-ca-red/28 bg-[rgba(250,39,66,0.08)] shadow-[0_16px_38px_rgba(0,0,0,0.24)]'
+          : 'border-white/8 bg-[rgba(255,255,255,0.03)] hover:border-white/14',
+      ].join(' ')}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex w-full items-center justify-between gap-3 rounded-t-[14px] border-b border-white/8 bg-[linear-gradient(90deg,rgba(250,39,66,0.9),rgba(179,22,43,0.92))] px-3 py-2.5 text-left"
+      >
+        <div>
+          <p className="ca-display text-[1.1rem] leading-none text-white">{ability.name || 'Untitled Skill'}</p>
+          <p className="ca-mono-label mt-1 text-[0.38rem] text-white/75">{isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'}</p>
+        </div>
+        <span className="ca-mono-label rounded-md border border-white/18 bg-black/20 px-2 py-1 text-[0.38rem] text-white">CD {ability.cooldown}</span>
+      </button>
+      <div className="space-y-3 px-3 py-3 sm:px-4">
+        <div className="grid gap-3 md:grid-cols-[8rem_minmax(0,1fr)]">
+          <div className="flex justify-center md:justify-start">
+            <AbilityTilePreview ability={ability} large />
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <InputField label="Skill Name" value={ability.name} onChange={(value) => onUpdate((current) => { current.name = value; syncAbilityPresentation(current) })} />
+              <NumberField label="Cooldown" value={ability.cooldown} onChange={(value) => onUpdate((current) => { current.cooldown = value })} />
+              <SelectField
+                label="Skill Logic"
+                value={ability.kind}
+                options={abilityKinds.map((value) => ({ value, label: value.toUpperCase() }))}
+                onChange={(value) => onUpdate((current) => { current.kind = value as BattleAbilityKind; syncAbilityPresentation(current) })}
+              />
+              <SelectField
+                label="Targeting"
+                value={ability.targetRule}
+                options={targetRules.map((value) => ({ value, label: value.toUpperCase() }))}
+                onChange={(value) => onUpdate((current) => { current.targetRule = value as BattleTargetRule })}
+              />
+            </div>
+            <InputField
+              label="Tags (comma separated)"
+              value={ability.tags.join(', ')}
+              onChange={(value) => onUpdate((current) => {
+                current.tags = value
+                  .split(',')
+                  .map((part) => part.trim().toUpperCase())
+                  .filter((part): part is BattleAbilityTag => tagOptions.includes(part as BattleAbilityTag))
+                syncAbilityPresentation(current)
+              })}
+            />
+            <TextAreaField label="Skill Copy" value={ability.description} onChange={(value) => onUpdate((current) => { current.description = value })} rows={3} />
           </div>
         </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="ca-display text-[2rem] leading-none text-ca-text sm:text-[2.4rem]">{fighter.name}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <StatusPill label={fighter.rarity} tone={fighter.rarity === 'SSR' || fighter.rarity === 'UR' ? 'red' : fighter.rarity === 'SR' ? 'teal' : 'frost'} />
-                <StatusPill label={fighter.role.toUpperCase()} tone="frost" />
-                <StatusPill label={fighter.affiliationLabel.toUpperCase()} tone="teal" />
-              </div>
-            </div>
-            <div className="rounded-[10px] border border-white/8 bg-[rgba(8,9,14,0.42)] px-3 py-2 text-right">
-              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">HP POOL</p>
-              <p className="ca-display mt-1 text-3xl text-ca-text">{fighter.maxHp}</p>
-            </div>
-          </div>
-          <p className="mt-3 text-sm leading-7 text-ca-text-2">{fighter.bio}</p>
-        </div>
+
+        <AssetField
+          fieldId={`ability-icon-${ability.id}`}
+          label="Skill Icon"
+          value={ability.icon.src ?? ''}
+          onChange={(value) => onUpdate((current) => { current.icon.src = value || undefined })}
+          onImport={onImportIcon}
+          helper="Square icon. Recommended 256x256."
+        />
+
+        <SkillCostPanel ability={ability} onUpdate={onUpdate} />
+
+        <EffectListEditor
+          title="Technique Results"
+          helper="Use effect rows to describe the real in-battle outcome of this skill."
+          effects={ability.effects ?? []}
+          onChange={onUpdateEffects}
+          advancedJson={JSON.stringify(ability.effects ?? [], null, 2)}
+          onAdvancedJsonChange={onAdvancedEffectsJson}
+        />
       </div>
     </div>
   )
 }
 
-function CreatorAbilityCard({
+function SkillCostPanel({
   ability,
-  active,
-  isUltimate,
-  onSelect,
-  children,
+  onUpdate,
 }: {
   ability: BattleAbilityTemplate
-  active: boolean
-  isUltimate: boolean
-  onSelect: () => void
-  children: ReactNode
+  onUpdate: (mutator: (ability: BattleAbilityTemplate) => void) => void
 }) {
+  const manual = Boolean(ability.energyCost)
+  const costEntries = Object.entries(getAbilityEnergyCost(ability))
+
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={[
-        'w-full rounded-[14px] border p-0 text-left transition',
-        active ? 'border-ca-red/28 bg-[rgba(250,39,66,0.08)] shadow-[0_16px_38px_rgba(0,0,0,0.24)]' : 'border-white/8 bg-[rgba(255,255,255,0.03)] hover:border-white/14',
-      ].join(' ')}>
-      <div className="flex items-center justify-between gap-3 border-b border-white/8 bg-[linear-gradient(90deg,rgba(250,39,66,0.9),rgba(179,22,43,0.92))] px-3 py-2.5">
-        <div>
-          <p className="ca-display text-[1.1rem] leading-none text-white">{ability.name}</p>
-          <p className="ca-mono-label mt-1 text-[0.38rem] text-white/75">{isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'}</p>
-        </div>
-        <span className="ca-mono-label rounded-md border border-white/18 bg-black/20 px-2 py-1 text-[0.38rem] text-white">CD {ability.cooldown}</span>
+    <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL COST</p>
+        <button
+          type="button"
+          onClick={() => onUpdate((current) => { current.energyCost = current.energyCost ? undefined : {} })}
+          className={[
+            'ca-mono-label rounded-md border px-2 py-1 text-[0.38rem] transition',
+            manual
+              ? 'border-ca-teal/22 bg-ca-teal-wash text-ca-teal'
+              : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2',
+          ].join(' ')}
+        >
+          {manual ? 'MANUAL' : 'AUTO'}
+        </button>
       </div>
-      <div className="px-3 py-3">{children}</div>
-    </button>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {costEntries.length > 0 ? (
+          costEntries.map(([type, value]) => (
+            <span key={type} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">
+              {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
+            </span>
+          ))
+        ) : (
+          <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">FREE</span>
+        )}
+      </div>
+      {manual ? (
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {battleEnergyOrder.map((type) => (
+            <NumberField
+              key={`${ability.id}-${type}`}
+              label={battleEnergyMeta[type].short}
+              value={ability.energyCost?.[type] ?? 0}
+              onChange={(value) => onUpdate((current) => {
+                const next = { ...(current.energyCost ?? {}) }
+                const sanitized = Math.max(0, Math.floor(value))
+                if (sanitized === 0) {
+                  delete next[type]
+                } else {
+                  next[type] = sanitized
+                }
+                current.energyCost = Object.keys(next).length > 0 ? next : {}
+              })}
+            />
+          ))}
+        </div>
+      ) : null}
+      <p className="mt-2 text-sm leading-6 text-ca-text-2">{explainCostRule(ability)}</p>
+    </div>
   )
 }
 
