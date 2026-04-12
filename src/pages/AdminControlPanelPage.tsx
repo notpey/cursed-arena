@@ -2261,7 +2261,7 @@ function EffectRowEditor({
         <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
           <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Replacement Ability JSON</summary>
           <div className="mt-3">
-            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.replacement, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; onChange({ ...effect, delta: { ...effect.delta, replacement: parsed } }) } catch { /* ignore */ } }} rows={8} mono />
+            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.replacement, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; const d = effect.delta; if (d.mode === 'replace') onChange({ ...effect, delta: { mode: 'replace', slotAbilityId: d.slotAbilityId, replacement: parsed, duration: d.duration } }) } catch { /* ignore */ } }} rows={8} mono />
           </div>
         </details>
       ) : null}
@@ -2269,7 +2269,7 @@ function EffectRowEditor({
         <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
           <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Granted Ability JSON</summary>
           <div className="mt-3">
-            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.grantedAbility, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; onChange({ ...effect, delta: { ...effect.delta, grantedAbility: parsed } }) } catch { /* ignore */ } }} rows={8} mono />
+            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.grantedAbility, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; const d = effect.delta; if (d.mode === 'grant') onChange({ ...effect, delta: { mode: 'grant', grantedAbility: parsed, duration: d.duration } }) } catch { /* ignore */ } }} rows={8} mono />
           </div>
         </details>
       ) : null}
