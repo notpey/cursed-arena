@@ -18,9 +18,16 @@ import { battleEnergyMeta, battleEnergyOrder, getAbilityEnergyCost } from '@/fea
 import { validateBattleContent } from '@/features/battle/validation'
 import type {
   BattleAbilityKind,
+  BattleAbilityStateDelta,
   BattleAbilityTag,
   BattleAbilityTemplate,
   BattleFighterTemplate,
+  BattleModifierMode,
+  BattleModifierScope,
+  BattleModifierStat,
+  BattleReactionCondition,
+  BattleScheduledPhase,
+  BattleStatusKind,
   BattleTargetRule,
   PassiveEffect,
   PassiveTrigger,
@@ -29,11 +36,16 @@ import type {
 
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
-const passiveTriggers: PassiveTrigger[] = ['onDealDamage', 'onRoundStart', 'whileAlive', 'onTargetBelow']
+const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onDefeat', 'onTargetBelow']
 const tagOptions: BattleAbilityTag[] = ['ATK', 'HEAL', 'BUFF', 'DEBUFF', 'UTILITY', 'ULT']
-const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost']
+const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
 const rarityOptions: BattleFighterTemplate['rarity'][] = ['R', 'SR', 'SSR', 'UR']
+const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
+const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
+const modifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
+const modifierStatusKinds: Array<BattleStatusKind | ''> = ['', 'stun', 'invincible', 'mark', 'burn', 'attackUp']
+const modifierStackingOptions = ['max', 'replace', 'stack'] as const
 
 type SkillBlueprintId =
   | 'single-strike'
@@ -58,6 +70,11 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   burn: { label: 'Burn', hint: 'Damage over time each round.' },
   cooldownReduction: { label: 'Cooldown Reduction', hint: 'Accelerate ability cycling.' },
   damageBoost: { label: 'Damage Boost', hint: 'Percent-based damage multiplier.' },
+  addModifier: { label: 'Add Modifier', hint: 'Apply a generic runtime modifier bundle.' },
+  removeModifier: { label: 'Remove Modifier', hint: 'Strip modifiers by filter instead of hardcoding dispels.' },
+  modifyAbilityState: { label: 'Ability State', hint: 'Grant, lock, or replace abilities using the generalized runtime model.' },
+  schedule: { label: 'Delayed Effect', hint: 'Queue nested effects for a future round start or end.' },
+  replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
 }
 
 const skillBlueprintOptions: Array<{ id: SkillBlueprintId; label: string; hint: string }> = [
@@ -78,8 +95,13 @@ type PassiveBlueprintId = 'round-heal' | 'damage-aura' | 'execute-drive' | 'temp
 const passiveTriggerMeta: Record<PassiveTrigger, { label: string; hint: string }> = {
   onDealDamage: { label: 'On Deal Damage', hint: 'Fires after this fighter deals damage.' },
   onRoundStart: { label: 'Round Start', hint: 'Fires automatically at the start of each round.' },
+  onRoundEnd: { label: 'Round End', hint: 'Fires before cooldowns and statuses tick down.' },
+  onAbilityUse: { label: 'On Ability Use', hint: 'Fires immediately before the fighter resolves a technique.' },
+  onAbilityResolve: { label: 'On Ability Resolve', hint: 'Fires after the selected technique finishes resolving.' },
+  onTakeDamage: { label: 'On Take Damage', hint: 'Fires after this fighter is hit.' },
+  onDefeat: { label: 'On Defeat', hint: 'Fires when this fighter is exorcised.' },
   whileAlive: { label: 'While Alive Aura', hint: 'Always active while the fighter remains alive.' },
-  onTargetBelow: { label: 'Execute Window', hint: 'Activates when the target falls below the threshold.' },
+  onTargetBelow: { label: 'Execute Window', hint: 'Legacy shorthand for target HP threshold reactions.' },
 }
 
 const passiveBlueprintOptions: Array<{ id: PassiveBlueprintId; label: string; hint: string }> = [
@@ -154,6 +176,18 @@ function syncAbilityPresentation(ability: BattleAbilityTemplate) {
   }
 }
 
+let embeddedAbilityCounter = 1
+
+function createTemporaryAbility(name = 'Temporary Technique'): BattleAbilityTemplate {
+  return createBlankAbility(`temporary-technique-${embeddedAbilityCounter++}`, name, {
+    kind: 'attack',
+    targetRule: 'enemy-single',
+    tags: ['ATK'],
+    cooldown: 1,
+    effects: [{ type: 'damage', power: 28, target: 'inherit' }],
+  })
+}
+
 function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
   switch (type) {
     case 'damage':
@@ -174,9 +208,46 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'cooldownReduction', amount: 1, target: 'inherit' }
     case 'damageBoost':
       return { type: 'damageBoost', amount: 0.2, target: 'inherit' }
+    case 'addModifier':
+      return {
+        type: 'addModifier',
+        target: 'inherit',
+        modifier: {
+          label: 'New Modifier',
+          scope: 'fighter',
+          stat: 'damageDealt',
+          mode: 'flat',
+          value: 10,
+          duration: { kind: 'rounds', rounds: 1 },
+          tags: [],
+          visible: false,
+          stacking: 'max',
+        },
+      }
+    case 'removeModifier':
+      return { type: 'removeModifier', target: 'inherit', filter: { statusKind: 'attackUp' } }
+    case 'modifyAbilityState':
+      return {
+        type: 'modifyAbilityState',
+        target: 'self',
+        delta: {
+          mode: 'grant',
+          duration: 2,
+          grantedAbility: createTemporaryAbility(),
+        },
+      }
+    case 'schedule':
+      return { type: 'schedule', delay: 1, phase: 'roundStart', target: 'inherit', effects: [{ type: 'damage', power: 12, target: 'inherit' }] }
+    case 'replaceAbility':
+      return {
+        type: 'replaceAbility',
+        duration: 2,
+        slotAbilityId: 'replace-this-skill',
+        target: 'self',
+        ability: createTemporaryAbility(),
+      }
   }
 }
-
 
 function applySkillBlueprint(ability: BattleAbilityTemplate, blueprintId: SkillBlueprintId, isUltimate: boolean) {
   const assign = (template: {
@@ -325,6 +396,37 @@ function formatEffectTarget(target: SkillEffect['target']) {
   return 'all enemies'
 }
 
+function formatCsvList(values?: string[]) {
+  return (values ?? []).join(', ')
+}
+
+function parseCsvList(value: string) {
+  return value.split(',').map((entry) => entry.trim()).filter(Boolean)
+}
+
+function usesBooleanModifierValue(effect: Extract<SkillEffect, { type: 'addModifier' }>) {
+  return effect.modifier.stat === 'canAct' || effect.modifier.stat === 'isInvulnerable' || typeof effect.modifier.value === 'boolean'
+}
+
+function describeCondition(condition: BattleReactionCondition) {
+  switch (condition.type) {
+    case 'targetHpBelow':
+      return `target below ${Math.round(condition.threshold * 100)}% HP`
+    case 'selfHpBelow':
+      return `self below ${Math.round(condition.threshold * 100)}% HP`
+    case 'actorHasStatus':
+      return `self has ${condition.status}`
+    case 'targetHasStatus':
+      return `target has ${condition.status}`
+    case 'abilityId':
+      return `ability is ${condition.abilityId}`
+    case 'abilityTag':
+      return `ability has ${condition.tag}`
+    case 'isUltimate':
+      return 'ability is an ultimate'
+  }
+}
+
 function describeEffect(effect: SkillEffect) {
   switch (effect.type) {
     case 'damage':
@@ -345,6 +447,20 @@ function describeEffect(effect: SkillEffect) {
       return `Reduces cooldowns by ${effect.amount} for ${formatEffectTarget(effect.target)}.`
     case 'damageBoost':
       return `Boosts outgoing damage for ${formatEffectTarget(effect.target)} by ${Math.round(effect.amount * 100)}%.`
+    case 'addModifier':
+      return `Apply ${effect.modifier.label} to ${formatEffectTarget(effect.target)} using ${effect.modifier.stat} ${effect.modifier.mode}.`
+    case 'removeModifier':
+      return `Remove modifiers from ${formatEffectTarget(effect.target)} matching ${effect.filter.statusKind ?? effect.filter.stat ?? effect.filter.label ?? 'the authored filter'}.`
+    case 'modifyAbilityState':
+      return effect.delta.mode === 'replace'
+        ? `Replace ${effect.delta.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.delta.replacement.name} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
+        : effect.delta.mode === 'grant'
+          ? `Grant ${effect.delta.grantedAbility.name} to ${formatEffectTarget(effect.target)} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
+          : `Lock ${effect.delta.slotAbilityId} on ${formatEffectTarget(effect.target)} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
+    case 'schedule':
+      return `After ${effect.delay} round ${effect.phase === 'roundStart' ? 'start' : 'end'} trigger${effect.delay === 1 ? '' : 's'}, resolve ${effect.effects.length} nested effect row${effect.effects.length === 1 ? '' : 's'}.`
+    case 'replaceAbility':
+      return `Replace ${effect.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`
   }
 }
 
@@ -358,36 +474,43 @@ function applyPassiveBlueprint(passive: PassiveEffect, blueprintId: PassiveBluep
       passive.label = 'Round Renewal'
       passive.trigger = 'onRoundStart'
       passive.threshold = undefined
+      passive.conditions = undefined
       passive.effects = [{ type: 'heal', power: 10, target: 'self' }]
       return
     case 'damage-aura':
       passive.label = 'Battle Pressure'
       passive.trigger = 'whileAlive'
       passive.threshold = undefined
+      passive.conditions = undefined
       passive.effects = [{ type: 'damageBoost', amount: 0.15, target: 'self' }]
       return
     case 'execute-drive':
       passive.label = 'Execution Drive'
-      passive.trigger = 'onTargetBelow'
-      passive.threshold = 0.4
+      passive.trigger = 'whileAlive'
+      passive.threshold = undefined
+      passive.conditions = [{ type: 'targetHpBelow', threshold: 0.4 }]
       passive.effects = [{ type: 'damageBoost', amount: 0.25, target: 'self' }]
       return
     case 'tempo-engine':
       passive.label = 'Tempo Engine'
       passive.trigger = 'whileAlive'
       passive.threshold = undefined
+      passive.conditions = undefined
       passive.effects = [{ type: 'cooldownReduction', amount: 1, target: 'self' }]
       return
   }
 }
+
 function describePassive(passive: PassiveEffect) {
   const thresholdText =
     passive.trigger === 'onTargetBelow' && typeof passive.threshold === 'number'
       ? ` under ${Math.round(passive.threshold * 100)}% HP`
       : ''
-  return `${passive.label}: ${formatPassiveTrigger(passive.trigger)}${thresholdText}.`.trim()
+  const conditionText = (passive.conditions ?? []).length > 0
+    ? ` Conditions: ${(passive.conditions ?? []).map(describeCondition).join(', ')}.`
+    : ''
+  return `${passive.label}: ${formatPassiveTrigger(passive.trigger)}${thresholdText}.${conditionText}`.trim()
 }
-
 function explainCostRule(ability: BattleAbilityTemplate) {
   if (ability.kind === 'pass') return 'Passive abilities are free.'
   if (ability.energyCost && Object.keys(ability.energyCost).length > 0) return 'This skill is using a manually authored cost override.'
@@ -448,7 +571,6 @@ function createBlankFighter(index: number): BattleFighterTemplate {
     affiliationLabel: 'Custom',
     battleTitle: 'Arena Recruit',
     bio: 'New combatant awaiting authored battle identity.',
-    renderSrc: '',
     boardPortraitSrc: '',
     maxHp: 100,
     passiveEffects: [
@@ -700,6 +822,35 @@ export function AdminControlPanelPage() {
     setSelectedPassiveIndex(0)
     setFighterJsonDraft('')
     setStatusFlash('FIGHTER DELETED')
+  }
+
+  function handleUpdateFighterId(newId: string) {
+    if (!selectedFighter) return
+    const oldId = selectedFighter.id
+    if (oldId === newId || !newId.trim()) return
+    if (draft.roster.some((f) => f.id !== oldId && f.id === newId)) {
+      setStatusFlash('ID ALREADY TAKEN')
+      return
+    }
+    updateDraft((next) => {
+      const fighter = next.roster.find((entry) => entry.id === oldId)
+      if (!fighter) return
+      fighter.abilities = fighter.abilities.map((ability) => ({
+        ...ability,
+        id: ability.id.startsWith(oldId + '-') ? newId + '-' + ability.id.slice(oldId.length + 1) : ability.id,
+      }))
+      fighter.ultimate = {
+        ...fighter.ultimate,
+        id: fighter.ultimate.id.startsWith(oldId + '-') ? newId + '-' + fighter.ultimate.id.slice(oldId.length + 1) : fighter.ultimate.id,
+      }
+      fighter.id = newId
+      next.defaultSetup.playerTeamIds = next.defaultSetup.playerTeamIds.map((id) => id === oldId ? newId : id)
+      next.defaultSetup.enemyTeamIds = next.defaultSetup.enemyTeamIds.map((id) => id === oldId ? newId : id)
+    })
+    setSelectedFighterId(newId)
+    if (selectedAbilityId?.startsWith(oldId + '-')) {
+      setSelectedAbilityId(newId + '-' + selectedAbilityId.slice(oldId.length + 1))
+    }
   }
 
   function handleCopyFighterJson() {
@@ -1021,7 +1172,7 @@ export function AdminControlPanelPage() {
                             <AssetField
                               fieldId={`fighter-portrait-${selectedFighter.id}`}
                               label="Portrait Image"
-                              value={selectedFighter.boardPortraitSrc}
+                              value={selectedFighter.boardPortraitSrc ?? ''}
                               onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value })}
                               onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, "PORTRAIT UPDATED")}
                               helper="Square crop. Recommended 512x512."
@@ -1035,8 +1186,19 @@ export function AdminControlPanelPage() {
                               <SelectField label="Rarity" value={selectedFighter.rarity} options={rarityOptions.map((value) => ({ value, label: value }))} onChange={(value) => updateSelectedFighter((fighter) => { fighter.rarity = value as BattleFighterTemplate['rarity'] })} />
                               <InputField label="Affiliation" value={selectedFighter.affiliationLabel} onChange={(value) => updateSelectedFighter((fighter) => { fighter.affiliationLabel = value })} />
                               <NumberField label="Max HP" value={selectedFighter.maxHp} onChange={(value) => updateSelectedFighter((fighter) => { fighter.maxHp = value })} />
+                              <InputField label="Battle Title" value={selectedFighter.battleTitle} onChange={(value) => updateSelectedFighter((fighter) => { fighter.battleTitle = value })} />
+                              <SlugInputField label="Fighter ID" value={selectedFighter.id} onChange={handleUpdateFighterId} />
                             </div>
                             <TextAreaField label="Bio" value={selectedFighter.bio} onChange={(value) => updateSelectedFighter((fighter) => { fighter.bio = value })} rows={4} />
+                            <details className="rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+                              <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Portrait Frame</summary>
+                              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                                <NumberField label="Scale" value={selectedFighter.boardPortraitFrame?.scale ?? 2.0} step={0.01} onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitFrame = { ...(fighter.boardPortraitFrame ?? {}), scale: value } })} />
+                                <InputField label="Offset X (%)" value={selectedFighter.boardPortraitFrame?.x ?? '0%'} onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitFrame = { ...(fighter.boardPortraitFrame ?? {}), x: value } })} />
+                                <InputField label="Offset Y (%)" value={selectedFighter.boardPortraitFrame?.y ?? '0%'} onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitFrame = { ...(fighter.boardPortraitFrame ?? {}), y: value } })} />
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-ca-text-3">Controls position and zoom of URL-sourced portraits. Scale 2.0–2.6 is typical; Y offset -10% to -20% centers the subject in frame.</p>
+                            </details>
                           </div>
                         </div>
                       </div>
@@ -1162,6 +1324,18 @@ export function AdminControlPanelPage() {
                                 <p className="ca-mono-label text-[0.38rem] text-ca-teal">TRIGGER NOTES</p>
                                 <p className="mt-1 text-sm leading-6 text-ca-text-2">{passiveTriggerMeta[selectedPassive.trigger].hint}</p>
                               </div>
+                              <details className="mt-3 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+                                <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Conditions JSON</summary>
+                                <div className="mt-3">
+                                  <TextAreaField
+                                    label="Conditions"
+                                    value={JSON.stringify(selectedPassive.conditions ?? [], null, 2)}
+                                    onChange={(value) => updateJsonField<BattleReactionCondition[]>(value, (parsed) => updateSelectedPassive((passive) => { passive.conditions = parsed }), 'PASSIVE CONDITIONS UPDATED')}
+                                    rows={6}
+                                    mono
+                                  />
+                                </div>
+                              </details>
                             </div>
                             <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
                               <p className="ca-mono-label text-[0.4rem] text-ca-text-3">PASSIVE SUMMARY</p>
@@ -1356,6 +1530,26 @@ function SelectField({
   )
 }
 
+function SlugInputField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const [raw, setRaw] = useState(value)
+  useEffect(() => { setRaw(value) }, [value])
+  return (
+    <label className="block">
+      <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</span>
+      <input
+        value={raw}
+        onChange={(event) => setRaw(event.target.value)}
+        onBlur={() => {
+          const slugged = slugify(raw) || value
+          setRaw(slugged)
+          onChange(slugged)
+        }}
+        className="mt-2 w-full rounded-[8px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2 font-mono text-sm text-ca-text outline-none transition focus:border-ca-teal/35"
+      />
+    </label>
+  )
+}
+
 function StatusPill({ label, tone }: { label: string; tone: 'teal' | 'red' | 'gold' | 'frost' }) {
   const className =
     tone === 'teal'
@@ -1436,10 +1630,7 @@ function AssetField({
 
 function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterTemplate; compact?: boolean }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(
-    fighter.boardPortraitSrc &&
-      (fighter.boardPortraitSrc !== fighter.renderSrc || fighter.boardPortraitSrc.startsWith('data:image')),
-  )
+  const portraitMode = Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
   const frame = portraitMode ? {} : fighter.boardPortraitFrame ?? {}
   const scale = frame.scale ?? 1
   const x = frame.x ?? '0%'
@@ -1533,7 +1724,7 @@ function FighterProfilePreview({ fighter }: { fighter: BattleFighterTemplate }) 
 
       {(fighter.passiveEffects ?? []).map((passive, index) => (
         <div key={`${passive.label}-${index}`} className="rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash px-3 py-3">
-          <p className="ca-mono-label text-[0.42rem] text-ca-teal">PASSIVE — {passive.label.toUpperCase()}</p>
+          <p className="ca-mono-label text-[0.42rem] text-ca-teal">PASSIVE - {passive.label.toUpperCase()}</p>
           <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(passive)}</p>
         </div>
       ))}
@@ -1569,7 +1760,7 @@ function SkillProfileRow({ ability, isUltimate }: { ability: BattleAbilityTempla
         <div className="min-w-0">
           <p className="ca-display truncate text-[1rem] leading-none text-white">{ability.name || 'Untitled Skill'}</p>
           <p className="ca-mono-label mt-1 text-[0.36rem] text-white/75">
-            {isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'} · CD {ability.cooldown}
+            {isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'} - CD {ability.cooldown}
           </p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap gap-1">
@@ -2008,8 +2199,96 @@ function EffectRowEditor({
         {effect.type === 'burn' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
         {effect.type === 'cooldownReduction' ? <NumberField label="Cooldowns Reduced" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
         {effect.type === 'damageBoost' ? <NumberField label="Boost %" value={Math.round(effect.amount * 100)} onChange={(value) => onChange({ ...effect, amount: value / 100 })} /> : null}
+        {effect.type === 'addModifier' ? <InputField label="Modifier Label" value={effect.modifier.label} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, label: value } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Scope" value={effect.modifier.scope ?? 'fighter'} options={modifierScopes.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, scope: value as BattleModifierScope } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Stat" value={effect.modifier.stat} options={modifierStats.map((value) => ({ value, label: value }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, stat: value as BattleModifierStat } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Mode" value={effect.modifier.mode} options={modifierModes.map((value) => ({ value, label: value }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, mode: value as BattleModifierMode } })} /> : null}
+        {effect.type === 'addModifier' && usesBooleanModifierValue(effect) ? <SelectField label="Value" value={String(effect.modifier.value)} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, value: value === 'true' } })} /> : null}
+        {effect.type === 'addModifier' && !usesBooleanModifierValue(effect) ? <NumberField label="Value" value={typeof effect.modifier.value === 'number' ? effect.modifier.value : 0} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, value } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Duration" value={effect.modifier.duration.kind} options={[{ value: 'rounds', label: 'ROUNDS' }, { value: 'permanent', label: 'PERMANENT' }, { value: 'untilRemoved', label: 'UNTIL REMOVED' }]} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, duration: value === 'rounds' ? { kind: 'rounds', rounds: 1 } : value === 'permanent' ? { kind: 'permanent' } : { kind: 'untilRemoved' } } })} /> : null}
+        {effect.type === 'addModifier' && effect.modifier.duration.kind === 'rounds' ? <NumberField label="Rounds" value={effect.modifier.duration.rounds} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, duration: { kind: 'rounds', rounds: value } } })} /> : null}
+        {effect.type === 'addModifier' ? <InputField label="Tags CSV" value={formatCsvList(effect.modifier.tags)} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, tags: parseCsvList(value) } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Visible" value={effect.modifier.visible === false ? 'false' : 'true'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, visible: value === 'true' } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Status Kind" value={effect.modifier.statusKind ?? ''} options={modifierStatusKinds.map((value) => ({ value, label: value ? value.toUpperCase() : 'NONE' }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, statusKind: value ? value as BattleStatusKind : undefined } })} /> : null}
+        {effect.type === 'addModifier' ? <SelectField label="Stacking" value={effect.modifier.stacking ?? 'max'} options={modifierStackingOptions.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, stacking: value as 'max' | 'replace' | 'stack' } })} /> : null}
+        {effect.type === 'removeModifier' ? <InputField label="Filter Label" value={effect.filter.label ?? ''} onChange={(value) => onChange({ ...effect, filter: { ...effect.filter, label: value || undefined } })} /> : null}
+        {effect.type === 'removeModifier' ? <SelectField label="Filter Stat" value={effect.filter.stat ?? ''} options={[{ value: '', label: 'ANY' }, ...modifierStats.map((value) => ({ value, label: value }))]} onChange={(value) => onChange({ ...effect, filter: { ...effect.filter, stat: value ? value as BattleModifierStat : undefined } })} /> : null}
+        {effect.type === 'removeModifier' ? <SelectField label="Filter Scope" value={effect.filter.scope ?? ''} options={[{ value: '', label: 'ANY' }, ...modifierScopes.map((value) => ({ value, label: value.toUpperCase() }))]} onChange={(value) => onChange({ ...effect, filter: { ...effect.filter, scope: value ? value as BattleModifierScope : undefined } })} /> : null}
+        {effect.type === 'removeModifier' ? <SelectField label="Status Kind" value={effect.filter.statusKind ?? ''} options={modifierStatusKinds.map((value) => ({ value, label: value ? value.toUpperCase() : 'ANY' }))} onChange={(value) => onChange({ ...effect, filter: { ...effect.filter, statusKind: value ? value as BattleStatusKind : undefined } })} /> : null}
+        {effect.type === 'removeModifier' ? <InputField label="Tags CSV" value={formatCsvList(effect.filter.tags)} onChange={(value) => onChange({ ...effect, filter: { ...effect.filter, tags: parseCsvList(value) } })} /> : null}
+        {effect.type === 'modifyAbilityState' ? (
+          <SelectField
+            label="Mode"
+            value={effect.delta.mode}
+            options={[{ value: 'replace', label: 'REPLACE' }, { value: 'grant', label: 'GRANT' }, { value: 'lock', label: 'LOCK' }]}
+            onChange={(value) => {
+              const duration = effect.delta.duration
+              const slotId = effect.delta.mode !== 'grant' ? effect.delta.slotAbilityId : 'target-ability-id'
+              const next: BattleAbilityStateDelta =
+                value === 'replace' ? { mode: 'replace', slotAbilityId: slotId, replacement: createTemporaryAbility(), duration }
+                : value === 'grant' ? { mode: 'grant', grantedAbility: createTemporaryAbility(), duration }
+                : { mode: 'lock', slotAbilityId: slotId, duration }
+              onChange({ ...effect, delta: next })
+            }}
+          />
+        ) : null}
+        {effect.type === 'modifyAbilityState' && (effect.delta.mode === 'replace' || effect.delta.mode === 'lock') ? (
+          <InputField label="Slot Ability ID" value={effect.delta.slotAbilityId} onChange={(value) => {
+            const delta = effect.delta
+            if (delta.mode === 'replace') onChange({ ...effect, delta: { ...delta, slotAbilityId: value } })
+            else if (delta.mode === 'lock') onChange({ ...effect, delta: { ...delta, slotAbilityId: value } })
+          }} />
+        ) : null}
+        {effect.type === 'modifyAbilityState' ? (
+          <NumberField label="Duration (rounds)" value={effect.delta.duration} onChange={(value) => {
+            onChange({ ...effect, delta: { ...effect.delta, duration: value } as BattleAbilityStateDelta })
+          }} />
+        ) : null}
+        {effect.type === 'schedule' ? <NumberField label="Delay (rounds)" value={effect.delay} onChange={(value) => onChange({ ...effect, delay: value })} /> : null}
+        {effect.type === 'schedule' ? (
+          <SelectField
+            label="Phase"
+            value={effect.phase}
+            options={[{ value: 'roundStart', label: 'ROUND START' }, { value: 'roundEnd', label: 'ROUND END' }]}
+            onChange={(value) => onChange({ ...effect, phase: value as BattleScheduledPhase })}
+          />
+        ) : null}
+        {effect.type === 'replaceAbility' ? <InputField label="Slot Ability ID" value={effect.slotAbilityId} onChange={(value) => onChange({ ...effect, slotAbilityId: value })} /> : null}
+        {effect.type === 'replaceAbility' ? <NumberField label="Duration (rounds)" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
       </div>
       <p className="mt-3 text-sm leading-6 text-ca-text-2">{describeEffect(effect)}</p>
+      {effect.type === 'modifyAbilityState' && effect.delta.mode === 'replace' ? (
+        <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+          <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Replacement Ability JSON</summary>
+          <div className="mt-3">
+            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.replacement, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; onChange({ ...effect, delta: { ...effect.delta, replacement: parsed } }) } catch { /* ignore */ } }} rows={8} mono />
+          </div>
+        </details>
+      ) : null}
+      {effect.type === 'modifyAbilityState' && effect.delta.mode === 'grant' ? (
+        <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+          <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Granted Ability JSON</summary>
+          <div className="mt-3">
+            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.delta.grantedAbility, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; onChange({ ...effect, delta: { ...effect.delta, grantedAbility: parsed } }) } catch { /* ignore */ } }} rows={8} mono />
+          </div>
+        </details>
+      ) : null}
+      {effect.type === 'schedule' ? (
+        <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+          <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Nested Effects JSON ({effect.effects.length} effect{effect.effects.length === 1 ? '' : 's'})</summary>
+          <div className="mt-3">
+            <TextAreaField label="Effects JSON" value={JSON.stringify(effect.effects, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as SkillEffect[]; onChange({ ...effect, effects: parsed }) } catch { /* ignore */ } }} rows={8} mono />
+          </div>
+        </details>
+      ) : null}
+      {effect.type === 'replaceAbility' ? (
+        <details className="mt-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
+          <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Replacement Ability JSON</summary>
+          <div className="mt-3">
+            <TextAreaField label="Ability JSON" value={JSON.stringify(effect.ability, null, 2)} onChange={(value) => { try { const parsed = JSON.parse(value) as BattleAbilityTemplate; onChange({ ...effect, ability: parsed }) } catch { /* ignore */ } }} rows={8} mono />
+          </div>
+        </details>
+      ) : null}
     </div>
   )
 }
@@ -2042,3 +2321,15 @@ function countPassiveTriggers(passives: PassiveEffect[]) {
     .map(([label, count]) => ({ label: label.toUpperCase(), count }))
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
 }
+
+
+
+
+
+
+
+
+
+
+
+
