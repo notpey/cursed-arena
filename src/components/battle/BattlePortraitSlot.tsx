@@ -1,5 +1,6 @@
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { isAlive } from '@/features/battle/engine'
+import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
 import { cn, getAccentStyles, type DisplayAccent } from '@/components/battle/battleDisplay'
 
@@ -145,9 +146,9 @@ export function BattlePortraitSlot({
   const portraitSize = compact ? '3.8rem' : '6rem'
   const statusTag = fighter.hp <= 0
     ? 'KO'
-    : fighter.statuses.stun > 0
+    : hasStatus(fighter.statuses, 'stun')
       ? 'STUN'
-      : fighter.statuses.invincible > 0
+      : hasStatus(fighter.statuses, 'invincible')
         ? 'VOID'
         : null
 

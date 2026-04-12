@@ -15,13 +15,22 @@ import {
   type BattleEnergyType,
 } from '@/features/battle/energy'
 import { createSeededRandom } from '@/features/battle/random'
+import {
+  cloneStatuses,
+  createStatuses,
+  getAttackUpAmount,
+  getBurnDamage,
+  getMarkBonus,
+  hasStatus,
+  tickStatuses,
+  upsertStatus,
+} from '@/features/battle/statuses'
 import type {
   BattleAbilityTemplate,
   BattleEvent,
   BattleEventTone,
   BattleFighterState,
   BattleState,
-  BattleStatuses,
   BattleTeamId,
   PassiveEffect,
   QueuedBattleAction,
@@ -32,26 +41,13 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function createStatuses(): BattleStatuses {
-  return {
-    stun: 0,
-    invincible: 0,
-    markTurns: 0,
-    markBonus: 0,
-    burnTurns: 0,
-    burnDamage: 0,
-    attackUpTurns: 0,
-    attackUpAmount: 0,
-  }
-}
-
 function cloneFighter(fighter: BattleFighterState): BattleFighterState {
   return {
     ...fighter,
     abilities: fighter.abilities.map((ability) => ({ ...ability })),
     ultimate: { ...fighter.ultimate },
     cooldowns: { ...fighter.cooldowns },
-    statuses: { ...fighter.statuses },
+    statuses: cloneStatuses(fighter.statuses),
   }
 }
 
@@ -290,7 +286,7 @@ export function getCommandablePlayerUnits(state: BattleState) {
 export function createAutoCommands(state: BattleState) {
   return Object.fromEntries(
     getCommandablePlayerUnits(state)
-      .filter((fighter) => fighter.statuses.stun > 0)
+      .filter((fighter) => hasStatus(fighter.statuses, 'stun'))
       .map((fighter) => [
         fighter.instanceId,
         {
@@ -383,33 +379,29 @@ function resolveEffects(
           break
 
         case 'stun':
-          t.statuses.stun = Math.max(t.statuses.stun, effect.duration)
+          t.statuses = upsertStatus(t.statuses, { kind: 'stun', duration: effect.duration })
           makeEvent(events, state.round, 'status', 'gold', `${t.shortName} is stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.duration, abilityId)
           break
 
         case 'invulnerable':
-          t.statuses.invincible = Math.max(t.statuses.invincible, effect.duration)
+          t.statuses = upsertStatus(t.statuses, { kind: 'invincible', duration: effect.duration })
           makeEvent(events, state.round, 'status', 'teal', `${t.shortName} became untouchable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
 
         case 'attackUp':
-          t.statuses.attackUpTurns = Math.max(t.statuses.attackUpTurns, effect.duration)
-          t.statuses.attackUpAmount = Math.max(t.statuses.attackUpAmount, effect.amount)
+          t.statuses = upsertStatus(t.statuses, { kind: 'attackUp', duration: effect.duration, amount: effect.amount })
           makeEvent(events, state.round, 'status', 'teal', `${t.shortName} gained +${effect.amount} ATK for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
           break
 
         case 'mark':
-          t.statuses.markTurns = Math.max(t.statuses.markTurns, effect.duration)
-          t.statuses.markBonus = Math.max(t.statuses.markBonus, effect.bonus)
+          t.statuses = upsertStatus(t.statuses, { kind: 'mark', duration: effect.duration, bonus: effect.bonus })
           makeEvent(events, state.round, 'status', 'red', `${t.shortName} was marked for +${effect.bonus} damage.`, actor.instanceId, t.instanceId, effect.bonus, abilityId)
           break
 
         case 'burn':
-          t.statuses.burnTurns = Math.max(t.statuses.burnTurns, effect.duration)
-          t.statuses.burnDamage = Math.max(t.statuses.burnDamage, effect.damage)
+          t.statuses = upsertStatus(t.statuses, { kind: 'burn', duration: effect.duration, damage: effect.damage })
           makeEvent(events, state.round, 'status', 'red', `${t.shortName} will burn for ${effect.damage} over ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.damage, abilityId)
           break
-
 
         case 'cooldownReduction':
         case 'damageBoost':
@@ -480,7 +472,7 @@ function applyDamage(
   abilityId?: string,
 ) {
   if (!isAlive(target)) return 0
-  if (target.statuses.invincible > 0) {
+  if (hasStatus(target.statuses, 'invincible')) {
     makeEvent(events, round, 'system', 'teal', `${target.shortName} nullified ${actor.shortName}'s attack.`, actor.instanceId, target.instanceId, 0, abilityId)
     return 0
   }
@@ -534,8 +526,8 @@ function calculateDamage(
 ) {
   let amount = basePower
 
-  if (actor.statuses.attackUpTurns > 0) {
-    amount += actor.statuses.attackUpAmount
+  if (hasStatus(actor.statuses, 'attackUp')) {
+    amount += getAttackUpAmount(actor.statuses)
   }
 
   // whileAlive damageBoost passives (e.g., Megumi's Ten Shadows)
@@ -567,8 +559,8 @@ function calculateDamage(
     amount = Math.round(amount * (1 + state.battlefield.ultimateDamageBoost))
   }
 
-  if (target.statuses.markTurns > 0) {
-    amount += target.statuses.markBonus
+  if (hasStatus(target.statuses, 'mark')) {
+    amount += getMarkBonus(target.statuses)
   }
 
   return amount
@@ -589,9 +581,9 @@ function resolveAction(
   const ability = getAbilityById(actor, command.abilityId)
   if (!ability) return
 
-  if (actor.statuses.stun > 0) {
-    actor.statuses.stun -= 1
+  if (hasStatus(actor.statuses, 'stun')) {
     makeEvent(events, state.round, 'status', 'gold', `${actor.shortName} is stunned and passed the turn.`, actor.instanceId)
+    actor.statuses = actor.statuses.filter((status) => status.kind !== 'stun')
     return
   }
 
@@ -636,9 +628,10 @@ function applyRoundStartEffects(state: BattleState, events: BattleEvent[]) {
   allUnits.forEach((fighter) => {
     if (!isAlive(fighter)) return
 
-    if (fighter.statuses.burnTurns > 0 && fighter.statuses.burnDamage > 0) {
-      fighter.hp = Math.max(0, fighter.hp - fighter.statuses.burnDamage)
-      makeEvent(events, state.round, 'damage', 'red', `${fighter.shortName} burned for ${fighter.statuses.burnDamage}.`, undefined, fighter.instanceId, fighter.statuses.burnDamage)
+    const burnDamage = getBurnDamage(fighter.statuses)
+    if (hasStatus(fighter.statuses, 'burn') && burnDamage > 0) {
+      fighter.hp = Math.max(0, fighter.hp - burnDamage)
+      makeEvent(events, state.round, 'damage', 'red', `${fighter.shortName} burned for ${burnDamage}.`, undefined, fighter.instanceId, burnDamage)
 
       if (fighter.hp <= 0) {
         makeEvent(events, state.round, 'defeat', 'gold', `${fighter.shortName} fell to burn damage.`, undefined, fighter.instanceId)
@@ -699,15 +692,7 @@ function tickRoundEnd(state: BattleState) {
       fighter.cooldowns[abilityId] = Math.max(0, (fighter.cooldowns[abilityId] ?? 0) - cooldownTick)
     })
 
-    fighter.statuses.invincible = Math.max(0, fighter.statuses.invincible - 1)
-    fighter.statuses.markTurns = Math.max(0, fighter.statuses.markTurns - 1)
-    if (fighter.statuses.markTurns === 0) fighter.statuses.markBonus = 0
-
-    fighter.statuses.burnTurns = Math.max(0, fighter.statuses.burnTurns - 1)
-    if (fighter.statuses.burnTurns === 0) fighter.statuses.burnDamage = 0
-
-    fighter.statuses.attackUpTurns = Math.max(0, fighter.statuses.attackUpTurns - 1)
-    if (fighter.statuses.attackUpTurns === 0) fighter.statuses.attackUpAmount = 0
+    fighter.statuses = tickStatuses(fighter.statuses)
   })
 }
 

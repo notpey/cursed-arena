@@ -1,4 +1,5 @@
 import { PASS_ABILITY_ID } from '@/features/battle/data'
+import { getAttackUpAmount, getBurnDamage, getMarkBonus, hasStatus } from '@/features/battle/statuses'
 import { getAbilityById, getFighterById } from '@/features/battle/engine'
 import type {
   BattleAbilityTemplate,
@@ -65,11 +66,11 @@ export function getAccentStyles(accent: DisplayAccent) {
 
 export function getStatusPills(fighter: BattleFighterState) {
   const pills: BattleStatusPill[] = []
-  if (fighter.statuses.stun > 0) pills.push({ label: 'STUN', tone: 'gold' })
-  if (fighter.statuses.invincible > 0) pills.push({ label: 'VOID', tone: 'teal' })
-  if (fighter.statuses.markTurns > 0) pills.push({ label: `MARK +${fighter.statuses.markBonus}`, tone: 'red' })
-  if (fighter.statuses.burnTurns > 0) pills.push({ label: `BURN ${fighter.statuses.burnDamage}`, tone: 'red' })
-  if (fighter.statuses.attackUpTurns > 0) pills.push({ label: `DMG +${fighter.statuses.attackUpAmount}`, tone: 'teal' })
+  if (hasStatus(fighter.statuses, 'stun')) pills.push({ label: 'STUN', tone: 'gold' })
+  if (hasStatus(fighter.statuses, 'invincible')) pills.push({ label: 'VOID', tone: 'teal' })
+  if (hasStatus(fighter.statuses, 'mark')) pills.push({ label: `MARK +${getMarkBonus(fighter.statuses)}`, tone: 'red' })
+  if (hasStatus(fighter.statuses, 'burn')) pills.push({ label: `BURN ${getBurnDamage(fighter.statuses)}`, tone: 'red' })
+  if (hasStatus(fighter.statuses, 'attackUp')) pills.push({ label: `DMG +${getAttackUpAmount(fighter.statuses)}`, tone: 'teal' })
   return pills
 }
 

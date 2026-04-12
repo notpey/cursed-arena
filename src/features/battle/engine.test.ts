@@ -7,6 +7,7 @@ import {
   resolveTeamTurn,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
+import { getBurnDamage, getStatusDuration } from '@/features/battle/statuses'
 import type { BattleState, QueuedBattleAction } from '@/features/battle/types'
 
 function getFighter(state: BattleState, team: 'player' | 'enemy', templateId: string) {
@@ -90,8 +91,8 @@ describe('battle engine scenarios', () => {
     )
 
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
-    expect(updatedYuji.statuses.burnTurns).toBe(2)
-    expect(updatedYuji.statuses.burnDamage).toBe(7)
+    expect(getStatusDuration(updatedYuji.statuses, 'burn')).toBe(2)
+    expect(getBurnDamage(updatedYuji.statuses)).toBe(7)
   })
 
   test('Yuji passive heals at round start', () => {

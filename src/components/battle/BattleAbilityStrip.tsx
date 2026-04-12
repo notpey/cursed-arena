@@ -3,6 +3,7 @@ import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/components/battle/battleDisplay'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
+import { hasStatus } from '@/features/battle/statuses'
 import { getAbilityById } from '@/features/battle/engine'
 import type { BattleAbilityTemplate, BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
 
@@ -156,9 +157,9 @@ export function BattleAbilityStrip({
   const hpValue = (fighter.hp / fighter.maxHp) * 100
   const disabledLabel = fighter.hp <= 0
     ? 'KO'
-    : fighter.statuses.stun > 0
+    : hasStatus(fighter.statuses, 'stun')
       ? 'STUNNED'
-      : fighter.statuses.invincible > 0
+      : hasStatus(fighter.statuses, 'invincible')
         ? 'VOID'
         : null
 

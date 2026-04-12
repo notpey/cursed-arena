@@ -74,16 +74,16 @@ export type BattleFighterTemplate = {
   ultimate: BattleAbilityTemplate
 }
 
-export type BattleStatuses = {
-  stun: number
-  invincible: number
-  markTurns: number
-  markBonus: number
-  burnTurns: number
-  burnDamage: number
-  attackUpTurns: number
-  attackUpAmount: number
-}
+export type BattleStatusKind = 'stun' | 'invincible' | 'mark' | 'burn' | 'attackUp'
+
+export type BattleStatus =
+  | { kind: 'stun'; duration: number }
+  | { kind: 'invincible'; duration: number }
+  | { kind: 'mark'; duration: number; bonus: number }
+  | { kind: 'burn'; duration: number; damage: number }
+  | { kind: 'attackUp'; duration: number; amount: number }
+
+export type BattleStatuses = BattleStatus[]
 
 export type BattleFighterState = {
   instanceId: string

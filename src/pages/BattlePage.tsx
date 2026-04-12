@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
+import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
 import { setEnergyFocus, type BattleEnergyType } from '@/features/battle/energy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
@@ -154,26 +155,23 @@ function buildCarryoverHighlights(previousState: BattleState, nextState: BattleS
       pushHighlight(labels, `+${fighter.hp - previous.hp} HP`)
     }
 
-    if (fighter.statuses.stun > 0 && fighter.statuses.stun !== previous.statuses.stun) {
+    if (hasStatus(fighter.statuses, 'stun') && getStatusDuration(fighter.statuses, 'stun') !== getStatusDuration(previous.statuses, 'stun')) {
       pushHighlight(labels, 'STUNNED')
     }
 
-    if (fighter.statuses.invincible > 0 && fighter.statuses.invincible !== previous.statuses.invincible) {
+    if (hasStatus(fighter.statuses, 'invincible') && getStatusDuration(fighter.statuses, 'invincible') !== getStatusDuration(previous.statuses, 'invincible')) {
       pushHighlight(labels, 'VOID')
     }
 
-    if (fighter.statuses.attackUpTurns > 0 && (
-      fighter.statuses.attackUpTurns !== previous.statuses.attackUpTurns ||
-      fighter.statuses.attackUpAmount !== previous.statuses.attackUpAmount
-    )) {
+    if (hasStatus(fighter.statuses, 'attackUp') && getStatusDuration(fighter.statuses, 'attackUp') !== getStatusDuration(previous.statuses, 'attackUp')) {
       pushHighlight(labels, 'DMG UP')
     }
 
-    if (fighter.statuses.burnTurns > 0 && fighter.statuses.burnTurns !== previous.statuses.burnTurns) {
-      pushHighlight(labels, `BURN ${fighter.statuses.burnTurns}T`)
+    if (hasStatus(fighter.statuses, 'burn') && getStatusDuration(fighter.statuses, 'burn') !== getStatusDuration(previous.statuses, 'burn')) {
+      pushHighlight(labels, `BURN ${getStatusDuration(fighter.statuses, 'burn')}T`)
     }
 
-    if (fighter.statuses.markTurns > 0 && fighter.statuses.markTurns !== previous.statuses.markTurns) {
+    if (hasStatus(fighter.statuses, 'mark') && getStatusDuration(fighter.statuses, 'mark') !== getStatusDuration(previous.statuses, 'mark')) {
       pushHighlight(labels, 'MARKED')
     }
 
