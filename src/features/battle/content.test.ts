@@ -22,6 +22,24 @@ describe('battle content validation', () => {
     expect(getAbilityEnergyCost(ability)).toEqual({ mental: 2, technique: 1 })
   })
 
+  test('manual costs can exceed automatic reserve guidance without failing validation', () => {
+    const expensiveAbility = {
+      ...battleRoster[0].abilities[0],
+      energyCost: { physical: 2, technique: 2, mental: 1 },
+    }
+
+    const report = validateBattleContent([
+      {
+        ...battleRoster[0],
+        abilities: [expensiveAbility, ...battleRoster[0].abilities.slice(1)],
+      },
+      battleRoster[1],
+      battleRoster[2],
+    ], defaultBattleSetup)
+
+    expect(report.errors.some((error) => error.includes('energy cost exceeds a single-round reserve budget'))).toBe(false)
+  })
+
   test('validator catches duplicate ids and malformed abilities', () => {
     const brokenRoster: BattleFighterTemplate[] = [
       {

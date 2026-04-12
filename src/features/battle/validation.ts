@@ -125,6 +125,8 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   }
   seenIds.add(ability.id)
 
+  const hasManualCostOverride = Boolean(ability.energyCost && Object.keys(ability.energyCost).length > 0)
+
   if (ability.energyCost) {
     Object.entries(ability.energyCost).forEach(([type, value]) => {
       if (!Number.isFinite(value) || value < 0) pushIssue(issues, scope, `manual ${type} cost must be zero or higher`)
@@ -132,8 +134,10 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     })
   }
 
-  const cost = countEnergyCost(getAbilityEnergyCost(ability))
-  if (cost > 3) pushIssue(issues, scope, 'energy cost exceeds a single-round reserve budget')
+  if (!hasManualCostOverride) {
+    const cost = countEnergyCost(getAbilityEnergyCost(ability))
+    if (cost > 3) pushIssue(issues, scope, 'energy cost exceeds a single-round reserve budget')
+  }
 
   if (ability.tags.includes('ULT') !== (fighter.ultimate.id === ability.id)) {
     pushIssue(issues, scope, 'ULT tag must appear only on the fighter ultimate')

@@ -34,6 +34,45 @@ const tagOptions: BattleAbilityTag[] = ['ATK', 'HEAL', 'BUFF', 'DEBUFF', 'UTILIT
 const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
 const rarityOptions: BattleFighterTemplate['rarity'][] = ['R', 'SR', 'SSR', 'UR']
+
+type SkillBlueprintId =
+  | 'single-strike'
+  | 'pressure-burst'
+  | 'execution-stun'
+  | 'single-heal'
+  | 'squad-heal'
+  | 'guard-window'
+  | 'team-rally'
+  | 'mark-target'
+  | 'burn-field'
+  | 'tempo-shift'
+  | 'ultimate-surge'
+
+const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string }> = {
+  damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
+  heal: { label: 'Heal', hint: 'Restore HP to allies or self.' },
+  invulnerable: { label: 'Invulnerable', hint: 'Ignore incoming damage for a duration.' },
+  attackUp: { label: 'Attack Up', hint: 'Flat outgoing damage increase.' },
+  stun: { label: 'Stun', hint: 'Force the target to lose actions.' },
+  mark: { label: 'Mark', hint: 'Increase follow-up damage taken.' },
+  burn: { label: 'Burn', hint: 'Damage over time each round.' },
+  cooldownReduction: { label: 'Cooldown Reduction', hint: 'Accelerate ability cycling.' },
+  damageBoost: { label: 'Damage Boost', hint: 'Percent-based damage multiplier.' },
+}
+
+const skillBlueprintOptions: Array<{ id: SkillBlueprintId; label: string; hint: string }> = [
+  { id: 'single-strike', label: 'Single-Target Strike', hint: 'Basic attack pattern for a front-line skill.' },
+  { id: 'pressure-burst', label: 'AoE Pressure Burst', hint: 'Spread damage across the enemy team.' },
+  { id: 'execution-stun', label: 'Execution / Stun', hint: 'Single-target hit with a control rider.' },
+  { id: 'single-heal', label: 'Single-Target Heal', hint: 'Keep one ally standing.' },
+  { id: 'squad-heal', label: 'Team Heal', hint: 'Stabilize the whole lineup.' },
+  { id: 'guard-window', label: 'Guard Window', hint: 'Short defensive immunity on self or ally.' },
+  { id: 'team-rally', label: 'Team Rally', hint: 'Buff the squad for a push turn.' },
+  { id: 'mark-target', label: 'Focus Mark', hint: 'Prime a target for follow-up burst.' },
+  { id: 'burn-field', label: 'Burn Field', hint: 'AoE pressure with damage over time.' },
+  { id: 'tempo-shift', label: 'Tempo Shift', hint: 'Utility tool for cooldown acceleration.' },
+  { id: 'ultimate-surge', label: 'Ultimate Surge', hint: 'High-impact finisher scaffold.' },
+]
 const liveContent = createContentSnapshot(battleRoster, {
   playerTeamIds: defaultBattleSetup.playerTeamIds,
   enemyTeamIds: defaultBattleSetup.enemyTeamIds,
@@ -123,6 +162,146 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
   }
 }
 
+
+function applySkillBlueprint(ability: BattleAbilityTemplate, blueprintId: SkillBlueprintId, isUltimate: boolean) {
+  const assign = (template: {
+    kind: BattleAbilityKind
+    targetRule: BattleTargetRule
+    tags: BattleAbilityTag[]
+    cooldown: number
+    description: string
+    effects: SkillEffect[]
+  }) => {
+    ability.kind = template.kind
+    ability.targetRule = template.targetRule
+    ability.cooldown = template.cooldown
+    ability.description = template.description
+    ability.tags = isUltimate
+      ? Array.from(new Set([...template.tags.filter((tag) => tag !== 'ULT'), 'ULT']))
+      : template.tags.filter((tag) => tag !== 'ULT')
+    ability.effects = template.effects.map((effect) => JSON.parse(JSON.stringify(effect)) as SkillEffect)
+    syncAbilityPresentation(ability)
+  }
+
+  switch (blueprintId) {
+    case 'single-strike':
+      assign({
+        kind: 'attack',
+        targetRule: 'enemy-single',
+        tags: ['ATK'],
+        cooldown: 1,
+        description: 'Deal direct damage to one enemy.',
+        effects: [{ type: 'damage', power: isUltimate ? 48 : 30, target: 'inherit' }],
+      })
+      return
+    case 'pressure-burst':
+      assign({
+        kind: 'attack',
+        targetRule: 'enemy-all',
+        tags: ['ATK'],
+        cooldown: isUltimate ? 4 : 2,
+        description: 'Pressure the entire enemy team with an area attack.',
+        effects: [{ type: 'damage', power: isUltimate ? 42 : 18, target: 'all-enemies' }],
+      })
+      return
+    case 'execution-stun':
+      assign({
+        kind: 'debuff',
+        targetRule: 'enemy-single',
+        tags: ['ATK', 'DEBUFF'],
+        cooldown: 2,
+        description: 'Hit one enemy and lock them down for a turn.',
+        effects: [
+          { type: 'damage', power: isUltimate ? 40 : 24, target: 'inherit' },
+          { type: 'stun', duration: 1, target: 'inherit' },
+        ],
+      })
+      return
+    case 'single-heal':
+      assign({
+        kind: 'heal',
+        targetRule: 'ally-single',
+        tags: ['HEAL'],
+        cooldown: 2,
+        description: 'Restore HP to one ally.',
+        effects: [{ type: 'heal', power: isUltimate ? 40 : 24, target: 'inherit' }],
+      })
+      return
+    case 'squad-heal':
+      assign({
+        kind: 'heal',
+        targetRule: 'ally-all',
+        tags: ['HEAL', 'UTILITY'],
+        cooldown: isUltimate ? 4 : 3,
+        description: 'Restore HP across the whole team.',
+        effects: [{ type: 'heal', power: isUltimate ? 22 : 12, target: 'all-allies' }],
+      })
+      return
+    case 'guard-window':
+      assign({
+        kind: 'defend',
+        targetRule: 'self',
+        tags: ['UTILITY'],
+        cooldown: 3,
+        description: 'Create a brief invulnerability window.',
+        effects: [{ type: 'invulnerable', duration: isUltimate ? 2 : 1, target: 'self' }],
+      })
+      return
+    case 'team-rally':
+      assign({
+        kind: 'buff',
+        targetRule: 'ally-all',
+        tags: ['BUFF', 'UTILITY'],
+        cooldown: 3,
+        description: 'Empower the whole team for a coordinated push.',
+        effects: [{ type: 'attackUp', amount: isUltimate ? 18 : 10, duration: 2, target: 'all-allies' }],
+      })
+      return
+    case 'mark-target':
+      assign({
+        kind: 'debuff',
+        targetRule: 'enemy-single',
+        tags: ['DEBUFF', 'UTILITY'],
+        cooldown: 2,
+        description: 'Expose one enemy so allies hit harder.',
+        effects: [{ type: 'mark', bonus: isUltimate ? 24 : 15, duration: 2, target: 'inherit' }],
+      })
+      return
+    case 'burn-field':
+      assign({
+        kind: 'debuff',
+        targetRule: 'enemy-all',
+        tags: ['DEBUFF'],
+        cooldown: 3,
+        description: 'Apply burning pressure across the enemy team.',
+        effects: [{ type: 'burn', damage: isUltimate ? 14 : 8, duration: 2, target: 'all-enemies' }],
+      })
+      return
+    case 'tempo-shift':
+      assign({
+        kind: 'utility',
+        targetRule: 'self',
+        tags: ['UTILITY', 'BUFF'],
+        cooldown: 3,
+        description: 'Accelerate your next rotation by reducing cooldowns.',
+        effects: [{ type: 'cooldownReduction', amount: isUltimate ? 2 : 1, target: 'self' }],
+      })
+      return
+    case 'ultimate-surge':
+      assign({
+        kind: 'attack',
+        targetRule: 'enemy-all',
+        tags: ['ATK'],
+        cooldown: 5,
+        description: 'Deliver a high-impact finishing sequence.',
+        effects: [
+          { type: 'damage', power: 54, target: 'all-enemies' },
+          { type: 'mark', bonus: 18, duration: 2, target: 'all-enemies' },
+        ],
+      })
+      return
+  }
+}
 
 function formatEffectTarget(target: SkillEffect['target']) {
   if (target === 'inherit') return 'the skill target'
@@ -1472,6 +1651,12 @@ function SkillEditorCard({
           </div>
         </div>
 
+        <SkillBlueprintPanel
+          key={ability.id}
+          isUltimate={isUltimate}
+          onApply={(blueprintId) => onUpdate((current) => { applySkillBlueprint(current, blueprintId, isUltimate) })}
+        />
+
         <AssetField
           fieldId={`ability-icon-${ability.id}`}
           label="Skill Icon"
@@ -1491,6 +1676,52 @@ function SkillEditorCard({
           advancedJson={JSON.stringify(ability.effects ?? [], null, 2)}
           onAdvancedJsonChange={onAdvancedEffectsJson}
         />
+      </div>
+    </div>
+  )
+}
+
+function SkillBlueprintPanel({
+  isUltimate,
+  onApply,
+}: {
+  isUltimate: boolean
+  onApply: (blueprintId: SkillBlueprintId) => void
+}) {
+  const preferredDefault: SkillBlueprintId = isUltimate ? 'ultimate-surge' : 'single-strike'
+  const [selectedBlueprint, setSelectedBlueprint] = useState<SkillBlueprintId>(preferredDefault)
+
+  const activeBlueprint =
+    skillBlueprintOptions.find((option) => option.id === selectedBlueprint) ??
+    skillBlueprintOptions[0]
+
+  return (
+    <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL BLUEPRINT</p>
+          <p className="mt-1 text-sm leading-6 text-ca-text-2">Pick a logical starting pattern, then fine-tune the numbers and copy below.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onApply(selectedBlueprint)}
+          className="rounded-[8px] border border-ca-red/20 bg-ca-red px-3 py-2 ca-display text-[0.8rem] tracking-[0.06em] text-white transition hover:-translate-y-[1px]"
+        >
+          APPLY BLUEPRINT
+        </button>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <SelectField
+          label="Technique Archetype"
+          value={selectedBlueprint}
+          options={skillBlueprintOptions.map((option) => ({ value: option.id, label: option.label }))}
+          onChange={(value) => setSelectedBlueprint(value as SkillBlueprintId)}
+        />
+        <div className="rounded-[8px] border border-ca-teal/18 bg-ca-teal-wash px-3 py-2.5">
+          <p className="ca-mono-label text-[0.38rem] text-ca-teal">ARCHETYPE NOTES</p>
+          <p className="mt-1 text-sm leading-6 text-ca-text-2">{activeBlueprint.hint}</p>
+          <p className="mt-2 ca-mono-label text-[0.38rem] text-ca-text-3">{isUltimate ? 'ULTIMATE SKILLS KEEP THE ULT TAG WHEN APPLIED.' : 'STANDARD SKILLS STAY NON-ULT.'}</p>
+        </div>
       </div>
     </div>
   )
@@ -1555,7 +1786,7 @@ function SkillCostPanel({
           ))}
         </div>
       ) : null}
-      <p className="mt-2 text-sm leading-6 text-ca-text-2">{explainCostRule(ability)}</p>
+      <p className="mt-2 text-sm leading-6 text-ca-text-2">{manual ? 'Manual costs are authoritative here. Enter any combination you want and the ACP will preserve it.' : explainCostRule(ability)}</p>
     </div>
   )
 }
@@ -1594,14 +1825,15 @@ function EffectListEditor({
         <p className="mt-1 text-xs leading-5 text-ca-text-2">{helper}</p>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {['damage', 'heal', 'stun', 'burn', 'mark', 'attackUp', 'cooldownReduction', 'damageBoost'].map((type) => (
+        {effectTypes.map((type) => (
           <button
             key={type}
             type="button"
-            onClick={() => addEffect(type as SkillEffect['type'])}
+            onClick={() => addEffect(type)}
             className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2 hover:border-ca-teal/25 hover:text-ca-teal"
+            title={effectTypeMeta[type].hint}
           >
-            ADD {type.replace(/([A-Z])/g, ' $1').toUpperCase()}
+            ADD {effectTypeMeta[type].label.toUpperCase()}
           </button>
         ))}
       </div>
@@ -1642,7 +1874,7 @@ function EffectRowEditor({
         <button type="button" onClick={onRemove} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.38rem] text-ca-red">REMOVE</button>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <SelectField label="Type" value={effect.type} options={effectTypes.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...createEffect(value as SkillEffect['type']), target: effect.target })} />
+        <SelectField label="Type" value={effect.type} options={effectTypes.map((value) => ({ value, label: effectTypeMeta[value].label }))} onChange={(value) => onChange({ ...createEffect(value as SkillEffect['type']), target: effect.target })} />
         <SelectField label="Target" value={effect.target} options={effectTargets.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, target: value as SkillEffect['target'] })} />
         {effect.type === 'damage' || effect.type === 'heal' ? <NumberField label={effect.type === 'damage' ? 'Damage' : 'Healing'} value={effect.power} onChange={(value) => onChange({ ...effect, power: value })} /> : null}
         {effect.type === 'invulnerable' || effect.type === 'stun' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
