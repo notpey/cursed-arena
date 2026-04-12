@@ -31,7 +31,6 @@ import {
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
 import type { BattleEvent, BattleState, QueuedBattleAction } from '@/features/battle/types'
-import { useBattleAudio } from '@/features/audio/useAudio'
 
 type BattleViewState = {
   state: BattleState
@@ -322,7 +321,6 @@ function UtilityRail({
 export function BattlePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
-  const { handleBattleEvents } = useBattleAudio()
   const [stagedSession] = useState(() => readStagedBattleSession())
   const [initialBattle] = useState(createNewBattle)
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
@@ -601,8 +599,6 @@ export function BattlePage() {
     const nextQueued = createAutoCommands(currentState)
     const nextActorId = getNextActorId(currentState, nextQueued)
     const nextTransition = buildRoundTransition(previousState, currentState, allEvents)
-
-    handleBattleEvents(allEvents)
 
     setBattle({
       state: currentState,
