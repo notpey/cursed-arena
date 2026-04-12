@@ -156,7 +156,8 @@ export function defineFighter(
     affiliationLabel: boardMeta.affiliationLabel,
     battleTitle: boardMeta.battleTitle,
     bio: boardMeta.bio,
-    boardPortraitSrc: boardMeta.boardPortraitSrc ?? template.renderSrc,
+    boardPortraitSrc: boardMeta.boardPortraitSrc ?? '',
     boardPortraitFrame: boardMeta.boardPortraitFrame ?? template.portraitFrame,
   }
 }
+

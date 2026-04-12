@@ -21,6 +21,7 @@ import yujiItadoriRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
 import yutaOkkotsuRender from '@/assets/renders/Yuta_Okkotsu_Cursed_Clash.webp'
 import { battleRosterById } from '@/features/battle/data'
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
+import { describeReactionCondition } from '@/features/battle/reactions'
 import type { BattleAbilityTemplate, BattleFighterTemplate, PassiveEffect, SkillEffect } from '@/features/battle/types'
 
 type BaseCharacterSeed = {
@@ -248,36 +249,52 @@ function describeSkillEffect(effect: SkillEffect) {
       return `reduce cooldowns by ${effect.amount} extra each round`
     case 'damageBoost':
       return `gain ${Math.round(effect.amount * 100)}% bonus damage`
+    case 'schedule':
+      return `schedule ${effect.effects.length} delayed effect row${effect.effects.length === 1 ? '' : 's'} for ${effect.delay} ${effect.phase === 'roundStart' ? 'round start' : 'round end'}`
+    case 'replaceAbility':
+      return `replace ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}`
   }
 }
 
 function describePassive(passive: PassiveEffect): CharacterPassive {
-  const triggerLabel =
-    passive.trigger === 'whileAlive'
-      ? 'While Alive'
-      : passive.trigger === 'onRoundStart'
-        ? 'Round Start'
-        : passive.trigger === 'onDealDamage'
-          ? 'On Deal Damage'
-          : 'Execute Window'
+  const triggerLabelMap: Record<PassiveEffect['trigger'], string> = {
+    whileAlive: 'While Alive',
+    onRoundStart: 'Round Start',
+    onRoundEnd: 'Round End',
+    onAbilityUse: 'On Ability Use',
+    onAbilityResolve: 'On Ability Resolve',
+    onDealDamage: 'On Deal Damage',
+    onTakeDamage: 'On Take Damage',
+    onDefeat: 'On Defeat',
+    onTargetBelow: 'Execute Window',
+  }
+
+  const prefixMap: Record<PassiveEffect['trigger'], string> = {
+    whileAlive: 'While alive, ',
+    onRoundStart: 'At the start of each round, ',
+    onRoundEnd: 'At round end, ',
+    onAbilityUse: 'Before using an ability, ',
+    onAbilityResolve: 'After resolving an ability, ',
+    onDealDamage: 'After dealing damage, ',
+    onTakeDamage: 'After taking damage, ',
+    onDefeat: 'On defeat, ',
+    onTargetBelow: '',
+  }
 
   const thresholdPrefix =
     passive.trigger === 'onTargetBelow' && passive.threshold != null
       ? `Against targets below ${Math.round(passive.threshold * 100)}% HP, `
-      : passive.trigger === 'whileAlive'
-        ? 'While alive, '
-        : passive.trigger === 'onRoundStart'
-          ? 'At the start of each round, '
-          : passive.trigger === 'onDealDamage'
-            ? 'After dealing damage, '
-            : ''
+      : prefixMap[passive.trigger]
 
+  const conditionPrefix = (passive.conditions ?? []).length > 0
+    ? `${(passive.conditions ?? []).map(describeReactionCondition).join(', ')}, `
+    : ''
   const effectText = passive.effects.map(describeSkillEffect).join(', ')
 
   return {
     label: passive.label,
-    description: `${thresholdPrefix}${effectText}.`.replace(/^./, (letter) => letter.toUpperCase()),
-    triggerLabel,
+    description: `${thresholdPrefix}${conditionPrefix}${effectText}.`.replace(/^./, (letter) => letter.toUpperCase()),
+    triggerLabel: triggerLabelMap[passive.trigger],
   }
 }
 

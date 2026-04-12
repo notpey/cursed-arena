@@ -1,15 +1,17 @@
-# Cursed Arena — Battle Engine Design
+
+> Detailed follow-up spec: [battle-engine-effects-spec.md](./battle-engine-effects-spec.md)
+
 
 ## Philosophy
 
-Naruto-Arena proved that turn-based 3v3 combat with a shared energy pool is deeply engaging. The strategic layer — reading your opponent, managing resources, building team synergy — is the core that made the game addictive. Cursed Arena preserves that core while expanding the engine's expressive power.
+Naruto-Arena proved that turn-based 3v3 combat with a shared energy pool is deeply engaging. The strategic layer â€” reading your opponent, managing resources, building team synergy â€” is the core that made the game addictive. Cursed Arena preserves that core while expanding the engine's expressive power.
 
 **What we keep:**
-- Sequential turn structure (Player A acts → resolves, Player B acts → resolves, coin flip for who goes first)
+- Sequential turn structure (Player A acts â†’ resolves, Player B acts â†’ resolves, coin flip for who goes first)
 - 3v3 team format with a shared energy pool
 - Simple, fixed damage numbers (no RNG rolls)
 - 4 skills per character (3 standard + 1 ultimate)
-- Compact matches (typically 8–15 rounds)
+- Compact matches (typically 8â€“15 rounds)
 
 **What we expand:**
 - Variable HP pools (not fixed 100 for everyone)
@@ -27,11 +29,11 @@ Naruto-Arena proved that turn-based 3v3 combat with a shared energy pool is deep
 Naruto-Arena was **not** simultaneous. It was sequential:
 
 1. A coin flip determines who goes **first** for the match (Player A or Player B)
-2. **Player A's turn:** Player A selects one skill for each of their living characters, then presses Ready. All of Player A's actions resolve immediately — damage is dealt, heals are applied, statuses are inflicted, deaths are checked.
+2. **Player A's turn:** Player A selects one skill for each of their living characters, then presses Ready. All of Player A's actions resolve immediately â€” damage is dealt, heals are applied, statuses are inflicted, deaths are checked.
 3. **Player B's turn:** Player B now sees the results of Player A's actions and selects their own skills. Player B presses Ready, and their actions resolve.
 4. This constitutes **one round**. A new round begins, and the process repeats.
 
-**Who goes first stays consistent for the entire match** (determined by the initial coin flip). This means going second is a consistent strategic advantage — you always get to react to your opponent's plays. The coin flip balances this by making it random.
+**Who goes first stays consistent for the entire match** (determined by the initial coin flip). This means going second is a consistent strategic advantage â€” you always get to react to your opponent's plays. The coin flip balances this by making it random.
 
 ### Phase Order (per round)
 
@@ -66,8 +68,8 @@ Naruto-Arena was **not** simultaneous. It was sequential:
 
 ### Why sequential matters
 
-Going second is inherently advantageous — you see what your opponent did and can react. Naruto-Arena balanced this with the coin flip. We keep this because:
-- It creates **asymmetric strategy** — the first player wants to set up plays that are hard to react to, the second player wants to capitalize on information
+Going second is inherently advantageous â€” you see what your opponent did and can react. Naruto-Arena balanced this with the coin flip. We keep this because:
+- It creates **asymmetric strategy** â€” the first player wants to set up plays that are hard to react to, the second player wants to capitalize on information
 - It makes **defensive skills more interesting** for the first player (you defend preemptively, hoping you guessed right)
 - It makes **aggressive plays riskier** for the first player (if you commit and miss, the second player punishes)
 
@@ -78,13 +80,13 @@ Going second is inherently advantageous — you see what your opponent did and c
 ### Simple for now
 
 Each round, each team receives energy based on **living characters**:
-- 3 alive → 3 energy
-- 2 alive → 2 energy
-- 1 alive → 1 energy
+- 3 alive â†’ 3 energy
+- 2 alive â†’ 2 energy
+- 1 alive â†’ 1 energy
 
 Energy enters a **shared reserve pool**. All characters on a team draw from the same pool. Unspent energy carries over between rounds.
 
-Skills have costs defined in terms of the four energy types (Physical, Cursed Technique, Binding Vow, Mental). The reserve is generic — spending any type deducts from the same pool.
+Skills have costs defined in terms of the four energy types (Physical, Cursed Technique, Binding Vow, Mental). The reserve is generic â€” spending any type deducts from the same pool.
 
 We'll revisit energy balance, focus mechanics, and potential energy denial later. For now, the goal is to get the core loop working.
 
@@ -95,8 +97,8 @@ We'll revisit energy balance, focus mechanics, and potential energy denial later
 ### Structure
 
 Every character has:
-- **3 standard skills** — varying costs, cooldowns, and purposes
-- **1 ultimate skill** — expensive (costs 3 energy), high-impact, long cooldown
+- **3 standard skills** â€” varying costs, cooldowns, and purposes
+- **1 ultimate skill** â€” expensive (costs 3 energy), high-impact, long cooldown
 
 ### Skill Properties
 
@@ -115,19 +117,19 @@ tags: string[] (ATK, HEAL, BUFF, DEBUFF, UTILITY, ULT)
 ### Targeting
 
 Keep it simple (same as Naruto-Arena):
-- **Self** — affects only the user
-- **Single enemy** — pick one opponent
-- **All enemies** — hits all living opponents
-- **Single ally** — pick one teammate
-- **All allies** — affects all living teammates
+- **Self** â€” affects only the user
+- **Single enemy** â€” pick one opponent
+- **All enemies** â€” hits all living opponents
+- **Single ally** â€” pick one teammate
+- **All allies** â€” affects all living teammates
 
 No positional mechanics. The original proved this works.
 
 ### Cooldowns
 
-- Standard skills: 1–3 turn cooldowns
-- Ultimates: 4–5 turn cooldowns
-- Some cheap skills: 0–1 turn cooldown (usable frequently but low power)
+- Standard skills: 1â€“3 turn cooldowns
+- Ultimates: 4â€“5 turn cooldowns
+- Some cheap skills: 0â€“1 turn cooldown (usable frequently but low power)
 - Cooldowns tick down by 1 each round during cleanup
 - Passive cooldown reduction exists (e.g., Gojo's Six Eyes)
 
@@ -142,9 +144,9 @@ base = ability.power + actor.attack
 modifiers:
   + actor.attackUpAmount (if buffed)
   + target.markBonus (if marked/vulnerable)
-  × (1 + actor.passive.damageBoost) (if passive applies)
-  × (1 + actor.passive.executeBonus) (if target below threshold)
-  × (1 + battlefield.ultimateDamageBoost) (if ultimate)
+  Ã— (1 + actor.passive.damageBoost) (if passive applies)
+  Ã— (1 + actor.passive.executeBonus) (if target below threshold)
+  Ã— (1 + battlefield.ultimateDamageBoost) (if ultimate)
 
 final = base after modifiers, floored to integer
 ```
@@ -153,14 +155,14 @@ Damage is **deterministic**. No crits, no RNG rolls. You can always calculate ex
 
 ### Defense (current)
 
-- **Invulnerability** — blocks all incoming damage for the turn. Usually 1-turn duration, high cooldown.
+- **Invulnerability** â€” blocks all incoming damage for the turn. Usually 1-turn duration, high cooldown.
 
 ### HP Pools (variable)
 
-Characters have different max HP values (currently 88–112):
-- Tanks: 105–115 HP
-- Standard: 90–105 HP
-- Glass cannons: 80–92 HP
+Characters have different max HP values (currently 88â€“112):
+- Tanks: 105â€“115 HP
+- Standard: 90â€“105 HP
+- Glass cannons: 80â€“92 HP
 
 ---
 
@@ -192,7 +194,7 @@ Characters have different max HP values (currently 88–112):
 
 ## Trigger & Passive System (Priority #1 for expansion)
 
-This is the biggest expansion over Naruto-Arena's engine. NA couldn't do "if X then Y" — everything was static. Cursed Arena needs a **data-driven trigger system** so new character mechanics don't require engine code changes.
+This is the biggest expansion over Naruto-Arena's engine. NA couldn't do "if X then Y" â€” everything was static. Cursed Arena needs a **data-driven trigger system** so new character mechanics don't require engine code changes.
 
 ### What we already have (hardcoded)
 
@@ -253,7 +255,7 @@ Each of these is expressible as a trigger + effect combination, no special-case 
 
 ## What Our Engine Already Has vs. What Needs to Change
 
-### Already implemented ✓
+### Already implemented âœ“
 - 3v3 teams with shared energy pool
 - Deterministic energy generation (1 per living character)
 - Speed-based resolution order
@@ -272,13 +274,13 @@ Each of these is expressible as a trigger + effect combination, no special-case 
 - Enemy AI (basic priority scoring)
 - Battle event log
 
-### Needs to change for sequential turns ✗
-- **Turn structure:** Currently resolves all actions in one pass sorted by speed. Needs to change to: Player A's actions resolve fully → game state updates → Player B sees results → Player B's actions resolve.
+### Needs to change for sequential turns âœ—
+- **Turn structure:** Currently resolves all actions in one pass sorted by speed. Needs to change to: Player A's actions resolve fully â†’ game state updates â†’ Player B sees results â†’ Player B's actions resolve.
 - **Coin flip:** Add initial turn-order determination at match start.
-- **UI flow:** Currently both players queue simultaneously and press Ready once. Needs to become: active player queues and presses Ready → resolution animation → other player's turn activates.
+- **UI flow:** Currently both players queue simultaneously and press Ready once. Needs to become: active player queues and presses Ready â†’ resolution animation â†’ other player's turn activates.
 - **Enemy AI:** Currently builds all commands at once. Needs to react to the player's resolved actions (if AI goes second) or commit blind (if AI goes first).
 
-### Needs implementation for trigger system ✗
+### Needs implementation for trigger system âœ—
 - Generalized `SkillEffect` type replacing hardcoded ability logic
 - Generalized `PassiveEffect` type replacing hardcoded passive checks
 - Engine resolver that reads effects from data instead of checking ability IDs
@@ -286,13 +288,13 @@ Each of these is expressible as a trigger + effect combination, no special-case 
 
 ### Implementation priority
 
-**Phase 1 — Sequential turn structure:**
+**Phase 1 â€” Sequential turn structure:**
 Refactor the resolution loop to process one team's actions fully before the other team acts. Add coin flip. Update UI flow.
 
-**Phase 2 — Generalized trigger/passive system:**
+**Phase 2 â€” Generalized trigger/passive system:**
 Define `SkillEffect` and `PassiveEffect` types. Refactor the resolver to read from data. Migrate existing abilities and passives to the new format.
 
-**Phase 3 — New character passives:**
+**Phase 3 â€” New character passives:**
 Design and implement characters that showcase the new trigger system capabilities.
 
 ---
@@ -301,9 +303,9 @@ Design and implement characters that showcase the new trigger system capabilitie
 
 | Aspect | Naruto-Arena | Cursed Arena |
 |--------|-------------|--------------|
-| Turn structure | Sequential (P1 → resolve → P2 → resolve), coin flip for order | Same — preserved faithfully |
+| Turn structure | Sequential (P1 â†’ resolve â†’ P2 â†’ resolve), coin flip for order | Same â€” preserved faithfully |
 | Energy generation | Random chakra types each turn | Deterministic: 1 per living character, shared pool |
-| HP pools | Fixed 100 for all characters | Variable (80–115) per character |
+| HP pools | Fixed 100 for all characters | Variable (80â€“115) per character |
 | Speed stat | None | Determines resolution order within a turn |
 | Passive abilities | None (characters were purely their 4 skills) | Unique per-character passives with trigger system |
 | Conditional effects | Not possible in the engine | Data-driven trigger system (on-hit, on-death, threshold, etc.) |

@@ -36,17 +36,14 @@ function PortraitSquare({
   size?: string
   mirrored?: boolean
 }) {
-  const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(
-    fighter.boardPortraitSrc &&
-      (fighter.boardPortraitSrc !== fighter.renderSrc || fighter.boardPortraitSrc.startsWith('data:image')),
-  )
+  const portraitMode = Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
   const frame = portraitMode ? {} : fighter.boardPortraitFrame ?? {}
   const portraitScale = frame.scale ?? 1
   const portraitX = frame.x ?? '0%'
   const portraitY = frame.y ?? '0%'
   const portraitOpacity = frame.opacity ?? 1
   const portraitWidth = frame.maxWidth ?? '100%'
+  const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
 
   return (
     <div
@@ -222,3 +219,6 @@ export function BattlePortraitSlot({
     </button>
   )
 }
+
+
+

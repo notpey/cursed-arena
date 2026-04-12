@@ -64,8 +64,7 @@ export type BattleFighterTemplate = {
   affiliationLabel: string
   battleTitle: string
   bio: string
-  renderSrc: string
-  boardPortraitSrc: string
+  boardPortraitSrc?: string
   portraitFrame?: BattlePortraitFrame
   boardPortraitFrame?: BattlePortraitFrame
   maxHp: number
@@ -85,6 +84,100 @@ export type BattleStatus =
 
 export type BattleStatuses = BattleStatus[]
 
+export type BattleModifierScope = 'fighter' | 'team' | 'battlefield'
+
+export type BattleModifierStat =
+  | 'damageDealt'
+  | 'damageTaken'
+  | 'healDone'
+  | 'healTaken'
+  | 'cooldownTick'
+  | 'dotDamage'
+  | 'canAct'
+  | 'isInvulnerable'
+
+export type BattleModifierMode = 'flat' | 'percentAdd' | 'multiplier' | 'set'
+
+export type BattleModifierStacking = 'max' | 'replace' | 'stack'
+
+export type BattleModifierValue = number | boolean | string
+
+export type BattleModifierDurationTemplate =
+  | { kind: 'rounds'; rounds: number }
+  | { kind: 'permanent' }
+  | { kind: 'untilRemoved' }
+
+export type BattleModifierDuration =
+  | { kind: 'rounds'; remaining: number }
+  | { kind: 'permanent' }
+  | { kind: 'untilRemoved' }
+
+export type BattleModifierTemplate = {
+  label: string
+  scope?: BattleModifierScope
+  stat: BattleModifierStat
+  mode: BattleModifierMode
+  value: BattleModifierValue
+  duration: BattleModifierDurationTemplate
+  tags: string[]
+  visible?: boolean
+  stacking?: BattleModifierStacking
+  statusKind?: BattleStatusKind
+}
+
+export type BattleModifierFilter = {
+  label?: string
+  scope?: BattleModifierScope
+  stat?: BattleModifierStat
+  tags?: string[]
+  sourceAbilityId?: string
+  sourceActorId?: string
+  statusKind?: BattleStatusKind
+}
+
+export type BattleModifierInstance = {
+  id: string
+  label: string
+  sourceActorId?: string
+  sourceAbilityId?: string
+  scope: BattleModifierScope
+  targetId?: string
+  stat: BattleModifierStat
+  mode: BattleModifierMode
+  value: BattleModifierValue
+  duration: BattleModifierDuration
+  tags: string[]
+  visible: boolean
+  stacking: BattleModifierStacking
+  statusKind?: BattleStatusKind
+}
+
+export type BattleReactionCondition =
+  | { type: 'selfHpBelow'; threshold: number }
+  | { type: 'targetHpBelow'; threshold: number }
+  | { type: 'actorHasStatus'; status: BattleStatusKind }
+  | { type: 'targetHasStatus'; status: BattleStatusKind }
+  | { type: 'abilityId'; abilityId: string }
+  | { type: 'abilityTag'; tag: BattleAbilityTag }
+  | { type: 'isUltimate' }
+
+export type BattleScheduledPhase = 'roundStart' | 'roundEnd'
+
+export type BattleAbilityStateDelta =
+  | { mode: 'replace'; slotAbilityId: string; replacement: BattleAbilityTemplate; duration: number }
+  | { mode: 'grant'; grantedAbility: BattleAbilityTemplate; duration: number }
+  | { mode: 'lock'; slotAbilityId: string; duration: number }
+
+export type BattleScheduledEffect = {
+  id: string
+  actorId: string
+  targetIds: string[]
+  abilityId?: string
+  dueRound: number
+  phase: BattleScheduledPhase
+  effects: SkillEffect[]
+}
+
 export type BattleFighterState = {
   instanceId: string
   templateId: string
@@ -97,8 +190,7 @@ export type BattleFighterState = {
   affiliationLabel: string
   battleTitle: string
   bio: string
-  renderSrc: string
-  boardPortraitSrc: string
+  boardPortraitSrc?: string
   portraitFrame?: BattlePortraitFrame
   boardPortraitFrame?: BattlePortraitFrame
   maxHp: number
@@ -108,6 +200,8 @@ export type BattleFighterState = {
   ultimate: BattleAbilityTemplate
   cooldowns: Record<string, number>
   statuses: BattleStatuses
+  modifiers: BattleModifierInstance[]
+  abilityState: BattleAbilityStateDelta[]
 }
 
 export type BattlefieldEffect = {
@@ -158,6 +252,89 @@ export type BattleEvent = {
   amount?: number
 }
 
+export type BattleResourceKey = 'reserve' | 'physical' | 'technique' | 'vow' | 'mental'
+
+export type BattleDamagePacket = {
+  kind: 'damage'
+  sourceActorId?: string
+  targetId: string
+  abilityId?: string
+  baseAmount: number
+  amount: number
+  damageType: 'normal' | 'burn' | 'fatigue' | 'true'
+  tags: string[]
+  flags: {
+    isUltimate?: boolean
+    isStatusTick?: boolean
+    ignoresInvulnerability?: boolean
+  }
+}
+
+export type BattleHealPacket = {
+  kind: 'heal'
+  sourceActorId?: string
+  targetId: string
+  abilityId?: string
+  baseAmount: number
+  amount: number
+  tags: string[]
+  flags: {
+    isRoundStart?: boolean
+    isRegen?: boolean
+  }
+}
+
+export type BattleResourcePacket = {
+  kind: 'resource'
+  sourceActorId?: string
+  targetTeam: BattleTeamId
+  abilityId?: string
+  mode: 'gain' | 'spend' | 'refresh' | 'set'
+  amounts: Partial<Record<BattleResourceKey, number>>
+  tags: string[]
+}
+
+export type BattleRuntimePacket = BattleDamagePacket | BattleHealPacket | BattleResourcePacket
+
+export type BattleRuntimeEventType =
+  | 'round_started'
+  | 'round_ended'
+  | 'ability_used'
+  | 'ability_resolved'
+  | 'damage_would_apply'
+  | 'damage_applied'
+  | 'damage_blocked'
+  | 'heal_would_apply'
+  | 'heal_applied'
+  | 'resource_changed'
+  | 'modifier_applied'
+  | 'modifier_removed'
+  | 'fighter_defeated'
+  | 'status_applied'
+  | 'status_removed'
+  | 'scheduled_effect_created'
+  | 'scheduled_effect_resolved'
+
+export type BattleRuntimeEvent = {
+  id: string
+  round: number
+  type: BattleRuntimeEventType
+  actorId?: string
+  targetId?: string
+  team?: BattleTeamId
+  abilityId?: string
+  amount?: number
+  tags?: string[]
+  packet?: BattleRuntimePacket
+  meta?: Record<string, string | number | boolean | null>
+}
+
+export type BattleResolutionResult = {
+  state: BattleState
+  events: BattleEvent[]
+  runtimeEvents: BattleRuntimeEvent[]
+}
+
 export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies'
 
 export type SkillEffect =
@@ -170,12 +347,27 @@ export type SkillEffect =
   | { type: 'burn'; damage: number; duration: number; target: EffectTarget }
   | { type: 'cooldownReduction'; amount: number; target: EffectTarget }
   | { type: 'damageBoost'; amount: number; target: EffectTarget }
+  | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
+  | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget }
+  | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
+  | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
+  | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
 
-export type PassiveTrigger = 'onDealDamage' | 'onRoundStart' | 'whileAlive' | 'onTargetBelow'
+export type PassiveTrigger =
+  | 'onDealDamage'
+  | 'onRoundStart'
+  | 'onRoundEnd'
+  | 'onAbilityUse'
+  | 'onAbilityResolve'
+  | 'onTakeDamage'
+  | 'onDefeat'
+  | 'whileAlive'
+  | 'onTargetBelow'
 
 export type PassiveEffect = {
   trigger: PassiveTrigger
   threshold?: number
+  conditions?: BattleReactionCondition[]
   effects: SkillEffect[]
   label: string
 }
@@ -199,5 +391,11 @@ export type BattleState = {
   enemyEnergy: BattleEnergyPool
   playerTeam: BattleFighterState[]
   enemyTeam: BattleFighterState[]
+  playerTeamModifiers: BattleModifierInstance[]
+  enemyTeamModifiers: BattleModifierInstance[]
+  battlefieldModifiers: BattleModifierInstance[]
+  scheduledEffects: BattleScheduledEffect[]
   winner: BattleTeamId | null
 }
+
+

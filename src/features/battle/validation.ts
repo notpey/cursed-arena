@@ -1,5 +1,15 @@
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
-import type { BattleAbilityTemplate, BattleFighterTemplate, PassiveEffect, SkillEffect } from '@/features/battle/types'
+import { passiveTriggerOrder } from '@/features/battle/reactions'
+import type {
+  BattleAbilityTemplate,
+  BattleFighterTemplate,
+  BattleModifierMode,
+  BattleModifierScope,
+  BattleModifierStat,
+  BattleReactionCondition,
+  PassiveEffect,
+  SkillEffect,
+} from '@/features/battle/types'
 
 export type BattleContentSetup = {
   playerTeamIds: string[]
@@ -14,12 +24,11 @@ type EffectValidationContext =
   | { source: 'ability' }
   | { source: 'passive'; trigger: PassiveEffect['trigger'] }
 
-const supportedPassiveTriggers: PassiveEffect['trigger'][] = [
-  'onDealDamage',
-  'onRoundStart',
-  'whileAlive',
-  'onTargetBelow',
-]
+const supportedPassiveTriggers: PassiveEffect['trigger'][] = [...passiveTriggerOrder]
+const supportedStatuses = ['stun', 'invincible', 'mark', 'burn', 'attackUp']
+const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
+const supportedModifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
+const supportedModifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
 
 function pushIssue(issues: string[], scope: string, message: string) {
   issues.push(`${scope}: ${message}`)
@@ -27,6 +36,44 @@ function pushIssue(issues: string[], scope: string, message: string) {
 
 function isUnique(values: string[]) {
   return new Set(values).size === values.length
+}
+
+function validateCondition(scope: string, condition: BattleReactionCondition, issues: string[]) {
+  switch (condition.type) {
+    case 'selfHpBelow':
+    case 'targetHpBelow':
+      if (condition.threshold <= 0 || condition.threshold >= 1) {
+        pushIssue(issues, scope, 'threshold must be between 0 and 1')
+      }
+      return
+    case 'actorHasStatus':
+    case 'targetHasStatus':
+      if (!supportedStatuses.includes(condition.status)) {
+        pushIssue(issues, scope, `unsupported status "${condition.status}"`)
+      }
+      return
+    case 'abilityId':
+      if (!condition.abilityId.trim()) pushIssue(issues, scope, 'abilityId is required')
+      return
+    case 'abilityTag':
+    case 'isUltimate':
+      return
+  }
+}
+
+function validateEmbeddedAbility(scope: string, ability: BattleAbilityTemplate, issues: string[]) {
+  if (!ability.id.trim()) pushIssue(issues, scope, 'replacement ability id is required')
+  if (!ability.name.trim()) pushIssue(issues, scope, 'replacement ability name is required')
+  if (!ability.description.trim()) pushIssue(issues, scope, 'replacement ability description is required')
+  if (ability.cooldown < 0) pushIssue(issues, scope, 'replacement ability cooldown cannot be negative')
+  if (ability.tags.length === 0) pushIssue(issues, scope, 'replacement ability requires at least one tag')
+  if ((ability.effects?.length ?? 0) === 0 && ability.kind !== 'pass') {
+    pushIssue(issues, scope, 'replacement ability requires at least one effect')
+  }
+
+  ;(ability.effects ?? []).forEach((effect, index) =>
+    validateSkillEffect(`${scope} effect ${index + 1}`, effect, issues, { source: 'ability' }),
+  )
 }
 
 function validateSkillEffect(
@@ -59,26 +106,46 @@ function validateSkillEffect(
     case 'cooldownReduction':
       if (effect.amount <= 0) pushIssue(issues, scope, 'cooldownReduction amount must be positive')
       if (context.source !== 'passive' || context.trigger !== 'whileAlive' || effect.target !== 'self') {
-        pushIssue(
-          issues,
-          scope,
-          'cooldownReduction is only supported on self-targeted whileAlive passives',
-        )
+        pushIssue(issues, scope, 'cooldownReduction is only supported on self-targeted whileAlive passives')
       }
       return
     case 'damageBoost':
       if (effect.amount <= 0) pushIssue(issues, scope, 'damageBoost amount must be positive')
-      if (
-        context.source !== 'passive' ||
-        !['whileAlive', 'onTargetBelow'].includes(context.trigger) ||
-        effect.target !== 'self'
-      ) {
-        pushIssue(
-          issues,
-          scope,
-          'damageBoost is only supported on self-targeted whileAlive or onTargetBelow passives',
-        )
+      if (context.source !== 'passive' || !['whileAlive', 'onTargetBelow'].includes(context.trigger) || effect.target !== 'self') {
+        pushIssue(issues, scope, 'damageBoost is only supported on self-targeted whileAlive or onTargetBelow passives')
       }
+      return
+    case 'addModifier':
+      if (!effect.modifier.label.trim()) pushIssue(issues, scope, 'addModifier label is required')
+      if (!supportedModifierStats.includes(effect.modifier.stat)) pushIssue(issues, scope, `unsupported modifier stat "${effect.modifier.stat}"`)
+      if (!supportedModifierModes.includes(effect.modifier.mode)) pushIssue(issues, scope, `unsupported modifier mode "${effect.modifier.mode}"`)
+      if (effect.modifier.scope && !supportedModifierScopes.includes(effect.modifier.scope)) pushIssue(issues, scope, `unsupported modifier scope "${effect.modifier.scope}"`)
+      if (effect.modifier.duration.kind === 'rounds' && effect.modifier.duration.rounds <= 0) pushIssue(issues, scope, 'addModifier round duration must be positive')
+      if ((effect.modifier.mode === 'flat' || effect.modifier.mode === 'percentAdd' || effect.modifier.mode === 'multiplier') && typeof effect.modifier.value !== 'number') {
+        pushIssue(issues, scope, 'numeric modifier modes require a numeric value')
+      }
+      if (effect.modifier.mode === 'set' && typeof effect.modifier.value !== 'boolean' && typeof effect.modifier.value !== 'string' && typeof effect.modifier.value !== 'number') {
+        pushIssue(issues, scope, 'set modifiers require a serializable value')
+      }
+      return
+    case 'removeModifier':
+      if (!effect.filter.label && !effect.filter.stat && !effect.filter.statusKind && (effect.filter.tags?.length ?? 0) === 0 && !effect.filter.scope) {
+        pushIssue(issues, scope, 'removeModifier requires at least one filter field')
+      }
+      if (effect.filter.stat && !supportedModifierStats.includes(effect.filter.stat)) pushIssue(issues, scope, `unsupported removeModifier stat "${effect.filter.stat}"`)
+      if (effect.filter.scope && !supportedModifierScopes.includes(effect.filter.scope)) pushIssue(issues, scope, `unsupported removeModifier scope "${effect.filter.scope}"`)
+      return
+    case 'schedule':
+      if (effect.delay <= 0) pushIssue(issues, scope, 'schedule delay must be positive')
+      if (effect.effects.length === 0) pushIssue(issues, scope, 'schedule must include nested effects')
+      effect.effects.forEach((nestedEffect, index) =>
+        validateSkillEffect(`${scope} nested effect ${index + 1}`, nestedEffect, issues, context),
+      )
+      return
+    case 'replaceAbility':
+      if (effect.duration <= 0) pushIssue(issues, scope, 'replaceAbility duration must be positive')
+      if (!effect.slotAbilityId.trim()) pushIssue(issues, scope, 'replaceAbility slotAbilityId is required')
+      validateEmbeddedAbility(`${scope} replacement`, effect.ability, issues)
       return
   }
 }
@@ -90,10 +157,18 @@ function validatePassive(scope: string, passive: PassiveEffect, issues: string[]
     pushIssue(issues, scope, `unsupported passive trigger "${passive.trigger}"`)
   }
   if (passive.trigger === 'onTargetBelow') {
-    if (typeof passive.threshold !== 'number' || passive.threshold <= 0 || passive.threshold >= 1) {
-      pushIssue(issues, scope, 'onTargetBelow passives require a threshold between 0 and 1')
+    if (typeof passive.threshold === 'number' && (passive.threshold <= 0 || passive.threshold >= 1)) {
+      pushIssue(issues, scope, 'onTargetBelow threshold must be between 0 and 1')
+    }
+    const hasTargetThreshold = (passive.conditions ?? []).some((condition) => condition.type === 'targetHpBelow')
+    if (passive.threshold == null && !hasTargetThreshold) {
+      pushIssue(issues, scope, 'onTargetBelow requires a legacy threshold or targetHpBelow condition')
     }
   }
+
+  passive.conditions?.forEach((condition, index) => {
+    validateCondition(`${scope} condition ${index + 1}`, condition, issues)
+  })
 
   passive.effects.forEach((effect, index) =>
     validateSkillEffect(`${scope} effect ${index + 1}`, effect, issues, {
@@ -183,8 +258,6 @@ export function validateBattleContent(
     if (!fighter.id.trim()) pushIssue(errors, scope, 'fighter id is required')
     if (!fighter.name.trim()) pushIssue(errors, scope, 'fighter name is required')
     if (!fighter.shortName.trim()) pushIssue(errors, scope, 'fighter shortName is required')
-    if (!fighter.renderSrc) pushIssue(errors, scope, 'renderSrc is required')
-    if (!fighter.boardPortraitSrc) pushIssue(errors, scope, 'boardPortraitSrc is required')
     if (fighter.maxHp <= 0) pushIssue(errors, scope, 'maxHp must be positive')
     if (fighter.abilities.length !== 3) pushIssue(errors, scope, 'fighters must define exactly 3 standard abilities')
 
@@ -214,3 +287,7 @@ export function assertValidBattleContent(roster: BattleFighterTemplate[], setup?
     throw new Error(`Battle content validation failed:\n${report.errors.join('\n')}`)
   }
 }
+
+
+
+

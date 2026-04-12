@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'vitest'
+import { battleRoster } from '@/features/battle/data'
 import {
   beginNewRound,
   createInitialBattleState,
   endRound,
+  getAbilityById,
   getTeam,
   resolveTeamTurn,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
 import { getBurnDamage, getStatusDuration } from '@/features/battle/statuses'
 import type { BattleState, QueuedBattleAction } from '@/features/battle/types'
+import { validateBattleContent } from '@/features/battle/validation'
 
 function getFighter(state: BattleState, team: 'player' | 'enemy', templateId: string) {
   const fighter = getTeam(state, team).find((unit) => unit.templateId === templateId)
@@ -106,6 +109,225 @@ describe('battle engine scenarios', () => {
     expect(updatedYuji.hp).toBe(86)
   })
 
+  test('resolveTeamTurn emits runtime events and packets for a damaging ability', () => {
+    const state = createInitialBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', megumi.instanceId, 'megumi-dogs', yuji.instanceId),
+      'player',
+    )
+
+    expect(result.runtimeEvents.some((event) => event.type === 'ability_used' && event.abilityId === 'megumi-dogs')).toBe(true)
+    expect(result.runtimeEvents.some((event) => event.type === 'resource_changed' && event.abilityId === 'megumi-dogs')).toBe(true)
+
+    const damageEvent = result.runtimeEvents.find((event) => event.type === 'damage_applied' && event.targetId === yuji.instanceId)
+    expect(damageEvent?.packet?.kind).toBe('damage')
+    if (damageEvent?.packet?.kind === 'damage') {
+      expect(damageEvent.packet.baseAmount).toBe(46)
+      expect(damageEvent.packet.amount).toBe(50)
+      expect(damageEvent.packet.damageType).toBe('normal')
+    }
+  })
+
+  test('beginNewRound emits round-start and healing runtime events', () => {
+    const state = createInitialBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    yuji.hp = 80
+
+    const result = beginNewRound(state)
+
+    expect(result.runtimeEvents.some((event) => event.type === 'round_started')).toBe(true)
+    const healEvent = result.runtimeEvents.find((event) => event.type === 'heal_applied' && event.targetId === yuji.instanceId)
+    expect(healEvent?.packet?.kind).toBe('heal')
+    if (healEvent?.packet?.kind === 'heal') {
+      expect(healEvent.packet.amount).toBe(6)
+    }
+  })
+
+  test('generic addModifier effects feed the runtime damage calculation and status sync', () => {
+    const state = createInitialBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    megumi.abilities[0].energyCost = {}
+    megumi.abilities[0].effects = [
+      {
+        type: 'addModifier',
+        target: 'self',
+        modifier: {
+          label: 'Focused Strike',
+          stat: 'damageDealt',
+          mode: 'flat',
+          value: 9,
+          duration: { kind: 'rounds', rounds: 2 },
+          tags: ['custom', 'focus'],
+          visible: true,
+          stacking: 'max',
+          statusKind: 'attackUp',
+        },
+      },
+      { type: 'damage', power: 20, target: 'inherit' },
+    ]
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', megumi.instanceId, megumi.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(73)
+    expect(getStatusDuration(getFighter(result.state, 'player', 'megumi').statuses, 'attackUp')).toBe(2)
+    expect(result.runtimeEvents.some((event) => event.type === 'modifier_applied' && event.targetId === megumi.instanceId)).toBe(true)
+  })
+
+  test('generic removeModifier effects can strip invulnerability before damage resolves', () => {
+    const state = createInitialBattleState()
+    const gojo = getFighter(state, 'player', 'gojo')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].kind = 'buff'
+    yuji.abilities[0].tags = ['BUFF']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{
+      type: 'addModifier',
+      target: 'self',
+      modifier: {
+        label: 'Guard Shell',
+        stat: 'isInvulnerable',
+        mode: 'set',
+        value: true,
+        duration: { kind: 'rounds', rounds: 2 },
+        tags: ['custom', 'guard'],
+        visible: true,
+        stacking: 'max',
+        statusKind: 'invincible',
+      },
+    }]
+
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [
+      { type: 'removeModifier', target: 'inherit', filter: { statusKind: 'invincible' } },
+      { type: 'damage', power: 20, target: 'inherit' },
+    ]
+
+    const shielded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    expect(getStatusDuration(getFighter(shielded.state, 'enemy', 'yuji').statuses, 'invincible')).toBe(2)
+
+    const stripped = resolveTeamTurn(
+      shielded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(stripped.state, 'enemy', 'yuji').hp).toBe(84)
+    expect(getStatusDuration(getFighter(stripped.state, 'enemy', 'yuji').statuses, 'invincible')).toBe(0)
+    expect(stripped.runtimeEvents.some((event) => event.type === 'modifier_removed' && event.targetId === yuji.instanceId)).toBe(true)
+  })
+
+  test('team-scoped modifiers amplify allied actions', () => {
+    const control = createInitialBattleState()
+    const buffed = createInitialBattleState()
+
+    const gojo = getFighter(buffed, 'player', 'gojo')
+    const buffedMegumi = getFighter(buffed, 'player', 'megumi')
+    const buffedYuji = getFighter(buffed, 'enemy', 'yuji')
+    const controlMegumi = getFighter(control, 'player', 'megumi')
+    const controlYuji = getFighter(control, 'enemy', 'yuji')
+
+    gojo.abilities[0].kind = 'buff'
+    gojo.abilities[0].targetRule = 'self'
+    gojo.abilities[0].tags = ['BUFF']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{
+      type: 'addModifier',
+      target: 'self',
+      modifier: {
+        label: 'Team Focus',
+        scope: 'team',
+        stat: 'damageDealt',
+        mode: 'flat',
+        value: 7,
+        duration: { kind: 'rounds', rounds: 1 },
+        tags: ['custom', 'team-focus'],
+        visible: false,
+        stacking: 'max',
+      },
+    }]
+
+    const controlResult = resolveTeamTurn(
+      control,
+      queue('player', controlMegumi.instanceId, controlMegumi.abilities[0].id, controlYuji.instanceId),
+      'player',
+    )
+    const buffedResult = resolveTeamTurn(
+      buffed,
+      {
+        [gojo.instanceId]: { actorId: gojo.instanceId, team: 'player', abilityId: gojo.abilities[0].id, targetId: gojo.instanceId },
+        [buffedMegumi.instanceId]: { actorId: buffedMegumi.instanceId, team: 'player', abilityId: buffedMegumi.abilities[0].id, targetId: buffedYuji.instanceId },
+      },
+      'player',
+    )
+
+    expect(getFighter(controlResult.state, 'enemy', 'yuji').hp - getFighter(buffedResult.state, 'enemy', 'yuji').hp).toBe(7)
+    expect(buffedResult.state.playerTeamModifiers).toHaveLength(1)
+  })
+
+  test('battlefield-scoped modifiers affect both teams through the shared pool', () => {
+    const control = createInitialBattleState()
+    const modified = createInitialBattleState()
+
+    const gojo = getFighter(modified, 'player', 'gojo')
+    const modifiedMegumi = getFighter(modified, 'player', 'megumi')
+    const modifiedYuji = getFighter(modified, 'enemy', 'yuji')
+    const controlMegumi = getFighter(control, 'player', 'megumi')
+    const controlYuji = getFighter(control, 'enemy', 'yuji')
+
+    gojo.abilities[0].kind = 'utility'
+    gojo.abilities[0].targetRule = 'self'
+    gojo.abilities[0].tags = ['UTILITY']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{
+      type: 'addModifier',
+      target: 'self',
+      modifier: {
+        label: 'Open Domain',
+        scope: 'battlefield',
+        stat: 'damageTaken',
+        mode: 'flat',
+        value: 6,
+        duration: { kind: 'rounds', rounds: 1 },
+        tags: ['custom', 'domain'],
+        visible: false,
+        stacking: 'max',
+      },
+    }]
+
+    const controlResult = resolveTeamTurn(
+      control,
+      queue('player', controlMegumi.instanceId, controlMegumi.abilities[0].id, controlYuji.instanceId),
+      'player',
+    )
+    const modifiedResult = resolveTeamTurn(
+      modified,
+      {
+        [gojo.instanceId]: { actorId: gojo.instanceId, team: 'player', abilityId: gojo.abilities[0].id, targetId: gojo.instanceId },
+        [modifiedMegumi.instanceId]: { actorId: modifiedMegumi.instanceId, team: 'player', abilityId: modifiedMegumi.abilities[0].id, targetId: modifiedYuji.instanceId },
+      },
+      'player',
+    )
+
+    expect(getFighter(controlResult.state, 'enemy', 'yuji').hp - getFighter(modifiedResult.state, 'enemy', 'yuji').hp).toBe(6)
+    expect(modifiedResult.state.battlefieldModifiers).toHaveLength(1)
+  })
+
   test('battlefield bonus increases ultimate damage', () => {
     const state = createInitialBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
@@ -153,5 +375,115 @@ describe('battle engine scenarios', () => {
 
     expect(first.firstPlayer).toBe(second.firstPlayer)
     expect([first.firstPlayer, 'player', 'enemy']).toContain(alternate.firstPlayer)
+  })
+
+  test('scheduled effects resolve on the configured future round start', () => {
+    const state = createInitialBattleState()
+    const gojo = getFighter(state, 'player', 'gojo')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    gojo.abilities[0].effects = [{
+      type: 'schedule',
+      delay: 1,
+      phase: 'roundStart',
+      target: 'inherit',
+      effects: [{ type: 'damage', power: 11, target: 'inherit' }],
+    }]
+
+    const acted = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, 'gojo-infinity', yuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(acted.state, 'enemy', 'yuji').hp).toBe(104)
+
+    const nextRound = beginNewRound(acted.state)
+    expect(getFighter(nextRound.state, 'enemy', 'yuji').hp).toBe(99)
+  })
+
+  test('ability replacement effects swap the visible skill slot temporarily', () => {
+    const state = createInitialBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    yuji.abilities[2].effects = [{
+      type: 'replaceAbility',
+      target: 'self',
+      slotAbilityId: 'yuji-kick',
+      duration: 2,
+      ability: {
+        id: 'yuji-sukuna-cleave',
+        name: 'Sukuna Cleave',
+        description: 'A temporary replacement strike.',
+        kind: 'attack',
+        targetRule: 'enemy-single',
+        tags: ['ATK'],
+        icon: { label: 'SC', tone: 'red' },
+        cooldown: 1,
+        effects: [{ type: 'damage', power: 70, target: 'inherit' }],
+      },
+    }]
+
+    const acted = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, 'yuji-adrenaline', yuji.instanceId),
+      'enemy',
+    )
+    const updatedYuji = getFighter(acted.state, 'enemy', 'yuji')
+
+    expect(getAbilityById(updatedYuji, 'yuji-sukuna-cleave')?.name).toBe('Sukuna Cleave')
+    expect(getAbilityById(updatedYuji, 'yuji-kick')).toBeNull()
+
+    const afterRound = endRound(acted.state)
+    expect(getAbilityById(getFighter(afterRound.state, 'enemy', 'yuji'), 'yuji-sukuna-cleave')?.name).toBe('Sukuna Cleave')
+
+    const afterSecondRound = endRound(afterRound.state)
+    expect(getAbilityById(getFighter(afterSecondRound.state, 'enemy', 'yuji'), 'yuji-sukuna-cleave')).toBeNull()
+  })
+
+  test('modifyAbilityState grant adds a temporary visible ability', () => {
+    const state = createInitialBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].tags = ['UTILITY']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{
+      type: 'modifyAbilityState',
+      target: 'self',
+      delta: {
+        mode: 'grant',
+        duration: 1,
+        grantedAbility: {
+          id: 'yuji-feint',
+          name: 'Feint',
+          description: 'A temporary granted technique.',
+          kind: 'attack',
+          targetRule: 'enemy-single',
+          tags: ['ATK'],
+          icon: { label: 'FE', tone: 'red' },
+          cooldown: 1,
+          effects: [{ type: 'damage', power: 10, target: 'inherit' }],
+        },
+      },
+    }]
+
+    const acted = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    expect(getAbilityById(getFighter(acted.state, 'enemy', 'yuji'), 'yuji-feint')?.name).toBe('Feint')
+
+    const afterRound = endRound(acted.state)
+    expect(getAbilityById(getFighter(afterRound.state, 'enemy', 'yuji'), 'yuji-feint')).toBeNull()
+  })
+
+  test('battle content validation no longer requires renderSrc', () => {
+    const report = validateBattleContent([JSON.parse(JSON.stringify(battleRoster[0]))])
+
+    expect(report.errors).toEqual([])
+    expect(report.errors.some((issue) => issue.includes('renderSrc'))).toBe(false)
   })
 })

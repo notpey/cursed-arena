@@ -33,7 +33,6 @@ export type BattlePrepRosterEntry = {
   name: string
   rarity: CharacterRarity
   archetypes: Archetype[]
-  renderSrc?: string
   portraitFrame?: {
     scale?: number
     x?: string
@@ -122,14 +121,12 @@ export const battlePrepRoster: BattlePrepRosterEntry[] = battleRoster
   .map((fighter) => {
     const character = ownedRosterById[fighter.id]
     const rarity = character?.rarity ?? mapBattleRarityToCharacter(fighter.rarity)
-    const renderSrc = character?.renderSrc ?? (fighter.renderSrc || fighter.boardPortraitSrc || undefined)
 
     return {
       id: fighter.id,
       name: fighter.name,
       rarity,
       archetypes: character?.archetypes ?? deriveArchetypesFromFighter(fighter),
-      renderSrc,
       portraitFrame: character?.portraitFrame ?? fighter.portraitFrame,
       gradeLabel: gradeLabelFromRarity(rarity),
       role: fighter.role,
@@ -259,4 +256,6 @@ export function deleteSavedPrepTeam(teamId: string) {
   writeLocalStorage(savedTeamsStorageKey, next)
   return next
 }
+
+
 

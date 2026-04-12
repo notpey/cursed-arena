@@ -1,11 +1,3 @@
-import gojoRender from '@/assets/renders/Satoru_Gojo_Cursed_Clash.webp'
-import yujiRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
-import megumiRender from '@/assets/renders/Megumi_Fushiguro_Cursed_Clash.webp'
-import nobaraRender from '@/assets/renders/Nobara_Kugisaki_Cursed_Clash.webp'
-import jogoRender from '@/assets/renders/Jogo_Cursed_Clash.webp'
-import nanamiRender from '@/assets/renders/Kento_Nanami_Cursed_Clash.webp'
-import yutaRender from '@/assets/renders/Yuta_Okkotsu_Cursed_Clash.webp'
-import todoRender from '@/assets/renders/Aoi_Todo_Cursed_Clash.webp'
 import {
   damageSkill,
   debuffSkill,
@@ -130,7 +122,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Gojo',
     rarity: 'SSR',
     role: 'Blaster / Control',
-    renderSrc: gojoRender,
     portraitFrame: { scale: 2.24, y: '-18%' },
     maxHp: 112,
     passiveEffects: [definePassive({
@@ -191,7 +182,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Megumi',
     rarity: 'UR',
     role: 'Utility / Sustain',
-    renderSrc: megumiRender,
     portraitFrame: { scale: 2.14, y: '-14%' },
     maxHp: 96,
     passiveEffects: [definePassive({
@@ -257,7 +247,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Jogo',
     rarity: 'R',
     role: 'Blaster / Burn',
-    renderSrc: jogoRender,
     portraitFrame: { scale: 2.02, y: '-6%' },
     maxHp: 88,
     passiveEffects: [definePassive({
@@ -318,7 +307,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Yuji',
     rarity: 'SSR',
     role: 'Striker',
-    renderSrc: yujiRender,
     portraitFrame: { scale: 2.06, y: '-10%' },
     maxHp: 104,
     passiveEffects: [definePassive({
@@ -378,7 +366,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Nobara',
     rarity: 'SR',
     role: 'Debuff / Burst',
-    renderSrc: nobaraRender,
     portraitFrame: { scale: 2.08, y: '-10%' },
     maxHp: 90,
     abilities: [
@@ -434,7 +421,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Nanami',
     rarity: 'SR',
     role: 'Bruiser / Execute',
-    renderSrc: nanamiRender,
     portraitFrame: { scale: 1.98, y: '-12%' },
     maxHp: 108,
     passiveEffects: [definePassive({
@@ -497,7 +483,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Yuta',
     rarity: 'SSR',
     role: 'Hybrid',
-    renderSrc: yutaRender,
     portraitFrame: { scale: 2.1, y: '-12%' },
     maxHp: 102,
     abilities: [
@@ -552,7 +537,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     shortName: 'Todo',
     rarity: 'SR',
     role: 'Bruiser / Utility',
-    renderSrc: todoRender,
     portraitFrame: { scale: 2.0, y: '-10%' },
     maxHp: 110,
     abilities: [
@@ -635,3 +619,4 @@ export const defaultBattleSetup = {
   playerTeamIds: runtimeBattleContent.defaultSetup.playerTeamIds,
   enemyTeamIds: runtimeBattleContent.defaultSetup.enemyTeamIds,
 }
+
