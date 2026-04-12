@@ -1077,60 +1077,14 @@ export function AdminControlPanelPage() {
                     )}
                   </div>
                 </EditorCard>
-
-                <EditorCard title="Default Match Setup" subtitle="Launch Teams">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <TeamSelectGroup
-                      title="Player Team"
-                      values={draft.defaultSetup.playerTeamIds}
-                      roster={draft.roster}
-                      accent="teal"
-                      onChange={(slotIndex, value) =>
-                        updateDraft((next) => {
-                          next.defaultSetup.playerTeamIds[slotIndex] = value
-                        })
-                      }
-                    />
-                    <TeamSelectGroup
-                      title="Enemy Team"
-                      values={draft.defaultSetup.enemyTeamIds}
-                      roster={draft.roster}
-                      accent="red"
-                      onChange={(slotIndex, value) =>
-                        updateDraft((next) => {
-                          next.defaultSetup.enemyTeamIds[slotIndex] = value
-                        })
-                      }
-                    />
-                  </div>
-                </EditorCard>
               </>
             ) : null}
           </section>
 
-          <section className="space-y-4">
+          <section className="space-y-4 xl:sticky xl:top-4 self-start">
             {selectedFighter && selectedAbility ? (
-              <EditorCard title="Live Preview" subtitle={selectedFighter.shortName.toUpperCase()}>
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-[5rem_minmax(0,1fr)]">
-                    <PortraitPreview fighter={selectedFighter} compact />
-                    <div>
-                      <p className="ca-display text-[1.35rem] text-ca-text">{selectedAbility.name}</p>
-                      <p className="mt-1 text-sm leading-6 text-ca-text-2">{selectedAbility.description}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    {(selectedAbility.effects ?? []).map((effect, index) => (
-                      <div key={`${selectedAbility.id}-summary-${index}`} className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
-                        <p className="ca-mono-label text-[0.36rem] text-ca-text-3">EFFECT {index + 1}</p>
-                        <p className="mt-1 text-sm leading-6 text-ca-text-2">{describeEffect(effect)}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </EditorCard>
+              <SelectionPreviewPanel fighter={selectedFighter} ability={selectedAbility} passive={selectedPassive ?? null} />
             ) : null}
-
             <EditorCard title="Authoring Guide" subtitle="Images + Costs">
               <div className="space-y-3 text-sm leading-6 text-ca-text-2">
                 <GuideRow label="Portrait" copy="Recommended 512x512. Preferred master 1024x1024. Square crop with face or upper torso centered." />
@@ -1284,47 +1238,6 @@ function SelectField({
         ))}
       </select>
     </label>
-  )
-}
-
-function TeamSelectGroup({
-  title,
-  values,
-  roster,
-  accent,
-  onChange,
-}: {
-  title: string
-  values: string[]
-  roster: BattleFighterTemplate[]
-  accent: 'teal' | 'red'
-  onChange: (slotIndex: number, value: string) => void
-}) {
-  return (
-    <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-      <p className="ca-mono-label text-[0.42rem] text-ca-text-3">{title}</p>
-      <div className="mt-3 space-y-3">
-        {values.map((value, index) => (
-          <label key={`${title}-${index}`} className="block">
-            <span className="ca-mono-label text-[0.38rem] text-ca-text-3">SLOT {index + 1}</span>
-            <select
-              value={value}
-              onChange={(event) => onChange(index, event.target.value)}
-              className={[
-                'mt-2 w-full rounded-[8px] border bg-[rgba(11,11,18,0.72)] px-3 py-2 text-sm text-ca-text outline-none transition',
-                accent === 'teal' ? 'border-ca-teal/18 focus:border-ca-teal/35' : 'border-ca-red/18 focus:border-ca-red/35',
-              ].join(' ')}
-            >
-              {roster.map((fighter) => (
-                <option key={`${title}-${fighter.id}`} value={fighter.id}>
-                  {fighter.shortName}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -1574,6 +1487,100 @@ function SkillProfileRow({ ability, isUltimate }: { ability: BattleAbilityTempla
   )
 }
 
+function SelectionPreviewPanel({
+  fighter,
+  ability,
+  passive,
+}: {
+  fighter: BattleFighterTemplate
+  ability: BattleAbilityTemplate
+  passive: PassiveEffect | null
+}) {
+  const costEntries = Object.entries(getAbilityEnergyCost(ability))
+  const targetLabel = ability.targetRule.toUpperCase().replace(/-/g, ' ')
+  const rarityTone: 'red' | 'teal' | 'frost' =
+    fighter.rarity === 'SSR' || fighter.rarity === 'UR' ? 'red' : fighter.rarity === 'SR' ? 'teal' : 'frost'
+
+  return (
+    <EditorCard title="Selection Preview" subtitle={fighter.shortName.toUpperCase()}>
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-[12px] border border-white/10 bg-[linear-gradient(135deg,rgba(250,39,66,0.12),rgba(250,39,66,0.02)_35%,rgba(5,216,189,0.08)_78%,rgba(255,255,255,0.03))] p-3">
+          <div className="grid gap-3 sm:grid-cols-[5rem_minmax(0,1fr)]">
+            <PortraitPreview fighter={fighter} compact />
+            <div className="min-w-0">
+              <p className="ca-display text-[1.35rem] leading-none text-ca-text">{fighter.name}</p>
+              <p className="ca-mono-label mt-1 text-[0.38rem] text-ca-text-3">{fighter.battleTitle?.toUpperCase() ?? fighter.role.toUpperCase()}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <StatusPill label={fighter.rarity} tone={rarityTone} />
+                <StatusPill label={fighter.role.toUpperCase()} tone="frost" />
+                <StatusPill label={fighter.affiliationLabel.toUpperCase()} tone="teal" />
+                <StatusPill label={"HP " + fighter.maxHp} tone="gold" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[12px] border border-white/10 bg-[rgba(255,255,255,0.03)]">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[linear-gradient(90deg,rgba(250,39,66,0.9),rgba(179,22,43,0.92))] px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="ca-display truncate text-[1.05rem] leading-none text-white">{ability.name || "Untitled Skill"}</p>
+              <p className="ca-mono-label mt-1 text-[0.36rem] text-white/75">{ability.tags.includes("ULT") ? "ULTIMATE TECHNIQUE" : "ACTIVE SKILL"} - CD {ability.cooldown}</p>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {costEntries.length > 0 ? (
+                costEntries.map(([type, value]) => (
+                  <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
+                    {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
+                  </span>
+                ))
+              ) : (
+                <span className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">FREE</span>
+              )}
+            </div>
+          </div>
+          <div className="space-y-3 px-3 py-3">
+            <div className="flex gap-3">
+              <div className="flex-shrink-0">
+                <AbilityTilePreview ability={ability} large />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm leading-6 text-ca-text-2">{ability.description}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {ability.tags.map((tag) => (
+                    <StatusPill key={tag} label={tag} tone={tag === "ULT" ? "gold" : tag === "DEBUFF" ? "red" : "teal"} />
+                  ))}
+                  <StatusPill label={targetLabel} tone="frost" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="ca-mono-label text-[0.4rem] text-ca-text-3">EFFECT BREAKDOWN</p>
+              {(ability.effects ?? []).length > 0 ? (
+                (ability.effects ?? []).map((effect, index) => (
+                  <div key={ability.id + "-summary-" + index} className="rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2.5">
+                    <p className="ca-mono-label text-[0.36rem] text-ca-text-3">EFFECT {index + 1}</p>
+                    <p className="mt-1 text-sm leading-6 text-ca-text-2">{describeEffect(effect)}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[8px] border border-dashed border-white/10 px-3 py-2.5 text-sm text-ca-text-3">No effect rows authored for this skill yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {passive ? (
+          <div className="rounded-[12px] border border-ca-teal/18 bg-ca-teal-wash px-3 py-3">
+            <p className="ca-mono-label text-[0.4rem] text-ca-teal">ACTIVE PASSIVE</p>
+            <p className="ca-display mt-2 text-[1rem] text-ca-text">{passive.label}</p>
+            <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(passive)}</p>
+          </div>
+        ) : null}
+      </div>
+    </EditorCard>
+  )
+}
 function SkillEditorCard({
   ability,
   isUltimate,
