@@ -73,6 +73,21 @@ const skillBlueprintOptions: Array<{ id: SkillBlueprintId; label: string; hint: 
   { id: 'tempo-shift', label: 'Tempo Shift', hint: 'Utility tool for cooldown acceleration.' },
   { id: 'ultimate-surge', label: 'Ultimate Surge', hint: 'High-impact finisher scaffold.' },
 ]
+type PassiveBlueprintId = 'round-heal' | 'damage-aura' | 'execute-drive' | 'tempo-engine'
+
+const passiveTriggerMeta: Record<PassiveTrigger, { label: string; hint: string }> = {
+  onDealDamage: { label: 'On Deal Damage', hint: 'Fires after this fighter deals damage.' },
+  onRoundStart: { label: 'Round Start', hint: 'Fires automatically at the start of each round.' },
+  whileAlive: { label: 'While Alive Aura', hint: 'Always active while the fighter remains alive.' },
+  onTargetBelow: { label: 'Execute Window', hint: 'Activates when the target falls below the threshold.' },
+}
+
+const passiveBlueprintOptions: Array<{ id: PassiveBlueprintId; label: string; hint: string }> = [
+  { id: 'round-heal', label: 'Round Heal', hint: 'Simple regeneration or start-of-round sustain.' },
+  { id: 'damage-aura', label: 'Damage Aura', hint: 'Always-on offensive pressure while alive.' },
+  { id: 'execute-drive', label: 'Execute Drive', hint: 'Extra damage when enemies are low.' },
+  { id: 'tempo-engine', label: 'Tempo Engine', hint: 'Self cooldown acceleration while alive.' },
+]
 const liveContent = createContentSnapshot(battleRoster, {
   playerTeamIds: defaultBattleSetup.playerTeamIds,
   enemyTeamIds: defaultBattleSetup.enemyTeamIds,
@@ -333,12 +348,44 @@ function describeEffect(effect: SkillEffect) {
   }
 }
 
+function formatPassiveTrigger(trigger: PassiveTrigger) {
+  return passiveTriggerMeta[trigger].label
+}
+
+function applyPassiveBlueprint(passive: PassiveEffect, blueprintId: PassiveBlueprintId) {
+  switch (blueprintId) {
+    case 'round-heal':
+      passive.label = 'Round Renewal'
+      passive.trigger = 'onRoundStart'
+      passive.threshold = undefined
+      passive.effects = [{ type: 'heal', power: 10, target: 'self' }]
+      return
+    case 'damage-aura':
+      passive.label = 'Battle Pressure'
+      passive.trigger = 'whileAlive'
+      passive.threshold = undefined
+      passive.effects = [{ type: 'damageBoost', amount: 0.15, target: 'self' }]
+      return
+    case 'execute-drive':
+      passive.label = 'Execution Drive'
+      passive.trigger = 'onTargetBelow'
+      passive.threshold = 0.4
+      passive.effects = [{ type: 'damageBoost', amount: 0.25, target: 'self' }]
+      return
+    case 'tempo-engine':
+      passive.label = 'Tempo Engine'
+      passive.trigger = 'whileAlive'
+      passive.threshold = undefined
+      passive.effects = [{ type: 'cooldownReduction', amount: 1, target: 'self' }]
+      return
+  }
+}
 function describePassive(passive: PassiveEffect) {
   const thresholdText =
     passive.trigger === 'onTargetBelow' && typeof passive.threshold === 'number'
       ? ` under ${Math.round(passive.threshold * 100)}% HP`
       : ''
-  return `${passive.label}: ${passive.trigger}${thresholdText}.`.trim()
+  return `${passive.label}: ${formatPassiveTrigger(passive.trigger)}${thresholdText}.`.trim()
 }
 
 function explainCostRule(ability: BattleAbilityTemplate) {
@@ -1045,51 +1092,94 @@ export function AdminControlPanelPage() {
                       </div>
                     </div>
                   ) : editorTab === "passives" ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={handleAddPassive} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.42rem] text-ca-teal">ADD PASSIVE</button>
-                        <button type="button" onClick={handleRemovePassive} disabled={!selectedPassive} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.42rem] text-ca-red disabled:opacity-50">REMOVE PASSIVE</button>
+                    <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
+                      <div className="space-y-3">
+                        <div className="rounded-[12px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={handleAddPassive} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.42rem] text-ca-teal">ADD PASSIVE</button>
+                            <button type="button" onClick={handleRemovePassive} disabled={!selectedPassive} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.42rem] text-ca-red disabled:opacity-50">REMOVE</button>
+                          </div>
+                          <div className="mt-3 grid gap-2">
+                            {passiveBlueprintOptions.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => updateSelectedPassive((passive) => { applyPassiveBlueprint(passive, option.id) })}
+                                disabled={!selectedPassive}
+                                className="rounded-[8px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2 text-left transition hover:border-ca-teal/22 disabled:opacity-50"
+                              >
+                                <p className="ca-mono-label text-[0.38rem] text-ca-text">{option.label.toUpperCase()}</p>
+                                <p className="mt-1 text-xs leading-5 text-ca-text-3">{option.hint}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-[12px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+                          <p className="ca-mono-label text-[0.42rem] text-ca-text-3">PASSIVE LIST</p>
+                          <div className="mt-3 space-y-2">
+                            {(selectedFighter.passiveEffects ?? []).length > 0 ? (
+                              (selectedFighter.passiveEffects ?? []).map((passive, index) => (
+                                <button
+                                  key={passive.label + index}
+                                  type="button"
+                                  onClick={() => setSelectedPassiveIndex(index)}
+                                  className={[
+                                    "w-full rounded-[10px] border px-3 py-3 text-left transition",
+                                    selectedPassiveIndexResolved === index ? "border-ca-teal/28 bg-ca-teal-wash" : "border-white/8 bg-[rgba(255,255,255,0.03)] hover:border-white/14",
+                                  ].join(" ")}
+                                >
+                                  <p className="ca-display text-[0.95rem] text-ca-text">{passive.label}</p>
+                                  <p className="ca-mono-label mt-1 text-[0.36rem] text-ca-text-3">{formatPassiveTrigger(passive.trigger).toUpperCase()}</p>
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-sm text-ca-text-3">This fighter has no passive effects authored.</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      {(selectedFighter.passiveEffects?.length ?? 0) > 0 && selectedPassive ? (
-                        <>
-                          <SelectField
-                            label="Selected Passive"
-                            value={`${selectedPassiveIndexResolved}`}
-                            options={(selectedFighter.passiveEffects ?? []).map((passive, index) => ({ value: `${index}`, label: passive.label }))}
-                            onChange={(value) => setSelectedPassiveIndex(Number(value))}
-                          />
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <InputField label="Label" value={selectedPassive.label} onChange={(value) => updateSelectedPassive((passive) => { passive.label = value })} />
-                            <SelectField
-                              label="Trigger"
-                              value={selectedPassive.trigger}
-                              options={passiveTriggers.map((value) => ({ value, label: value.toUpperCase() }))}
-                              onChange={(value) => updateSelectedPassive((passive) => { passive.trigger = value as PassiveTrigger })}
+                      <div>
+                        {selectedPassive ? (
+                          <div className="space-y-3">
+                            <div className="rounded-[12px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <InputField label="Label" value={selectedPassive.label} onChange={(value) => updateSelectedPassive((passive) => { passive.label = value })} />
+                                <SelectField
+                                  label="Trigger"
+                                  value={selectedPassive.trigger}
+                                  options={passiveTriggers.map((value) => ({ value, label: passiveTriggerMeta[value].label }))}
+                                  onChange={(value) => updateSelectedPassive((passive) => { passive.trigger = value as PassiveTrigger })}
+                                />
+                                {selectedPassive.trigger === "onTargetBelow" ? (
+                                  <NumberField
+                                    label="Threshold (%)"
+                                    value={Math.round((selectedPassive.threshold ?? 0.4) * 100)}
+                                    onChange={(value) => updateSelectedPassive((passive) => { passive.threshold = value > 0 ? value / 100 : undefined })}
+                                  />
+                                ) : null}
+                              </div>
+                              <div className="mt-3 rounded-[8px] border border-ca-teal/18 bg-ca-teal-wash px-3 py-2.5">
+                                <p className="ca-mono-label text-[0.38rem] text-ca-teal">TRIGGER NOTES</p>
+                                <p className="mt-1 text-sm leading-6 text-ca-text-2">{passiveTriggerMeta[selectedPassive.trigger].hint}</p>
+                              </div>
+                            </div>
+                            <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
+                              <p className="ca-mono-label text-[0.4rem] text-ca-text-3">PASSIVE SUMMARY</p>
+                              <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(selectedPassive)}</p>
+                            </div>
+                            <EffectListEditor
+                              title="Reaction Results"
+                              helper="These rows fire whenever the selected trigger condition is met."
+                              effects={selectedPassive.effects}
+                              onChange={(effects) => updateSelectedPassiveEffects(() => effects)}
+                              advancedJson={JSON.stringify(selectedPassive.effects, null, 2)}
+                              onAdvancedJsonChange={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedPassive((passive) => { passive.effects = parsed }), "PASSIVE EFFECTS UPDATED")}
                             />
-                            {selectedPassive.trigger === "onTargetBelow" ? (
-                              <NumberField
-                                label="Threshold (%)"
-                                value={Math.round((selectedPassive.threshold ?? 0.4) * 100)}
-                                onChange={(value) => updateSelectedPassive((passive) => { passive.threshold = value > 0 ? value / 100 : undefined })}
-                              />
-                            ) : null}
                           </div>
-                          <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                            <p className="ca-mono-label text-[0.4rem] text-ca-text-3">PASSIVE SUMMARY</p>
-                            <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(selectedPassive)}</p>
-                          </div>
-                          <EffectListEditor
-                            title="Passive Results"
-                            helper="These rows fire whenever the passive trigger condition is met."
-                            effects={selectedPassive.effects}
-                            onChange={(effects) => updateSelectedPassiveEffects(() => effects)}
-                            advancedJson={JSON.stringify(selectedPassive.effects, null, 2)}
-                            onAdvancedJsonChange={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedPassive((passive) => { passive.effects = parsed }), "PASSIVE EFFECTS UPDATED")}
-                          />
-                        </>
-                      ) : (
-                        <p className="text-sm text-ca-text-3">This fighter has no passive effects authored.</p>
-                      )}
+                        ) : (
+                          <div className="rounded-[12px] border border-dashed border-white/10 px-3 py-4 text-sm text-ca-text-3">Add or select a passive to begin editing reactions.</div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -1104,7 +1194,9 @@ export function AdminControlPanelPage() {
                 </div>
               </EditorCard>
             ) : null}
-          </section>          <section className="space-y-4 xl:sticky xl:top-4 self-start">
+          </section>
+
+          <section className="space-y-4 xl:sticky xl:top-4 self-start">
             {selectedFighter && selectedAbility ? (
               <SelectionPreviewPanel fighter={selectedFighter} ability={selectedAbility} passive={selectedPassive ?? null} />
             ) : null}
