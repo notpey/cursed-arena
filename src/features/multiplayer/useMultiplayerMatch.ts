@@ -116,6 +116,8 @@ export type MultiplayerMatchHandle = {
   opponentDisplayName: string
   status: MultiplayerStatus
   error: string | null
+  /** Raw match row — useful for reading mode, team lists, etc. on match end. */
+  matchRow: MatchRow | null
   /**
    * Submit commands and run engine resolution.
    * Commands should be in LOCAL perspective (you = 'player').
@@ -319,6 +321,7 @@ export function useMultiplayerMatch(
     opponentDisplayName:  opponentName,
     status,
     error,
+    matchRow:             matchRowRef.current,
     submitCommands,
   }
 }

@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CharacterCard } from '@/components/ui/CharacterCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ownedRosterCharacters } from '@/data/characters'
@@ -6,19 +6,60 @@ import {
   formatMatchTimestamp,
   getFeaturedTeamIds,
   getModeLabel,
+  getRankTier,
   readBattleProfileStats,
   readRecentMatchHistory,
   type MatchHistoryEntry,
 } from '@/features/battle/matches'
 import { usePlayerState } from '@/features/player/store'
+import { useAuth } from '@/features/auth/useAuth'
+import {
+  fetchPlayerRankProfile,
+  fetchLeaderboard,
+  type PlayerRankProfile,
+  type LeaderboardEntry,
+} from '@/features/ranking/client'
 
 const rosterById = Object.fromEntries(ownedRosterCharacters.map((character) => [character.id, character]))
 
 export function ProfilePage() {
   const { profile } = usePlayerState()
-  const profileStats = useMemo(() => readBattleProfileStats(), [])
+  const { user } = useAuth()
+  const localStats = useMemo(() => readBattleProfileStats(), [])
   const recentMatches = useMemo(() => readRecentMatchHistory(), [])
   const currentSquad = useMemo(() => getFeaturedTeamIds(), [])
+
+  const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+
+  useEffect(() => {
+    if (!user) return
+    fetchPlayerRankProfile(user.id).then(({ data }) => { if (data) setDbProfile(data) })
+    fetchLeaderboard(10).then(({ data }) => { setLeaderboard(data) })
+  }, [user])
+
+  // Prefer server LP/stats when the user is logged in
+  const profileStats = useMemo(() => {
+    if (!dbProfile) return localStats
+    const lpCurrent = dbProfile.lp
+    const tier = getRankTier(lpCurrent)
+    const peakLp = Math.max(localStats.peakLp, lpCurrent)
+    const peakTier = getRankTier(peakLp)
+    return {
+      ...localStats,
+      lpCurrent,
+      lpToNext: tier.next ?? lpCurrent,
+      rank: tier.label,
+      peakLp,
+      peakRank: peakTier.label,
+      wins: dbProfile.wins,
+      losses: dbProfile.losses,
+      matchesPlayed: dbProfile.wins + dbProfile.losses,
+      currentStreak: dbProfile.win_streak,
+      bestStreak: dbProfile.best_streak,
+    }
+  }, [dbProfile, localStats])
+
   const lpPct = Math.min(100, Math.round((profileStats.lpCurrent / Math.max(profileStats.lpToNext, 1)) * 100))
   const statBento = [
     { label: 'Total Wins', value: `${profileStats.wins}` },
@@ -36,6 +77,7 @@ export function ProfilePage() {
           <ProfileHeaderCard profile={profile} />
           <RankCard profileStats={profileStats} lpPct={lpPct} />
           <StatsBento items={statBento} />
+          {leaderboard.length > 0 && <LeaderboardCard leaderboard={leaderboard} currentUserId={user?.id} />}
         </div>
 
         <div className="min-w-0 space-y-4">
@@ -116,6 +158,66 @@ function StatsBento({ items }: { items: Array<{ label: string; value: string }> 
           <p className="ca-mono-label mt-2 text-[0.42rem] text-ca-text-disabled">{item.label}</p>
         </div>
       ))}
+    </section>
+  )
+}
+
+function LeaderboardCard({
+  leaderboard,
+  currentUserId,
+}: {
+  leaderboard: LeaderboardEntry[]
+  currentUserId?: string
+}) {
+  return (
+    <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
+      <div className="mb-4">
+        <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Ranked Ladder</p>
+        <p className="ca-display mt-2 text-3xl text-ca-text">Leaderboard</p>
+      </div>
+
+      <div className="space-y-1.5">
+        {leaderboard.map((entry, index) => {
+          const tier = getRankTier(entry.lp)
+          const isMe = entry.id === currentUserId
+          const wl = entry.wins + entry.losses
+          const winRate = wl > 0 ? Math.round((entry.wins / wl) * 100) : 0
+
+          return (
+            <div
+              key={entry.id}
+              className={[
+                'flex items-center gap-3 rounded-[8px] border px-3 py-2.5',
+                isMe
+                  ? 'border-sky-400/20 bg-sky-400/6'
+                  : 'border-white/6 bg-[rgba(16,17,22,0.14)]',
+              ].join(' ')}
+            >
+              <span className={[
+                'ca-mono-label w-5 shrink-0 text-center text-[0.46rem]',
+                index === 0 ? 'text-amber-300' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-ca-text-3',
+              ].join(' ')}>
+                {index + 1}
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={['ca-mono-label text-[0.5rem]', isMe ? 'text-sky-300' : 'text-ca-text-2'].join(' ')}>
+                    {entry.display_name}
+                    {isMe ? ' (YOU)' : ''}
+                  </span>
+                  <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{tier.label}</span>
+                </div>
+                <p className="ca-mono-label mt-0.5 text-[0.42rem] text-ca-text-3">
+                  {entry.wins}W / {entry.losses}L — {winRate}%
+                </p>
+              </div>
+
+              <span className="ca-mono-label shrink-0 text-[0.52rem] text-ca-teal">{entry.lp} LP</span>
+            </div>
+          )
+        })}
+      </div>
     </section>
   )
 }

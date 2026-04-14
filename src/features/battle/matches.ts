@@ -153,7 +153,7 @@ function writeLocalStorage<T>(key: string, value: T) {
   }
 }
 
-function getRankTier(lp: number) {
+export function getRankTier(lp: number) {
   return rankTiers.reduce((best, tier) => (lp >= tier.min ? tier : best), rankTiers[0])
 }
 
@@ -528,3 +528,92 @@ export function recordCompletedBattle({
   return lastResult
 }
 
+/**
+ * Record the outcome of a completed online match.
+ * Unlike `recordCompletedBattle`, LP delta comes from the server RPC
+ * rather than being computed locally.
+ */
+export function recordOnlineCompletedBattle({
+  won,
+  rounds,
+  playerTeamIds,
+  enemyTeamIds,
+  opponentName,
+  mode,
+  lpDelta,
+  lpBefore,
+}: {
+  won: boolean
+  rounds: number
+  playerTeamIds: string[]
+  enemyTeamIds: string[]
+  opponentName: string
+  mode: BattleMatchMode
+  lpDelta: number
+  lpBefore: number
+}): LastBattleResult {
+  const current = readBattleProfileStats()
+  const rankBefore = current.rank
+  const lpCurrent = Math.max(0, lpBefore + lpDelta)
+  const peakLp = Math.max(current.peakLp, lpCurrent)
+  const rankTier = getRankTier(lpCurrent)
+  const peakTier = getRankTier(peakLp)
+
+  const nextStats: BattleProfileStats = {
+    ...current,
+    wins: current.wins + (won ? 1 : 0),
+    losses: current.losses + (won ? 0 : 1),
+    matchesPlayed: current.matchesPlayed + 1,
+    currentStreak: won ? current.currentStreak + 1 : 0,
+    bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
+    lpCurrent,
+    lpToNext: rankTier.next ?? lpCurrent,
+    rank: rankTier.label,
+    peakLp,
+    peakRank: peakTier.label,
+  }
+
+  const rankShift = getRankShift(rankBefore, nextStats.rank)
+
+  const historyEntry: MatchHistoryEntry = {
+    id: `match-online-${Date.now()}`,
+    result: won ? 'WIN' : 'LOSS',
+    mode,
+    opponentName,
+    opponentTitle: 'Online Match',
+    yourTeam: playerTeamIds.slice(),
+    theirTeam: enemyTeamIds.slice(),
+    timestamp: Date.now(),
+    rounds,
+    lpDelta,
+    rankBefore,
+    rankAfter: nextStats.rank,
+  }
+
+  const lastResult: LastBattleResult = {
+    id: historyEntry.id,
+    result: historyEntry.result,
+    mode,
+    winner: won ? 'player' : 'enemy',
+    rounds,
+    opponentName,
+    opponentTitle: 'Online Match',
+    yourTeam: playerTeamIds.slice(),
+    theirTeam: enemyTeamIds.slice(),
+    lpDelta,
+    lpBefore,
+    lpAfter: nextStats.lpCurrent,
+    rankBefore,
+    rankAfter: nextStats.rank,
+    rankShift,
+    timestamp: historyEntry.timestamp,
+    profileSnapshot: nextStats,
+  }
+
+  const history = normalizeHistory([historyEntry, ...readRecentMatchHistory()])
+  writeLocalStorage(battleProfileStatsKey, nextStats)
+  writeLocalStorage(battleMatchHistoryKey, history)
+  writeLocalStorage(lastBattleResultKey, lastResult)
+
+  return lastResult
+}

@@ -10,10 +10,13 @@ import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   getModeLabel,
+  readBattleProfileStats,
   readStagedBattleSession,
   recordCompletedBattle,
+  recordOnlineCompletedBattle,
   type LastBattleResult,
 } from '@/features/battle/matches'
+import { settleMatchLp } from '@/features/ranking/client'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
@@ -457,6 +460,46 @@ export function BattlePage() {
 
     if (lastRecordedResultId === resultId) return
 
+    // Claim the slot immediately to prevent double-recording across re-renders
+    setLastRecordedResultId(resultId)
+
+    if (multiplayer && matchId) {
+      // Online match — settle LP on the server then record locally
+      const won = battle.state.winner === 'player'
+      const playerTeamIds = battle.state.playerTeam.map((f) => f.templateId)
+      const enemyTeamIds  = battle.state.enemyTeam.map((f) => f.templateId)
+      const mode = multiplayer.matchRow?.mode ?? 'private'
+
+      settleMatchLp(matchId).then(({ data: settle }) => {
+        // Compute LP delta from server response; fall back to 0 if non-ranked or error
+        let lpDelta = 0
+        let lpBefore = readBattleProfileStats().lpCurrent
+        if (settle && !settle.error && !settle.already_settled) {
+          if (won) {
+            lpDelta  = settle.lp_gain ?? 0
+            lpBefore = (settle.winner_lp ?? lpBefore) - lpDelta
+          } else {
+            lpDelta  = -(settle.lp_loss ?? 0)
+            lpBefore = (settle.loser_lp ?? lpBefore) - lpDelta
+          }
+        }
+
+        const result = recordOnlineCompletedBattle({
+          won,
+          rounds: battle.state.round,
+          playerTeamIds,
+          enemyTeamIds,
+          opponentName: multiplayer.opponentDisplayName,
+          mode,
+          lpDelta,
+          lpBefore,
+        })
+        setRecordedResult(result)
+      })
+      return
+    }
+
+    // Local AI match
     const result = recordCompletedBattle({
       winner: battle.state.winner,
       rounds: battle.state.round,
@@ -466,8 +509,7 @@ export function BattlePage() {
     })
 
     setRecordedResult(result)
-    setLastRecordedResultId(resultId)
-  }, [battle.state, stagedSession, lastRecordedResultId])
+  }, [battle.state, stagedSession, lastRecordedResultId, multiplayer, matchId])
 
   function clearPendingSelection() {
     setSelectedAbilityId(null)
