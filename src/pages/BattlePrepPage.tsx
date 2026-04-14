@@ -8,6 +8,7 @@ import {
   battlePrepRosterById,
   persistPrepSelection,
   readPrepSelection,
+  sanitizePrepTeamIds,
   stageBattleLaunch,
   type BattlePrepRosterEntry,
 } from '@/features/battle/prep'
@@ -21,6 +22,18 @@ import {
   readSelectedMatchMode,
   type BattleMatchMode,
 } from '@/features/battle/matches'
+import { createInitialBattleState } from '@/features/battle/engine'
+import { createBattleSeed } from '@/features/battle/random'
+import {
+  searchPlayersByName,
+  createChallenge,
+  acceptChallenge,
+  declineChallenge,
+  subscribeToIncomingChallenges,
+  type ProfileSearchResult,
+} from '@/features/multiplayer/client'
+import type { MatchRow } from '@/features/multiplayer/types'
+import { useAuth } from '@/features/auth/useAuth'
 import type { CharacterRarity } from '@/types/characters'
 
 type PrepSortKey = 'NAME' | 'RARITY' | 'ROLE'
@@ -163,6 +176,7 @@ function PortraitThumb({
 
 export function BattlePrepPage() {
   const navigate = useNavigate()
+  const { user, profile: authProfile } = useAuth()
   const [searchValue, setSearchValue] = useState('')
   const [sortBy, setSortBy] = useState<PrepSortKey>('NAME')
   const [roleFilter, setRoleFilter] = useState<PrepRoleFilter>('ALL')
@@ -177,6 +191,33 @@ export function BattlePrepPage() {
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [matchMode, setMatchMode] = useState<BattleMatchMode>(() => readSelectedMatchMode())
   const [profileStats] = useState(() => readBattleProfileStats())
+
+  // ── Multiplayer private match state ─────────────────────────────────────
+  const [privateOpen, setPrivateOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<ProfileSearchResult[]>([])
+  const [selectedOpponent, setSelectedOpponent] = useState<ProfileSearchResult | null>(null)
+  const [incomingChallenge, setIncomingChallenge] = useState<MatchRow | null>(null)
+  const [mpError, setMpError] = useState<string | null>(null)
+  const [mpLoading, setMpLoading] = useState(false)
+
+  // Search debounce
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults([]); return }
+    const t = window.setTimeout(async () => {
+      const { data } = await searchPlayersByName(searchQuery, user?.id)
+      setSearchResults(data)
+    }, 300)
+    return () => window.clearTimeout(t)
+  }, [searchQuery, user?.id])
+
+  // Listen for incoming challenges
+  useEffect(() => {
+    if (!user) return
+    return subscribeToIncomingChallenges(user.id, (row) => {
+      setIncomingChallenge(row)
+    })
+  }, [user])
 
   useEffect(() => {
     persistPrepSelection(teamIds)
@@ -265,8 +306,79 @@ export function BattlePrepPage() {
 
   function handleEnterArena() {
     if (!isReady) return
+
+    if (matchMode === 'private') {
+      setPrivateOpen(true)
+      setMpError(null)
+      setSearchQuery('')
+      setSelectedOpponent(null)
+      return
+    }
+
+    // Ranked / Quick → local AI battle (unchanged)
     stageBattleLaunch(teamIds, matchMode)
     navigate('/battle')
+  }
+
+  async function handleSendChallenge() {
+    if (!selectedOpponent || !isReady || !user) return
+    setMpLoading(true)
+    setMpError(null)
+
+    const sanitized = sanitizePrepTeamIds(teamIds)
+    const seed = createBattleSeed('private', sanitized)
+    const displayName = authProfile?.display_name ?? 'Player'
+
+    const { data, error } = await createChallenge({
+      playerAId: user.id,
+      playerADisplayName: displayName,
+      playerBId: selectedOpponent.id,
+      playerBDisplayName: selectedOpponent.display_name ?? '',
+      teamIds: sanitized,
+      seed,
+    })
+
+    setMpLoading(false)
+
+    if (error || !data) {
+      setMpError(error ?? 'Failed to send challenge.')
+      return
+    }
+
+    // Navigate to the battle page — WaitingForOpponentOverlay shows until they accept
+    navigate(`/battle/${data.id}`)
+  }
+
+  async function handleAcceptChallenge() {
+    if (!incomingChallenge || !isReady || !user) return
+    setMpLoading(true)
+    setMpError(null)
+
+    const sanitized = sanitizePrepTeamIds(teamIds)
+    const displayName = authProfile?.display_name ?? 'Player'
+
+    const { data, error } = await acceptChallenge({
+      matchId: incomingChallenge.id,
+      displayName,
+      teamIds: sanitized,
+      buildInitialState: (playerATeam, playerBTeam, seed) =>
+        createInitialBattleState({ playerTeamIds: playerATeam, enemyTeamIds: playerBTeam, battleSeed: seed }),
+    })
+
+    setMpLoading(false)
+
+    if (error || !data) {
+      setMpError(error ?? 'Failed to accept challenge.')
+      return
+    }
+
+    navigate(`/battle/${data.id}`)
+  }
+
+  async function handleDeclineChallenge() {
+    if (!incomingChallenge) return
+    await declineChallenge(incomingChallenge.id)
+    setIncomingChallenge(null)
   }
 
   return (
@@ -316,14 +428,40 @@ export function BattlePrepPage() {
                   ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleEnterArena}
-                  disabled={!isReady}
-                  className="ca-display mt-4 w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.18rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
-                >
-                  {getModeButtonLabel(matchMode)}
-                </button>
+                {!privateOpen || matchMode !== 'private' ? (
+                  <button
+                    type="button"
+                    onClick={handleEnterArena}
+                    disabled={!isReady}
+                    className="ca-display mt-4 w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.18rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+                  >
+                    {getModeButtonLabel(matchMode)}
+                  </button>
+                ) : (
+                  <ChallengePanel
+                    searchQuery={searchQuery}
+                    searchResults={searchResults}
+                    selectedOpponent={selectedOpponent}
+                    loading={mpLoading}
+                    error={mpError}
+                    isReady={isReady}
+                    isLoggedIn={Boolean(user)}
+                    onSearchChange={(v) => { setSearchQuery(v); setSelectedOpponent(null) }}
+                    onSelectOpponent={setSelectedOpponent}
+                    onChallenge={handleSendChallenge}
+                    onCancel={() => { setPrivateOpen(false); setMpError(null); setSearchQuery(''); setSelectedOpponent(null) }}
+                  />
+                )}
+
+                {incomingChallenge && (
+                  <IncomingChallengeBar
+                    challengerName={incomingChallenge.player_a_display_name}
+                    loading={mpLoading}
+                    isReady={isReady}
+                    onAccept={handleAcceptChallenge}
+                    onDecline={handleDeclineChallenge}
+                  />
+                )}
               </div>
 
               <div className="mt-3 flex-1 rounded-[14px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,16,24,0.88),rgba(10,10,16,0.76))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_14px_28px_rgba(0,0,0,0.12)]">
@@ -429,6 +567,145 @@ export function BattlePrepPage() {
         </section>
       </div>
     </section>
+  )
+}
+
+// ── Challenge panel (username search) ────────────────────────────────────────
+
+function ChallengePanel({
+  searchQuery,
+  searchResults,
+  selectedOpponent,
+  loading,
+  error,
+  isReady,
+  isLoggedIn,
+  onSearchChange,
+  onSelectOpponent,
+  onChallenge,
+  onCancel,
+}: {
+  searchQuery: string
+  searchResults: ProfileSearchResult[]
+  selectedOpponent: ProfileSearchResult | null
+  loading: boolean
+  error: string | null
+  isReady: boolean
+  isLoggedIn: boolean
+  onSearchChange: (v: string) => void
+  onSelectOpponent: (p: ProfileSearchResult) => void
+  onChallenge: () => void
+  onCancel: () => void
+}) {
+  if (!isLoggedIn) {
+    return (
+      <div className="mt-4 rounded-xl border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-3 text-center">
+        <p className="text-xs text-ca-text-2">Sign in to challenge a player.</p>
+      </div>
+    )
+  }
+
+  const canChallenge = Boolean(selectedOpponent) && isReady && !loading
+
+  return (
+    <div className="mt-4 space-y-2">
+      <p className="ca-mono-label text-[0.42rem] text-ca-text-3">CHALLENGE A PLAYER</p>
+
+      <input
+        type="text"
+        value={selectedOpponent ? selectedOpponent.display_name ?? '' : searchQuery}
+        onChange={(e) => onSearchChange(e.target.value)}
+        placeholder="Search by username…"
+        className="w-full rounded-[10px] border border-white/12 bg-[rgba(11,11,18,0.72)] px-3 py-2 text-sm text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
+      />
+
+      {/* Search results dropdown */}
+      {searchResults.length > 0 && !selectedOpponent && (
+        <div className="rounded-[10px] border border-white/10 bg-[rgba(14,14,22,0.96)] py-1 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+          {searchResults.map((result) => (
+            <button
+              key={result.id}
+              type="button"
+              onClick={() => onSelectOpponent(result)}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ca-text transition hover:bg-white/8"
+            >
+              <span className="ca-display text-[0.85rem]">{result.display_name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {selectedOpponent && (
+        <p className="ca-mono-label text-[0.42rem] text-ca-teal">
+          ✓ {selectedOpponent.display_name} selected
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={onChallenge}
+        disabled={!canChallenge}
+        className="ca-display w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-2.5 text-[1rem] text-white transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+      >
+        {loading ? 'Sending…' : 'Send Challenge'}
+      </button>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        className="ca-mono-label w-full text-center text-[0.44rem] text-ca-text-3 transition hover:text-ca-text-2"
+      >
+        CANCEL
+      </button>
+
+      {error && <p className="ca-mono-label text-center text-[0.44rem] text-ca-red">{error}</p>}
+    </div>
+  )
+}
+
+// ── Incoming challenge banner ─────────────────────────────────────────────────
+
+function IncomingChallengeBar({
+  challengerName,
+  loading,
+  isReady,
+  onAccept,
+  onDecline,
+}: {
+  challengerName: string
+  loading: boolean
+  isReady: boolean
+  onAccept: () => void
+  onDecline: () => void
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-ca-teal/25 bg-ca-teal-wash px-3 py-3">
+      <p className="ca-mono-label text-[0.42rem] text-ca-teal">INCOMING CHALLENGE</p>
+      <p className="mt-1 text-sm text-ca-text">
+        <span className="ca-display">{challengerName}</span> wants to battle.
+      </p>
+      {!isReady && (
+        <p className="ca-mono-label mt-1 text-[0.4rem] text-ca-text-3">Select your team to accept.</p>
+      )}
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={!isReady || loading}
+          className="ca-display flex-1 rounded-lg border border-ca-teal/30 bg-ca-teal-wash px-2 py-2 text-[0.85rem] text-ca-teal transition enabled:hover:bg-ca-teal/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? 'Accepting…' : 'Accept'}
+        </button>
+        <button
+          type="button"
+          onClick={onDecline}
+          disabled={loading}
+          className="ca-display flex-1 rounded-lg border border-white/10 bg-[rgba(255,255,255,0.04)] px-2 py-2 text-[0.85rem] text-ca-text-2 transition enabled:hover:bg-white/8"
+        >
+          Decline
+        </button>
+      </div>
+    </div>
   )
 }
 

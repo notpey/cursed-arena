@@ -41,6 +41,11 @@ export const router = createBrowserRouter([
     element: withRouteSuspense(<BattlePage />),
   },
   {
+    // Online match — matchId drives the multiplayer hook
+    path: '/battle/:matchId',
+    element: withRouteSuspense(<BattlePage />),
+  },
+  {
     path: '/',
     element: withRouteSuspense(<ShellLayout />),
     children: shellRoutes,

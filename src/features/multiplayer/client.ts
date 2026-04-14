@@ -1,0 +1,432 @@
+/**
+ * Supabase DB operations for multiplayer.
+ *
+ * All functions return { data, error } shaped results so callers can handle
+ * failures without try/catch at every call site.
+ */
+
+import { getSupabaseClient } from '@/lib/supabase'
+import type { BattleState, BattleTeamId, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleMatchMode } from '@/features/battle/matches'
+import type { MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function db() {
+  const client = getSupabaseClient()
+  if (!client) throw new Error('Supabase is not configured')
+  return client
+}
+
+// ── Matchmaking queue ─────────────────────────────────────────────────────────
+
+export async function joinMatchmakingQueue({
+  playerId,
+  mode,
+  teamIds,
+  displayName,
+  lp,
+}: {
+  playerId: string
+  mode: BattleMatchMode
+  teamIds: string[]
+  displayName: string
+  lp: number
+}) {
+  const { error } = await db()
+    .from('matchmaking_queue')
+    .upsert(
+      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp },
+      { onConflict: 'player_id' },
+    )
+
+  return { error: error?.message ?? null }
+}
+
+export async function leaveMatchmakingQueue(playerId: string) {
+  const { error } = await db()
+    .from('matchmaking_queue')
+    .delete()
+    .eq('player_id', playerId)
+
+  return { error: error?.message ?? null }
+}
+
+/**
+ * Find the oldest other player in the queue for the same mode and pair them.
+ * Returns the created match row if pairing succeeded, null if no opponent found.
+ */
+export async function findAndCreateQueuedMatch({
+  playerId,
+  mode,
+  teamIds,
+  displayName,
+  initialBattleState,
+  seed,
+}: {
+  playerId: string
+  mode: BattleMatchMode
+  teamIds: string[]
+  displayName: string
+  initialBattleState: BattleState
+  seed: string
+}): Promise<{ data: MatchRow | null; error: string | null }> {
+  const supabase = db()
+
+  // Find oldest opponent in queue (not ourselves)
+  const { data: opponents, error: qErr } = await supabase
+    .from('matchmaking_queue')
+    .select('*')
+    .eq('mode', mode)
+    .neq('player_id', playerId)
+    .order('created_at', { ascending: true })
+    .limit(1)
+
+  if (qErr) return { data: null, error: qErr.message }
+  if (!opponents || opponents.length === 0) return { data: null, error: null }
+
+  const opponent = opponents[0] as QueueRow
+
+  // Create the match
+  const { data: match, error: mErr } = await supabase
+    .from('matches')
+    .insert({
+      mode,
+      status: 'in_progress',
+      seed,
+      player_a_id: playerId,
+      player_b_id: opponent.player_id,
+      player_a_display_name: displayName,
+      player_b_display_name: opponent.display_name,
+      player_a_team: teamIds,
+      player_b_team: opponent.team_ids,
+      battle_state: initialBattleState,
+      current_phase: initialBattleState.phase,
+      current_round: initialBattleState.round,
+      active_player: initialBattleState.activePlayer,
+      winner: null,
+    })
+    .select()
+    .single()
+
+  if (mErr) return { data: null, error: mErr.message }
+
+  // Remove both players from the queue
+  await supabase
+    .from('matchmaking_queue')
+    .delete()
+    .in('player_id', [playerId, opponent.player_id])
+
+  return { data: match as MatchRow, error: null }
+}
+
+// ── Username lookup ────────────────────────────────────────────────────────────
+
+export type ProfileSearchResult = {
+  id: string
+  display_name: string
+}
+
+/**
+ * Search for players by display name (case-insensitive prefix match).
+ * Requires the profiles table to have a read policy for authenticated users.
+ */
+export async function searchPlayersByName(
+  query: string,
+  excludeId?: string,
+): Promise<{ data: ProfileSearchResult[]; error: string | null }> {
+  if (!query.trim()) return { data: [], error: null }
+
+  let req = db()
+    .from('profiles')
+    .select('id, display_name')
+    .ilike('display_name', `%${query.trim()}%`)
+    .limit(6)
+
+  if (excludeId) req = req.neq('id', excludeId)
+
+  const { data, error } = await req
+
+  if (error) return { data: [], error: error.message }
+  return { data: (data ?? []) as ProfileSearchResult[], error: null }
+}
+
+// ── Private challenge (username-based) ────────────────────────────────────────
+
+/**
+ * Challenge a specific player by their user ID.
+ * Creates a 'waiting' match with both player IDs set.
+ * Player B receives a Realtime INSERT notification.
+ */
+export async function createChallenge({
+  playerAId,
+  playerADisplayName,
+  playerBId,
+  playerBDisplayName,
+  teamIds,
+  seed,
+}: {
+  playerAId: string
+  playerADisplayName: string
+  playerBId: string
+  playerBDisplayName: string
+  teamIds: string[]
+  seed: string
+}): Promise<{ data: MatchRow | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('matches')
+    .insert({
+      mode: 'private',
+      status: 'waiting',
+      seed,
+      player_a_id: playerAId,
+      player_b_id: playerBId,
+      player_a_display_name: playerADisplayName,
+      player_b_display_name: playerBDisplayName,
+      player_a_team: teamIds,
+      player_b_team: [],
+      battle_state: null,
+      current_phase: 'coinFlip',
+      current_round: 1,
+      active_player: 'player',
+    })
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data as MatchRow, error: null }
+}
+
+/**
+ * Accept an incoming challenge.
+ * Player B selects their team, builds the initial BattleState, and starts the match.
+ */
+export async function acceptChallenge({
+  matchId,
+  displayName,
+  teamIds,
+  buildInitialState,
+}: {
+  matchId: string
+  displayName: string
+  teamIds: string[]
+  buildInitialState: (playerATeam: string[], playerBTeam: string[], seed: string) => BattleState
+}): Promise<{ data: MatchRow | null; error: string | null }> {
+  const supabase = db()
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('id', matchId)
+    .eq('status', 'waiting')
+    .single()
+
+  if (fetchErr || !existing) return { data: null, error: fetchErr?.message ?? 'Challenge not found or already started.' }
+  const lobby = existing as MatchRow
+
+  const initialState = buildInitialState(lobby.player_a_team, teamIds, lobby.seed)
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('matches')
+    .update({
+      status: 'in_progress',
+      player_b_display_name: displayName,
+      player_b_team: teamIds,
+      battle_state: initialState,
+      current_phase: initialState.phase,
+      current_round: initialState.round,
+      active_player: initialState.activePlayer,
+    })
+    .eq('id', matchId)
+    .select()
+    .single()
+
+  if (updateErr) return { data: null, error: updateErr.message }
+  return { data: updated as MatchRow, error: null }
+}
+
+/**
+ * Decline / cancel a pending challenge.
+ */
+export async function declineChallenge(matchId: string): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from('matches')
+    .update({ status: 'abandoned' })
+    .eq('id', matchId)
+    .eq('status', 'waiting')
+
+  return { error: error?.message ?? null }
+}
+
+// ── In-game state operations ──────────────────────────────────────────────────
+
+export async function fetchMatch(matchId: string): Promise<{ data: MatchRow | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('matches')
+    .select('*')
+    .eq('id', matchId)
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data as MatchRow, error: null }
+}
+
+/**
+ * The active player writes their resolved BattleState after running the engine.
+ */
+export async function commitMatchState({
+  matchId,
+  newState,
+}: {
+  matchId: string
+  newState: BattleState
+}): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from('matches')
+    .update({
+      battle_state: newState,
+      current_phase: newState.phase,
+      current_round: newState.round,
+      active_player: newState.activePlayer ?? 'player',
+      winner: newState.winner ?? null,
+      status: newState.phase === 'finished' ? 'finished' : 'in_progress',
+    })
+    .eq('id', matchId)
+
+  return { error: error?.message ?? null }
+}
+
+/**
+ * Record a player's raw commands (for audit / desync detection).
+ * Called before running the engine, so there's a record even if the client crashes.
+ */
+export async function submitCommandRecord({
+  matchId,
+  playerId,
+  round,
+  phase,
+  commands,
+}: {
+  matchId: string
+  playerId: string
+  round: number
+  phase: 'firstPlayerCommand' | 'secondPlayerCommand'
+  commands: Record<string, QueuedBattleAction>
+}): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from('match_commands')
+    .upsert(
+      { match_id: matchId, player_id: playerId, round, phase, commands },
+      { onConflict: 'match_id,player_id,round,phase' },
+    )
+
+  return { error: error?.message ?? null }
+}
+
+// ── Realtime subscriptions ────────────────────────────────────────────────────
+
+/**
+ * Subscribe to all UPDATE events on a match row.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToMatch(
+  matchId: string,
+  onUpdate: (row: MatchRow) => void,
+): () => void {
+  const supabase = db()
+
+  const channel = supabase
+    .channel(`match:${matchId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'matches',
+        filter: `id=eq.${matchId}`,
+      },
+      (payload) => {
+        onUpdate(payload.new as MatchRow)
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+/**
+ * Subscribe to incoming challenges for a player.
+ * Fires when a new 'waiting' match is created with this player as player_b.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToIncomingChallenges(
+  playerId: string,
+  onChallenge: (row: MatchRow) => void,
+): () => void {
+  const supabase = db()
+
+  const channel = supabase
+    .channel(`incoming-challenges:${playerId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'matches',
+        filter: `player_b_id=eq.${playerId}`,
+      },
+      (payload) => {
+        const row = payload.new as MatchRow
+        if (row.status === 'waiting') {
+          onChallenge(row)
+        }
+      },
+    )
+    .subscribe()
+
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+/**
+ * Look up any active match the current player is already in
+ * (handles page refresh mid-game).
+ */
+export async function fetchActiveMatch(playerId: string): Promise<{ data: MatchRow | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('matches')
+    .select('*')
+    .eq('status', 'in_progress')
+    .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data as MatchRow | null, error: null }
+}
+
+/**
+ * Determine this player's role in a match row.
+ */
+export function getMyRole(match: MatchRow, playerId: string): MultiplayerRole | null {
+  if (match.player_a_id === playerId) return 'a'
+  if (match.player_b_id === playerId) return 'b'
+  return null
+}
+
+/**
+ * Surrender / abandon a match.
+ */
+export async function abandonMatch(matchId: string, losingTeam: BattleTeamId): Promise<{ error: string | null }> {
+  const winner: BattleTeamId = losingTeam === 'player' ? 'enemy' : 'player'
+  const { error } = await db()
+    .from('matches')
+    .update({ status: 'abandoned', winner })
+    .eq('id', matchId)
+
+  return { error: error?.message ?? null }
+}

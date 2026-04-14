@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
 import { setEnergyFocus, type BattleEnergyType } from '@/features/battle/energy'
@@ -16,6 +16,7 @@ import {
 } from '@/features/battle/matches'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
+import { useAuth } from '@/features/auth/useAuth'
 import {
   buildEnemyCommands,
   canQueueAbility,
@@ -31,6 +32,10 @@ import {
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
 import type { BattleEvent, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import {
+  useMultiplayerMatch,
+  buildTimeoutCommands,
+} from '@/features/multiplayer/useMultiplayerMatch'
 
 type BattleViewState = {
   state: BattleState
@@ -321,6 +326,12 @@ function UtilityRail({
 export function BattlePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
+  const { user } = useAuth()
+  const { matchId } = useParams<{ matchId?: string }>()
+
+  // ── Multiplayer hook (null when playing vs AI) ──────────────────────────
+  const multiplayer = useMultiplayerMatch(matchId ?? null, user?.id ?? null)
+
   const [stagedSession] = useState(() => readStagedBattleSession())
   const [initialBattle] = useState(createNewBattle)
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
@@ -328,7 +339,7 @@ export function BattlePage() {
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
   const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
   const [battleLog, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
-  const [turnSecondsLeft, setTurnSecondsLeft] = useState(30)
+  const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
   const [roundTransition, setRoundTransition] = useState<RoundTransitionState | null>(null)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
@@ -339,14 +350,21 @@ export function BattlePage() {
     initials: profile.avatarLabel,
     accent: 'teal' as const,
   }
-  const enemyBoardProfile = stagedSession
+  const enemyBoardProfile = multiplayer
     ? {
-        username: stagedSession.opponentName,
-        title: stagedSession.opponentTitle,
-        initials: getInitials(stagedSession.opponentName),
+        username: multiplayer.opponentDisplayName,
+        title: 'Opponent',
+        initials: getInitials(multiplayer.opponentDisplayName),
         accent: 'red' as const,
       }
-    : battleBoardProfiles.enemy
+    : stagedSession
+      ? {
+          username: stagedSession.opponentName,
+          title: stagedSession.opponentTitle,
+          initials: getInitials(stagedSession.opponentName),
+          accent: 'red' as const,
+        }
+      : battleBoardProfiles.enemy
   const selectedActor = battle.selectedActorId ? getFighterById(battle.state, battle.selectedActorId) : null
   const selectedAbility = selectedActor && selectedAbilityId ? getAbilityById(selectedActor, selectedAbilityId) : null
   const validTargetIds =
@@ -375,23 +393,41 @@ export function BattlePage() {
           ? `RESPONSE TURN (${turnOrderLabel})`
           : `OPENING TURN (${turnOrderLabel})`
 
+  // ── Sync multiplayer state → local battle view ──────────────────────────
+  useEffect(() => {
+    if (!multiplayer) return
+    const nextActorId = multiplayer.isMyTurn
+      ? getNextActorId(multiplayer.battleState, multiplayer.autoCommands)
+      : null
+
+    setBattle({
+      state: multiplayer.battleState,
+      queued: multiplayer.autoCommands,
+      selectedActorId: nextActorId,
+    })
+    clearPendingSelection()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiplayer?.battleState, multiplayer?.isMyTurn])
+
   const onTurnTimeout = useEffectEvent(() => {
     if (battle.state.phase === 'finished') return
     handleTurnTimeout()
   })
 
   useEffect(() => {
-    setTurnSecondsLeft(30)
-  }, [battle.state.round, battle.state.phase])
+    setTurnSecondsLeft(60)
+  }, [battle.state.round, battle.state.phase, multiplayer?.isMyTurn])
 
   useEffect(() => {
     if (battle.state.phase === 'finished') return undefined
+    // In online mode only tick down when it's our turn
+    if (multiplayer && !multiplayer.isMyTurn) return undefined
     const timer = window.setInterval(() => {
       setTurnSecondsLeft((current) => Math.max(0, current - 1))
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [battle.state.phase, battle.state.round])
+  }, [battle.state.phase, battle.state.round, multiplayer?.isMyTurn])
 
   useEffect(() => {
     if (turnSecondsLeft > 0) return
@@ -551,12 +587,24 @@ export function BattlePage() {
     clearPendingSelection()
   }
 
-  function resolveQueuedRound(
+  async function resolveQueuedRound(
     queuedActions: Record<string, QueuedBattleAction>,
     preludeEvents: BattleEvent[] = [],
   ) {
     if (battle.state.phase === 'finished') return
 
+    // ── Online path ───────────────────────────────────────────────────────
+    if (multiplayer) {
+      const { events } = await multiplayer.submitCommands(queuedActions, preludeEvents)
+      // State arrives via the useEffect above (Realtime + optimistic update).
+      // We only need to append events to the log here.
+      setBattleLog((current) => [...current, ...preludeEvents, ...events].slice(-36))
+      clearPendingSelection()
+      setHoveredAbility(null)
+      return
+    }
+
+    // ── Local / AI path (unchanged) ───────────────────────────────────────
     const allEvents: BattleEvent[] = [...preludeEvents]
     const previousState = battle.state
     let currentState = battle.state
@@ -614,7 +662,13 @@ export function BattlePage() {
   function handleTurnTimeout() {
     if (battle.state.phase === 'finished') return
 
-    const queuedActions = buildTimedOutQueuedActions(battle.state, battle.queued)
+    // In online mode only time out if it's actually our turn
+    if (multiplayer && !multiplayer.isMyTurn) return
+
+    const queuedActions = multiplayer
+      ? buildTimeoutCommands(battle.state)
+      : buildTimedOutQueuedActions(battle.state, battle.queued)
+
     const autoPassedCount = getCommandablePlayerUnits(battle.state).filter(
       (fighter) => !battle.queued[fighter.instanceId],
     ).length
@@ -697,6 +751,14 @@ export function BattlePage() {
           </div>
         </div>
 
+        {multiplayer && multiplayer.status === 'opponent_turn' ? (
+          <OpponentTurnOverlay opponentName={multiplayer.opponentDisplayName} />
+        ) : null}
+
+        {multiplayer && multiplayer.status === 'waiting_for_opponent' ? (
+          <WaitingForOpponentOverlay />
+        ) : null}
+
         {battle.state.phase === 'finished' ? (
           <BattleResultOverlay
             winner={battle.state.winner}
@@ -765,6 +827,31 @@ function BattleResultOverlay({
             Return To Lobby
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function OpponentTurnOverlay({ opponentName }: { opponentName: string }) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-end justify-center pb-6 pointer-events-none">
+      <div className="rounded-[0.35rem] border border-white/10 bg-[rgba(8,8,14,0.82)] px-5 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-sm">
+        <p className="ca-mono-label text-[0.52rem] text-ca-text-3 mb-1">WAITING</p>
+        <p className="ca-display text-sm text-ca-text">
+          {opponentName.toUpperCase()} IS CHOOSING ACTIONS
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function WaitingForOpponentOverlay() {
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.8)] backdrop-blur-sm">
+      <div className="rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] px-10 py-8 shadow-[0_22px_54px_rgba(0,0,0,0.4)] text-center">
+        <p className="ca-mono-label text-[0.52rem] text-ca-text-3 mb-3">PRIVATE MATCH</p>
+        <h2 className="ca-display text-3xl text-ca-teal mb-2">Waiting for Opponent</h2>
+        <p className="text-sm text-ca-text-2">Share your room code with a friend to begin.</p>
       </div>
     </div>
   )
