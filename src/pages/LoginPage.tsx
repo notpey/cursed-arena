@@ -10,15 +10,21 @@ export function LoginPage() {
   const navigate = useNavigate()
 
   const [mode, setMode] = useState<AuthMode>('login')
-  const [displayName, setDisplayName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+
+  // Login fields
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+
+  // Signup fields
+  const [signupUsername, setSignupUsername] = useState('')
+  const [signupEmail, setSignupEmail] = useState('')
+  const [signupPassword, setSignupPassword] = useState('')
+  const [signupConfirm, setSignupConfirm] = useState('')
+
   const [busy, setBusy] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
 
-  // If already authenticated, send to home
   useEffect(() => {
     if (auth.status === 'authenticated' || auth.status === 'unconfigured') {
       navigate('/', { replace: true })
@@ -29,37 +35,70 @@ export function LoginPage() {
     setMode(next)
     setErrorMsg(null)
     setConfirmMsg(null)
-    setPassword('')
-    setConfirmPassword('')
+    setLoginPassword('')
+    setSignupPassword('')
+    setSignupConfirm('')
   }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg(null)
+
+    if (!loginUsername.trim()) {
+      setErrorMsg('Enter your username.')
+      return
+    }
+    if (!loginPassword) {
+      setErrorMsg('Enter your password.')
+      return
+    }
+
     setBusy(true)
-    const result = await auth.signInWithPassword(email, password)
+
+    // Resolve username → email via the RPC, then sign in
+    const { email, error: lookupError } = await auth.lookupEmailByUsername(loginUsername)
+    if (lookupError) {
+      setBusy(false)
+      setErrorMsg(lookupError)
+      return
+    }
+    if (!email) {
+      setBusy(false)
+      setErrorMsg('Username not found. Check your spelling or create an account.')
+      return
+    }
+
+    const result = await auth.signInWithPassword(email, loginPassword)
     setBusy(false)
     if (result.error) {
       setErrorMsg(result.error)
     }
-    // auth status change will trigger the useEffect redirect
+    // auth status change triggers the useEffect redirect
   }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setErrorMsg(null)
 
-    if (!displayName.trim()) {
-      setErrorMsg('Choose a display name.')
+    if (!signupUsername.trim()) {
+      setErrorMsg('Choose a username.')
       return
     }
-    if (password !== confirmPassword) {
+    if (!signupEmail.trim()) {
+      setErrorMsg('Enter a recovery email address.')
+      return
+    }
+    if (!signupPassword) {
+      setErrorMsg('Choose a password.')
+      return
+    }
+    if (signupPassword !== signupConfirm) {
       setErrorMsg('Passwords do not match.')
       return
     }
 
     setBusy(true)
-    const result = await auth.signUpWithPassword(email, password, displayName)
+    const result = await auth.signUpWithPassword(signupEmail, signupPassword, signupUsername)
     setBusy(false)
 
     if (result.error) {
@@ -68,13 +107,11 @@ export function LoginPage() {
     }
 
     if (result.needsEmailConfirmation) {
-      setConfirmMsg(`Check ${email.trim()} and confirm your email before signing in.`)
-      setMode('login')
-      setPassword('')
-      setConfirmPassword('')
+      setConfirmMsg(`Check ${signupEmail.trim()} and confirm your address before signing in.`)
+      switchMode('login')
+      setLoginUsername(signupUsername)
       return
     }
-    // auth status change will trigger the useEffect redirect
   }
 
   async function handleGoogle() {
@@ -115,7 +152,9 @@ export function LoginPage() {
             <p className="ca-mono-label text-[0.52rem] tracking-[0.22em] text-ca-text-3">ENTER THE</p>
             <h1 className="ca-display mt-2 text-5xl text-ca-text">Cursed Arena</h1>
             <p className="mt-2 text-[0.78rem] text-ca-text-3">
-              Create an account to track your rank, record, and LP.
+              {mode === 'login'
+                ? 'Sign in with your arena username.'
+                : 'Create an account to start climbing the ladder.'}
             </p>
           </div>
 
@@ -141,14 +180,12 @@ export function LoginPage() {
             </div>
 
             <div className="p-6">
-              {/* Confirmation message */}
               {confirmMsg ? (
                 <div className="mb-4 rounded-[0.35rem] border border-ca-teal/22 bg-ca-teal-wash px-3 py-2.5">
                   <p className="text-[0.75rem] leading-5 text-ca-teal">{confirmMsg}</p>
                 </div>
               ) : null}
 
-              {/* Error message */}
               {errorMsg ? (
                 <div className="mb-4 rounded-[0.35rem] border border-ca-red/22 bg-ca-red-wash px-3 py-2.5">
                   <p className="text-[0.75rem] leading-5 text-ca-red">{errorMsg}</p>
@@ -157,16 +194,63 @@ export function LoginPage() {
 
               {mode === 'login' ? (
                 <form onSubmit={handleLogin} className="space-y-3">
-                  <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-                  <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
+                  <Field
+                    label="Username"
+                    type="text"
+                    value={loginUsername}
+                    onChange={setLoginUsername}
+                    placeholder="Your arena name"
+                    autoComplete="username"
+                  />
+                  <Field
+                    label="Password"
+                    type="password"
+                    value={loginPassword}
+                    onChange={setLoginPassword}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                  />
                   <ActionButton busy={busy} label="SIGN IN" />
                 </form>
               ) : (
                 <form onSubmit={handleSignup} className="space-y-3">
-                  <Field label="Display Name" type="text" value={displayName} onChange={setDisplayName} placeholder="Your arena name" />
-                  <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-                  <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
-                  <Field label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} placeholder="••••••••" />
+                  <Field
+                    label="Username"
+                    type="text"
+                    value={signupUsername}
+                    onChange={setSignupUsername}
+                    placeholder="Your arena name"
+                    autoComplete="username"
+                  />
+                  <div>
+                    <Field
+                      label="Recovery Email"
+                      type="email"
+                      value={signupEmail}
+                      onChange={setSignupEmail}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                    <p className="mt-1 ca-mono-label text-[0.42rem] text-ca-text-3">
+                      Used only for password recovery — not shown publicly.
+                    </p>
+                  </div>
+                  <Field
+                    label="Password"
+                    type="password"
+                    value={signupPassword}
+                    onChange={setSignupPassword}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                  />
+                  <Field
+                    label="Confirm Password"
+                    type="password"
+                    value={signupConfirm}
+                    onChange={setSignupConfirm}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                  />
                   <ActionButton busy={busy} label="CREATE ACCOUNT" />
                 </form>
               )}
@@ -200,12 +284,14 @@ function Field({
   value,
   onChange,
   placeholder,
+  autoComplete,
 }: {
   label: string
   type: 'text' | 'email' | 'password'
   value: string
   onChange: (v: string) => void
   placeholder: string
+  autoComplete?: string
 }) {
   return (
     <div>
@@ -215,7 +301,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        autoComplete={type === 'password' ? 'current-password' : type === 'email' ? 'email' : 'name'}
+        autoComplete={autoComplete}
         className="w-full rounded-[0.35rem] border border-white/12 bg-[rgba(255,255,255,0.04)] px-3 py-2.5 text-[0.85rem] text-ca-text placeholder:text-ca-text-3 outline-none transition focus:border-ca-teal/40 focus:bg-[rgba(255,255,255,0.07)]"
       />
     </div>

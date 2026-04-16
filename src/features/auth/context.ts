@@ -24,6 +24,8 @@ export type AuthContextValue = {
   signInWithGoogle: () => Promise<{ error: string | null }>
   signOut: () => Promise<{ error: string | null }>
   saveDisplayName: (displayName: string) => Promise<{ error: string | null }>
+  /** Look up a user's email by their display_name for username-based login. */
+  lookupEmailByUsername: (username: string) => Promise<{ email: string | null; error: string | null }>
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

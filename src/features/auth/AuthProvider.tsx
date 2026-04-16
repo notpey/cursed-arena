@@ -246,6 +246,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { error: nextError }
   }
 
+  async function lookupEmailByUsername(username: string) {
+    const client = getSupabaseClient()
+    if (!client) return { email: null, error: 'Supabase is not configured.' }
+
+    const { data, error: rpcError } = await client.rpc('get_email_by_username', {
+      p_username: username.trim(),
+    })
+
+    if (rpcError) return { email: null, error: rpcError.message }
+    return { email: (data as string | null) ?? null, error: null }
+  }
+
   async function signOut() {
     const client = getSupabaseClient()
     if (!client) return { error: null }
@@ -308,6 +320,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     signInWithGoogle,
     signOut,
     saveDisplayName,
+    lookupEmailByUsername,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
