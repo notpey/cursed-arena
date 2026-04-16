@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { getTargetLabel } from '@/components/battle/battleDisplay'
@@ -30,6 +30,10 @@ import {
   acceptChallenge,
   declineChallenge,
   subscribeToIncomingChallenges,
+  joinMatchmakingQueue,
+  leaveMatchmakingQueue,
+  findAndCreateQueuedMatch,
+  fetchActiveMatch,
   type ProfileSearchResult,
 } from '@/features/multiplayer/client'
 import type { MatchRow } from '@/features/multiplayer/types'
@@ -201,6 +205,11 @@ export function BattlePrepPage() {
   const [mpError, setMpError] = useState<string | null>(null)
   const [mpLoading, setMpLoading] = useState(false)
 
+  // ── Matchmaking queue state (ranked / quick) ─────────────────────────────
+  const [searching, setSearching] = useState(false)
+  const [queueError, setQueueError] = useState<string | null>(null)
+  const searchingRef = useRef(false)
+
   // Search debounce
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return }
@@ -226,6 +235,17 @@ export function BattlePrepPage() {
   useEffect(() => {
     persistSelectedMatchMode(matchMode)
   }, [matchMode])
+
+  // Leave the queue if the user navigates away while searching
+  useEffect(() => {
+    return () => {
+      if (searchingRef.current && user) {
+        searchingRef.current = false
+        leaveMatchmakingQueue(user.id).catch(() => {})
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   const visibleRoster = useMemo(() => {
     const query = searchValue.trim().toLowerCase()
@@ -304,7 +324,7 @@ export function BattlePrepPage() {
     })
   }
 
-  function handleEnterArena() {
+  async function handleEnterArena() {
     if (!isReady) return
 
     if (matchMode === 'private') {
@@ -315,9 +335,80 @@ export function BattlePrepPage() {
       return
     }
 
-    // Ranked / Quick → local AI battle (unchanged)
-    stageBattleLaunch(teamIds, matchMode)
-    navigate('/battle')
+    // Ranked / Quick — requires auth; join the matchmaking queue
+    if (!user) {
+      stageBattleLaunch(teamIds, matchMode)
+      navigate('/battle')
+      return
+    }
+
+    const sanitized = sanitizePrepTeamIds(teamIds)
+    const displayName = authProfile?.display_name ?? 'Player'
+    const lp = profileStats.lpCurrent
+
+    setSearching(true)
+    setQueueError(null)
+
+    const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName, lp })
+    if (qErr) {
+      setSearching(false)
+      setQueueError(qErr)
+      return
+    }
+
+    searchingRef.current = true
+    void pollForMatch({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName })
+  }
+
+  async function pollForMatch({
+    playerId, mode, teamIds: sanitized, displayName,
+  }: { playerId: string; mode: BattleMatchMode; teamIds: string[]; displayName: string }) {
+    if (!searchingRef.current) return
+
+    // Check if we've already been matched as Player B
+    const { data: activeMatch } = await fetchActiveMatch(playerId)
+    if (activeMatch) {
+      searchingRef.current = false
+      setSearching(false)
+      navigate(`/battle/${activeMatch.id}`)
+      return
+    }
+
+    // Try to be Player A and create a match with the oldest queued opponent
+    const seed = createBattleSeed(mode, sanitized)
+    const { data: match, error } = await findAndCreateQueuedMatch({
+      playerId, mode, teamIds: sanitized, displayName, seed,
+      buildInitialState: (playerATeam, playerBTeam, matchSeed) =>
+        createInitialBattleState({ playerTeamIds: playerATeam, enemyTeamIds: playerBTeam, battleSeed: matchSeed }),
+    })
+
+    if (error) {
+      searchingRef.current = false
+      setSearching(false)
+      setQueueError(error)
+      return
+    }
+
+    if (match) {
+      searchingRef.current = false
+      setSearching(false)
+      navigate(`/battle/${match.id}`)
+      return
+    }
+
+    // No opponent yet — retry after a short delay
+    if (searchingRef.current) {
+      window.setTimeout(() => {
+        void pollForMatch({ playerId, mode, teamIds: sanitized, displayName })
+      }, 2500)
+    }
+  }
+
+  async function handleCancelSearch() {
+    searchingRef.current = false
+    setSearching(false)
+    setQueueError(null)
+    if (user) await leaveMatchmakingQueue(user.id)
   }
 
   async function handleSendChallenge() {
@@ -428,7 +519,13 @@ export function BattlePrepPage() {
                   ))}
                 </div>
 
-                {!privateOpen || matchMode !== 'private' ? (
+                {searching ? (
+                  <SearchingPanel
+                    mode={matchMode}
+                    error={queueError}
+                    onCancel={handleCancelSearch}
+                  />
+                ) : !privateOpen || matchMode !== 'private' ? (
                   <button
                     type="button"
                     onClick={handleEnterArena}
@@ -705,6 +802,40 @@ function IncomingChallengeBar({
           Decline
         </button>
       </div>
+    </div>
+  )
+}
+
+function SearchingPanel({
+  mode,
+  error,
+  onCancel,
+}: {
+  mode: BattleMatchMode
+  error: string | null
+  onCancel: () => void
+}) {
+  return (
+    <div className="mt-4 rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash p-3">
+      <div className="flex items-center gap-2">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-ca-teal" />
+        <p className="ca-mono-label text-[0.48rem] text-ca-teal">
+          SEARCHING FOR {getModeLabel(mode).toUpperCase()} MATCH…
+        </p>
+      </div>
+      <p className="ca-mono-label mt-1.5 text-[0.42rem] text-ca-text-3">
+        You'll be matched automatically when an opponent is found.
+      </p>
+      {error && (
+        <p className="ca-mono-label mt-2 text-[0.42rem] text-ca-red">{error}</p>
+      )}
+      <button
+        type="button"
+        onClick={onCancel}
+        className="ca-mono-label mt-3 w-full rounded-lg border border-white/12 bg-[rgba(30,30,36,0.72)] px-3 py-2 text-[0.46rem] text-ca-text-2 transition hover:text-ca-text"
+      >
+        CANCEL SEARCH
+      </button>
     </div>
   )
 }

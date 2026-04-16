@@ -61,14 +61,15 @@ export async function findAndCreateQueuedMatch({
   mode,
   teamIds,
   displayName,
-  initialBattleState,
+  buildInitialState,
   seed,
 }: {
   playerId: string
   mode: BattleMatchMode
   teamIds: string[]
   displayName: string
-  initialBattleState: BattleState
+  /** Called with (playerATeam, playerBTeam, seed) once an opponent is found. */
+  buildInitialState: (playerATeam: string[], playerBTeam: string[], seed: string) => BattleState
   seed: string
 }): Promise<{ data: MatchRow | null; error: string | null }> {
   const supabase = db()
@@ -86,6 +87,7 @@ export async function findAndCreateQueuedMatch({
   if (!opponents || opponents.length === 0) return { data: null, error: null }
 
   const opponent = opponents[0] as QueueRow
+  const initialBattleState = buildInitialState(teamIds, opponent.team_ids, seed)
 
   // Create the match
   const { data: match, error: mErr } = await supabase

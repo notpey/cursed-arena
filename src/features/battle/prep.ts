@@ -1,5 +1,6 @@
 import { ownedRosterCharacters } from '@/data/characters'
-import { battleRoster, defaultBattleSetup } from '@/features/battle/data'
+import { authoredBattleContent, defaultBattleSetup } from '@/features/battle/data'
+import { readPublishedBattleContent } from '@/features/battle/contentStore'
 import {
   createStagedBattleSession,
   persistSelectedMatchMode,
@@ -117,27 +118,39 @@ const ownedRosterById = Object.fromEntries(
   ownedRosterCharacters.map((character) => [character.id, character]),
 ) as Record<string, (typeof ownedRosterCharacters)[number]>
 
-export const battlePrepRoster: BattlePrepRosterEntry[] = battleRoster
-  .map((fighter) => {
-    const character = ownedRosterById[fighter.id]
-    const rarity = character?.rarity ?? mapBattleRarityToCharacter(fighter.rarity)
+/**
+ * Convert a raw BattleFighterTemplate array into BattlePrepRosterEntry objects.
+ * Used both at module init (from published content) and in the ACP preview.
+ */
+export function buildPrepRosterEntries(fighters: BattleFighterTemplate[]): BattlePrepRosterEntry[] {
+  return fighters
+    .map((fighter) => {
+      const character = ownedRosterById[fighter.id]
+      const rarity = character?.rarity ?? mapBattleRarityToCharacter(fighter.rarity)
 
-    return {
-      id: fighter.id,
-      name: fighter.name,
-      rarity,
-      archetypes: character?.archetypes ?? deriveArchetypesFromFighter(fighter),
-      portraitFrame: character?.portraitFrame ?? fighter.portraitFrame,
-      gradeLabel: gradeLabelFromRarity(rarity),
-      role: fighter.role,
-      passiveLabel: fighter.passiveEffects?.[0]?.label ?? 'No passive loaded',
-      battleTemplate: fighter,
-    }
-  })
-  .sort((left, right) => {
-    if (rarityRank[right.rarity] !== rarityRank[left.rarity]) return rarityRank[right.rarity] - rarityRank[left.rarity]
-    return left.name.localeCompare(right.name)
-  })
+      return {
+        id: fighter.id,
+        name: fighter.name,
+        rarity,
+        archetypes: character?.archetypes ?? deriveArchetypesFromFighter(fighter),
+        portraitFrame: character?.portraitFrame ?? fighter.portraitFrame,
+        gradeLabel: gradeLabelFromRarity(rarity),
+        role: fighter.role,
+        passiveLabel: fighter.passiveEffects?.[0]?.label ?? 'No passive loaded',
+        battleTemplate: fighter,
+      }
+    })
+    .sort((left, right) => {
+      if (rarityRank[right.rarity] !== rarityRank[left.rarity]) return rarityRank[right.rarity] - rarityRank[left.rarity]
+      return left.name.localeCompare(right.name)
+    })
+}
+
+// Build from the published Supabase snapshot (synced by ContentSync in App.tsx).
+// Falls back to the locally authored content if no snapshot is available yet.
+const publishedContent = readPublishedBattleContent(authoredBattleContent)
+
+export const battlePrepRoster: BattlePrepRosterEntry[] = buildPrepRosterEntries(publishedContent.roster)
 
 export const battlePrepRosterById = Object.fromEntries(
   battlePrepRoster.map((entry) => [entry.id, entry]),
