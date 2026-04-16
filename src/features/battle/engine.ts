@@ -10,9 +10,12 @@ import {
   countEnergyCost,
   createRoundEnergyPool,
   getAbilityEnergyCost,
+  getRefreshGain,
+  getSpentEnergyAmounts,
   refreshRoundEnergy,
   setEnergyFocus,
   spendEnergy,
+  sumEnergyCosts,
   type BattleEnergyType,
 } from '@/features/battle/energy'
 import { createSeededRandom } from '@/features/battle/random'
@@ -57,6 +60,7 @@ import type {
   BattleModifierTemplate,
   BattleReactionCondition,
   BattleResolutionResult,
+  BattleResourceKey,
   BattleResourcePacket,
   BattleRuntimeEvent,
   BattleRuntimeEventType,
@@ -245,13 +249,14 @@ export function createInitialBattleState(setupOverrides?: BattleStateSetup): Bat
   const first = coinFlip(`${setup.battleSeed}:initiative`)
 
   return {
+    battleSeed: setup.battleSeed,
     round: 1,
     phase: 'firstPlayerCommand',
     firstPlayer: first,
     activePlayer: first,
     battlefield: setup.battlefield,
-    playerEnergy: createRoundEnergyPool(playerTeam.filter(isAlive).length, pickPreferredFocusType(playerTeam)),
-    enemyEnergy: createRoundEnergyPool(enemyTeam.filter(isAlive).length, pickPreferredFocusType(enemyTeam)),
+    playerEnergy: createRoundEnergyPool(playerTeam.filter(isAlive).length, pickPreferredFocusType(playerTeam), `${setup.battleSeed}:initial:player`),
+    enemyEnergy: createRoundEnergyPool(enemyTeam.filter(isAlive).length, pickPreferredFocusType(enemyTeam), `${setup.battleSeed}:initial:enemy`),
     playerTeam,
     enemyTeam,
     playerTeamModifiers: createModifiers(),
@@ -317,6 +322,18 @@ function formatFocus(type: BattleEnergyType | null) {
   return `${type} focus`
 }
 
+function formatEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
+  const tokens = battleEnergyOrder
+    .map((type) => {
+      const amount = amounts[type] ?? 0
+      if (amount <= 0) return null
+      return `${type.toUpperCase()} +${amount}`
+    })
+    .filter((token): token is string => Boolean(token))
+
+  return tokens.length > 0 ? tokens.join(', ') : 'no gain'
+}
+
 function getCommandEnergyCost(state: BattleState, command: QueuedBattleAction) {
   const actor = getFighterById(state, command.actorId)
   if (!actor) return {}
@@ -331,15 +348,14 @@ export function getProjectedTeamEnergy(
   team: BattleTeamId,
   ignoreActorId?: string,
 ) {
-  let projected = { ...getEnergyPool(state, team) }
+  const totalQueuedCost = sumEnergyCosts(
+    Object.values(queued)
+      .filter((command) => command.team === team)
+      .filter((command) => !ignoreActorId || command.actorId !== ignoreActorId)
+      .map((command) => getCommandEnergyCost(state, command)),
+  )
 
-  Object.values(queued).forEach((command) => {
-    if (command.team !== team) return
-    if (ignoreActorId && command.actorId === ignoreActorId) return
-    projected = spendEnergy(projected, getCommandEnergyCost(state, command))
-  })
-
-  return projected
+  return spendEnergy(getEnergyPool(state, team), totalQueuedCost)
 }
 
 export function canUseAbility(state: BattleState, fighter: BattleFighterState, abilityId: string) {
@@ -628,6 +644,11 @@ function resolveEffectTargets(
   }
 }
 
+function getResourcePacketAmount(amounts: Partial<Record<BattleResourceKey, number>>) {
+  if (typeof amounts.reserve === 'number') return amounts.reserve
+  return Object.values(amounts).reduce((total, amount) => total + (amount ?? 0), 0)
+}
+
 function emitResourceChange(
   ctx: ResolutionContext,
   round: number,
@@ -637,7 +658,7 @@ function emitResourceChange(
     actorId: packet.sourceActorId,
     team: packet.targetTeam,
     abilityId: packet.abilityId,
-    amount: packet.amounts.reserve,
+    amount: getResourcePacketAmount(packet.amounts),
     tags: packet.tags,
     packet,
   })
@@ -1378,7 +1399,9 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
 
   if (ability.id !== PASS_ABILITY_ID) {
     const cost = getAbilityEnergyCost(ability)
-    const nextPool = spendEnergy(getEnergyPool(state, actor.team), cost)
+    const currentPool = getEnergyPool(state, actor.team)
+    const spent = getSpentEnergyAmounts(currentPool, cost)
+    const nextPool = spendEnergy(currentPool, cost)
     if (actor.team === 'player') {
       state.playerEnergy = nextPool
     } else {
@@ -1391,11 +1414,19 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       targetTeam: actor.team,
       abilityId: ability.id,
       mode: 'spend',
-      amounts: { reserve: -countEnergyCost(cost) },
+      amounts: {
+        reserve: -countEnergyCost(cost),
+        ...Object.fromEntries(
+          battleEnergyOrder
+            .map((type) => [type, spent ? -spent[type] : 0] as const)
+            .filter((entry) => entry[1] !== 0),
+        ),
+      },
       tags: ability.tags,
     })
   }
 
+  makeEvent(ctx, state.round, 'action', 'frost', `${actor.shortName} activated ${ability.name}.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
   makeEvent(ctx, state.round, 'action', 'frost', `${actor.shortName} activated ${ability.name}.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
   makeRuntimeEvent(ctx, state.round, 'ability_used', {
     actorId: actor.instanceId,
@@ -1492,26 +1523,42 @@ function applyRoundEnergyGeneration(state: BattleState, ctx: ResolutionContext) 
   const enemyAliveCount = state.enemyTeam.filter(isAlive).length
 
   if (playerAliveCount > 0) {
-    state.playerEnergy = refreshRoundEnergy(state.playerEnergy, playerAliveCount)
-    makeEvent(ctx, state.round, 'system', 'teal', `Reserve +${playerAliveCount} cursed energy. ${formatFocus(state.playerEnergy.focus)} refreshed.`)
+    const playerSeed = `${state.battleSeed}:round:${state.round}:player`
+    const playerGain = getRefreshGain(playerAliveCount, state.playerEnergy.focus, playerSeed)
+    state.playerEnergy = refreshRoundEnergy(state.playerEnergy, playerAliveCount, playerSeed)
+    makeEvent(
+      ctx,
+      state.round,
+      'system',
+      'teal',
+      `Cursed energy refreshed: ${formatEnergyAmounts(playerGain)}. ${formatFocus(state.playerEnergy.focus)} locked for the next draw.`,
+    )
     emitResourceChange(ctx, state.round, {
       kind: 'resource',
       targetTeam: 'player',
       mode: 'refresh',
-      amounts: { reserve: playerAliveCount },
+      amounts: { reserve: playerAliveCount, ...playerGain },
       tags: ['round-start'],
     })
   }
 
   if (enemyAliveCount > 0) {
     const enemyFocus = pickPreferredFocusType(state.enemyTeam)
-    state.enemyEnergy = refreshRoundEnergy(state.enemyEnergy, enemyAliveCount, enemyFocus)
-    makeEvent(ctx, state.round, 'system', 'red', `Enemy reserve +${enemyAliveCount} cursed energy. ${formatFocus(state.enemyEnergy.focus)} refreshed.`)
+    const enemySeed = `${state.battleSeed}:round:${state.round}:enemy`
+    const enemyGain = getRefreshGain(enemyAliveCount, enemyFocus, enemySeed)
+    state.enemyEnergy = refreshRoundEnergy(state.enemyEnergy, enemyAliveCount, enemySeed, enemyFocus)
+    makeEvent(
+      ctx,
+      state.round,
+      'system',
+      'red',
+      `Enemy cursed energy refreshed: ${formatEnergyAmounts(enemyGain)}. ${formatFocus(state.enemyEnergy.focus)} locked for the next draw.`,
+    )
     emitResourceChange(ctx, state.round, {
       kind: 'resource',
       targetTeam: 'enemy',
       mode: 'refresh',
-      amounts: { reserve: enemyAliveCount },
+      amounts: { reserve: enemyAliveCount, ...enemyGain },
       tags: ['round-start'],
     })
   }
@@ -1608,13 +1655,29 @@ export function resolveTeamTurn(
   previousState: BattleState,
   commands: Record<string, QueuedBattleAction>,
   team: BattleTeamId,
+  actionOrder?: string[],
 ): BattleResolutionResult {
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
 
-  const teamFighters = getTeam(state, team).filter(isAlive).sort((a, b) => a.slot - b.slot)
+  const aliveFighters = getTeam(state, team).filter(isAlive)
 
-  teamFighters.forEach((fighter) => {
+  // Build execution order: use player-specified order first, then append any
+  // alive fighters not covered (preserves slot order for the remainder).
+  let orderedIds: string[]
+  if (actionOrder && actionOrder.length > 0) {
+    const remaining = aliveFighters
+      .filter((f) => !actionOrder.includes(f.instanceId))
+      .sort((a, b) => a.slot - b.slot)
+      .map((f) => f.instanceId)
+    orderedIds = [...actionOrder, ...remaining]
+  } else {
+    orderedIds = aliveFighters.sort((a, b) => a.slot - b.slot).map((f) => f.instanceId)
+  }
+
+  orderedIds.forEach((instanceId) => {
+    const fighter = aliveFighters.find((f) => f.instanceId === instanceId)
+    if (!fighter) return
     const command = commands[fighter.instanceId]
     if (!command) {
       resolveAction(state, ctx, {
@@ -1767,6 +1830,8 @@ export function resolveRound(
 
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
 }
+
+
 
 
 

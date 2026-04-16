@@ -1,7 +1,9 @@
 import {
   battleEnergyMeta,
   battleEnergyOrder,
+  getEnergyCount,
   randomEnergyMeta,
+  totalEnergyInPool,
   type BattleEnergyCost,
   type BattleEnergyPool,
   type BattleEnergyType,
@@ -50,13 +52,13 @@ export function EnergyCostRow({ cost, compact = false }: { cost: BattleEnergyCos
 function FocusChip({
   type,
   active,
-  available,
+  count,
   disabled,
   onSelect,
 }: {
   type: BattleEnergyType
   active: boolean
-  available: boolean
+  count: number
   disabled: boolean
   onSelect?: (type: BattleEnergyType) => void
 }) {
@@ -77,10 +79,11 @@ function FocusChip({
         borderColor: active ? meta.border : 'rgba(255,255,255,0.08)',
         boxShadow: active ? `0 0 14px ${meta.glow}` : 'none',
       }}
-      title={available ? `${meta.label} focus ready` : `${meta.label} focus selected for next refresh`}
+      title={active ? `${meta.label} focus selected for the next refresh` : meta.label}
     >
       <EnergyPip type={type} small />
       <span className="ca-mono-label text-[0.6rem]">{meta.short}</span>
+      <span className="ca-mono-label text-[0.6rem] text-ca-text">x{count}</span>
     </button>
   )
 }
@@ -95,31 +98,23 @@ export function TeamEnergyReserve({
   onSelectFocus?: (type: BattleEnergyType) => void
 }) {
   const selectedFocus = pool.focus ?? 'technique'
-  const totalCostHint = pool.focusAvailable ? '1 matching pip free this round' : 'focus bonus spent this round'
 
   return (
     <div className="rounded-[0.3rem] border border-white/10 bg-[rgba(10,10,15,0.84)] px-2.5 py-2 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-xl">
       <div className="grid gap-2 sm:grid-cols-[4.4rem_minmax(0,1fr)] sm:items-center">
         <div className="rounded-[0.25rem] border border-white/8 bg-[rgba(255,255,255,0.03)] px-2 py-1.5">
-          <p className="ca-mono-label text-[0.6rem] text-ca-text-3">RESERVE</p>
+          <p className="ca-mono-label text-[0.6rem] text-ca-text-3">TOTAL CE</p>
           <div className="mt-1 flex items-end gap-1.5">
-            <span className="ca-display text-[0.88rem] leading-none text-ca-text">{pool.reserve}</span>
-            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">CE</span>
+            <span className="ca-display text-[0.88rem] leading-none text-ca-text">{totalEnergyInPool(pool)}</span>
+            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">PIPS</span>
           </div>
         </div>
 
         <div className="min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">ENERGY FOCUS</p>
-            <span
-              className={cn(
-                'rounded-full border px-1.5 py-0.5 ca-mono-label text-[0.22rem]',
-                pool.focusAvailable
-                  ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal text-[0.6rem]'
-                  : 'border-white/10 bg-white/5 text-ca-text-3 text-[0.6rem]',
-              )}
-            >
-              {pool.focusAvailable ? 'READY' : 'SPENT'}
+            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">NEXT REFRESH FOCUS</p>
+            <span className="rounded-full border border-ca-teal/25 bg-ca-teal-wash px-1.5 py-0.5 ca-mono-label text-[0.6rem] text-ca-teal">
+              {selectedFocus.toUpperCase()}
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -128,22 +123,18 @@ export function TeamEnergyReserve({
                 key={type}
                 type={type}
                 active={selectedFocus === type}
-                available={pool.focusAvailable}
+                count={getEnergyCount(pool, type)}
                 disabled={disabled}
                 onSelect={onSelectFocus}
               />
             ))}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">{totalCostHint.toUpperCase()}</span>
-            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">MAX {Math.max(0, pool.reserve + (pool.focusAvailable ? 1 : 0))} PIPS</span>
+            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">1 MATCHING PIP IS GUARANTEED ON THE NEXT REFRESH</span>
+            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">CURRENT TOTAL {totalEnergyInPool(pool)}</span>
           </div>
         </div>
       </div>
     </div>
   )
 }
-
-
-
-

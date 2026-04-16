@@ -204,20 +204,22 @@ export function BattlePrepPage() {
   const [incomingChallenge, setIncomingChallenge] = useState<MatchRow | null>(null)
   const [mpError, setMpError] = useState<string | null>(null)
   const [mpLoading, setMpLoading] = useState(false)
+  const visibleSearchResults = searchQuery.trim() ? searchResults : []
 
   // ── Matchmaking queue state (ranked / quick) ─────────────────────────────
   const [searching, setSearching] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
   const [aiFallback, setAiFallback] = useState(false)
   const searchingRef = useRef(false)
-  const searchStartRef = useRef<number>(0)
+  const searchAttemptsRef = useRef(0)
 
   // Timeout before falling back to AI: quick = 20 s, ranked = 45 s
+  const POLL_INTERVAL_MS = 2_500
   const AI_FALLBACK_MS: Record<string, number> = { quick: 20_000, ranked: 45_000 }
 
   // Search debounce
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return }
+    if (!searchQuery.trim()) return
     const t = window.setTimeout(async () => {
       const { data } = await searchPlayersByName(searchQuery, user?.id)
       setSearchResults(data)
@@ -248,8 +250,7 @@ export function BattlePrepPage() {
         searchingRef.current = false
         leaveMatchmakingQueue(user.id).catch(() => {})
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    }
   }, [user])
 
   const visibleRoster = useMemo(() => {
@@ -362,7 +363,7 @@ export function BattlePrepPage() {
     }
 
     searchingRef.current = true
-    searchStartRef.current = Date.now()
+    searchAttemptsRef.current = 0
     setAiFallback(false)
     void pollForMatch({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName })
   }
@@ -405,10 +406,11 @@ export function BattlePrepPage() {
 
     // No opponent yet — check timeout then retry
     if (searchingRef.current) {
-      const elapsed = Date.now() - searchStartRef.current
+      const attempts = searchAttemptsRef.current + 1
+      searchAttemptsRef.current = attempts
       const limit = AI_FALLBACK_MS[mode] ?? 30_000
 
-      if (elapsed >= limit) {
+      if (attempts * POLL_INTERVAL_MS >= limit) {
         // Timeout — fall back to an AI match
         searchingRef.current = false
         setAiFallback(true)
@@ -424,7 +426,7 @@ export function BattlePrepPage() {
 
       window.setTimeout(() => {
         void pollForMatch({ playerId, mode, teamIds: sanitized, displayName })
-      }, 2500)
+      }, POLL_INTERVAL_MS)
     }
   }
 
@@ -563,7 +565,7 @@ export function BattlePrepPage() {
                 ) : (
                   <ChallengePanel
                     searchQuery={searchQuery}
-                    searchResults={searchResults}
+                    searchResults={visibleSearchResults}
                     selectedOpponent={selectedOpponent}
                     loading={mpLoading}
                     error={mpError}

@@ -1,8 +1,8 @@
-import { useEffect, useEffectEvent, useState } from 'react'
+import { type DragEvent, useEffect, useEffectEvent, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
-import { setEnergyFocus, getAbilityEnergyCost, countEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyOrder, battleEnergyMeta, canPayEnergy, getAbilityEnergyCost, getEnergyCount, setEnergyFocus, spendEnergy, sumEnergyCosts, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
@@ -36,7 +36,6 @@ import {
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
 import type { BattleEvent, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
-import type { BattleEnergyPool } from '@/features/battle/energy'
 import {
   useMultiplayerMatch,
   buildTimeoutCommands,
@@ -45,6 +44,8 @@ import {
 type BattleViewState = {
   state: BattleState
   queued: Record<string, QueuedBattleAction>
+  /** Player-chosen execution order (array of actorIds). Defaults to slot order. */
+  actionOrder: string[]
   selectedActorId: string | null
 }
 
@@ -100,6 +101,7 @@ function createNewBattle(): { viewState: BattleViewState; initialEvents: BattleE
     viewState: {
       state,
       queued,
+      actionOrder: getCommandablePlayerUnits(state).map((f) => f.instanceId),
       selectedActorId: getNextActorId(state, queued),
     },
     initialEvents,
@@ -389,6 +391,9 @@ export function BattlePage() {
     hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
   const enemyIntentSummaries = getEnemyIntentSummaries(battle.state)
+  const multiplayerBattleState = multiplayer?.battleState
+  const multiplayerAutoCommands = multiplayer?.autoCommands
+  const multiplayerIsMyTurn = multiplayer?.isMyTurn ?? false
   const topBarPrompt = targetingEnemies
     ? `TARGET ENEMY WITH ${selectedAbility?.name.toUpperCase() ?? 'TECHNIQUE'}`
     : targetingAllies
@@ -401,19 +406,20 @@ export function BattlePage() {
 
   // ── Sync multiplayer state → local battle view ──────────────────────────
   useEffect(() => {
-    if (!multiplayer) return
-    const nextActorId = multiplayer.isMyTurn
-      ? getNextActorId(multiplayer.battleState, multiplayer.autoCommands)
+    if (!multiplayerBattleState || !multiplayerAutoCommands) return
+    const nextActorId = multiplayerIsMyTurn
+      ? getNextActorId(multiplayerBattleState, multiplayerAutoCommands)
       : null
 
     setBattle({
-      state: multiplayer.battleState,
-      queued: multiplayer.autoCommands,
+      state: multiplayerBattleState,
+      queued: multiplayerAutoCommands,
+      actionOrder: getCommandablePlayerUnits(multiplayerBattleState).map((f) => f.instanceId),
       selectedActorId: nextActorId,
     })
-    clearPendingSelection()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multiplayer?.battleState, multiplayer?.isMyTurn])
+    setSelectedAbilityId(null)
+    setSelectedTargetId(null)
+  }, [multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn])
 
   const onTurnTimeout = useEffectEvent(() => {
     if (battle.state.phase === 'finished') return
@@ -427,13 +433,13 @@ export function BattlePage() {
   useEffect(() => {
     if (battle.state.phase === 'finished') return undefined
     // In online mode only tick down when it's our turn
-    if (multiplayer && !multiplayer.isMyTurn) return undefined
+    if (multiplayerBattleState && !multiplayerIsMyTurn) return undefined
     const timer = window.setInterval(() => {
       setTurnSecondsLeft((current) => Math.max(0, current - 1))
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [battle.state.phase, battle.state.round, multiplayer?.isMyTurn])
+  }, [battle.state.phase, battle.state.round, multiplayerBattleState, multiplayerIsMyTurn])
 
   useEffect(() => {
     if (turnSecondsLeft > 0) return
@@ -624,6 +630,7 @@ export function BattlePage() {
       }, {})
 
       return {
+        ...current,
         state: nextState,
         queued: nextQueued,
         selectedActorId: getNextActorId(nextState, nextQueued, current.selectedActorId),
@@ -635,12 +642,13 @@ export function BattlePage() {
   async function resolveQueuedRound(
     queuedActions: Record<string, QueuedBattleAction>,
     preludeEvents: BattleEvent[] = [],
+    playerActionOrder?: string[],
   ) {
     if (battle.state.phase === 'finished') return
 
     // ── Online path ───────────────────────────────────────────────────────
     if (multiplayer) {
-      const { events } = await multiplayer.submitCommands(queuedActions, preludeEvents)
+      const { events } = await multiplayer.submitCommands(queuedActions, preludeEvents, playerActionOrder)
       // State arrives via the useEffect above (Realtime + optimistic update).
       // We only need to append events to the log here.
       setBattleLog((current) => [...current, ...preludeEvents, ...events].slice(-36))
@@ -655,13 +663,9 @@ export function BattlePage() {
     const playerEvents: BattleEvent[] = [...preludeEvents]
     const enemyEvents: BattleEvent[] = []
 
-    // Phase 1: player turn
-    if (currentState.firstPlayer === 'player') {
-      const playerResult = resolveTeamTurn(currentState, queuedActions, 'player')
-      currentState = playerResult.state
-      playerEvents.push(...playerResult.events)
-    } else {
-      const playerResult = resolveTeamTurn(currentState, queuedActions, 'player')
+    // Phase 1: player turn — respects player-chosen action order
+    {
+      const playerResult = resolveTeamTurn(currentState, queuedActions, 'player', playerActionOrder)
       currentState = playerResult.state
       playerEvents.push(...playerResult.events)
     }
@@ -708,6 +712,7 @@ export function BattlePage() {
     setBattle({
       state: currentState,
       queued: nextQueued,
+      actionOrder: getCommandablePlayerUnits(currentState).map((f) => f.instanceId),
       selectedActorId: nextActorId,
     })
     setBattleLog((current) => [...current, ...enemyEvents].slice(-36))
@@ -736,9 +741,9 @@ export function BattlePage() {
     setQueueDialogOpen(true)
   }
 
-  function handleQueueConfirm() {
+  function handleQueueConfirm(finalActionOrder: string[]) {
     setQueueDialogOpen(false)
-    resolveQueuedRound(battle.queued)
+    resolveQueuedRound(battle.queued, [], finalActionOrder)
   }
 
   function handleTargetFighterClick(fighter: { instanceId: string }) {
@@ -828,6 +833,7 @@ export function BattlePage() {
             round={battle.state.round}
             playerTeam={battle.state.playerTeam}
             queued={battle.queued}
+            initialOrder={battle.actionOrder}
             energy={battle.state.playerEnergy}
             onConfirm={handleQueueConfirm}
             onBack={() => setQueueDialogOpen(false)}
@@ -969,10 +975,54 @@ function WaitingForOpponentOverlay() {
   )
 }
 
+// Per-action random CE allocation: maps actorId → Record<BattleEnergyType, number>
+type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
+
+function buildDefaultRandomAllocation(
+  rows: { fighter: BattleFighterState; cost: BattleEnergyCost | null; isPass: boolean }[],
+  energy: BattleEnergyPool,
+): RandomAllocation {
+  // For each action that has random cost, greedily assign from the most-abundant type.
+  const allocation: RandomAllocation = {}
+  const remainingPool = { ...energy.amounts }
+
+  for (const { fighter, cost, isPass } of rows) {
+    if (!cost || isPass) continue
+    // First spend typed costs to update remainingPool
+    for (const type of battleEnergyOrder) {
+      const required = cost[type] ?? 0
+      remainingPool[type] = Math.max(0, remainingPool[type] - required)
+    }
+    const randomNeeded = cost.random ?? 0
+    if (randomNeeded === 0) continue
+
+    const alloc: Partial<Record<BattleEnergyType, number>> = {}
+    let left = randomNeeded
+    const sorted = [...battleEnergyOrder].sort((a, b) => remainingPool[b] - remainingPool[a])
+    for (const type of sorted) {
+      if (left <= 0) break
+      const take = Math.min(remainingPool[type], left)
+      if (take > 0) {
+        alloc[type] = take
+        remainingPool[type] -= take
+        left -= take
+      }
+    }
+    allocation[fighter.instanceId] = alloc
+  }
+
+  return allocation
+}
+
+function totalRandomAllocated(alloc: Partial<Record<BattleEnergyType, number>>) {
+  return battleEnergyOrder.reduce((sum, t) => sum + (alloc[t] ?? 0), 0)
+}
+
 function SkillQueueModal({
   round,
   playerTeam,
   queued,
+  initialOrder,
   energy,
   onConfirm,
   onBack,
@@ -980,95 +1030,293 @@ function SkillQueueModal({
   round: number
   playerTeam: BattleFighterState[]
   queued: Record<string, QueuedBattleAction>
+  initialOrder: string[]
   energy: BattleEnergyPool
-  onConfirm: () => void
+  onConfirm: (actionOrder: string[]) => void
   onBack: () => void
 }) {
-  const rows = playerTeam.map((fighter) => {
-    const action = queued[fighter.instanceId]
-    const ability = action ? getAbilityById(fighter, action.abilityId) : null
-    const cost = ability ? getAbilityEnergyCost(ability) : null
-    const totalCost = cost ? countEnergyCost(cost) : 0
-    const isPass = !ability || ability.id === PASS_ABILITY_ID
-    return { fighter, ability, cost, totalCost, isPass }
+  // Build an ordered list of actorIds from initialOrder, then any remaining alive fighters.
+  const [order, setOrder] = useState<string[]>(() => {
+    const aliveIds = new Set(playerTeam.filter((f) => f.hp > 0).map((f) => f.instanceId))
+    const filtered = initialOrder.filter((id) => aliveIds.has(id))
+    const rest = [...aliveIds].filter((id) => !filtered.includes(id))
+    return [...filtered, ...rest]
   })
 
-  const grandTotal = rows.reduce((sum, r) => sum + r.totalCost, 0)
-  const focusDiscount = rows.some((r) => r.cost && energy.focus && r.cost[energy.focus]) && energy.focusAvailable ? 1 : 0
-  const netCost = Math.max(0, grandTotal - focusDiscount)
-  const reserveAfter = Math.max(0, energy.reserve - netCost)
-  const canAfford = energy.reserve >= netCost
+  // Base rows keyed by actorId
+  const rowMap = new Map(
+    playerTeam.map((fighter) => {
+      const action = queued[fighter.instanceId]
+      const ability = action ? getAbilityById(fighter, action.abilityId) : null
+      const cost = ability ? getAbilityEnergyCost(ability) : null
+      const isPass = !ability || ability.id === PASS_ABILITY_ID
+      return [fighter.instanceId, { fighter, ability, cost, isPass }]
+    }),
+  )
+
+  // Ordered rows in the user-chosen execution sequence
+  const rows = order
+    .map((id) => rowMap.get(id))
+    .filter((r): r is NonNullable<typeof r> => r !== undefined)
+
+  // Random CE allocation state (per-actor)
+  const [randomAlloc, setRandomAlloc] = useState<RandomAllocation>(() =>
+    buildDefaultRandomAllocation(rows, energy),
+  )
+
+  // Build the effective cost for each row: typed cost + random cost resolved via allocation
+  function getEffectiveCost(actorId: string, cost: BattleEnergyCost): BattleEnergyCost {
+    if (!cost.random) return cost
+    const alloc = randomAlloc[actorId] ?? {}
+    const resolved: BattleEnergyCost = { ...cost }
+    delete resolved.random
+    for (const type of battleEnergyOrder) {
+      const extra = alloc[type] ?? 0
+      if (extra > 0) resolved[type] = (resolved[type] ?? 0) + extra
+    }
+    return resolved
+  }
+
+  const effectiveRows = rows.map(({ fighter, ability, cost, isPass }) => ({
+    fighter,
+    ability,
+    cost,
+    isPass,
+    effectiveCost: cost && !isPass ? getEffectiveCost(fighter.instanceId, cost) : null,
+  }))
+
+  const aggregateCost = sumEnergyCosts(
+    effectiveRows.flatMap(({ effectiveCost }) => (effectiveCost ? [effectiveCost] : [])),
+  )
+  const canAfford = canPayEnergy(energy, aggregateCost)
+  const energyAfter = canAfford ? spendEnergy(energy, aggregateCost) : energy
+  const totalBefore = totalEnergyInPool(energy)
+  const totalAfter = totalEnergyInPool(energyAfter)
+
+  // Unallocated random pips per actor (shows warning if user deleted allocation without replacing)
+  function getUnallocated(actorId: string, cost: BattleEnergyCost | null) {
+    if (!cost?.random) return 0
+    const alloc = randomAlloc[actorId] ?? {}
+    return cost.random - totalRandomAllocated(alloc)
+  }
+  const hasUnallocated = rows.some(({ fighter, cost }) => getUnallocated(fighter.instanceId, cost) > 0)
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  function handleDragStart(index: number) {
+    setDragIndex(index)
+  }
+
+  function handleDragOver(e: DragEvent<HTMLDivElement>, index: number) {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>, targetIndex: number) {
+    e.preventDefault()
+    if (dragIndex === null || dragIndex === targetIndex) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+    const next = [...order]
+    const [moved] = next.splice(dragIndex, 1)
+    next.splice(targetIndex, 0, moved)
+    setOrder(next)
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  function adjustRandomAlloc(actorId: string, type: BattleEnergyType, delta: number) {
+    setRandomAlloc((prev) => {
+      const current = { ...(prev[actorId] ?? {}) }
+      const next = Math.max(0, (current[type] ?? 0) + delta)
+      current[type] = next
+      return { ...prev, [actorId]: current }
+    })
+  }
+
+  // Any random-cost rows that need allocation
+  const randomRows = effectiveRows.filter(({ cost, isPass }) => !isPass && (cost?.random ?? 0) > 0)
 
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.78)] backdrop-blur-[3px]">
       <div className="w-full max-w-lg rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.98),rgba(10,9,18,0.99))] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
-
         <div className="border-b border-white/8 px-6 py-4">
-          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">ACTION QUEUE</p>
-          <h2 className="ca-display mt-1.5 text-3xl text-ca-text">COMMIT ROUND {round}</h2>
+          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">ACTION QUEUE — ROUND {round}</p>
+          <h2 className="ca-display mt-1.5 text-3xl text-ca-text">PRESS WHEN READY</h2>
         </div>
 
-        <div className="divide-y divide-white/6 px-2 py-1">
-          {rows.map(({ fighter, ability, cost, isPass }) => (
-            <div key={fighter.instanceId} className="flex items-center gap-3 px-4 py-3">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[0.25rem] border border-white/10 bg-[rgba(255,255,255,0.04)]">
-                <span className="ca-mono-label text-[0.52rem] text-ca-text-2">
-                  {fighter.shortName.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
+        {/* ── Execution order: horizontal drag-and-drop skill tiles ── */}
+        <div className="px-5 py-4">
+          <p className="ca-mono-label mb-3 text-[0.44rem] text-ca-text-3">EXECUTION ORDER — DRAG TO REORDER</p>
+          <div className="flex items-end gap-3">
+            {effectiveRows.map(({ fighter, ability, isPass, effectiveCost }, index) => {
+              const isDragging = dragIndex === index
+              const isTarget = dragOverIndex === index && dragIndex !== index
+              return (
+                <div
+                  key={fighter.instanceId}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={[
+                    'flex flex-col items-center gap-1.5 cursor-grab active:cursor-grabbing select-none transition-all',
+                    isDragging ? 'opacity-30' : 'opacity-100',
+                  ].join(' ')}
+                  style={{ transform: isTarget ? 'scale(1.05) translateX(4px)' : undefined }}
+                >
+                  {/* Position number */}
+                  <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{index + 1}</span>
 
-              <div className="min-w-0 flex-1">
-                <p className="ca-display text-[0.95rem] leading-none text-ca-text">{fighter.shortName}</p>
-                <p className={['mt-1 ca-mono-label text-[0.5rem]', isPass ? 'text-ca-text-3' : 'text-ca-text-2'].join(' ')}>
-                  {isPass ? 'AUTO-PASS' : ability!.name.toUpperCase()}
-                </p>
-              </div>
+                  {/* Skill icon tile */}
+                  <div className={[
+                    'relative h-[3.5rem] w-[3.5rem] overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)]',
+                    isPass ? 'border-white/10 opacity-45' : 'border-white/25',
+                    isTarget ? 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.3)]' : '',
+                  ].join(' ')}>
+                    {ability?.icon.src && !isPass ? (
+                      <img src={ability.icon.src} alt={ability.name} className="h-full w-full object-cover" draggable={false} />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[0.55rem] font-black text-white/20">
+                        {fighter.shortName.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    {/* Cost badge */}
+                    {effectiveCost && !isPass ? (
+                      <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.75)] px-0.5 py-0.5">
+                        <EnergyCostRow cost={effectiveCost} compact />
+                      </div>
+                    ) : null}
+                  </div>
 
-              <div className="shrink-0">
-                {cost && !isPass ? (
-                  <EnergyCostRow cost={cost} />
-                ) : (
-                  <span className="ca-mono-label text-[0.46rem] text-ca-text-3">—</span>
-                )}
-              </div>
-            </div>
-          ))}
+                  {/* Fighter name */}
+                  <p className="ca-mono-label max-w-[3.5rem] truncate text-center text-[0.44rem] text-ca-text-2">
+                    {fighter.shortName.toUpperCase()}
+                  </p>
+
+                  {/* Ability name */}
+                  <p className={['ca-mono-label max-w-[3.5rem] truncate text-center text-[0.4rem]', isPass ? 'text-ca-text-3' : 'text-ca-text-2'].join(' ')}>
+                    {isPass ? 'PASS' : (ability?.name.toUpperCase() ?? '—')}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
         </div>
+
+        {/* ── Random CE allocation (only shown when needed) ── */}
+        {randomRows.length > 0 ? (
+          <div className="border-t border-white/8 px-5 py-3">
+            <p className="ca-mono-label mb-2 text-[0.44rem] text-ca-text-3">ASSIGN RANDOM CHAKRA</p>
+            {randomRows.map(({ fighter, cost }) => {
+              const unallocated = getUnallocated(fighter.instanceId, cost)
+              return (
+                <div key={fighter.instanceId} className="mb-2 last:mb-0">
+                  <p className="ca-mono-label mb-1 text-[0.44rem] text-ca-text-2">
+                    {fighter.shortName.toUpperCase()} — CHOOSE {cost!.random} RANDOM
+                    {unallocated > 0 ? (
+                      <span className="ml-1.5 text-ca-red">({unallocated} LEFT)</span>
+                    ) : (
+                      <span className="ml-1.5 text-ca-teal">✓</span>
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {battleEnergyOrder.map((type) => {
+                      const meta = battleEnergyMeta[type]
+                      const allocated = randomAlloc[fighter.instanceId]?.[type] ?? 0
+                      const poolCount = getEnergyCount(energy, type)
+                      const atMax = totalRandomAllocated(randomAlloc[fighter.instanceId] ?? {}) >= cost!.random!
+                      return (
+                        <div key={type} className="flex items-center gap-1 rounded-[0.2rem] border border-white/8 bg-[rgba(255,255,255,0.03)] px-1.5 py-1">
+                          <span className="ca-mono-label text-[0.44rem]" style={{ color: meta.color }}>
+                            {meta.short}
+                          </span>
+                          <span className="ca-mono-label text-[0.42rem] text-ca-text-3">({poolCount})</span>
+                          <button
+                            type="button"
+                            disabled={allocated <= 0}
+                            onClick={() => adjustRandomAlloc(fighter.instanceId, type, -1)}
+                            className="grid h-4 w-4 place-items-center rounded border border-white/10 bg-[rgba(255,255,255,0.04)] ca-mono-label text-[0.6rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.08)] disabled:opacity-25"
+                          >−</button>
+                          <span
+                            className="ca-mono-label w-3 text-center text-[0.52rem]"
+                            style={{ color: allocated > 0 ? meta.color : undefined }}
+                          >
+                            {allocated}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={allocated >= poolCount || atMax}
+                            onClick={() => adjustRandomAlloc(fighter.instanceId, type, 1)}
+                            className="grid h-4 w-4 place-items-center rounded border border-white/10 bg-[rgba(255,255,255,0.04)] ca-mono-label text-[0.6rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.08)] disabled:opacity-25"
+                          >+</button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : null}
 
         <div className="border-t border-white/8 px-6 py-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">TOTAL COST</span>
-              <span className={['ca-mono-label text-[0.56rem]', canAfford ? 'text-ca-text' : 'text-ca-red'].join(' ')}>
-                {netCost}
-              </span>
+              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">CE BEFORE</span>
+              <span className="ca-mono-label text-[0.56rem] text-ca-text">{totalBefore}</span>
             </div>
             <div className="h-3 w-px bg-white/12" />
             <div className="flex items-center gap-2">
-              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">RESERVE</span>
-              <span className="ca-mono-label text-[0.56rem] text-ca-text">{energy.reserve}</span>
-            </div>
-            <div className="h-3 w-px bg-white/12" />
-            <div className="flex items-center gap-2">
-              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">AFTER</span>
-              <span className={['ca-mono-label text-[0.56rem]', reserveAfter === 0 ? 'text-amber-300' : 'text-ca-teal'].join(' ')}>
-                {reserveAfter}
+              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">CE AFTER</span>
+              <span className={['ca-mono-label text-[0.56rem]', totalAfter === 0 ? 'text-amber-300' : 'text-ca-teal'].join(' ')}>
+                {totalAfter}
               </span>
             </div>
-            {focusDiscount > 0 ? (
-              <>
-                <div className="h-3 w-px bg-white/12" />
-                <span className="ca-mono-label text-[0.46rem] text-ca-teal">FOCUS -1</span>
-              </>
-            ) : null}
           </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {battleEnergyOrder.map((type) => {
+              const meta = battleEnergyMeta[type]
+              const before = getEnergyCount(energy, type)
+              const after = getEnergyCount(energyAfter, type)
+              return (
+                <div
+                  key={type}
+                  className="rounded-[0.25rem] border bg-[rgba(255,255,255,0.03)] px-2 py-1.5"
+                  style={{ borderColor: meta.border }}
+                >
+                  <p className="ca-mono-label text-[0.42rem]" style={{ color: meta.color }}>{meta.short}</p>
+                  <p className="mt-1 ca-mono-label text-[0.56rem] text-ca-text">
+                    {before} → {after}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+
+          {!canAfford ? (
+            <p className="mt-3 ca-mono-label text-[0.46rem] text-ca-red">CANNOT AFFORD THIS QUEUE — ADJUST ALLOCATION.</p>
+          ) : hasUnallocated ? (
+            <p className="mt-3 ca-mono-label text-[0.46rem] text-amber-300">RANDOM PIPS NOT FULLY ALLOCATED — ASSIGN BEFORE COMMITTING.</p>
+          ) : null}
         </div>
 
         <div className="flex gap-3 border-t border-white/8 px-6 py-4">
           <button
             type="button"
-            onClick={onConfirm}
-            className="ca-display flex-1 rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 text-[1.05rem] text-white transition hover:brightness-110"
+            disabled={!canAfford || hasUnallocated}
+            onClick={() => onConfirm(order)}
+            className="ca-display flex-1 rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 text-[1.05rem] text-white transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             CONFIRM
           </button>
@@ -1080,15 +1328,8 @@ function SkillQueueModal({
             BACK
           </button>
         </div>
-
       </div>
     </div>
   )
 }
-
-
-
-
-
-
 

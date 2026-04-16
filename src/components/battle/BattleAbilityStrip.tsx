@@ -1,5 +1,5 @@
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
-import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
+import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/components/battle/battleDisplay'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
@@ -109,17 +109,6 @@ function QueuedSlot({
   )
 }
 
-function StatusEffectPip({ label }: { label: string }) {
-  return (
-    <div
-      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-[0.15rem] border border-white/15 bg-[rgba(15,15,20,0.9)] sm:h-8 sm:w-8"
-      title={label}
-    >
-      <span className="ca-mono-label select-none text-[0.34rem] text-white/50 sm:text-[0.4rem]">{label}</span>
-    </div>
-  )
-}
-
 export function BattleAbilityStrip({
   fighter,
   selected,
@@ -129,7 +118,6 @@ export function BattleAbilityStrip({
   pendingAbilityId,
   queuedAction,
   validAbility,
-  statusLabels,
   carryoverLabels = [],
   onActorClick,
   onAbilityClick,
@@ -145,7 +133,6 @@ export function BattleAbilityStrip({
   pendingAbilityId?: string | null
   queuedAction?: QueuedBattleAction
   validAbility?: (abilityId: string) => boolean
-  statusLabels?: string[]
   carryoverLabels?: string[]
   onActorClick?: () => void
   onAbilityClick?: (abilityId: string) => void
@@ -154,7 +141,6 @@ export function BattleAbilityStrip({
   onDequeue?: () => void
 }) {
   const abilities = fighter.abilities.concat(fighter.ultimate)
-  const effects = statusLabels ?? []
   const hpValue = (fighter.hp / fighter.maxHp) * 100
   const disabledLabel = fighter.hp <= 0
     ? 'KO'
@@ -203,13 +189,7 @@ export function BattleAbilityStrip({
         </div>
 
         <div className="flex min-w-0 flex-col justify-end gap-2 overflow-x-auto pb-1">
-          {effects.length > 0 ? (
-            <div className="flex items-center gap-1">
-              {effects.map((label) => (
-                <StatusEffectPip key={`${fighter.instanceId}-${label}`} label={label} />
-              ))}
-            </div>
-          ) : null}
+          <ActiveEffectPips fighter={fighter} className="min-h-[1.35rem] sm:min-h-[1.6rem]" />
 
           <div className="flex items-end gap-1.5 sm:gap-2">
             <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />

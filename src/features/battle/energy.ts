@@ -1,16 +1,17 @@
 import type { BattleAbilityTemplate } from '@/features/battle/types'
+import { createSeededRandom } from '@/features/battle/random'
 
 export const battleEnergyOrder = ['physical', 'technique', 'vow', 'mental'] as const
 
 export type BattleEnergyType = (typeof battleEnergyOrder)[number]
 
+export type BattleEnergyAmounts = Record<BattleEnergyType, number>
+
 export type BattleEnergyPool = {
-  reserve: number
+  amounts: BattleEnergyAmounts
   focus: BattleEnergyType | null
-  focusAvailable: boolean
 }
 
-// `random` is a wildcard cost paid from reserve — never focus-discounted.
 export type BattleEnergyCost = Partial<Record<BattleEnergyType, number>> & { random?: number }
 
 export const randomEnergyMeta = {
@@ -55,27 +56,98 @@ export const battleEnergyMeta: Record<
   },
 }
 
+function sanitizeCount(value: number | undefined) {
+  return Math.max(0, Math.floor(value ?? 0))
+}
+
+export function createEnergyAmounts(values: Partial<Record<BattleEnergyType, number>> = {}): BattleEnergyAmounts {
+  return Object.fromEntries(
+    battleEnergyOrder.map((type) => [type, sanitizeCount(values[type])]),
+  ) as BattleEnergyAmounts
+}
+
+export function totalEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
+  return battleEnergyOrder.reduce((total, type) => total + sanitizeCount(amounts[type]), 0)
+}
+
+export function totalEnergyInPool(pool: BattleEnergyPool) {
+  return totalEnergyAmounts(pool.amounts)
+}
+
+export function getEnergyCount(pool: BattleEnergyPool, type: BattleEnergyType) {
+  return pool.amounts[type] ?? 0
+}
+
+function addEnergyAmounts(left: BattleEnergyAmounts, right: Partial<Record<BattleEnergyType, number>>) {
+  return createEnergyAmounts(
+    Object.fromEntries(
+      battleEnergyOrder.map((type) => [type, left[type] + sanitizeCount(right[type])]),
+    ) as Partial<Record<BattleEnergyType, number>>,
+  )
+}
+
+function subtractEnergyAmounts(left: BattleEnergyAmounts, right: Partial<Record<BattleEnergyType, number>>) {
+  return createEnergyAmounts(
+    Object.fromEntries(
+      battleEnergyOrder.map((type) => [type, Math.max(0, left[type] - sanitizeCount(right[type]) )]),
+    ) as Partial<Record<BattleEnergyType, number>>,
+  )
+}
+
+function generateRefreshAmounts(
+  livingCount: number,
+  focus: BattleEnergyType | null,
+  seed: string,
+): BattleEnergyAmounts {
+  const next = createEnergyAmounts()
+  let remaining = Math.max(0, livingCount)
+
+  if (focus && remaining > 0) {
+    next[focus] += 1
+    remaining -= 1
+  }
+
+  const random = createSeededRandom(seed)
+  for (let index = 0; index < remaining; index += 1) {
+    const rolledIndex = Math.floor(random() * battleEnergyOrder.length) % battleEnergyOrder.length
+    next[battleEnergyOrder[rolledIndex]] += 1
+  }
+
+  return next
+}
+
 export function createRoundEnergyPool(
   livingCount = 3,
   focus: BattleEnergyType | null = 'technique',
+  seed = 'default-energy-seed',
 ): BattleEnergyPool {
   return {
-    reserve: Math.max(0, livingCount),
+    amounts: generateRefreshAmounts(livingCount, focus, seed),
     focus,
-    focusAvailable: true,
   }
 }
 
 export function refreshRoundEnergy(
   pool: BattleEnergyPool,
   livingCount: number,
+  seed = 'default-energy-seed',
   nextFocus?: BattleEnergyType | null,
 ): BattleEnergyPool {
+  const focus = nextFocus === undefined ? pool.focus : nextFocus
+  const refresh = generateRefreshAmounts(livingCount, focus, seed)
+
   return {
-    reserve: pool.reserve + Math.max(0, livingCount),
-    focus: nextFocus === undefined ? pool.focus : nextFocus,
-    focusAvailable: true,
+    amounts: addEnergyAmounts(pool.amounts, refresh),
+    focus,
   }
+}
+
+export function getRefreshGain(
+  livingCount: number,
+  focus: BattleEnergyType | null,
+  seed = 'default-energy-seed',
+) {
+  return generateRefreshAmounts(livingCount, focus, seed)
 }
 
 export function setEnergyFocus(
@@ -89,11 +161,30 @@ export function setEnergyFocus(
 }
 
 export function countEnergyCost(cost: BattleEnergyCost) {
-  return battleEnergyOrder.reduce((total, type) => total + (cost[type] ?? 0), 0) + (cost.random ?? 0)
+  return battleEnergyOrder.reduce((total, type) => total + sanitizeCount(cost[type]), 0) + sanitizeCount(cost.random)
 }
 
 export function countTypedCost(cost: BattleEnergyCost) {
-  return battleEnergyOrder.reduce((total, type) => total + (cost[type] ?? 0), 0)
+  return battleEnergyOrder.reduce((total, type) => total + sanitizeCount(cost[type]), 0)
+}
+
+export function sumEnergyCosts(costs: BattleEnergyCost[]) {
+  return costs.reduce<BattleEnergyCost>((total, cost) => {
+    const next: BattleEnergyCost = { ...total }
+    battleEnergyOrder.forEach((type) => {
+      const amount = sanitizeCount(cost[type])
+      if (amount > 0) {
+        next[type] = sanitizeCount(next[type]) + amount
+      }
+    })
+
+    const random = sanitizeCount(cost.random)
+    if (random > 0) {
+      next.random = sanitizeCount(next.random) + random
+    }
+
+    return next
+  }, {})
 }
 
 export function getAbilityEnergyCost(ability: BattleAbilityTemplate): BattleEnergyCost {
@@ -102,9 +193,13 @@ export function getAbilityEnergyCost(ability: BattleAbilityTemplate): BattleEner
   if (ability.energyCost) {
     const explicit = Object.fromEntries(
       battleEnergyOrder
-        .map((type) => [type, Math.max(0, Math.floor(ability.energyCost?.[type] ?? 0))] as const)
+        .map((type) => [type, sanitizeCount(ability.energyCost?.[type])] as const)
         .filter((entry) => entry[1] > 0),
     ) as BattleEnergyCost
+
+    if (sanitizeCount(ability.energyCost.random) > 0) {
+      explicit.random = sanitizeCount(ability.energyCost.random)
+    }
 
     return explicit
   }
@@ -144,28 +239,52 @@ export function getAbilityEnergyCost(ability: BattleAbilityTemplate): BattleEner
   return { physical: 1 }
 }
 
-export function getFocusDiscountType(
-  pool: BattleEnergyPool,
-  cost: BattleEnergyCost,
-): BattleEnergyType | null {
-  if (!pool.focusAvailable || !pool.focus) return null
-  return cost[pool.focus] ? pool.focus : null
+function getSpentEnergyAmountsInternal(pool: BattleEnergyPool, cost: BattleEnergyCost): BattleEnergyAmounts | null {
+  const remaining = createEnergyAmounts(pool.amounts)
+  const spent = createEnergyAmounts()
+
+  for (const type of battleEnergyOrder) {
+    const required = sanitizeCount(cost[type])
+    if (remaining[type] < required) return null
+    remaining[type] -= required
+    spent[type] += required
+  }
+
+  let randomRequired = sanitizeCount(cost.random)
+  if (randomRequired === 0) return spent
+
+  const sortedTypes = [...battleEnergyOrder].sort((left, right) => {
+    const delta = remaining[right] - remaining[left]
+    if (delta !== 0) return delta
+    return battleEnergyOrder.indexOf(left) - battleEnergyOrder.indexOf(right)
+  })
+
+  for (const type of sortedTypes) {
+    if (randomRequired <= 0) break
+    const spendable = Math.min(remaining[type], randomRequired)
+    remaining[type] -= spendable
+    spent[type] += spendable
+    randomRequired -= spendable
+  }
+
+  if (randomRequired > 0) return null
+  return spent
+}
+
+export function getSpentEnergyAmounts(pool: BattleEnergyPool, cost: BattleEnergyCost) {
+  return getSpentEnergyAmountsInternal(pool, cost)
 }
 
 export function canPayEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost) {
-  const totalCost = countEnergyCost(cost)
-  const discount = getFocusDiscountType(pool, cost) ? 1 : 0
-  return pool.reserve >= totalCost - discount
+  return getSpentEnergyAmountsInternal(pool, cost) !== null
 }
 
 export function spendEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost): BattleEnergyPool {
-  const discountType = getFocusDiscountType(pool, cost)
-  const discount = discountType ? 1 : 0
+  const spent = getSpentEnergyAmountsInternal(pool, cost)
+  if (!spent) return pool
 
   return {
-    reserve: Math.max(0, pool.reserve - Math.max(0, countEnergyCost(cost) - discount)),
+    amounts: subtractEnergyAmounts(pool.amounts, spent),
     focus: pool.focus,
-    focusAvailable: discountType ? false : pool.focusAvailable,
   }
 }
-

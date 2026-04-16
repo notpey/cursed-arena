@@ -9,6 +9,152 @@ import type {
   QueuedBattleAction,
 } from '@/features/battle/types'
 
+export type ActivePipTone = 'default' | 'burn' | 'stun' | 'heal' | 'buff' | 'debuff' | 'void'
+
+export type ActiveEffectPip = {
+  key: string
+  iconSrc?: string
+  label: string
+  detail: string
+  turnsLeft: number | null  // null = permanent/untilRemoved
+  tone: ActivePipTone
+}
+
+function pipDuration(duration: { kind: string; remaining?: number } | undefined): number | null {
+  if (!duration) return null
+  if (duration.kind === 'rounds') return duration.remaining ?? 0
+  return null
+}
+
+export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
+  const pips: ActiveEffectPip[] = []
+
+  // ── Statuses ─────────────────────────────────────────────────────────────
+  for (const status of fighter.statuses) {
+    if (status.kind === 'stun') {
+      pips.push({
+        key: 'status-stun',
+        label: 'Stunned',
+        detail: `Cannot use abilities for ${status.duration} more turn${status.duration !== 1 ? 's' : ''}.`,
+        turnsLeft: status.duration,
+        tone: 'stun',
+      })
+    } else if (status.kind === 'invincible') {
+      pips.push({
+        key: 'status-invincible',
+        label: 'Invincible',
+        detail: `Cannot be targeted by enemy skills for ${status.duration} more turn${status.duration !== 1 ? 's' : ''}.`,
+        turnsLeft: status.duration,
+        tone: 'void',
+      })
+    } else if (status.kind === 'burn') {
+      pips.push({
+        key: 'status-burn',
+        label: `Burn ${status.damage}`,
+        detail: `Takes ${status.damage} affliction damage per turn. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
+        turnsLeft: status.duration,
+        tone: 'burn',
+      })
+    } else if (status.kind === 'mark') {
+      pips.push({
+        key: 'status-mark',
+        label: `Marked +${status.bonus}`,
+        detail: `Next hit deals +${status.bonus} bonus damage. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
+        turnsLeft: status.duration,
+        tone: 'debuff',
+      })
+    } else if (status.kind === 'attackUp') {
+      pips.push({
+        key: 'status-attackUp',
+        label: `DMG +${status.amount}`,
+        detail: `Attack increased by ${status.amount}. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
+        turnsLeft: status.duration,
+        tone: 'buff',
+      })
+    }
+  }
+
+  // ── Visible modifiers ─────────────────────────────────────────────────────
+  for (const mod of fighter.modifiers) {
+    if (!mod.visible) continue
+    const dur = pipDuration(mod.duration as { kind: string; remaining?: number })
+    const durText = dur !== null ? ` ${dur} turn${dur !== 1 ? 's' : ''} remaining.` : ''
+
+    let detail = mod.label
+    let tone: ActivePipTone = 'default'
+
+    if (mod.stat === 'damageTaken' && typeof mod.value === 'number') {
+      if (mod.mode === 'flat') {
+        detail = mod.value < 0
+          ? `Damage taken reduced by ${Math.abs(mod.value)}.${durText}`
+          : `Damage taken increased by ${mod.value}.${durText}`
+        tone = mod.value < 0 ? 'buff' : 'debuff'
+      } else if (mod.mode === 'percentAdd') {
+        detail = `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%.${durText}`
+        tone = mod.value < 0 ? 'buff' : 'debuff'
+      }
+    } else if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
+      detail = `Damage dealt ${mod.value > 0 ? '+' : ''}${mod.value}.${durText}`
+      tone = mod.value > 0 ? 'buff' : 'debuff'
+    } else if (mod.stat === 'isInvulnerable') {
+      detail = `Invulnerable to enemy skills.${durText}`
+      tone = 'void'
+    } else if (mod.stat === 'canAct' && mod.value === false) {
+      detail = `Cannot use abilities.${durText}`
+      tone = 'stun'
+    } else if (mod.stat === 'healDone' || mod.stat === 'healTaken') {
+      detail = `${mod.label}.${durText}`
+      tone = 'heal'
+    } else {
+      detail = `${mod.label}.${durText}`
+    }
+
+    pips.push({
+      key: `mod-${mod.id}`,
+      iconSrc: undefined,
+      label: mod.label,
+      detail,
+      turnsLeft: dur,
+      tone,
+    })
+  }
+
+  // ── Ability state changes (locked/replaced skills) ────────────────────────
+  for (const delta of fighter.abilityState) {
+    if (delta.mode === 'lock') {
+      pips.push({
+        key: `abilitystate-lock-${delta.slotAbilityId}`,
+        label: 'Ability Locked',
+        detail: `A skill is locked for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
+        turnsLeft: delta.duration,
+        tone: 'stun',
+      })
+    } else if (delta.mode === 'replace') {
+      const replaced = delta.replacement
+      pips.push({
+        key: `abilitystate-replace-${delta.slotAbilityId}`,
+        iconSrc: replaced.icon.src,
+        label: replaced.name,
+        detail: `${replaced.name} is active for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
+        turnsLeft: delta.duration,
+        tone: 'default',
+      })
+    } else if (delta.mode === 'grant') {
+      const granted = delta.grantedAbility
+      pips.push({
+        key: `abilitystate-grant-${granted.id}`,
+        iconSrc: granted.icon.src,
+        label: granted.name,
+        detail: `${granted.name} granted for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
+        turnsLeft: delta.duration,
+        tone: 'buff',
+      })
+    }
+  }
+
+  return pips
+}
+
 export function cn(...tokens: Array<string | false | null | undefined>) {
   return tokens.filter(Boolean).join(' ')
 }

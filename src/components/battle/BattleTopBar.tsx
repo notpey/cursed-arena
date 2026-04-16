@@ -1,5 +1,5 @@
 import { EnergyPip } from '@/components/battle/BattleEnergy'
-import { battleEnergyMeta, battleEnergyOrder, type BattleEnergyPool, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyMeta, battleEnergyOrder, getEnergyCount, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyType } from '@/features/battle/energy'
 import type { BattleUserProfile } from '@/features/battle/types'
 import { cn, getAccentStyles } from '@/components/battle/battleDisplay'
 
@@ -60,6 +60,7 @@ export function BattleTopBar({
           {battleEnergyOrder.map((type) => {
             const meta = battleEnergyMeta[type]
             const active = playerEnergy.focus === type
+            const count = getEnergyCount(playerEnergy, type)
             return (
               <button
                 key={type}
@@ -71,14 +72,14 @@ export function BattleTopBar({
                   active ? 'border-white/20 bg-white/10' : 'border-transparent bg-transparent',
                   battleFinished ? 'cursor-default opacity-70' : 'hover:border-white/12 hover:bg-white/8',
                 )}
-                title={meta.label}
+                title={`${meta.label} reserve`}
               >
                 <EnergyPip type={type} small />
-                <span className="ca-mono-label text-[0.6rem] text-ca-text">x{active && playerEnergy.focusAvailable ? 1 : 0}</span>
+                <span className="ca-mono-label text-[0.6rem] text-ca-text">x{count}</span>
               </button>
             )
           })}
-          <span className="ca-mono-label text-[0.6rem] text-ca-text-2">T x{playerEnergy.reserve}</span>
+          <span className="ca-mono-label text-[0.6rem] text-ca-text-2">T x{totalEnergyInPool(playerEnergy)}</span>
         </div>
 
         <div className="flex flex-col items-center gap-1">

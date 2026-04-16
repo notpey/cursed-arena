@@ -19,7 +19,6 @@ export function BattleEnemyStrip({
 }) {
   const accentStyles = getAccentStyles('red')
   const statuses = getStatusPills(fighter)
-  const portraitStatusLabels = statuses.slice(0, 2).map((pill) => pill.label)
   const knockedOut = fighter.hp <= 0
   const intentLabel = summary === 'Ready' ? 'UNKNOWN' : summary
   const passiveLabel = fighter.passiveEffects?.[0]?.label ?? 'NONE'
@@ -52,7 +51,7 @@ export function BattleEnemyStrip({
           <div className="mt-2 flex flex-wrap gap-1 justify-start lg:justify-end">
             {statuses.length > 0 ? (
               statuses.map((pill) => (
-                <span key={`${fighter.instanceId}-${pill.label}`} className={cn('ca-mono-label rounded-full border px-1 py-0.5 text-[0.22rem]', toneClasses(pill.tone))}>
+                <span key={`${fighter.instanceId}-${pill.label}`} className={cn('ca-mono-label rounded-full border px-1.5 py-0.5 text-[0.52rem]', toneClasses(pill.tone))}>
                   {pill.label}
                 </span>
               ))
@@ -72,7 +71,6 @@ export function BattleEnemyStrip({
               selectedTarget={selectedTarget}
               muted={muted}
               compact
-              statusLabels={portraitStatusLabels}
               onClick={onActorClick}
             />
             <div className="min-w-0 flex-1 text-right">

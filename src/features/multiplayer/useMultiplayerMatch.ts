@@ -122,10 +122,12 @@ export type MultiplayerMatchHandle = {
    * Submit commands and run engine resolution.
    * Commands should be in LOCAL perspective (you = 'player').
    * The hook re-maps them to canonical before committing.
+   * actionOrder is the player-chosen execution sequence (local actorIds).
    */
   submitCommands: (
     localCommands: Record<string, QueuedBattleAction>,
     preludeEvents?: BattleEvent[],
+    actionOrder?: string[],
   ) => Promise<{ events: BattleEvent[] }>
 }
 
@@ -141,6 +143,7 @@ export function useMultiplayerMatch(
   const matchRowRef  = useRef<MatchRow | null>(null)
 
   const [canonical, setCanonical]       = useState<BattleState | null>(null)
+  const [matchRow, setMatchRow]         = useState<MatchRow | null>(null)
   const [role, setRole]                 = useState<MultiplayerRole | null>(null)
   const [opponentName, setOpponentName] = useState('')
   const [status, setStatus]             = useState<MultiplayerStatus>('loading')
@@ -172,6 +175,7 @@ export function useMultiplayerMatch(
       }
 
       matchRowRef.current = data
+      setMatchRow(data)
       roleRef.current     = myRole
 
       const opponent = myRole === 'a' ? data.player_b_display_name : data.player_a_display_name
@@ -203,6 +207,7 @@ export function useMultiplayerMatch(
       if (!myRole) return
 
       matchRowRef.current = updatedRow
+      setMatchRow(updatedRow)
 
       // Update opponent name if player_b just joined
       const opponent = myRole === 'a' ? updatedRow.player_b_display_name : updatedRow.player_a_display_name
@@ -233,7 +238,8 @@ export function useMultiplayerMatch(
   const submitCommands = useCallback(
     async (
       localCommands: Record<string, QueuedBattleAction>,
-      _preludeEvents: BattleEvent[] = [],
+      _preludeEvents?: BattleEvent[],
+      actionOrder?: string[],
     ): Promise<{ events: BattleEvent[] }> => {
       const canon  = canonicalRef.current
       const myRole = roleRef.current
@@ -262,8 +268,8 @@ export function useMultiplayerMatch(
       // ── Engine resolution ─────────────────────────────────────────────────
       const allEvents: BattleEvent[] = []
 
-      // 1. Resolve this player's turn
-      const turnResult = resolveTeamTurn(canon, canonicalCommands, myTeam)
+      // 1. Resolve this player's turn, respecting player-chosen action order
+      const turnResult = resolveTeamTurn(canon, canonicalCommands, myTeam, actionOrder)
       allEvents.push(...turnResult.events)
       let nextState = turnResult.state
 
@@ -309,9 +315,9 @@ export function useMultiplayerMatch(
     return null
   }
 
-  const myTeam  = roleToTeam(role)
-  const local   = localState(canonical, role)
-  const isMy    = calcIsMyTurn(canonical, myTeam)
+  const myTeam = roleToTeam(role)
+  const local = localState(canonical, role)
+  const isMy = calcIsMyTurn(canonical, myTeam)
 
   return {
     battleState:          local,
@@ -321,7 +327,7 @@ export function useMultiplayerMatch(
     opponentDisplayName:  opponentName,
     status,
     error,
-    matchRow:             matchRowRef.current,
+    matchRow,
     submitCommands,
   }
 }

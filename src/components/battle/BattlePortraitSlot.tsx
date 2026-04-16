@@ -1,8 +1,165 @@
+import { useState } from 'react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { isAlive } from '@/features/battle/engine'
 import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
-import { cn, getAccentStyles, type DisplayAccent } from '@/components/battle/battleDisplay'
+import { cn, getAccentStyles, getActivePips, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
+
+// ── Tone → accent color mapping ──────────────────────────────────────────────
+function pipToneStyles(tone: ActivePipTone): { border: string; glow: string; overlay: string; badge: string } {
+  switch (tone) {
+    case 'burn':
+      return {
+        border: 'border-ca-red/55',
+        glow: 'shadow-[0_0_6px_rgba(250,39,66,0.45)]',
+        overlay: 'bg-[rgba(250,39,66,0.18)]',
+        badge: 'bg-ca-red/85 text-white',
+      }
+    case 'stun':
+      return {
+        border: 'border-amber-300/55',
+        glow: 'shadow-[0_0_6px_rgba(252,211,77,0.4)]',
+        overlay: 'bg-[rgba(252,211,77,0.14)]',
+        badge: 'bg-amber-400/85 text-black',
+      }
+    case 'heal':
+      return {
+        border: 'border-emerald-400/55',
+        glow: 'shadow-[0_0_6px_rgba(52,211,153,0.4)]',
+        overlay: 'bg-[rgba(52,211,153,0.14)]',
+        badge: 'bg-emerald-500/85 text-white',
+      }
+    case 'buff':
+      return {
+        border: 'border-ca-teal/55',
+        glow: 'shadow-[0_0_6px_rgba(5,216,189,0.4)]',
+        overlay: 'bg-[rgba(5,216,189,0.12)]',
+        badge: 'bg-ca-teal/85 text-black',
+      }
+    case 'debuff':
+      return {
+        border: 'border-purple-400/55',
+        glow: 'shadow-[0_0_6px_rgba(192,132,252,0.4)]',
+        overlay: 'bg-[rgba(192,132,252,0.12)]',
+        badge: 'bg-purple-500/85 text-white',
+      }
+    case 'void':
+      return {
+        border: 'border-sky-300/55',
+        glow: 'shadow-[0_0_6px_rgba(125,211,252,0.4)]',
+        overlay: 'bg-[rgba(125,211,252,0.12)]',
+        badge: 'bg-sky-400/85 text-black',
+      }
+    default:
+      return {
+        border: 'border-white/20',
+        glow: '',
+        overlay: 'bg-[rgba(255,255,255,0.06)]',
+        badge: 'bg-white/20 text-white',
+      }
+  }
+}
+
+function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
+  const styles = pipToneStyles(pip.tone)
+  return (
+    <div className={cn(
+      'pointer-events-none rounded-[0.3rem] border p-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm',
+      styles.border,
+      'bg-[rgba(10,9,18,0.97)]',
+    )}>
+      <div className="flex items-start justify-between gap-1">
+        <p className="ca-display text-[0.72rem] leading-tight text-ca-text">{pip.label}</p>
+        {pip.turnsLeft !== null ? (
+          <span className={cn('shrink-0 rounded px-1 py-0.5 ca-mono-label text-[0.38rem]', styles.badge)}>
+            {pip.turnsLeft}T
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-[0.58rem] leading-relaxed text-ca-text-2">{pip.detail}</p>
+      {/* Tooltip arrow */}
+      <div className={cn(
+        'absolute -bottom-[5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r',
+        styles.border,
+        'bg-[rgba(10,9,18,0.97)]',
+      )} />
+    </div>
+  )
+}
+
+function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?: boolean }) {
+  const [hovered, setHovered] = useState(false)
+  const styles = pipToneStyles(pip.tone)
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className={cn(
+        'grid h-[1.35rem] w-[1.35rem] shrink-0 cursor-default overflow-hidden rounded-[0.18rem] border-2 transition sm:h-[1.6rem] sm:w-[1.6rem]',
+        styles.border,
+        hovered ? styles.glow : '',
+      )}>
+        {/* Base icon or fallback */}
+        {pip.iconSrc ? (
+          <img
+            src={pip.iconSrc}
+            alt={pip.label}
+            className="h-full w-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className={cn('h-full w-full', styles.overlay)} />
+        )}
+        {/* Tone color overlay (subtle tint on top of icon) */}
+        <div className={cn('pointer-events-none absolute inset-0 opacity-40', styles.overlay)} />
+      </div>
+
+      {/* Turn badge in corner */}
+      {pip.turnsLeft !== null ? (
+        <span className={cn(
+          'pointer-events-none absolute -bottom-[3px] -right-[3px] z-10 rounded-[0.1rem] px-[3px] py-[1px] ca-mono-label text-[0.3rem] leading-none',
+          styles.badge,
+        )}>
+          {pip.turnsLeft}
+        </span>
+      ) : null}
+
+      {/* Tooltip — flips side when mirrored so it doesn't clip */}
+      {hovered ? (
+        <div className={cn(
+          'pointer-events-none absolute bottom-[calc(100%+5px)] z-50 w-44',
+          mirrored ? 'right-0' : 'left-1/2 -translate-x-1/2',
+        )}>
+          <PipTooltip pip={pip} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function ActiveEffectPips({
+  fighter,
+  mirrored = false,
+  className,
+}: {
+  fighter: BattleFighterState
+  mirrored?: boolean
+  className?: string
+}) {
+  const pips = getActivePips(fighter)
+  if (pips.length === 0) return null
+
+  return (
+    <div className={cn('flex flex-wrap gap-0.5', mirrored ? 'justify-end' : 'justify-start', className)}>
+      {pips.map((pip) => (
+        <ActivePip key={pip.key} pip={pip} mirrored={mirrored} />
+      ))}
+    </div>
+  )
+}
 
 function rarityBorder(rarity: BattleFighterState['rarity']) {
   if (rarity === 'UR') return 'border-ca-red/60'
@@ -120,7 +277,6 @@ export function BattlePortraitSlot({
   mirrored = false,
   showName = false,
   hideHp = false,
-  statusLabels = [],
   carryoverLabels = [],
   onClick,
 }: {
@@ -134,7 +290,6 @@ export function BattlePortraitSlot({
   mirrored?: boolean
   showName?: boolean
   hideHp?: boolean
-  statusLabels?: string[]
   carryoverLabels?: string[]
   onClick?: () => void
 }) {
@@ -210,15 +365,7 @@ export function BattlePortraitSlot({
         </div>
       ) : null}
 
-      {statusLabels.length > 0 ? (
-        <div className={cn('mt-0.5 flex flex-wrap gap-0.5', portraitSizeClass)}>
-          {statusLabels.slice(0, 2).map((label) => (
-            <span key={`${fighter.instanceId}-${label}`} className="rounded-[0.1rem] border border-white/10 bg-black/45 px-1 py-0.5 ca-mono-label text-[0.42rem] text-ca-text">
-              {label}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <ActiveEffectPips fighter={fighter} mirrored={mirrored} className="mt-0.5" />
     </button>
   )
 }

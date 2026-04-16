@@ -1,6 +1,6 @@
 import { BattleAbilityStrip } from '@/components/battle/BattleAbilityStrip'
 import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
-import { cn, getStatusPills } from '@/components/battle/battleDisplay'
+import { cn } from '@/components/battle/battleDisplay'
 import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
 
 type RoundTransitionOverlay = {
@@ -150,8 +150,6 @@ export function BattleBoard({
           const allyQueued = queued[fighter.instanceId]
           const allyTargetable = targetingAllies && validTargetIds.includes(fighter.instanceId)
           const enemyTargetable = Boolean(enemy && targetingEnemies && validTargetIds.includes(enemy.instanceId))
-          const playerStatus = getStatusPills(fighter).map((pill) => pill.label)
-          const enemyStatus = enemy ? getStatusPills(enemy).map((pill) => pill.label) : []
           const playerCarryover = roundTransition?.highlights[fighter.instanceId] ?? []
           const enemyCarryover = enemy ? roundTransition?.highlights[enemy.instanceId] ?? [] : []
           const enemyIntent = enemy ? enemyIntentSummaries[enemy.instanceId] ?? 'Auto-pass' : 'Auto-pass'
@@ -168,7 +166,6 @@ export function BattleBoard({
                   pendingAbilityId={selectedActorId === fighter.instanceId ? selectedAbility?.id ?? null : null}
                   queuedAction={allyQueued}
                   validAbility={(abilityId) => canUsePlayerAbility(fighter, abilityId)}
-                  statusLabels={playerStatus}
                   carryoverLabels={playerCarryover}
                   onActorClick={() => {
                     if (allyTargetable) {
@@ -202,7 +199,6 @@ export function BattleBoard({
                         targetable={enemyTargetable}
                         selectedTarget={selectedTargetId === enemy.instanceId}
                         muted={Boolean(targetingEnemies && !enemyTargetable && selectedAbility)}
-                        statusLabels={enemyStatus}
                         carryoverLabels={enemyCarryover}
                         onClick={enemyTargetable ? () => onTargetFighter(enemy) : undefined}
                       />

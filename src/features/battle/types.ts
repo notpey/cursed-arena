@@ -382,6 +382,7 @@ export type TurnPhase =
   | 'finished'
 
 export type BattleState = {
+  battleSeed: string
   round: number
   phase: TurnPhase
   firstPlayer: BattleTeamId
@@ -397,5 +398,6 @@ export type BattleState = {
   scheduledEffects: BattleScheduledEffect[]
   winner: BattleTeamId | null
 }
+
 
 

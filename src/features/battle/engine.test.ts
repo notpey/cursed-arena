@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { createEnergyAmounts } from '@/features/battle/energy'
 import { battleRoster } from '@/features/battle/data'
 import {
   beginNewRound,
@@ -27,9 +28,20 @@ function queue(team: 'player' | 'enemy', actorId: string, abilityId: string, tar
   }
 }
 
+function createChargedBattleState(overrides?: Parameters<typeof createInitialBattleState>[0]) {
+  const state = createInitialBattleState(overrides)
+  const chargedPool = {
+    amounts: createEnergyAmounts({ physical: 6, technique: 6, vow: 6, mental: 6 }),
+    focus: 'technique' as const,
+  }
+  state.playerEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
+  state.enemyEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
+  return state
+}
+
 describe('battle engine scenarios', () => {
   test('Gojo passive reduces cooldowns by an extra turn at round end', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
 
     gojo.cooldowns['gojo-red'] = 2
@@ -41,7 +53,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('Megumi passive damage boost applies to standard attacks', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const megumi = getFighter(state, 'player', 'megumi')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -56,8 +68,8 @@ describe('battle engine scenarios', () => {
   })
 
   test('Nanami execute passive applies only below threshold', () => {
-    const aboveThreshold = createInitialBattleState()
-    const belowThreshold = createInitialBattleState()
+    const aboveThreshold = createChargedBattleState()
+    const belowThreshold = createChargedBattleState()
 
     const gojoAbove = getFighter(aboveThreshold, 'player', 'gojo')
     const gojoBelow = getFighter(belowThreshold, 'player', 'gojo')
@@ -83,7 +95,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('Jogo passive applies burn on hit', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const jogo = getFighter(state, 'player', 'jogo')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -99,7 +111,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('Yuji passive heals at round start', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const yuji = getFighter(state, 'enemy', 'yuji')
     yuji.hp = 80
 
@@ -110,7 +122,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('resolveTeamTurn emits runtime events and packets for a damaging ability', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const megumi = getFighter(state, 'player', 'megumi')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -133,7 +145,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('beginNewRound emits round-start and healing runtime events', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const yuji = getFighter(state, 'enemy', 'yuji')
     yuji.hp = 80
 
@@ -148,7 +160,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('generic addModifier effects feed the runtime damage calculation and status sync', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const megumi = getFighter(state, 'player', 'megumi')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -184,7 +196,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('generic removeModifier effects can strip invulnerability before damage resolves', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -233,8 +245,8 @@ describe('battle engine scenarios', () => {
   })
 
   test('team-scoped modifiers amplify allied actions', () => {
-    const control = createInitialBattleState()
-    const buffed = createInitialBattleState()
+    const control = createChargedBattleState()
+    const buffed = createChargedBattleState()
 
     const gojo = getFighter(buffed, 'player', 'gojo')
     const buffedMegumi = getFighter(buffed, 'player', 'megumi')
@@ -281,8 +293,8 @@ describe('battle engine scenarios', () => {
   })
 
   test('battlefield-scoped modifiers affect both teams through the shared pool', () => {
-    const control = createInitialBattleState()
-    const modified = createInitialBattleState()
+    const control = createChargedBattleState()
+    const modified = createChargedBattleState()
 
     const gojo = getFighter(modified, 'player', 'gojo')
     const modifiedMegumi = getFighter(modified, 'player', 'megumi')
@@ -329,7 +341,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('battlefield bonus increases ultimate damage', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
 
     const result = resolveTeamTurn(
@@ -343,7 +355,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('dead fighters do not act on the second turn after first-turn resolution', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     state.firstPlayer = 'player'
     state.activePlayer = 'player'
     state.phase = 'firstPlayerCommand'
@@ -369,16 +381,16 @@ describe('battle engine scenarios', () => {
   })
 
   test('battle seed locks initiative deterministically', () => {
-    const first = createInitialBattleState({ battleSeed: 'alpha-seed' })
-    const second = createInitialBattleState({ battleSeed: 'alpha-seed' })
-    const alternate = createInitialBattleState({ battleSeed: 'beta-seed' })
+    const first = createChargedBattleState({ battleSeed: 'alpha-seed' })
+    const second = createChargedBattleState({ battleSeed: 'alpha-seed' })
+    const alternate = createChargedBattleState({ battleSeed: 'beta-seed' })
 
     expect(first.firstPlayer).toBe(second.firstPlayer)
     expect([first.firstPlayer, 'player', 'enemy']).toContain(alternate.firstPlayer)
   })
 
   test('scheduled effects resolve on the configured future round start', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
@@ -403,7 +415,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('ability replacement effects swap the visible skill slot temporarily', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const yuji = getFighter(state, 'enemy', 'yuji')
 
     yuji.abilities[2].effects = [{
@@ -442,7 +454,7 @@ describe('battle engine scenarios', () => {
   })
 
   test('modifyAbilityState grant adds a temporary visible ability', () => {
-    const state = createInitialBattleState()
+    const state = createChargedBattleState()
     const yuji = getFighter(state, 'enemy', 'yuji')
 
     yuji.abilities[0].kind = 'utility'
@@ -487,3 +499,5 @@ describe('battle engine scenarios', () => {
     expect(report.errors.some((issue) => issue.includes('renderSrc'))).toBe(false)
   })
 })
+
+

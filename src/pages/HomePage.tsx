@@ -77,8 +77,8 @@ export function HomePage() {
   const selectedMode: BattleMatchMode = lastResult?.mode ?? 'ranked'
 
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
-  const [missions, setMissions] = useState<MissionWithProgress[]>(() => getMissionsWithProgress())
-  const [coins, setCoins] = useState(() => getMissionCoins())
+  const missions = useMemo<MissionWithProgress[]>(() => getMissionsWithProgress(), [])
+  const coins = useMemo(() => getMissionCoins(), [])
 
   // Fetch real LP from DB when logged in
   useEffect(() => {
@@ -88,11 +88,7 @@ export function HomePage() {
     })
   }, [user])
 
-  // Refresh missions whenever the page mounts
-  useEffect(() => {
-    setMissions(getMissionsWithProgress())
-    setCoins(getMissionCoins())
-  }, [])
+
 
   const displayStats = useMemo(() => {
     if (!dbProfile) return profileStats
@@ -123,8 +119,8 @@ export function HomePage() {
         <EventBanner />
 
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-          <MissionColumn title="Daily Missions" missions={dailyMissions} coins={coins} />
-          <MissionColumn title="Weekly Missions" missions={weeklyMissions} coins={coins} />
+          <MissionColumn title="Daily Missions" missions={dailyMissions} />
+          <MissionColumn title="Weekly Missions" missions={weeklyMissions} />
         </div>
 
         <BattlePassCard />
@@ -180,11 +176,9 @@ function EventBanner() {
 function MissionColumn({
   title,
   missions,
-  coins: _coins,
 }: {
   title: string
   missions: MissionWithProgress[]
-  coins: number
 }) {
   return (
     <div className="min-w-0">
