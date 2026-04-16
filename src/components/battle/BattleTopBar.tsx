@@ -47,6 +47,7 @@ export function BattleTopBar({
   onSelectFocus: (type: BattleEnergyType) => void
 }) {
   const timerPercent = Math.max(0, Math.min(100, (turnSecondsLeft / 30) * 100))
+  const timerUrgent = turnSecondsLeft <= 10 && turnSecondsLeft > 0
 
   return (
     <header className="flex items-center gap-4 border-b border-white/8 bg-[linear-gradient(180deg,rgba(12,10,22,0.92),rgba(16,13,28,0.88))] px-4 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
@@ -96,13 +97,23 @@ export function BattleTopBar({
           </button>
 
           <div className="w-[16rem] overflow-hidden rounded-full bg-[rgba(0,0,0,0.35)]">
-            <div className="h-1.5 bg-[linear-gradient(90deg,rgba(250,39,66,0.96),rgba(255,180,190,0.92))]" style={{ width: `${timerPercent}%` }} />
+            <div
+              className={cn(
+                'h-1.5 transition-all duration-1000',
+                timerUrgent
+                  ? 'animate-pulse bg-[linear-gradient(90deg,rgba(250,39,66,1),rgba(255,100,120,1))]'
+                  : 'bg-[linear-gradient(90deg,rgba(250,39,66,0.96),rgba(255,180,190,0.92))]',
+              )}
+              style={{ width: `${timerPercent}%` }}
+            />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="ca-mono-label text-[0.65rem] text-ca-text-2">{boardPrompt.toUpperCase()}</span>
-          <span className="ca-mono-label text-[0.7rem] tabular-nums text-ca-text">{String(turnSecondsLeft).padStart(2, '0')}S</span>
+          <span className={cn('ca-mono-label text-[0.7rem] tabular-nums', timerUrgent ? 'animate-pulse text-ca-red' : 'text-ca-text')}>
+            {String(turnSecondsLeft).padStart(2, '0')}S
+          </span>
         </div>
       </div>
 

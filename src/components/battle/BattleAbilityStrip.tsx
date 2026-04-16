@@ -74,9 +74,9 @@ function QueuedSlot({
   return (
     <button
       type="button"
-      onDoubleClick={hasQueued ? onDequeue : undefined}
+      onClick={hasQueued ? onDequeue : undefined}
       disabled={!hasQueued}
-      title={hasQueued ? `${queuedAbility!.name} (double-click to remove)` : 'No technique queued'}
+      title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'No technique queued'}
       className={cn(
         'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
         hasQueued
@@ -101,7 +101,8 @@ function QueuedSlot({
 
       {hasQueued ? (
         <div className="absolute bottom-0.5 left-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
-          <span className="ca-mono-label text-[0.42rem] text-ca-teal">QUEUED</span>
+          <span className="ca-mono-label text-[0.42rem] text-ca-teal group-hover:hidden">QUEUED</span>
+          <span className="ca-mono-label hidden text-[0.42rem] text-ca-red group-hover:inline">REMOVE</span>
         </div>
       ) : null}
     </button>

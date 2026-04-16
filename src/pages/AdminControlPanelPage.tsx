@@ -14,7 +14,7 @@ import {
   saveDraftBattleContent,
   type BattleContentSnapshot,
 } from '@/features/battle/contentStore'
-import { battleEnergyMeta, battleEnergyOrder, getAbilityEnergyCost } from '@/features/battle/energy'
+import { battleEnergyMeta, battleEnergyOrder, randomEnergyMeta, getAbilityEnergyCost } from '@/features/battle/energy'
 import { validateBattleContent } from '@/features/battle/validation'
 import type {
   BattleAbilityKind,
@@ -116,6 +116,90 @@ const liveContent = createContentSnapshot(battleRoster, {
 })
 
 const adminSelectionStorageKey = 'ca-admin-selection-v1'
+const battleProgressStorageKey = 'ca-battle-progress-v1'
+
+type TaskStatus = 'pending' | 'in-progress' | 'done'
+
+interface ProgressTask { id: string; label: string }
+interface ProgressPhase { id: string; phase: string; label: string; tasks: ProgressTask[] }
+
+const battleProgressPhases: ProgressPhase[] = [
+  {
+    id: 'phase-1',
+    phase: 'Phase 1',
+    label: 'Stabilize Architecture',
+    tasks: [
+      { id: 'p1-topbar', label: 'Extract BattleTopBar.tsx' },
+      { id: 'p1-board', label: 'Extract BattleBoard.tsx' },
+      { id: 'p1-portrait', label: 'Extract BattlePortraitSlot.tsx' },
+      { id: 'p1-ability-strip', label: 'Extract BattleAbilityStrip.tsx' },
+      { id: 'p1-info-panel', label: 'Extract BattleInfoPanel.tsx' },
+      { id: 'p1-log-panel', label: 'Extract BattleLogPanel.tsx' },
+      { id: 'p1-lane', label: 'Extract BattleLane.tsx' },
+      { id: 'p1-row', label: 'Extract BattleRow.tsx' },
+      { id: 'p1-ability-slot', label: 'Extract BattleAbilitySlot.tsx' },
+      { id: 'p1-status-chips', label: 'Extract BattleStatusChips.tsx' },
+      { id: 'p1-build', label: 'Confirm build and lint clean' },
+    ],
+  },
+  {
+    id: 'phase-2',
+    phase: 'Phase 2',
+    label: 'Add Missing Data',
+    tasks: [
+      { id: 'p2-portrait-src', label: 'Add portraitSrc field to fighter data' },
+      { id: 'p2-bio', label: 'Add bio / flavor text field to fighter data' },
+      { id: 'p2-icon-src', label: 'Add iconSrc to ability data' },
+      { id: 'p2-affiliation', label: 'Add affiliationLabel and battleTitle to fighter data' },
+      { id: 'p2-badge-meta', label: 'Add playerBadgeTitle / teamLabel top-bar metadata' },
+      { id: 'p2-build', label: 'Confirm build and lint clean' },
+    ],
+  },
+  {
+    id: 'phase-3',
+    phase: 'Phase 3',
+    label: 'Replace Layout Skeleton',
+    tasks: [
+      { id: 'p3-top-strip', label: 'Implement BattleTopBar strip (72–88px)' },
+      { id: 'p3-board-lanes', label: 'Implement BattleLane + BattleRow board layout' },
+      { id: 'p3-bottom-band', label: 'Implement bottom utility band (info + log panels)' },
+      { id: 'p3-remove-stage', label: 'Remove giant stage windows and footer table' },
+    ],
+  },
+  {
+    id: 'phase-4',
+    phase: 'Phase 4',
+    label: 'Reconnect UX',
+    tasks: [
+      { id: 'p4-selection', label: 'Reconnect fighter selection to board rows' },
+      { id: 'p4-targeting', label: 'Reconnect targeting highlights' },
+      { id: 'p4-queue', label: 'Reconnect queued state display on rows' },
+      { id: 'p4-info-panel', label: 'Wire BattleInfoPanel to inspected fighter / ability' },
+      { id: 'p4-log-panel', label: 'Make BattleLogPanel persistent (remove feed drawer)' },
+      { id: 'p4-end-turn', label: 'Remove endTurn confirmation modal' },
+    ],
+  },
+  {
+    id: 'phase-5',
+    phase: 'Phase 5',
+    label: 'Cleanup',
+    tasks: [
+      { id: 'p5-dead-code', label: 'Remove dead components and layout helpers' },
+      { id: 'p5-responsive', label: 'Responsive audit (tablet and mobile fallbacks)' },
+      { id: 'p5-typography', label: 'Typography and contrast pass' },
+      { id: 'p5-acceptance', label: 'Final acceptance criteria review' },
+    ],
+  },
+]
+
+const battleProgressDefaults: Record<string, TaskStatus> = {
+  'p1-topbar': 'done',
+  'p1-board': 'done',
+  'p1-portrait': 'done',
+  'p1-ability-strip': 'done',
+  'p1-info-panel': 'done',
+  'p1-log-panel': 'done',
+}
 
 type AdminSelection = {
   fighterId: string
@@ -1012,6 +1096,8 @@ export function AdminControlPanelPage() {
           <MetricCard label="Passives" value={`${passiveCount}`} tone="gold" />
           <MetricCard label="Validation Issues" value={`${validationReport.errors.length}`} tone={validationReport.errors.length > 0 ? 'red' : 'teal'} />
         </section>
+
+        <BattleProgressTracker />
 
         <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2069,11 +2155,14 @@ function SkillCostPanel({
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {costEntries.length > 0 ? (
-          costEntries.map(([type, value]) => (
-            <span key={type} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">
-              {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
-            </span>
-          ))
+          costEntries.map(([type, value]) => {
+            const meta = type === 'random' ? randomEnergyMeta : battleEnergyMeta[type as keyof typeof battleEnergyMeta]
+            return (
+              <span key={type} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">
+                {meta.short} {value}
+              </span>
+            )
+          })
         ) : (
           <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2">FREE</span>
         )}
@@ -2088,15 +2177,22 @@ function SkillCostPanel({
               onChange={(value) => onUpdate((current) => {
                 const next = { ...(current.energyCost ?? {}) }
                 const sanitized = Math.max(0, Math.floor(value))
-                if (sanitized === 0) {
-                  delete next[type]
-                } else {
-                  next[type] = sanitized
-                }
+                if (sanitized === 0) { delete next[type] } else { next[type] = sanitized }
                 current.energyCost = Object.keys(next).length > 0 ? next : {}
               })}
             />
           ))}
+          <NumberField
+            key={`${ability.id}-random`}
+            label={randomEnergyMeta.short}
+            value={ability.energyCost?.random ?? 0}
+            onChange={(value) => onUpdate((current) => {
+              const next = { ...(current.energyCost ?? {}) }
+              const sanitized = Math.max(0, Math.floor(value))
+              if (sanitized === 0) { delete next.random } else { next.random = sanitized }
+              current.energyCost = Object.keys(next).length > 0 ? next : {}
+            })}
+          />
         </div>
       ) : null}
       <p className="mt-2 text-sm leading-6 text-ca-text-2">{manual ? 'Manual costs are authoritative here. Enter any combination you want and the ACP will preserve it.' : explainCostRule(ability)}</p>
@@ -2320,6 +2416,141 @@ function countPassiveTriggers(passives: PassiveEffect[]) {
   return Array.from(counts.entries())
     .map(([label, count]) => ({ label: label.toUpperCase(), count }))
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+}
+
+function readProgressStatuses(): Record<string, TaskStatus> {
+  try {
+    const raw = window.localStorage.getItem(battleProgressStorageKey)
+    if (!raw) return { ...battleProgressDefaults }
+    return { ...battleProgressDefaults, ...JSON.parse(raw) as Record<string, TaskStatus> }
+  } catch {
+    return { ...battleProgressDefaults }
+  }
+}
+
+function BattleProgressTracker() {
+  const [statuses, setStatuses] = useState<Record<string, TaskStatus>>(readProgressStatuses)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    window.localStorage.setItem(battleProgressStorageKey, JSON.stringify(statuses))
+  }, [statuses])
+
+  function cycleStatus(taskId: string) {
+    setStatuses((prev) => {
+      const current = prev[taskId] ?? 'pending'
+      const next: TaskStatus = current === 'pending' ? 'in-progress' : current === 'in-progress' ? 'done' : 'pending'
+      return { ...prev, [taskId]: next }
+    })
+  }
+
+  function togglePhase(phaseId: string) {
+    setCollapsed((prev) => ({ ...prev, [phaseId]: !prev[phaseId] }))
+  }
+
+  const allTasks = battleProgressPhases.flatMap((p) => p.tasks)
+  const doneCount = allTasks.filter((t) => (statuses[t.id] ?? 'pending') === 'done').length
+  const totalCount = allTasks.length
+  const pct = Math.round((doneCount / totalCount) * 100)
+
+  return (
+    <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Battle Board Refactor</p>
+          <p className="ca-display mt-2 text-3xl text-ca-text">N-A Progress Tracker</p>
+        </div>
+        <div className="text-right">
+          <p className="ca-mono-label text-[0.42rem] text-ca-text-3">OVERALL</p>
+          <p className="ca-display mt-1 text-4xl text-ca-teal">{pct}%</p>
+          <p className="ca-mono-label text-[0.4rem] text-ca-text-3">{doneCount} / {totalCount} TASKS</p>
+        </div>
+      </div>
+
+      <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-white/8">
+        <div
+          className="h-full rounded-full bg-ca-teal transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {battleProgressPhases.map((phase) => {
+          const phaseDone = phase.tasks.filter((t) => (statuses[t.id] ?? 'pending') === 'done').length
+          const phaseTotal = phase.tasks.length
+          const isCollapsed = collapsed[phase.id] ?? false
+          const phaseComplete = phaseDone === phaseTotal
+
+          return (
+            <div key={phase.id} className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)]">
+              <button
+                type="button"
+                onClick={() => togglePhase(phase.id)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={[
+                      'ca-mono-label rounded-md border px-2 py-1 text-[0.38rem]',
+                      phaseComplete
+                        ? 'border-ca-teal/18 bg-ca-teal-wash text-ca-teal'
+                        : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-3',
+                    ].join(' ')}
+                  >
+                    {phase.phase.toUpperCase()}
+                  </span>
+                  <span className="ca-display text-[1.1rem] text-ca-text">{phase.label}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="ca-mono-label text-[0.4rem] text-ca-text-3">{phaseDone}/{phaseTotal}</span>
+                  <span className="text-[0.6rem] text-ca-text-3">{isCollapsed ? '▶' : '▼'}</span>
+                </div>
+              </button>
+
+              {!isCollapsed && (
+                <div className="border-t border-white/6 px-4 pb-3 pt-2 space-y-1">
+                  {phase.tasks.map((task) => {
+                    const status = statuses[task.id] ?? 'pending'
+                    return (
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => cycleStatus(task.id)}
+                        className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left transition hover:bg-white/4"
+                      >
+                        <span
+                          className={[
+                            'ca-mono-label shrink-0 rounded-md border px-2 py-1 text-[0.38rem]',
+                            status === 'done'
+                              ? 'border-ca-teal/18 bg-ca-teal-wash text-ca-teal'
+                              : status === 'in-progress'
+                                ? 'border-amber-400/18 bg-amber-400/10 text-amber-300'
+                                : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-3',
+                          ].join(' ')}
+                        >
+                          {status === 'done' ? 'DONE' : status === 'in-progress' ? 'IN PROGRESS' : 'PENDING'}
+                        </span>
+                        <span
+                          className={[
+                            'text-sm',
+                            status === 'done' ? 'text-ca-text-3 line-through' : 'text-ca-text-2',
+                          ].join(' ')}
+                        >
+                          {task.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="mt-3 ca-mono-label text-[0.38rem] text-ca-text-3">CLICK ANY TASK TO CYCLE STATUS — PERSISTS IN LOCAL STORAGE</p>
+    </section>
+  )
 }
 
 

@@ -1,22 +1,29 @@
 import {
   battleEnergyMeta,
   battleEnergyOrder,
+  randomEnergyMeta,
   type BattleEnergyCost,
   type BattleEnergyPool,
   type BattleEnergyType,
 } from '@/features/battle/energy'
 import { cn } from '@/components/battle/battleDisplay'
 
-function getCostEntries(cost: BattleEnergyCost) {
-  return battleEnergyOrder.flatMap((type) => Array.from({ length: cost[type] ?? 0 }, () => type))
+function getCostEntries(cost: BattleEnergyCost): Array<BattleEnergyType | 'random'> {
+  const typed = battleEnergyOrder.flatMap((type) => Array.from({ length: cost[type] ?? 0 }, (): BattleEnergyType => type))
+  const random = Array.from({ length: cost.random ?? 0 }, (): 'random' => 'random')
+  return [...typed, ...random]
 }
 
-export function EnergyPip({ type, small = false }: { type: BattleEnergyType; small?: boolean }) {
-  const meta = battleEnergyMeta[type]
+export function EnergyPip({ type, small = false }: { type: BattleEnergyType | 'random'; small?: boolean }) {
+  const meta = type === 'random' ? randomEnergyMeta : battleEnergyMeta[type]
 
   return (
     <span
-      className={cn('rounded-full border shadow-[0_0_12px_var(--energy-glow)]', small ? 'h-2.5 w-2.5' : 'h-3.5 w-3.5')}
+      className={cn(
+        'border shadow-[0_0_12px_var(--energy-glow)]',
+        small ? 'h-2.5 w-2.5' : 'h-3.5 w-3.5',
+        type === 'random' ? 'rounded-[0.15rem]' : 'rounded-full',
+      )}
       style={{
         backgroundColor: meta.color,
         borderColor: meta.border,

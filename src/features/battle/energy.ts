@@ -10,7 +10,16 @@ export type BattleEnergyPool = {
   focusAvailable: boolean
 }
 
-export type BattleEnergyCost = Partial<Record<BattleEnergyType, number>>
+// `random` is a wildcard cost paid from reserve — never focus-discounted.
+export type BattleEnergyCost = Partial<Record<BattleEnergyType, number>> & { random?: number }
+
+export const randomEnergyMeta = {
+  label: 'Random',
+  short: 'RND',
+  color: '#4e5060',
+  border: 'rgba(78, 80, 96, 0.5)',
+  glow: 'rgba(78, 80, 96, 0.25)',
+}
 
 export const battleEnergyMeta: Record<
   BattleEnergyType,
@@ -80,6 +89,10 @@ export function setEnergyFocus(
 }
 
 export function countEnergyCost(cost: BattleEnergyCost) {
+  return battleEnergyOrder.reduce((total, type) => total + (cost[type] ?? 0), 0) + (cost.random ?? 0)
+}
+
+export function countTypedCost(cost: BattleEnergyCost) {
   return battleEnergyOrder.reduce((total, type) => total + (cost[type] ?? 0), 0)
 }
 

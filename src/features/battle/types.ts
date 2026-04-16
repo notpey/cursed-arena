@@ -1,4 +1,4 @@
-import type { BattleEnergyPool } from '@/features/battle/energy'
+import type { BattleEnergyPool, BattleEnergyCost } from '@/features/battle/energy'
 
 export type BattleTeamId = 'player' | 'enemy'
 
@@ -38,7 +38,7 @@ export type BattleAbilityTemplate = {
   tags: BattleAbilityTag[]
   icon: BattleAbilityIcon
   cooldown: number
-  energyCost?: Partial<Record<'physical' | 'technique' | 'vow' | 'mental', number>>
+  energyCost?: BattleEnergyCost
   effects?: SkillEffect[]
   power?: number
   healPower?: number

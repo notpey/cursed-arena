@@ -2,7 +2,8 @@ import { useEffect, useEffectEvent, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
-import { setEnergyFocus, type BattleEnergyType } from '@/features/battle/energy'
+import { setEnergyFocus, getAbilityEnergyCost, countEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
+import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
@@ -34,7 +35,8 @@ import {
   resolveTeamTurn,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
-import type { BattleEvent, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleEvent, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleEnergyPool } from '@/features/battle/energy'
 import {
   useMultiplayerMatch,
   buildTimeoutCommands,
@@ -346,6 +348,7 @@ export function BattlePage() {
   const [roundTransition, setRoundTransition] = useState<RoundTransitionState | null>(null)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
+  const [queueDialogOpen, setQueueDialogOpen] = useState(false)
 
   const playerBoardProfile = {
     username: profile.displayName,
@@ -646,46 +649,58 @@ export function BattlePage() {
       return
     }
 
-    // ── Local / AI path (unchanged) ───────────────────────────────────────
-    const allEvents: BattleEvent[] = [...preludeEvents]
+    // ── Local / AI path ───────────────────────────────────────────────────
     const previousState = battle.state
     let currentState = battle.state
+    const playerEvents: BattleEvent[] = [...preludeEvents]
+    const enemyEvents: BattleEvent[] = []
 
+    // Phase 1: player turn
     if (currentState.firstPlayer === 'player') {
       const playerResult = resolveTeamTurn(currentState, queuedActions, 'player')
       currentState = playerResult.state
-      allEvents.push(...playerResult.events)
-
-      if (currentState.phase !== 'finished') {
-        currentState = transitionToSecondPlayer(currentState)
-        const enemyCommands = buildEnemyCommands(currentState)
-        const enemyResult = resolveTeamTurn(currentState, enemyCommands, 'enemy')
-        currentState = enemyResult.state
-        allEvents.push(...enemyResult.events)
-      }
+      playerEvents.push(...playerResult.events)
     } else {
       const playerResult = resolveTeamTurn(currentState, queuedActions, 'player')
       currentState = playerResult.state
-      allEvents.push(...playerResult.events)
+      playerEvents.push(...playerResult.events)
+    }
+
+    // Flush player events to log so they appear before enemy fires
+    clearPendingSelection()
+    setHoveredAbility(null)
+    setBattleLog((current) => [...current, ...playerEvents].slice(-36))
+
+    // Brief pause so the player can read what just happened
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 420))
+
+    // Phase 2: enemy turn + round end
+    if (currentState.phase !== 'finished' && previousState.firstPlayer === 'player') {
+      currentState = transitionToSecondPlayer(currentState)
+      const enemyCommands = buildEnemyCommands(currentState)
+      const enemyResult = resolveTeamTurn(currentState, enemyCommands, 'enemy')
+      currentState = enemyResult.state
+      enemyEvents.push(...enemyResult.events)
     }
 
     if (currentState.phase !== 'finished') {
       const roundEnd = endRound(currentState)
       currentState = roundEnd.state
-      allEvents.push(...roundEnd.events)
+      enemyEvents.push(...roundEnd.events)
     }
 
     if (currentState.phase !== 'finished' && currentState.firstPlayer === 'enemy') {
       const enemyCommands = buildEnemyCommands(currentState)
       const enemyResult = resolveTeamTurn(currentState, enemyCommands, 'enemy')
       currentState = enemyResult.state
-      allEvents.push(...enemyResult.events)
+      enemyEvents.push(...enemyResult.events)
 
       if (currentState.phase !== 'finished') {
         currentState = transitionToSecondPlayer(currentState)
       }
     }
 
+    const allEvents = [...playerEvents, ...enemyEvents]
     const nextQueued = createAutoCommands(currentState)
     const nextActorId = getNextActorId(currentState, nextQueued)
     const nextTransition = buildRoundTransition(previousState, currentState, allEvents)
@@ -695,9 +710,7 @@ export function BattlePage() {
       queued: nextQueued,
       selectedActorId: nextActorId,
     })
-    clearPendingSelection()
-    setHoveredAbility(null)
-    setBattleLog((current) => [...current, ...allEvents].slice(-36))
+    setBattleLog((current) => [...current, ...enemyEvents].slice(-36))
     setRoundTransition(nextTransition)
   }
 
@@ -720,6 +733,11 @@ export function BattlePage() {
 
   function resolveCommittedRound() {
     if (!commitReady || battle.state.phase === 'finished') return
+    setQueueDialogOpen(true)
+  }
+
+  function handleQueueConfirm() {
+    setQueueDialogOpen(false)
     resolveQueuedRound(battle.queued)
   }
 
@@ -803,6 +821,17 @@ export function BattlePage() {
 
         {multiplayer && multiplayer.status === 'error' ? (
           <DisconnectOverlay error={multiplayer.error} onReturnHome={() => navigate('/')} />
+        ) : null}
+
+        {queueDialogOpen ? (
+          <SkillQueueModal
+            round={battle.state.round}
+            playerTeam={battle.state.playerTeam}
+            queued={battle.queued}
+            energy={battle.state.playerEnergy}
+            onConfirm={handleQueueConfirm}
+            onBack={() => setQueueDialogOpen(false)}
+          />
         ) : null}
 
         {battle.state.phase === 'finished' ? (
@@ -935,6 +964,123 @@ function WaitingForOpponentOverlay() {
         <p className="ca-mono-label text-[0.52rem] text-ca-text-3 mb-3">PRIVATE MATCH</p>
         <h2 className="ca-display text-3xl text-ca-teal mb-2">Waiting for Opponent</h2>
         <p className="text-sm text-ca-text-2">Share your room code with a friend to begin.</p>
+      </div>
+    </div>
+  )
+}
+
+function SkillQueueModal({
+  round,
+  playerTeam,
+  queued,
+  energy,
+  onConfirm,
+  onBack,
+}: {
+  round: number
+  playerTeam: BattleFighterState[]
+  queued: Record<string, QueuedBattleAction>
+  energy: BattleEnergyPool
+  onConfirm: () => void
+  onBack: () => void
+}) {
+  const rows = playerTeam.map((fighter) => {
+    const action = queued[fighter.instanceId]
+    const ability = action ? getAbilityById(fighter, action.abilityId) : null
+    const cost = ability ? getAbilityEnergyCost(ability) : null
+    const totalCost = cost ? countEnergyCost(cost) : 0
+    const isPass = !ability || ability.id === PASS_ABILITY_ID
+    return { fighter, ability, cost, totalCost, isPass }
+  })
+
+  const grandTotal = rows.reduce((sum, r) => sum + r.totalCost, 0)
+  const focusDiscount = rows.some((r) => r.cost && energy.focus && r.cost[energy.focus]) && energy.focusAvailable ? 1 : 0
+  const netCost = Math.max(0, grandTotal - focusDiscount)
+  const reserveAfter = Math.max(0, energy.reserve - netCost)
+  const canAfford = energy.reserve >= netCost
+
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.78)] backdrop-blur-[3px]">
+      <div className="w-full max-w-lg rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.98),rgba(10,9,18,0.99))] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
+
+        <div className="border-b border-white/8 px-6 py-4">
+          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">ACTION QUEUE</p>
+          <h2 className="ca-display mt-1.5 text-3xl text-ca-text">COMMIT ROUND {round}</h2>
+        </div>
+
+        <div className="divide-y divide-white/6 px-2 py-1">
+          {rows.map(({ fighter, ability, cost, isPass }) => (
+            <div key={fighter.instanceId} className="flex items-center gap-3 px-4 py-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[0.25rem] border border-white/10 bg-[rgba(255,255,255,0.04)]">
+                <span className="ca-mono-label text-[0.52rem] text-ca-text-2">
+                  {fighter.shortName.slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="ca-display text-[0.95rem] leading-none text-ca-text">{fighter.shortName}</p>
+                <p className={['mt-1 ca-mono-label text-[0.5rem]', isPass ? 'text-ca-text-3' : 'text-ca-text-2'].join(' ')}>
+                  {isPass ? 'AUTO-PASS' : ability!.name.toUpperCase()}
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                {cost && !isPass ? (
+                  <EnergyCostRow cost={cost} />
+                ) : (
+                  <span className="ca-mono-label text-[0.46rem] text-ca-text-3">—</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-white/8 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">TOTAL COST</span>
+              <span className={['ca-mono-label text-[0.56rem]', canAfford ? 'text-ca-text' : 'text-ca-red'].join(' ')}>
+                {netCost}
+              </span>
+            </div>
+            <div className="h-3 w-px bg-white/12" />
+            <div className="flex items-center gap-2">
+              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">RESERVE</span>
+              <span className="ca-mono-label text-[0.56rem] text-ca-text">{energy.reserve}</span>
+            </div>
+            <div className="h-3 w-px bg-white/12" />
+            <div className="flex items-center gap-2">
+              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">AFTER</span>
+              <span className={['ca-mono-label text-[0.56rem]', reserveAfter === 0 ? 'text-amber-300' : 'text-ca-teal'].join(' ')}>
+                {reserveAfter}
+              </span>
+            </div>
+            {focusDiscount > 0 ? (
+              <>
+                <div className="h-3 w-px bg-white/12" />
+                <span className="ca-mono-label text-[0.46rem] text-ca-teal">FOCUS -1</span>
+              </>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex gap-3 border-t border-white/8 px-6 py-4">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="ca-display flex-1 rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 text-[1.05rem] text-white transition hover:brightness-110"
+          >
+            CONFIRM
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-5 py-2.5 text-[1.05rem] text-ca-text transition hover:bg-[rgba(36,34,48,0.8)]"
+          >
+            BACK
+          </button>
+        </div>
+
       </div>
     </div>
   )
