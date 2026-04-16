@@ -743,12 +743,12 @@ export function BattlePage() {
   }
 
   return (
-    <div className="relative h-screen overflow-hidden bg-[#08090d] text-ca-text">
+    <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
       <div className="absolute inset-0 bg-cover bg-center opacity-[0.55]" style={{ backgroundImage: `url(${homeBgBase})` }} />
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,5,8,0.05),rgba(4,5,8,0.4))]" />
 
       <div className="relative flex h-full w-full flex-col p-2 sm:p-3">
-        <div className="flex w-full flex-1 flex-col overflow-hidden rounded-[0.45rem] border border-white/8 bg-[rgba(8,8,12,0.06)] shadow-[0_20px_56px_rgba(0,0,0,0.28)]">
+        <div className="flex w-full flex-1 flex-col overflow-y-auto rounded-[0.45rem] border border-white/8 bg-[rgba(8,8,12,0.06)] shadow-[0_20px_56px_rgba(0,0,0,0.28)]">
           <BattleTopBar
             playerProfile={playerBoardProfile}
             enemyProfile={enemyBoardProfile}

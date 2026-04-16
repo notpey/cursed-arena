@@ -961,7 +961,7 @@ export function AdminControlPanelPage() {
     setStatusFlash('AUTHORED RESTORED')
   }
 
-  function handlePublish() {
+  async function handlePublish() {
     if (validationReport.errors.length > 0) {
       setStatusFlash('FIX VALIDATION')
       return
@@ -972,7 +972,7 @@ export function AdminControlPanelPage() {
       abilityId: selectedAbilityId,
       passiveIndex: selectedPassiveIndex,
     })
-    publishBattleContent(draft)
+    await publishBattleContent(draft)
     window.location.reload()
   }
 

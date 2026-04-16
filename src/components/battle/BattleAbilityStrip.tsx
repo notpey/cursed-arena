@@ -37,7 +37,7 @@ function SkillTile({
       disabled={locked}
       title={ability.name}
       className={cn(
-        'group relative h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[4.8rem] sm:w-[4.8rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
         queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
         locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
@@ -78,7 +78,7 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (double-click to remove)` : 'No technique queued'}
       className={cn(
-        'group relative h-[4.35rem] w-[4.35rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.8rem] sm:w-[4.8rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
         hasQueued
           ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
           : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',

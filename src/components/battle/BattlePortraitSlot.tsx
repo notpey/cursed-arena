@@ -28,12 +28,12 @@ function rarityTextColor(rarity: BattleFighterState['rarity']) {
 function PortraitSquare({
   fighter,
   dimmed = false,
-  size = '4.2rem',
+  sizeClass = 'w-[4.2rem]',
   mirrored = false,
 }: {
   fighter: BattleFighterState
   dimmed?: boolean
-  size?: string
+  sizeClass?: string
   mirrored?: boolean
 }) {
   const portraitMode = Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
@@ -51,8 +51,8 @@ function PortraitSquare({
         'relative aspect-square overflow-hidden rounded-[0.2rem] border-2 bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]',
         rarityBorder(fighter.rarity),
         dimmed && 'opacity-45 saturate-75',
+        sizeClass,
       )}
-      style={{ width: size }}
     >
       <div className={cn('absolute inset-0', rarityWash(fighter.rarity))} />
 
@@ -89,7 +89,7 @@ function PortraitSquare({
         <div className="absolute inset-0 grid place-items-center">
           <span
             className={cn('ca-display select-none text-[1.6rem] leading-none', rarityTextColor(fighter.rarity))}
-            style={{ fontSize: size === '3.8rem' ? '1.3rem' : '1.6rem' }}
+            style={{ fontSize: sizeClass.includes('3.2rem') ? '1.1rem' : sizeClass.includes('4.2rem') ? '1.3rem' : '1.6rem' }}
           >
             {initial}
           </span>
@@ -140,7 +140,10 @@ export function BattlePortraitSlot({
 }) {
   const accentStyles = getAccentStyles(accent)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
-  const portraitSize = compact ? '3.8rem' : '6rem'
+  // Responsive portrait sizes: smaller on narrow viewports, grow at sm+
+  const portraitSizeClass = compact
+    ? 'w-[3.2rem] sm:w-[3.8rem]'
+    : 'w-[4.5rem] sm:w-[6rem]'
   const statusTag = fighter.hp <= 0
     ? 'KO'
     : hasStatus(fighter.statuses, 'stun')
@@ -179,7 +182,7 @@ export function BattlePortraitSlot({
           selectedTarget && 'shadow-[0_0_0_2px_rgba(255,255,255,0.55),0_0_18px_rgba(255,255,255,0.2)]',
         )}
       >
-        <PortraitSquare fighter={fighter} dimmed={muted} size={portraitSize} mirrored={mirrored} />
+        <PortraitSquare fighter={fighter} dimmed={muted} sizeClass={portraitSizeClass} mirrored={mirrored} />
       </div>
 
       {statusTag ? (
@@ -197,7 +200,7 @@ export function BattlePortraitSlot({
       {showName ? <p className="mt-1 ca-display truncate text-[0.62rem] leading-none text-ca-text">{fighter.shortName.toUpperCase()}</p> : null}
 
       {!hideHp ? (
-        <div className="mt-1" style={{ width: portraitSize }}>
+        <div className={cn('mt-1', portraitSizeClass)}>
           <div className="relative overflow-hidden rounded-[0.1rem] border border-white/10 bg-black/60">
             <ProgressBar value={hpValue} tone="green" className="h-[0.85rem] bg-black/60" />
             <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.5rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
@@ -208,7 +211,7 @@ export function BattlePortraitSlot({
       ) : null}
 
       {statusLabels.length > 0 ? (
-        <div className="mt-0.5 flex flex-wrap gap-0.5" style={{ width: portraitSize }}>
+        <div className={cn('mt-0.5 flex flex-wrap gap-0.5', portraitSizeClass)}>
           {statusLabels.slice(0, 2).map((label) => (
             <span key={`${fighter.instanceId}-${label}`} className="rounded-[0.1rem] border border-white/10 bg-black/45 px-1 py-0.5 ca-mono-label text-[0.42rem] text-ca-text">
               {label}

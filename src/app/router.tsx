@@ -1,8 +1,10 @@
 import { Suspense, lazy, type ReactNode } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
+import { AuthGate } from '@/app/AuthGate'
 
 const ShellLayout = lazy(async () => ({ default: (await import('@/app/ShellLayout')).ShellLayout }))
 const AdminRoute = lazy(async () => ({ default: (await import('@/app/AdminRoute')).AdminRoute }))
+const LoginPage = lazy(async () => ({ default: (await import('@/pages/LoginPage')).LoginPage }))
 const HomePage = lazy(async () => ({ default: (await import('@/pages/HomePage')).HomePage }))
 const BattlePage = lazy(async () => ({ default: (await import('@/pages/BattlePage')).BattlePage }))
 const BattlePrepPage = lazy(async () => ({ default: (await import('@/pages/BattlePrepPage')).BattlePrepPage }))
@@ -36,18 +38,28 @@ const shellRoutes = [
 ]
 
 export const router = createBrowserRouter([
+  // Public — no auth required
+  {
+    path: '/login',
+    element: withRouteSuspense(<LoginPage />),
+  },
+  // Protected battle routes
   {
     path: '/battle',
-    element: withRouteSuspense(<BattlePage />),
+    element: <AuthGate>{withRouteSuspense(<BattlePage />)}</AuthGate>,
   },
   {
-    // Online match — matchId drives the multiplayer hook
     path: '/battle/:matchId',
-    element: withRouteSuspense(<BattlePage />),
+    element: <AuthGate>{withRouteSuspense(<BattlePage />)}</AuthGate>,
   },
+  // Protected shell
   {
     path: '/',
-    element: withRouteSuspense(<ShellLayout />),
+    element: (
+      <AuthGate>
+        {withRouteSuspense(<ShellLayout />)}
+      </AuthGate>
+    ),
     children: shellRoutes,
   },
 ])
