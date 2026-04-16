@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SurfaceCard } from '@/components/ui/SurfaceCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -7,6 +7,7 @@ import sukunaHome from '@/assets/renders/sukuna-home.webp'
 import {
   getModeDescription,
   getModeLabel,
+  getRankTier,
   readBattleProfileStats,
   readLastBattleResult,
   readRecentMatchHistory,
@@ -14,55 +15,13 @@ import {
   type BattleMatchMode,
 } from '@/features/battle/matches'
 import { usePlayerState } from '@/features/player/store'
-
-type Mission = {
-  id: string
-  label: string
-  progressLabel: string
-  progress: number
-  reward: number
-  complete?: boolean
-}
-
-const dailyMissions: Mission[] = [
-  {
-    id: 'd1',
-    label: 'Complete 1 Ranked Match',
-    progressLabel: '1/1',
-    progress: 100,
-    reward: 20,
-    complete: true,
-  },
-  {
-    id: 'd2',
-    label: 'Use 3 Ultimate Abilities',
-    progressLabel: '3/3',
-    progress: 100,
-    reward: 15,
-    complete: true,
-  },
-  { id: 'd3', label: 'Win 3 Battles', progressLabel: '1/3', progress: 33, reward: 15 },
-]
-
-const weeklyMissions: Mission[] = [
-  {
-    id: 'w1',
-    label: 'Complete 1 Ranked Match',
-    progressLabel: '1/1',
-    progress: 100,
-    reward: 20,
-    complete: true,
-  },
-  {
-    id: 'w2',
-    label: 'Use 3 Ultimate Abilities',
-    progressLabel: '3/3',
-    progress: 100,
-    reward: 15,
-    complete: true,
-  },
-  { id: 'w3', label: 'Win 3 Battles', progressLabel: '1/3', progress: 33, reward: 15 },
-]
+import { useAuth } from '@/features/auth/useAuth'
+import { fetchPlayerRankProfile, type PlayerRankProfile } from '@/features/ranking/client'
+import {
+  getMissionsWithProgress,
+  getMissionCoins,
+  type MissionWithProgress,
+} from '@/features/missions/store'
 
 type HomeHeroRenderConfig = {
   image: string
@@ -111,10 +70,47 @@ const homeHeroRender: HomeHeroRenderConfig = {
 export function HomePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
+  const { user } = useAuth()
   const profileStats = useMemo(() => readBattleProfileStats(), [])
   const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 3), [])
   const lastResult = useMemo(() => readLastBattleResult(), [])
   const selectedMode: BattleMatchMode = lastResult?.mode ?? 'ranked'
+
+  const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
+  const [missions, setMissions] = useState<MissionWithProgress[]>(() => getMissionsWithProgress())
+  const [coins, setCoins] = useState(() => getMissionCoins())
+
+  // Fetch real LP from DB when logged in
+  useEffect(() => {
+    if (!user) return
+    void fetchPlayerRankProfile(user.id).then(({ data }) => {
+      if (data) setDbProfile(data)
+    })
+  }, [user])
+
+  // Refresh missions whenever the page mounts
+  useEffect(() => {
+    setMissions(getMissionsWithProgress())
+    setCoins(getMissionCoins())
+  }, [])
+
+  const displayStats = useMemo(() => {
+    if (!dbProfile) return profileStats
+    const rankTier = getRankTier(dbProfile.lp)
+    return {
+      ...profileStats,
+      rank: rankTier.label,
+      lpCurrent: dbProfile.lp,
+      wins: dbProfile.wins,
+      losses: dbProfile.losses,
+      currentStreak: dbProfile.win_streak,
+      bestStreak: dbProfile.best_streak,
+      matchesPlayed: dbProfile.wins + dbProfile.losses,
+    }
+  }, [dbProfile, profileStats])
+
+  const dailyMissions = missions.filter((m) => m.type === 'daily')
+  const weeklyMissions = missions.filter((m) => m.type === 'weekly')
 
   function handleLaunchMode(mode: BattleMatchMode) {
     persistSelectedMatchMode(mode)
@@ -127,18 +123,22 @@ export function HomePage() {
         <EventBanner />
 
         <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-          <MissionColumn title="Daily Missions" missions={dailyMissions} />
-          <MissionColumn title="Weekly Missions" missions={weeklyMissions} />
+          <MissionColumn title="Daily Missions" missions={dailyMissions} coins={coins} />
+          <MissionColumn title="Weekly Missions" missions={weeklyMissions} coins={coins} />
         </div>
 
         <BattlePassCard />
         <StoryContinueCard />
-        <ProfileSummaryCard profileStats={profileStats} avatarLabel={profile.avatarLabel} />
+        <ProfileSummaryCard
+          profileStats={displayStats}
+          avatarLabel={profile.avatarLabel}
+          coins={coins}
+        />
       </section>
 
       <aside className="relative z-10 min-w-0">
         <HeroPlayPanel
-          profileStats={profileStats}
+          profileStats={displayStats}
           recentMatches={recentMatches}
           selectedMode={selectedMode}
           onLaunchMode={handleLaunchMode}
@@ -177,7 +177,15 @@ function EventBanner() {
   )
 }
 
-function MissionColumn({ title, missions }: { title: string; missions: Mission[] }) {
+function MissionColumn({
+  title,
+  missions,
+  coins: _coins,
+}: {
+  title: string
+  missions: MissionWithProgress[]
+  coins: number
+}) {
   return (
     <div className="min-w-0">
       <SectionHeader title={title} />
@@ -206,11 +214,21 @@ function MissionColumn({ title, missions }: { title: string; missions: Mission[]
                     {mission.progressLabel}
                   </span>
                 </div>
-                <ProgressBar value={mission.progress} tone={mission.complete ? 'teal' : 'red'} />
+                <ProgressBar
+                  value={Math.round((mission.progress / mission.goal) * 100)}
+                  tone={mission.complete ? 'teal' : 'red'}
+                />
               </div>
 
-              <div className="ca-mono-label rounded-md border border-ca-border-subtle bg-ca-overlay/50 px-2 py-1 text-[0.45rem] text-ca-text-3">
-                {mission.reward} +
+              <div
+                className={[
+                  'ca-mono-label rounded-md border px-2 py-1 text-[0.45rem]',
+                  mission.claimed
+                    ? 'border-ca-teal/20 bg-ca-teal-wash text-ca-teal'
+                    : 'border-ca-border-subtle bg-ca-overlay/50 text-ca-text-3',
+                ].join(' ')}
+              >
+                {mission.claimed ? '✓' : `${mission.reward} CC`}
               </div>
             </div>
           </SurfaceCard>
@@ -279,9 +297,11 @@ function StoryContinueCard() {
 function ProfileSummaryCard({
   profileStats,
   avatarLabel,
+  coins,
 }: {
   profileStats: ReturnType<typeof readBattleProfileStats>
   avatarLabel: string
+  coins: number
 }) {
   const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
 
@@ -296,13 +316,14 @@ function ProfileSummaryCard({
           </div>
           <div className="min-w-0">
             <p className="ca-display truncate text-2xl">{profileStats.playerName}</p>
-            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">{profileStats.rank} - {profileStats.season}</p>
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">{profileStats.rank} · {profileStats.season}</p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <RecordStat label="W" value={`${profileStats.wins}`} />
           <RecordStat label="L" value={`${profileStats.losses}`} />
           <RecordStat label="WR" value={`${winRate}%`} />
+          <RecordStat label="CC" value={`${coins}`} tone="gold" />
         </div>
       </div>
     </SurfaceCard>
@@ -310,10 +331,10 @@ function ProfileSummaryCard({
 }
 
 
-function RecordStat({ label, value }: { label: string; value: string }) {
+function RecordStat({ label, value, tone }: { label: string; value: string; tone?: 'gold' }) {
   return (
     <div className="text-center">
-      <p className="ca-mono-label text-xs text-ca-text">{value}</p>
+      <p className={['ca-mono-label text-xs', tone === 'gold' ? 'text-amber-400' : 'text-ca-text'].join(' ')}>{value}</p>
       <p className="ca-mono-label mt-1 text-[0.45rem] text-ca-text-3">{label}</p>
     </div>
   )
@@ -546,7 +567,3 @@ function Tag({ text, tone }: { text: string; tone: 'red' | 'teal' }) {
     </span>
   )
 }
-
-
-
-

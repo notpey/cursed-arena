@@ -801,12 +801,17 @@ export function BattlePage() {
           <WaitingForOpponentOverlay />
         ) : null}
 
+        {multiplayer && multiplayer.status === 'error' ? (
+          <DisconnectOverlay error={multiplayer.error} onReturnHome={() => navigate('/')} />
+        ) : null}
+
         {battle.state.phase === 'finished' ? (
           <BattleResultOverlay
             winner={battle.state.winner}
             recordedResult={recordedResult}
             onViewResults={() => navigate('/battle/results')}
-            onReturnToPrep={() => navigate('/battle/prep')}
+            onPlayAgain={() => navigate('/battle/prep')}
+            onReturnHome={() => navigate('/')}
           />
         ) : null}
       </div>
@@ -818,12 +823,14 @@ function BattleResultOverlay({
   winner,
   recordedResult,
   onViewResults,
-  onReturnToPrep,
+  onPlayAgain,
+  onReturnHome,
 }: {
   winner: BattleState['winner']
   recordedResult: LastBattleResult | null
   onViewResults: () => void
-  onReturnToPrep: () => void
+  onPlayAgain: () => void
+  onReturnHome: () => void
 }) {
   const win = winner === 'player'
 
@@ -853,7 +860,7 @@ function BattleResultOverlay({
             </span>
           </div>
         ) : null}
-        <div className="mt-6 flex gap-3">
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={onViewResults}
@@ -863,12 +870,46 @@ function BattleResultOverlay({
           </button>
           <button
             type="button"
-            onClick={onReturnToPrep}
+            onClick={onPlayAgain}
             className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-4 py-2 text-[1.1rem] text-ca-text"
           >
-            Return To Lobby
+            Play Again
+          </button>
+          <button
+            type="button"
+            onClick={onReturnHome}
+            className="ca-display rounded-lg border border-white/8 bg-transparent px-4 py-2 text-[1.1rem] text-ca-text-3 hover:text-ca-text"
+          >
+            Home
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function DisconnectOverlay({
+  error,
+  onReturnHome,
+}: {
+  error: string | null
+  onReturnHome: () => void
+}) {
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.82)] backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 text-center shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
+        <p className="ca-mono-label text-[0.52rem] text-ca-text-3">CONNECTION LOST</p>
+        <h2 className="ca-display mt-3 text-4xl text-ca-red">Disconnected</h2>
+        <p className="mt-3 text-sm text-ca-text-2">
+          {error ?? 'The connection to your opponent was interrupted.'}
+        </p>
+        <button
+          type="button"
+          onClick={onReturnHome}
+          className="mt-6 ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-6 py-2.5 text-[1.1rem] text-white"
+        >
+          Return Home
+        </button>
       </div>
     </div>
   )

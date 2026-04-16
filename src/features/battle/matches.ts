@@ -1,6 +1,7 @@
 import { defaultBattleSetup } from '@/features/battle/data'
 import { createBattleSeed, pickSeededIndex } from '@/features/battle/random'
 import { readPlayerProfile } from '@/features/player/store'
+import { trackBattleCompleted } from '@/features/missions/store'
 
 const selectedMatchModeKey = 'ca-battle-match-mode-v1'
 const stagedBattleSessionKey = 'ca-battle-staged-session-v1'
@@ -525,6 +526,8 @@ export function recordCompletedBattle({
   writeLocalStorage(battleMatchHistoryKey, history)
   writeLocalStorage(lastBattleResultKey, lastResult)
 
+  trackBattleCompleted(activeSession.mode, won)
+
   return lastResult
 }
 
@@ -614,6 +617,8 @@ export function recordOnlineCompletedBattle({
   writeLocalStorage(battleProfileStatsKey, nextStats)
   writeLocalStorage(battleMatchHistoryKey, history)
   writeLocalStorage(lastBattleResultKey, lastResult)
+
+  trackBattleCompleted(mode, won)
 
   return lastResult
 }
