@@ -4,11 +4,10 @@
 ALTER TABLE public.matches
   ADD COLUMN IF NOT EXISTS last_activity_at timestamptz NOT NULL DEFAULT now();
 
--- Backfill: use created_at as a reasonable baseline
+-- Backfill existing rows: use updated_at as a reasonable baseline
 UPDATE public.matches
-SET last_activity_at = created_at
-WHERE last_activity_at = now()
-  AND created_at IS NOT NULL;
+SET last_activity_at = updated_at
+WHERE created_at IS NOT NULL;
 
 -- ── 2. Match history table ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.match_history (
