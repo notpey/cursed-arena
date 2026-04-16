@@ -208,7 +208,12 @@ export function BattlePrepPage() {
   // ── Matchmaking queue state (ranked / quick) ─────────────────────────────
   const [searching, setSearching] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
+  const [aiFallback, setAiFallback] = useState(false)
   const searchingRef = useRef(false)
+  const searchStartRef = useRef<number>(0)
+
+  // Timeout before falling back to AI: quick = 20 s, ranked = 45 s
+  const AI_FALLBACK_MS: Record<string, number> = { quick: 20_000, ranked: 45_000 }
 
   // Search debounce
   useEffect(() => {
@@ -357,6 +362,8 @@ export function BattlePrepPage() {
     }
 
     searchingRef.current = true
+    searchStartRef.current = Date.now()
+    setAiFallback(false)
     void pollForMatch({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName })
   }
 
@@ -396,8 +403,25 @@ export function BattlePrepPage() {
       return
     }
 
-    // No opponent yet — retry after a short delay
+    // No opponent yet — check timeout then retry
     if (searchingRef.current) {
+      const elapsed = Date.now() - searchStartRef.current
+      const limit = AI_FALLBACK_MS[mode] ?? 30_000
+
+      if (elapsed >= limit) {
+        // Timeout — fall back to an AI match
+        searchingRef.current = false
+        setAiFallback(true)
+        leaveMatchmakingQueue(playerId).catch(() => {})
+        window.setTimeout(() => {
+          setSearching(false)
+          setAiFallback(false)
+          stageBattleLaunch(sanitized, mode)
+          navigate('/battle')
+        }, 1200)
+        return
+      }
+
       window.setTimeout(() => {
         void pollForMatch({ playerId, mode, teamIds: sanitized, displayName })
       }, 2500)
@@ -408,6 +432,7 @@ export function BattlePrepPage() {
     searchingRef.current = false
     setSearching(false)
     setQueueError(null)
+    setAiFallback(false)
     if (user) await leaveMatchmakingQueue(user.id)
   }
 
@@ -523,6 +548,7 @@ export function BattlePrepPage() {
                   <SearchingPanel
                     mode={matchMode}
                     error={queueError}
+                    aiFallback={aiFallback}
                     onCancel={handleCancelSearch}
                   />
                 ) : !privateOpen || matchMode !== 'private' ? (
@@ -809,33 +835,52 @@ function IncomingChallengeBar({
 function SearchingPanel({
   mode,
   error,
+  aiFallback,
   onCancel,
 }: {
   mode: BattleMatchMode
   error: string | null
+  aiFallback: boolean
   onCancel: () => void
 }) {
   return (
-    <div className="mt-4 rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash p-3">
+    <div className={[
+      'mt-4 rounded-[10px] border p-3 transition-colors',
+      aiFallback
+        ? 'border-amber-500/30 bg-amber-500/8'
+        : 'border-ca-teal/22 bg-ca-teal-wash',
+    ].join(' ')}>
       <div className="flex items-center gap-2">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-ca-teal" />
-        <p className="ca-mono-label text-[0.48rem] text-ca-teal">
-          SEARCHING FOR {getModeLabel(mode).toUpperCase()} MATCH…
+        <span className={[
+          'inline-block h-2 w-2 animate-pulse rounded-full',
+          aiFallback ? 'bg-amber-400' : 'bg-ca-teal',
+        ].join(' ')} />
+        <p className={[
+          'ca-mono-label text-[0.48rem]',
+          aiFallback ? 'text-amber-400' : 'text-ca-teal',
+        ].join(' ')}>
+          {aiFallback
+            ? 'NO OPPONENT FOUND — LAUNCHING AI MATCH…'
+            : `SEARCHING FOR ${getModeLabel(mode).toUpperCase()} MATCH…`}
         </p>
       </div>
       <p className="ca-mono-label mt-1.5 text-[0.42rem] text-ca-text-3">
-        You'll be matched automatically when an opponent is found.
+        {aiFallback
+          ? 'No real opponents were available. Starting an AI battle instead.'
+          : 'You\'ll be matched automatically when an opponent is found.'}
       </p>
       {error && (
         <p className="ca-mono-label mt-2 text-[0.42rem] text-ca-red">{error}</p>
       )}
-      <button
-        type="button"
-        onClick={onCancel}
-        className="ca-mono-label mt-3 w-full rounded-lg border border-white/12 bg-[rgba(30,30,36,0.72)] px-3 py-2 text-[0.46rem] text-ca-text-2 transition hover:text-ca-text"
-      >
-        CANCEL SEARCH
-      </button>
+      {!aiFallback && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="ca-mono-label mt-3 w-full rounded-lg border border-white/12 bg-[rgba(30,30,36,0.72)] px-3 py-2 text-[0.46rem] text-ca-text-2 transition hover:text-ca-text"
+        >
+          CANCEL SEARCH
+        </button>
+      )}
     </div>
   )
 }
