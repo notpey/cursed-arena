@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { getSupabaseClient } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
 import {
   authoredBattleContent,
@@ -821,12 +822,36 @@ export function AdminControlPanelPage() {
     })
   }
 
-  async function handleImageImport(apply: (value: string) => void, file: File | null, successMessage: string) {
+  async function handleImageImport(
+    apply: (value: string) => void,
+    file: File | null,
+    successMessage: string,
+    storageKey?: string,
+  ) {
     if (!file) return
 
     try {
-      const dataUrl = await readFileAsDataUrl(file)
-      apply(dataUrl)
+      const supabase = storageKey ? getSupabaseClient() : null
+
+      if (supabase && storageKey) {
+        // Upload to Supabase Storage → store CDN URL instead of base64
+        const ext = file.name.split('.').pop() ?? 'jpg'
+        const path = `${storageKey}.${ext}`
+        const { error: uploadErr } = await supabase.storage
+          .from('game-assets')
+          .upload(path, file, { upsert: true, contentType: file.type })
+
+        if (uploadErr) throw uploadErr
+
+        const { data: urlData } = supabase.storage.from('game-assets').getPublicUrl(path)
+        // Append a cache-bust so re-uploads immediately reflect in the ACP preview
+        apply(`${urlData.publicUrl}?t=${Date.now()}`)
+      } else {
+        // Supabase not configured — fall back to base64 data URL
+        const dataUrl = await readFileAsDataUrl(file)
+        apply(dataUrl)
+      }
+
       setStatusFlash(successMessage)
     } catch {
       setStatusFlash('UPLOAD FAILED')
@@ -1260,7 +1285,7 @@ export function AdminControlPanelPage() {
                               label="Portrait Image"
                               value={selectedFighter.boardPortraitSrc ?? ''}
                               onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value })}
-                              onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, "PORTRAIT UPDATED")}
+                              onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, "PORTRAIT UPDATED", `portraits/${selectedFighter.id}`)}
                               helper="Square crop. Recommended 512x512."
                             />
                           </div>
@@ -1333,7 +1358,7 @@ export function AdminControlPanelPage() {
                             onSelect={() => setSelectedAbilityId(selectedAbility.id)}
                             onUpdate={(mutator) => updateAbilityById(selectedAbility.id, mutator)}
                             onUpdateEffects={(effects) => updateAbilityEffectsById(selectedAbility.id, effects)}
-                            onImportIcon={(file) => handleImageImport((value) => updateAbilityById(selectedAbility.id, (current) => { current.icon.src = value }), file, "ABILITY ICON UPDATED")}
+                            onImportIcon={(file) => handleImageImport((value) => updateAbilityById(selectedAbility.id, (current) => { current.icon.src = value }), file, "ABILITY ICON UPDATED", `ability-icons/${selectedAbility.id}`)}
                             onAdvancedEffectsJson={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateAbilityById(selectedAbility.id, (current) => { current.effects = parsed }), "ABILITY EFFECTS UPDATED")}
                           />
                         ) : null}

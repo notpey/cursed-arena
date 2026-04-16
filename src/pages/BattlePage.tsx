@@ -1,4 +1,4 @@
-import { type DragEvent, useEffect, useEffectEvent, useState } from 'react'
+import { type DragEvent, type TouchEvent, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
@@ -18,6 +18,7 @@ import {
   type LastBattleResult,
 } from '@/features/battle/matches'
 import { settleMatchLp } from '@/features/ranking/client'
+import { saveMatchHistory } from '@/features/multiplayer/client'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
@@ -351,6 +352,7 @@ export function BattlePage() {
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
   const [queueDialogOpen, setQueueDialogOpen] = useState(false)
+  const [opponentDisconnected, setOpponentDisconnected] = useState(false)
 
   const playerBoardProfile = {
     username: profile.displayName,
@@ -455,6 +457,25 @@ export function BattlePage() {
     return () => window.clearTimeout(timer)
   }, [roundTransition])
 
+  // ── Opponent disconnect detection ─────────────────────────────────────────
+  // If it's opponent's turn in an online match and we haven't received a
+  // Realtime update in 90 seconds, they may have left.
+  useEffect(() => {
+    if (!multiplayer || multiplayerIsMyTurn || battle.state.phase === 'finished') {
+      setOpponentDisconnected(false)
+      return undefined
+    }
+    const lastUpdate = multiplayer.lastOpponentActionAt
+    const check = () => {
+      if (Date.now() - lastUpdate > 90_000) {
+        setOpponentDisconnected(true)
+      }
+    }
+    check()
+    const interval = window.setInterval(check, 5_000)
+    return () => window.clearInterval(interval)
+  }, [multiplayer, multiplayerIsMyTurn, battle.state.phase, multiplayer?.lastOpponentActionAt])
+
   useEffect(() => {
     if (battle.state.phase !== 'finished' || !battle.state.winner) return
 
@@ -504,6 +525,31 @@ export function BattlePage() {
           lpBefore,
         })
         setRecordedResult(result)
+
+        // Persist to server-side match history (fire-and-forget)
+        if (user?.id) {
+          const historyEntry = result.id
+            ? {
+                id: result.id,
+                result: result.result,
+                mode: result.mode,
+                opponentName: result.opponentName,
+                opponentTitle: result.opponentTitle,
+                opponentRankLabel: result.opponentRankLabel ?? null,
+                yourTeam: result.yourTeam,
+                theirTeam: result.theirTeam,
+                timestamp: result.timestamp,
+                rounds: result.rounds,
+                lpDelta: result.lpDelta,
+                rankBefore: result.rankBefore,
+                rankAfter: result.rankAfter,
+                roomCode: result.roomCode ?? null,
+              }
+            : null
+          if (historyEntry) {
+            void saveMatchHistory(user.id, historyEntry)
+          }
+        }
       })
       return
     }
@@ -828,6 +874,17 @@ export function BattlePage() {
           <DisconnectOverlay error={multiplayer.error} onReturnHome={() => navigate('/')} />
         ) : null}
 
+        {opponentDisconnected && multiplayer && battle.state.phase !== 'finished' ? (
+          <OpponentDisconnectedOverlay
+            opponentName={multiplayer.opponentDisplayName}
+            onClaimVictory={async () => {
+              await multiplayer.claimVictory()
+              setOpponentDisconnected(false)
+            }}
+            onDismiss={() => setOpponentDisconnected(false)}
+          />
+        ) : null}
+
         {queueDialogOpen ? (
           <SkillQueueModal
             round={battle.state.round}
@@ -975,6 +1032,44 @@ function WaitingForOpponentOverlay() {
   )
 }
 
+function OpponentDisconnectedOverlay({
+  opponentName,
+  onClaimVictory,
+  onDismiss,
+}: {
+  opponentName: string
+  onClaimVictory: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.72)] backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-[14px] border border-amber-300/20 bg-[linear-gradient(180deg,rgba(22,18,10,0.97),rgba(12,10,8,0.98))] p-6 shadow-[0_22px_54px_rgba(0,0,0,0.4)] text-center">
+        <p className="ca-mono-label text-[0.52rem] text-amber-300/60">CONNECTION</p>
+        <h2 className="ca-display mt-3 text-2xl text-amber-300">Opponent May Have Left</h2>
+        <p className="mt-2 text-sm text-ca-text-2">
+          No response from <span className="text-ca-text">{opponentName}</span> for over 90 seconds.
+        </p>
+        <div className="mt-6 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onClaimVictory}
+            className="ca-display w-full rounded-lg border border-ca-teal/35 bg-[linear-gradient(180deg,rgba(5,216,189,0.18),rgba(5,216,189,0.08))] px-4 py-2.5 text-[1rem] text-ca-teal"
+          >
+            Claim Victory
+          </button>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="ca-display w-full rounded-lg border border-white/8 bg-transparent px-4 py-2 text-[0.9rem] text-ca-text-3"
+          >
+            Keep Waiting
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Per-action random CE allocation: maps actorId → Record<BattleEnergyType, number>
 type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
 
@@ -1103,7 +1198,24 @@ function SkillQueueModal({
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  // Touch drag tracking
+  const touchDragFromRef = useRef<number | null>(null)
 
+  function applyReorder(from: number, to: number) {
+    if (from === to) return
+    const next = [...order]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    setOrder(next)
+  }
+
+  function clearDrag() {
+    setDragIndex(null)
+    setDragOverIndex(null)
+    touchDragFromRef.current = null
+  }
+
+  // ── Mouse / desktop drag ──────────────────────────────────────────────────
   function handleDragStart(index: number) {
     setDragIndex(index)
   }
@@ -1115,22 +1227,36 @@ function SkillQueueModal({
 
   function handleDrop(e: DragEvent<HTMLDivElement>, targetIndex: number) {
     e.preventDefault()
-    if (dragIndex === null || dragIndex === targetIndex) {
-      setDragIndex(null)
-      setDragOverIndex(null)
-      return
-    }
-    const next = [...order]
-    const [moved] = next.splice(dragIndex, 1)
-    next.splice(targetIndex, 0, moved)
-    setOrder(next)
-    setDragIndex(null)
-    setDragOverIndex(null)
+    if (dragIndex !== null) applyReorder(dragIndex, targetIndex)
+    clearDrag()
   }
 
   function handleDragEnd() {
-    setDragIndex(null)
-    setDragOverIndex(null)
+    clearDrag()
+  }
+
+  // ── Touch / mobile drag ───────────────────────────────────────────────────
+  function handleTouchStart(e: TouchEvent<HTMLDivElement>, index: number) {
+    touchDragFromRef.current = index
+    setDragIndex(index)
+  }
+
+  function handleTouchMove(e: TouchEvent<HTMLDivElement>) {
+    if (touchDragFromRef.current === null) return
+    const touch = e.touches[0]
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const tileEl = el?.closest('[data-tile-index]')
+    if (tileEl) {
+      const idx = parseInt((tileEl as HTMLElement).dataset.tileIndex ?? '-1', 10)
+      if (idx >= 0) setDragOverIndex(idx)
+    }
+  }
+
+  function handleTouchEnd() {
+    const from = touchDragFromRef.current
+    const to = dragOverIndex
+    if (from !== null && to !== null) applyReorder(from, to)
+    clearDrag()
   }
 
   function adjustRandomAlloc(actorId: string, type: BattleEnergyType, delta: number) {
@@ -1155,7 +1281,7 @@ function SkillQueueModal({
 
         {/* ── Execution order: horizontal drag-and-drop skill tiles ── */}
         <div className="px-5 py-4">
-          <p className="ca-mono-label mb-3 text-[0.44rem] text-ca-text-3">EXECUTION ORDER — DRAG TO REORDER</p>
+          <p className="ca-mono-label mb-3 text-[0.44rem] text-ca-text-3">EXECUTION ORDER — DRAG OR TOUCH TO REORDER</p>
           <div className="flex items-end gap-3">
             {effectiveRows.map(({ fighter, ability, isPass, effectiveCost }, index) => {
               const isDragging = dragIndex === index
@@ -1163,13 +1289,17 @@ function SkillQueueModal({
               return (
                 <div
                   key={fighter.instanceId}
+                  data-tile-index={index}
                   draggable
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDrop={(e) => handleDrop(e, index)}
                   onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(e, index)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                   className={[
-                    'flex flex-col items-center gap-1.5 cursor-grab active:cursor-grabbing select-none transition-all',
+                    'flex flex-col items-center gap-1.5 cursor-grab active:cursor-grabbing select-none transition-all touch-none',
                     isDragging ? 'opacity-30' : 'opacity-100',
                   ].join(' ')}
                   style={{ transform: isTarget ? 'scale(1.05) translateX(4px)' : undefined }}

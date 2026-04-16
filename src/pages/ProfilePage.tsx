@@ -19,6 +19,8 @@ import {
   type PlayerRankProfile,
   type LeaderboardEntry,
 } from '@/features/ranking/client'
+import { fetchPlayerMatchHistory } from '@/features/multiplayer/client'
+import type { MatchHistoryEntry } from '@/features/battle/matches'
 
 const rosterById = Object.fromEntries(ownedRosterCharacters.map((character) => [character.id, character]))
 
@@ -26,17 +28,22 @@ export function ProfilePage() {
   const { profile } = usePlayerState()
   const { user } = useAuth()
   const localStats = useMemo(() => readBattleProfileStats(), [])
-  const recentMatches = useMemo(() => readRecentMatchHistory(), [])
+  const localMatches = useMemo(() => readRecentMatchHistory(), [])
   const currentSquad = useMemo(() => getFeaturedTeamIds(), [])
 
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [serverMatches, setServerMatches] = useState<MatchHistoryEntry[] | null>(null)
 
   useEffect(() => {
     if (!user) return
     fetchPlayerRankProfile(user.id).then(({ data }) => { if (data) setDbProfile(data) })
     fetchLeaderboard(10).then(({ data }) => { setLeaderboard(data) })
+    fetchPlayerMatchHistory(user.id, 20).then(({ data }) => { if (data && data.length > 0) setServerMatches(data) })
   }, [user])
+
+  // Prefer server history when available (cross-device); fall back to localStorage
+  const recentMatches = serverMatches ?? localMatches
 
   // Prefer server LP/stats when the user is logged in
   const profileStats = useMemo(() => {

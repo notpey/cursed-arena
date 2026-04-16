@@ -7,7 +7,7 @@
 
 import { getSupabaseClient } from '@/lib/supabase'
 import type { BattleState, BattleTeamId, QueuedBattleAction } from '@/features/battle/types'
-import type { BattleMatchMode } from '@/features/battle/matches'
+import type { BattleMatchMode, MatchHistoryEntry } from '@/features/battle/matches'
 import type { MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -292,6 +292,7 @@ export async function commitMatchState({
       active_player: newState.activePlayer ?? 'player',
       winner: newState.winner ?? null,
       status: newState.phase === 'finished' ? 'finished' : 'in_progress',
+      last_activity_at: new Date().toISOString(),
     })
     .eq('id', matchId)
 
@@ -431,4 +432,96 @@ export async function abandonMatch(matchId: string, losingTeam: BattleTeamId): P
     .eq('id', matchId)
 
   return { error: error?.message ?? null }
+}
+
+/**
+ * Claim victory because the opponent appears to have disconnected.
+ * Only updates matches still in_progress — safe to call speculatively.
+ */
+export async function claimVictoryDueToDisconnect(
+  matchId: string,
+  claimingRole: MultiplayerRole,
+): Promise<{ error: string | null }> {
+  // Canonical: role 'a' = 'player', role 'b' = 'enemy'
+  const winner: BattleTeamId = claimingRole === 'a' ? 'player' : 'enemy'
+  const { error } = await db()
+    .from('matches')
+    .update({ status: 'abandoned', winner, last_activity_at: new Date().toISOString() })
+    .eq('id', matchId)
+    .eq('status', 'in_progress')
+
+  return { error: error?.message ?? null }
+}
+
+// ── Match history ─────────────────────────────────────────────────────────────
+
+/**
+ * Persist a completed match result to the server-side match_history table.
+ * Fire-and-forget: callers don't need to await this for the game to continue.
+ */
+export async function saveMatchHistory(
+  playerId: string,
+  entry: MatchHistoryEntry,
+): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from('match_history')
+    .upsert(
+      {
+        id: entry.id,
+        player_id: playerId,
+        result: entry.result,
+        mode: entry.mode,
+        opponent_name: entry.opponentName,
+        opponent_title: entry.opponentTitle,
+        opponent_rank_label: entry.opponentRankLabel ?? null,
+        your_team: entry.yourTeam,
+        their_team: entry.theirTeam,
+        rounds: entry.rounds,
+        lp_delta: entry.lpDelta,
+        rank_before: entry.rankBefore,
+        rank_after: entry.rankAfter,
+        room_code: entry.roomCode ?? null,
+        played_at: new Date(entry.timestamp).toISOString(),
+      },
+      { onConflict: 'id' },
+    )
+
+  return { error: error?.message ?? null }
+}
+
+/**
+ * Fetch a player's recent match history from the server.
+ * Returns null on error so the caller can fall back to localStorage.
+ */
+export async function fetchPlayerMatchHistory(
+  playerId: string,
+  limit = 20,
+): Promise<{ data: MatchHistoryEntry[] | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('match_history')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('played_at', { ascending: false })
+    .limit(limit)
+
+  if (error) return { data: null, error: error.message }
+
+  const entries: MatchHistoryEntry[] = (data ?? []).map((row) => ({
+    id: row.id as string,
+    result: row.result as 'WIN' | 'LOSS',
+    mode: row.mode as BattleMatchMode,
+    opponentName: row.opponent_name as string,
+    opponentTitle: row.opponent_title as string,
+    opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
+    yourTeam: row.your_team as string[],
+    theirTeam: row.their_team as string[],
+    timestamp: new Date(row.played_at as string).getTime(),
+    rounds: row.rounds as number,
+    lpDelta: row.lp_delta as number,
+    rankBefore: row.rank_before as string,
+    rankAfter: row.rank_after as string,
+    roomCode: (row.room_code as string | null) ?? null,
+  }))
+
+  return { data: entries, error: null }
 }

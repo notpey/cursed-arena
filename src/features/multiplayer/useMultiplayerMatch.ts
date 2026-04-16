@@ -34,6 +34,7 @@ import {
   getMyRole,
   submitCommandRecord,
   subscribeToMatch,
+  claimVictoryDueToDisconnect,
 } from '@/features/multiplayer/client'
 import type { MatchRow, MultiplayerRole, MultiplayerStatus } from '@/features/multiplayer/types'
 import { roleToTeam } from '@/features/multiplayer/types'
@@ -119,6 +120,14 @@ export type MultiplayerMatchHandle = {
   /** Raw match row — useful for reading mode, team lists, etc. on match end. */
   matchRow: MatchRow | null
   /**
+   * Unix timestamp (ms) of the last incoming Realtime update from the opponent.
+   * Used to detect disconnects: if this is >90s old and it's opponent's turn,
+   * the opponent may have left the match.
+   */
+  lastOpponentActionAt: number
+  /** Claim victory because the opponent has not responded — marks match abandoned. */
+  claimVictory: () => Promise<void>
+  /**
    * Submit commands and run engine resolution.
    * Commands should be in LOCAL perspective (you = 'player').
    * The hook re-maps them to canonical before committing.
@@ -138,16 +147,19 @@ export function useMultiplayerMatch(
   currentUserId: string | null,
 ): MultiplayerMatchHandle | null {
   // Canonical state (a=player, b=enemy) — source of truth
-  const canonicalRef = useRef<BattleState | null>(null)
-  const roleRef      = useRef<MultiplayerRole | null>(null)
-  const matchRowRef  = useRef<MatchRow | null>(null)
+  const canonicalRef            = useRef<BattleState | null>(null)
+  const roleRef                 = useRef<MultiplayerRole | null>(null)
+  const matchRowRef             = useRef<MatchRow | null>(null)
+  // Tracks when we last received an incoming Realtime update (not our own commit)
+  const lastOpponentActionAtRef = useRef<number>(Date.now())
 
-  const [canonical, setCanonical]       = useState<BattleState | null>(null)
-  const [matchRow, setMatchRow]         = useState<MatchRow | null>(null)
-  const [role, setRole]                 = useState<MultiplayerRole | null>(null)
-  const [opponentName, setOpponentName] = useState('')
-  const [status, setStatus]             = useState<MultiplayerStatus>('loading')
-  const [error, setError]               = useState<string | null>(null)
+  const [canonical, setCanonical]             = useState<BattleState | null>(null)
+  const [matchRow, setMatchRow]               = useState<MatchRow | null>(null)
+  const [role, setRole]                       = useState<MultiplayerRole | null>(null)
+  const [opponentName, setOpponentName]       = useState('')
+  const [status, setStatus]                   = useState<MultiplayerStatus>('loading')
+  const [error, setError]                     = useState<string | null>(null)
+  const [lastOpponentActionAt, setLastOpponentActionAt] = useState<number>(Date.now())
 
   // Keep refs in sync so callbacks don't close over stale state
   useEffect(() => { canonicalRef.current = canonical },  [canonical])
@@ -205,6 +217,10 @@ export function useMultiplayerMatch(
     const unsubscribe = subscribeToMatch(matchId, (updatedRow) => {
       const myRole = roleRef.current
       if (!myRole) return
+
+      // Stamp when we last heard from the other side (used for disconnect detection)
+      lastOpponentActionAtRef.current = Date.now()
+      setLastOpponentActionAt(Date.now())
 
       matchRowRef.current = updatedRow
       setMatchRow(updatedRow)
@@ -309,6 +325,13 @@ export function useMultiplayerMatch(
     [matchId, currentUserId],
   )
 
+  // ── Claim victory (opponent disconnected) ────────────────────────────────
+  const claimVictory = useCallback(async () => {
+    const myRole = roleRef.current
+    if (!myRole || !matchId) return
+    await claimVictoryDueToDisconnect(matchId, myRole)
+  }, [matchId])
+
   // ── Assemble return value ───────────────────────────────────────────────────
   if (!matchId || !currentUserId || !canonical || !role) {
     // Not ready or not in online mode
@@ -328,6 +351,8 @@ export function useMultiplayerMatch(
     status,
     error,
     matchRow,
+    lastOpponentActionAt,
+    claimVictory,
     submitCommands,
   }
 }
