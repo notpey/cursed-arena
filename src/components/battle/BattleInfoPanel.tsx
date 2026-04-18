@@ -18,8 +18,9 @@ function classLabel(kind: BattleAbilityTemplate['kind']): string {
   }
 }
 
-function classesFromTags(tags: BattleAbilityTemplate['tags']): string {
-  return tags.length > 0 ? tags.join(', ') : 'NONE'
+function formatSkillClasses(ability: BattleAbilityTemplate): string {
+  const classes = [classLabel(ability.kind), ...ability.classes]
+  return classes.length > 0 ? Array.from(new Set(classes)).join(', ') : 'NONE'
 }
 
 export function BattleInfoPanel({
@@ -88,7 +89,7 @@ export function BattleInfoPanel({
             {ability ? (
               <div className="flex items-center gap-2">
                 <span className="ca-mono-label text-[0.55rem] text-white/35">CLASSES</span>
-                <span className="ca-mono-label text-[0.62rem] text-white/75">{classesFromTags(ability.tags)}</span>
+                <span className="ca-mono-label text-[0.62rem] text-white/75">{formatSkillClasses(ability)}</span>
               </div>
             ) : null}
           </div>

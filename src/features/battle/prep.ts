@@ -1,6 +1,6 @@
 import { ownedRosterCharacters } from '@/data/characters'
 import { authoredBattleContent, defaultBattleSetup } from '@/features/battle/data'
-import { readPublishedBattleContent } from '@/features/battle/contentStore'
+import { readPublishedBattleContent } from '@/features/battle/contentSnapshot.ts'
 import {
   createStagedBattleSession,
   persistSelectedMatchMode,
@@ -104,9 +104,9 @@ function deriveArchetypesFromFighter(fighter: BattleFighterTemplate): Archetype[
 
   const allAbilities = fighter.abilities.concat(fighter.ultimate)
   if (fighter.maxHp >= 108 || allAbilities.some((ability) => ability.kind === 'defend')) tags.add('GUARDIAN')
-  if (allAbilities.some((ability) => ability.kind === 'heal' || ability.tags.includes('HEAL'))) tags.add('RESTORER')
-  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY'))) tags.add('AMPLIFIER')
-  if (allAbilities.some((ability) => ability.kind === 'debuff' || ability.tags.includes('DEBUFF'))) tags.add('DISRUPTOR')
+  if (allAbilities.some((ability) => ability.kind === 'heal')) tags.add('RESTORER')
+  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility')) tags.add('AMPLIFIER')
+  if (allAbilities.some((ability) => ability.kind === 'debuff')) tags.add('DISRUPTOR')
   if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-all')) tags.add('BLASTER')
   if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-single')) tags.add('STRIKER')
 

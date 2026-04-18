@@ -89,7 +89,7 @@ function getDefaultAbilityId(entry: BattlePrepRosterEntry | null) {
 }
 
 function formatAbilityClasses(ability: BattleAbilityTemplate) {
-  const classes = [ability.kind.toUpperCase(), ...ability.tags.filter((tag) => tag !== 'ULT')]
+  const classes = [ability.kind.toUpperCase(), ...ability.classes]
   return Array.from(new Set(classes)).join(', ')
 }
 
@@ -123,10 +123,16 @@ function PortraitThumb({
 
       {entry.battleTemplate.boardPortraitSrc ? (
         <div className="absolute inset-0 overflow-hidden">
-          <img
+                  <img
             src={entry.battleTemplate.boardPortraitSrc}
             alt={entry.name}
             className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+            style={{
+              transform: `translate(${entry.battleTemplate.boardPortraitFrame?.x ?? '0'}, ${entry.battleTemplate.boardPortraitFrame?.y ?? '0'}) scale(${entry.battleTemplate.boardPortraitFrame?.scale ?? 1})`,
+              opacity: entry.battleTemplate.boardPortraitFrame?.opacity,
+              maxWidth: entry.battleTemplate.boardPortraitFrame?.maxWidth,
+              margin: 'auto',
+            }}
             draggable={false}
           />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.24))]" />
@@ -993,7 +999,7 @@ function SelectedFighterPanel({
                   <p className="mt-2 max-w-3xl text-[0.98rem] leading-6 text-ca-text-2">{selectedAbility.description}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {selectedAbility.tags.includes('ULT') ? (
+                  {selectedAbility.classes.includes('Ultimate') ? (
                     <span className="ca-mono-label rounded-md border border-amber-400/22 bg-amber-400/10 px-2 py-1 text-[0.4rem] text-amber-300">
                       ULT
                     </span>

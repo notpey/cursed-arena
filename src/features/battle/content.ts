@@ -5,7 +5,7 @@ import type {
   BattleFighterTemplate,
   PassiveEffect,
   SkillEffect,
-} from '@/features/battle/types'
+} from '@/features/battle/types.ts'
 
 export type BattleAbilityDraft = Omit<BattleAbilityTemplate, 'icon'> & {
   icon?: Partial<BattleAbilityIcon>
@@ -36,19 +36,19 @@ function deriveAbilityLabel(name: string) {
   return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase()
 }
 
-function resolveAbilityTone(kind: BattleAbilityTemplate['kind'], tags: BattleAbilityTemplate['tags']): BattleBoardAccent {
-  if (tags.includes('ULT')) return 'gold'
-  if (kind === 'heal' || tags.includes('HEAL')) return 'teal'
-  if (kind === 'debuff' || tags.includes('DEBUFF')) return 'red'
-  if (kind === 'buff' || kind === 'defend' || kind === 'utility' || tags.includes('UTILITY')) return 'teal'
+function resolveAbilityTone(kind: BattleAbilityTemplate['kind'], isUltimate = false): BattleBoardAccent {
+  if (isUltimate) return 'gold'
+  if (kind === 'heal') return 'teal'
+  if (kind === 'debuff') return 'red'
+  if (kind === 'buff' || kind === 'defend' || kind === 'utility') return 'teal'
   if (kind === 'pass') return 'frost'
   return 'red'
 }
 
-function createAbilityIcon(template: Pick<BattleAbilityTemplate, 'name' | 'kind' | 'tags'>): BattleAbilityIcon {
+function createAbilityIcon(template: Pick<BattleAbilityTemplate, 'name' | 'kind' | 'classes'>): BattleAbilityIcon {
   return {
     label: deriveAbilityLabel(template.name),
-    tone: resolveAbilityTone(template.kind, template.tags),
+    tone: resolveAbilityTone(template.kind, template.classes.includes('Ultimate')),
   }
 }
 

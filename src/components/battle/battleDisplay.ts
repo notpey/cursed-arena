@@ -246,9 +246,9 @@ export function rarityClass(rarity: BattleFighterState['rarity']) {
 }
 
 export function abilityAccent(ability: BattleAbilityTemplate) {
-  if (ability.tags.includes('HEAL')) return 'text-ca-teal'
-  if (ability.tags.includes('ULT')) return 'text-amber-300'
-  if (ability.tags.includes('DEBUFF')) return 'text-ca-red'
+  if (ability.classes.includes('Ultimate')) return 'text-amber-300'
+  if (ability.kind === 'heal' || ability.kind === 'buff' || ability.kind === 'defend' || ability.kind === 'utility') return 'text-ca-teal'
+  if (ability.kind === 'debuff') return 'text-ca-red'
   return 'text-ca-text-2'
 }
 

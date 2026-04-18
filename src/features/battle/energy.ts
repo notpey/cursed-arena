@@ -1,5 +1,5 @@
-import type { BattleAbilityTemplate } from '@/features/battle/types'
-import { createSeededRandom } from '@/features/battle/random'
+import type { BattleAbilityTemplate } from '@/features/battle/types.ts'
+import { createSeededRandom } from '@/features/battle/random.ts'
 
 export const battleEnergyOrder = ['physical', 'technique', 'vow', 'mental'] as const
 
@@ -220,7 +220,7 @@ export function getAbilityEnergyCost(ability: BattleAbilityTemplate): BattleEner
     return explicit
   }
 
-  if (ability.tags.includes('ULT')) {
+  if (ability.classes.includes('Ultimate')) {
     return { technique: 1, vow: 1, mental: 1 }
   }
 
@@ -246,10 +246,6 @@ export function getAbilityEnergyCost(ability: BattleAbilityTemplate): BattleEner
 
   if (ability.targetRule === 'enemy-all') {
     return { physical: 1, technique: 1 }
-  }
-
-  if (ability.tags.includes('DEBUFF')) {
-    return { physical: 1, vow: 1 }
   }
 
   return { physical: 1 }

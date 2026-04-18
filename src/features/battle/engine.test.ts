@@ -246,7 +246,7 @@ describe('battle engine scenarios', () => {
 
     yuji.abilities[0].targetRule = 'self'
     yuji.abilities[0].kind = 'buff'
-    yuji.abilities[0].tags = ['BUFF']
+    yuji.abilities[0].classes = ['Instant', 'Mental']
     yuji.abilities[0].energyCost = {}
     yuji.abilities[0].effects = [{
       type: 'addModifier',
@@ -300,7 +300,7 @@ describe('battle engine scenarios', () => {
 
     gojo.abilities[0].kind = 'buff'
     gojo.abilities[0].targetRule = 'self'
-    gojo.abilities[0].tags = ['BUFF']
+    gojo.abilities[0].classes = ['Instant', 'Mental']
     gojo.abilities[0].energyCost = {}
     gojo.abilities[0].effects = [{
       type: 'addModifier',
@@ -348,7 +348,7 @@ describe('battle engine scenarios', () => {
 
     gojo.abilities[0].kind = 'utility'
     gojo.abilities[0].targetRule = 'self'
-    gojo.abilities[0].tags = ['UTILITY']
+    gojo.abilities[0].classes = ['Instant', 'Unique']
     gojo.abilities[0].energyCost = {}
     gojo.abilities[0].effects = [{
       type: 'addModifier',
@@ -473,7 +473,7 @@ describe('battle engine scenarios', () => {
         description: 'A temporary replacement strike.',
         kind: 'attack',
         targetRule: 'enemy-single',
-        tags: ['ATK'],
+        classes: ['Melee', 'Physical', 'Action'],
         icon: { label: 'SC', tone: 'red' },
         cooldown: 1,
         effects: [{ type: 'damage', power: 70, target: 'inherit' }],
@@ -503,7 +503,7 @@ describe('battle engine scenarios', () => {
 
     yuji.abilities[0].kind = 'utility'
     yuji.abilities[0].targetRule = 'self'
-    yuji.abilities[0].tags = ['UTILITY']
+    yuji.abilities[0].classes = ['Instant', 'Mental']
     yuji.abilities[0].energyCost = {}
     yuji.abilities[0].effects = [{
       type: 'modifyAbilityState',
@@ -517,7 +517,7 @@ describe('battle engine scenarios', () => {
           description: 'A temporary granted technique.',
           kind: 'attack',
           targetRule: 'enemy-single',
-          tags: ['ATK'],
+          classes: ['Melee', 'Physical', 'Instant'],
           icon: { label: 'FE', tone: 'red' },
           cooldown: 1,
           effects: [{ type: 'damage', power: 10, target: 'inherit' }],

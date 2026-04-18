@@ -20,7 +20,10 @@ import { validateBattleContent } from '@/features/battle/validation'
 import type {
   BattleAbilityKind,
   BattleAbilityStateDelta,
-  BattleAbilityTag,
+  BattleSkillActionType,
+  BattleSkillClass,
+  BattleSkillDamageType,
+  BattleSkillRange,
   BattleAbilityTemplate,
   BattleFighterTemplate,
   BattleModifierMode,
@@ -34,32 +37,18 @@ import type {
   PassiveTrigger,
   SkillEffect,
 } from '@/features/battle/types'
+import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRangeValues } from '@/features/battle/types'
 
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onDefeat', 'onTargetBelow']
-const tagOptions: BattleAbilityTag[] = ['ATK', 'HEAL', 'BUFF', 'DEBUFF', 'UTILITY', 'ULT']
 const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
-const rarityOptions: BattleFighterTemplate['rarity'][] = ['R', 'SR', 'SSR', 'UR']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const modifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
 const modifierStatusKinds: Array<BattleStatusKind | ''> = ['', 'stun', 'invincible', 'mark', 'burn', 'attackUp']
 const modifierStackingOptions = ['max', 'replace', 'stack'] as const
-
-type SkillBlueprintId =
-  | 'single-strike'
-  | 'pressure-burst'
-  | 'execution-stun'
-  | 'single-heal'
-  | 'squad-heal'
-  | 'guard-window'
-  | 'team-rally'
-  | 'mark-target'
-  | 'burn-field'
-  | 'tempo-shift'
-  | 'ultimate-surge'
 
 const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string }> = {
   damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
@@ -78,19 +67,6 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
 }
 
-const skillBlueprintOptions: Array<{ id: SkillBlueprintId; label: string; hint: string }> = [
-  { id: 'single-strike', label: 'Single-Target Strike', hint: 'Basic attack pattern for a front-line skill.' },
-  { id: 'pressure-burst', label: 'AoE Pressure Burst', hint: 'Spread damage across the enemy team.' },
-  { id: 'execution-stun', label: 'Execution / Stun', hint: 'Single-target hit with a control rider.' },
-  { id: 'single-heal', label: 'Single-Target Heal', hint: 'Keep one ally standing.' },
-  { id: 'squad-heal', label: 'Team Heal', hint: 'Stabilize the whole lineup.' },
-  { id: 'guard-window', label: 'Guard Window', hint: 'Short defensive immunity on self or ally.' },
-  { id: 'team-rally', label: 'Team Rally', hint: 'Buff the squad for a push turn.' },
-  { id: 'mark-target', label: 'Focus Mark', hint: 'Prime a target for follow-up burst.' },
-  { id: 'burn-field', label: 'Burn Field', hint: 'AoE pressure with damage over time.' },
-  { id: 'tempo-shift', label: 'Tempo Shift', hint: 'Utility tool for cooldown acceleration.' },
-  { id: 'ultimate-surge', label: 'Ultimate Surge', hint: 'High-impact finisher scaffold.' },
-]
 type PassiveBlueprintId = 'round-heal' | 'damage-aura' | 'execute-drive' | 'tempo-engine'
 
 const passiveTriggerMeta: Record<PassiveTrigger, { label: string; hint: string }> = {
@@ -160,11 +136,39 @@ function deriveAbilityLabel(name: string) {
   return `${words[0][0] ?? ''}${words[1][0] ?? ''}`.toUpperCase()
 }
 
-function resolveAbilityTone(kind: BattleAbilityTemplate['kind'], tags: BattleAbilityTemplate['tags']) {
-  if (tags.includes('ULT')) return 'gold' as const
-  if (kind === 'heal' || tags.includes('HEAL')) return 'teal' as const
-  if (kind === 'debuff' || tags.includes('DEBUFF')) return 'red' as const
-  if (kind === 'buff' || kind === 'defend' || kind === 'utility' || tags.includes('UTILITY')) return 'teal' as const
+type AbilityClassSelection = {
+  range: BattleSkillRange | ''
+  damageType: BattleSkillDamageType | ''
+  actionType: BattleSkillActionType | ''
+  unique: boolean
+  ultimate: boolean
+}
+
+function getAbilityClassSelection(classes: BattleSkillClass[]): AbilityClassSelection {
+  return {
+    range: battleSkillRangeValues.find((value) => classes.includes(value)) ?? '',
+    damageType: battleSkillDamageTypeValues.find((value) => classes.includes(value)) ?? '',
+    actionType: battleSkillActionTypeValues.find((value) => classes.includes(value)) ?? '',
+    unique: classes.includes('Unique'),
+    ultimate: classes.includes('Ultimate'),
+  }
+}
+
+function buildAbilityClasses(selection: AbilityClassSelection): BattleSkillClass[] {
+  return [
+    selection.range,
+    selection.damageType,
+    selection.actionType,
+    selection.unique ? 'Unique' : '',
+    selection.ultimate ? 'Ultimate' : '',
+  ].filter(Boolean) as BattleSkillClass[]
+}
+
+function resolveAbilityTone(kind: BattleAbilityTemplate['kind'], isUltimate: boolean) {
+  if (isUltimate) return 'gold' as const
+  if (kind === 'heal') return 'teal' as const
+  if (kind === 'debuff') return 'red' as const
+  if (kind === 'buff' || kind === 'defend' || kind === 'utility') return 'teal' as const
   if (kind === 'pass') return 'frost' as const
   return 'red' as const
 }
@@ -173,7 +177,7 @@ function syncAbilityPresentation(ability: BattleAbilityTemplate) {
   ability.icon = {
     src: ability.icon?.src,
     label: deriveAbilityLabel(ability.name),
-    tone: resolveAbilityTone(ability.kind, ability.tags),
+    tone: resolveAbilityTone(ability.kind, ability.classes.includes('Ultimate')),
   }
 }
 
@@ -183,7 +187,7 @@ function createTemporaryAbility(name = 'Temporary Technique'): BattleAbilityTemp
   return createBlankAbility(`temporary-technique-${embeddedAbilityCounter++}`, name, {
     kind: 'attack',
     targetRule: 'enemy-single',
-    tags: ['ATK'],
+    classes: ['Melee', 'Physical', 'Action'],
     cooldown: 1,
     effects: [{ type: 'damage', power: 28, target: 'inherit' }],
   })
@@ -250,146 +254,6 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
   }
 }
 
-function applySkillBlueprint(ability: BattleAbilityTemplate, blueprintId: SkillBlueprintId, isUltimate: boolean) {
-  const assign = (template: {
-    kind: BattleAbilityKind
-    targetRule: BattleTargetRule
-    tags: BattleAbilityTag[]
-    cooldown: number
-    description: string
-    effects: SkillEffect[]
-  }) => {
-    ability.kind = template.kind
-    ability.targetRule = template.targetRule
-    ability.cooldown = template.cooldown
-    ability.description = template.description
-    ability.tags = isUltimate
-      ? Array.from(new Set([...template.tags.filter((tag) => tag !== 'ULT'), 'ULT']))
-      : template.tags.filter((tag) => tag !== 'ULT')
-    ability.effects = template.effects.map((effect) => JSON.parse(JSON.stringify(effect)) as SkillEffect)
-    syncAbilityPresentation(ability)
-  }
-
-  switch (blueprintId) {
-    case 'single-strike':
-      assign({
-        kind: 'attack',
-        targetRule: 'enemy-single',
-        tags: ['ATK'],
-        cooldown: 1,
-        description: 'Deal direct damage to one enemy.',
-        effects: [{ type: 'damage', power: isUltimate ? 48 : 30, target: 'inherit' }],
-      })
-      return
-    case 'pressure-burst':
-      assign({
-        kind: 'attack',
-        targetRule: 'enemy-all',
-        tags: ['ATK'],
-        cooldown: isUltimate ? 4 : 2,
-        description: 'Pressure the entire enemy team with an area attack.',
-        effects: [{ type: 'damage', power: isUltimate ? 42 : 18, target: 'all-enemies' }],
-      })
-      return
-    case 'execution-stun':
-      assign({
-        kind: 'debuff',
-        targetRule: 'enemy-single',
-        tags: ['ATK', 'DEBUFF'],
-        cooldown: 2,
-        description: 'Hit one enemy and lock them down for a turn.',
-        effects: [
-          { type: 'damage', power: isUltimate ? 40 : 24, target: 'inherit' },
-          { type: 'stun', duration: 1, target: 'inherit' },
-        ],
-      })
-      return
-    case 'single-heal':
-      assign({
-        kind: 'heal',
-        targetRule: 'ally-single',
-        tags: ['HEAL'],
-        cooldown: 2,
-        description: 'Restore HP to one ally.',
-        effects: [{ type: 'heal', power: isUltimate ? 40 : 24, target: 'inherit' }],
-      })
-      return
-    case 'squad-heal':
-      assign({
-        kind: 'heal',
-        targetRule: 'ally-all',
-        tags: ['HEAL', 'UTILITY'],
-        cooldown: isUltimate ? 4 : 3,
-        description: 'Restore HP across the whole team.',
-        effects: [{ type: 'heal', power: isUltimate ? 22 : 12, target: 'all-allies' }],
-      })
-      return
-    case 'guard-window':
-      assign({
-        kind: 'defend',
-        targetRule: 'self',
-        tags: ['UTILITY'],
-        cooldown: 3,
-        description: 'Create a brief invulnerability window.',
-        effects: [{ type: 'invulnerable', duration: isUltimate ? 2 : 1, target: 'self' }],
-      })
-      return
-    case 'team-rally':
-      assign({
-        kind: 'buff',
-        targetRule: 'ally-all',
-        tags: ['BUFF', 'UTILITY'],
-        cooldown: 3,
-        description: 'Empower the whole team for a coordinated push.',
-        effects: [{ type: 'attackUp', amount: isUltimate ? 18 : 10, duration: 2, target: 'all-allies' }],
-      })
-      return
-    case 'mark-target':
-      assign({
-        kind: 'debuff',
-        targetRule: 'enemy-single',
-        tags: ['DEBUFF', 'UTILITY'],
-        cooldown: 2,
-        description: 'Expose one enemy so allies hit harder.',
-        effects: [{ type: 'mark', bonus: isUltimate ? 24 : 15, duration: 2, target: 'inherit' }],
-      })
-      return
-    case 'burn-field':
-      assign({
-        kind: 'debuff',
-        targetRule: 'enemy-all',
-        tags: ['DEBUFF'],
-        cooldown: 3,
-        description: 'Apply burning pressure across the enemy team.',
-        effects: [{ type: 'burn', damage: isUltimate ? 14 : 8, duration: 2, target: 'all-enemies' }],
-      })
-      return
-    case 'tempo-shift':
-      assign({
-        kind: 'utility',
-        targetRule: 'self',
-        tags: ['UTILITY', 'BUFF'],
-        cooldown: 3,
-        description: 'Accelerate your next rotation by reducing cooldowns.',
-        effects: [{ type: 'cooldownReduction', amount: isUltimate ? 2 : 1, target: 'self' }],
-      })
-      return
-    case 'ultimate-surge':
-      assign({
-        kind: 'attack',
-        targetRule: 'enemy-all',
-        tags: ['ATK'],
-        cooldown: 5,
-        description: 'Deliver a high-impact finishing sequence.',
-        effects: [
-          { type: 'damage', power: 54, target: 'all-enemies' },
-          { type: 'mark', bonus: 18, duration: 2, target: 'all-enemies' },
-        ],
-      })
-      return
-  }
-}
-
 function formatEffectTarget(target: SkillEffect['target']) {
   if (target === 'inherit') return 'the skill target'
   if (target === 'self') return 'self'
@@ -421,8 +285,8 @@ function describeCondition(condition: BattleReactionCondition) {
       return `target has ${condition.status}`
     case 'abilityId':
       return `ability is ${condition.abilityId}`
-    case 'abilityTag':
-      return `ability has ${condition.tag}`
+    case 'abilityClass':
+      return `ability has ${condition.class}`
     case 'isUltimate':
       return 'ability is an ultimate'
   }
@@ -513,19 +377,8 @@ function describePassive(passive: PassiveEffect) {
   return `${passive.label}: ${formatPassiveTrigger(passive.trigger)}${thresholdText}.${conditionText}`.trim()
 }
 function explainCostRule(ability: BattleAbilityTemplate) {
-  if (ability.kind === 'pass') return 'Passive abilities are free.'
   if (ability.energyCost && Object.keys(ability.energyCost).length > 0) return 'This skill is using a manually authored cost override.'
-  if (ability.tags.includes('ULT')) return 'Ultimates always cost CT 1 + VOW 1 + MEN 1.'
-  if (ability.kind === 'heal') {
-    return ability.targetRule === 'ally-all' ? 'Group healing adds CT on top of MEN.' : 'Single-target healing costs MEN 1.'
-  }
-  if (ability.kind === 'defend') return 'Defend skills cost CT 1.'
-  if (ability.kind === 'buff') return 'Buff skills cost VOW 1.'
-  if (ability.kind === 'debuff') return 'Debuffs cost VOW 1 + MEN 1.'
-  if (ability.kind === 'utility') return 'Utility skills cost CT 1 + MEN 1.'
-  if (ability.targetRule === 'enemy-all') return 'AoE attacks cost PHY 1 + CT 1.'
-  if (ability.tags.includes('DEBUFF')) return 'Attack skills with DEBUFF tags cost PHY 1 + VOW 1.'
-  return 'Standard attacks cost PHY 1.'
+  return 'Automatic costs follow the live battle rules for this skill kind, target pattern, and ultimate state.'
 }
 
 function readFileAsDataUrl(file: File) {
@@ -551,7 +404,7 @@ function createBlankAbility(id: string, name: string, overrides: Partial<BattleA
     description: 'Describe what this technique does in battle.',
     kind: 'attack',
     targetRule: 'enemy-single',
-    tags: ['ATK'],
+    classes: ['Melee', 'Physical', 'Action'],
     icon: { label: deriveAbilityLabel(name), tone: 'red' },
     cooldown: 1,
     effects: [{ type: 'damage', power: 30, target: 'inherit' }],
@@ -568,7 +421,7 @@ function createBlankFighter(index: number): BattleFighterTemplate {
     name: 'New Fighter ' + index,
     shortName,
     rarity: 'SR',
-    role: 'Hybrid',
+    role: '',
     affiliationLabel: 'Custom',
     battleTitle: 'Arena Recruit',
     bio: 'New combatant awaiting authored battle identity.',
@@ -583,12 +436,12 @@ function createBlankFighter(index: number): BattleFighterTemplate {
     ],
     abilities: [
       createBlankAbility('fighter-' + index + '-skill-1', 'New Strike'),
-      createBlankAbility('fighter-' + index + '-skill-2', 'New Technique', { kind: 'utility', targetRule: 'self', tags: ['UTILITY'], effects: [createEffect('cooldownReduction')] }),
+      createBlankAbility('fighter-' + index + '-skill-2', 'New Technique', { kind: 'utility', targetRule: 'self', classes: ['Instant', 'Mental'], effects: [createEffect('cooldownReduction')] }),
     ],
     ultimate: createBlankAbility('fighter-' + index + '-ultimate', 'New Ultimate', {
       kind: 'attack',
       targetRule: 'enemy-all',
-      tags: ['ATK', 'ULT'],
+      classes: ['Ranged', 'Energy', 'Ultimate', 'Action'],
       cooldown: 5,
       effects: [{ type: 'damage', power: 60, target: 'all-enemies' }],
     }),
@@ -1048,8 +901,8 @@ export function AdminControlPanelPage() {
     <section className="py-4 sm:py-6">
       <div className="space-y-4">
         <header className="rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.16)] px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
               <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Internal Tools</p>
               <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">Admin Control Panel</h1>
               <p className="mt-2 max-w-3xl text-sm text-ca-text-3">
@@ -1216,8 +1069,6 @@ export function AdminControlPanelPage() {
                   <div className="grid gap-3 md:grid-cols-2">
                     <InputField label="Name" value={selectedFighter.name} onChange={(value) => updateSelectedFighter((fighter) => { fighter.name = value })} />
                     <InputField label="Short Name" value={selectedFighter.shortName} onChange={(value) => updateSelectedFighter((fighter) => { fighter.shortName = value })} />
-                    <InputField label="Role" value={selectedFighter.role} onChange={(value) => updateSelectedFighter((fighter) => { fighter.role = value })} />
-                    <SelectField label="Rarity" value={selectedFighter.rarity} options={rarityOptions.map((value) => ({ value, label: value }))} onChange={(value) => updateSelectedFighter((fighter) => { fighter.rarity = value as BattleFighterTemplate['rarity'] })} />
                     <InputField label="Affiliation" value={selectedFighter.affiliationLabel} onChange={(value) => updateSelectedFighter((fighter) => { fighter.affiliationLabel = value })} />
                     <NumberField label="Max HP" value={selectedFighter.maxHp} onChange={(value) => updateSelectedFighter((fighter) => { fighter.maxHp = value })} />
                     <InputField label="Battle Title" value={selectedFighter.battleTitle} onChange={(value) => updateSelectedFighter((fighter) => { fighter.battleTitle = value })} />
@@ -1273,7 +1124,7 @@ export function AdminControlPanelPage() {
                                 <span className="ca-display truncate text-[1rem] text-ca-text">{ability.name || 'Untitled'}</span>
                                 <span className="ca-mono-label text-[0.36rem] text-ca-text-3">CD {ability.cooldown}</span>
                               </div>
-                              <p className="ca-mono-label mt-1 text-[0.36rem] text-ca-text-3">{ability.tags.join(' · ') || 'NO TAGS'}</p>
+                              <p className="ca-mono-label mt-1 text-[0.36rem] text-ca-text-3">{ability.classes.join(' · ') || 'NO CLASSES'}</p>
                             </div>
                             <span className="text-[0.7rem] text-ca-text-3">{expanded ? '▾' : '▸'}</span>
                           </button>
@@ -1827,8 +1678,8 @@ function SkillProfileRow({ ability, isUltimate }: { ability: BattleAbilityTempla
         <div className="min-w-0 flex-1">
           <p className="text-sm leading-6 text-ca-text-2">{ability.description}</p>
           <div className="mt-2 flex flex-wrap gap-1">
-            {ability.tags.map((tag) => (
-              <StatusPill key={tag} label={tag} tone={tag === 'ULT' ? 'gold' : tag === 'DEBUFF' ? 'red' : 'teal'} />
+            {ability.classes.map((skillClass) => (
+              <StatusPill key={skillClass} label={skillClass} tone={skillClass === 'Ultimate' ? 'gold' : skillClass === 'Control' || skillClass === 'Affliction' || skillClass === 'Mental' ? 'red' : 'teal'} />
             ))}
             <StatusPill label={targetLabel} tone="frost" />
           </div>
@@ -1900,26 +1751,10 @@ function SkillEditorCard({
                 onChange={(value) => onUpdate((current) => { current.targetRule = value as BattleTargetRule })}
               />
             </div>
-            <InputField
-              label="Tags (comma separated)"
-              value={ability.tags.join(', ')}
-              onChange={(value) => onUpdate((current) => {
-                current.tags = value
-                  .split(',')
-                  .map((part) => part.trim().toUpperCase())
-                  .filter((part): part is BattleAbilityTag => tagOptions.includes(part as BattleAbilityTag))
-                syncAbilityPresentation(current)
-              })}
-            />
+            <SkillClassEditor ability={ability} isUltimate={isUltimate} onUpdate={onUpdate} />
             <TextAreaField label="Skill Copy" value={ability.description} onChange={(value) => onUpdate((current) => { current.description = value })} rows={3} />
           </div>
         </div>
-
-        <SkillBlueprintPanel
-          key={ability.id}
-          isUltimate={isUltimate}
-          onApply={(blueprintId) => onUpdate((current) => { applySkillBlueprint(current, blueprintId, isUltimate) })}
-        />
 
         <AssetField
           fieldId={`ability-icon-${ability.id}`}
@@ -1945,48 +1780,94 @@ function SkillEditorCard({
   )
 }
 
-function SkillBlueprintPanel({
+function SkillClassEditor({
+  ability,
   isUltimate,
-  onApply,
+  onUpdate,
 }: {
+  ability: BattleAbilityTemplate
   isUltimate: boolean
-  onApply: (blueprintId: SkillBlueprintId) => void
+  onUpdate: (mutator: (ability: BattleAbilityTemplate) => void) => void
 }) {
-  const preferredDefault: SkillBlueprintId = isUltimate ? 'ultimate-surge' : 'single-strike'
-  const [selectedBlueprint, setSelectedBlueprint] = useState<SkillBlueprintId>(preferredDefault)
-
-  const activeBlueprint =
-    skillBlueprintOptions.find((option) => option.id === selectedBlueprint) ??
-    skillBlueprintOptions[0]
+  const selection = getAbilityClassSelection(ability.classes)
 
   return (
     <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL BLUEPRINT</p>
-          <p className="mt-1 text-sm leading-6 text-ca-text-2">Pick a logical starting pattern, then fine-tune the numbers and copy below.</p>
-        </div>
+      <div>
+        <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL CLASSES</p>
+        <p className="mt-1 text-sm leading-6 text-ca-text-2">Classes are descriptive metadata for reactions and future rules. Runtime behavior still keys off the skill kind and the fighter's actual ultimate slot.</p>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-3">
+        <SelectField
+          label="Range"
+          value={selection.range}
+          options={[{ value: '', label: 'NONE' }, ...battleSkillRangeValues.map((value) => ({ value, label: value.toUpperCase() }))]}
+          onChange={(value) => onUpdate((current) => {
+            const next = getAbilityClassSelection(current.classes)
+            next.range = value as BattleSkillRange | ''
+            current.classes = buildAbilityClasses(next)
+            syncAbilityPresentation(current)
+          })}
+        />
+        <SelectField
+          label="Damage Type"
+          value={selection.damageType}
+          options={[{ value: '', label: 'NONE' }, ...battleSkillDamageTypeValues.map((value) => ({ value, label: value.toUpperCase() }))]}
+          onChange={(value) => onUpdate((current) => {
+            const next = getAbilityClassSelection(current.classes)
+            next.damageType = value as BattleSkillDamageType | ''
+            current.classes = buildAbilityClasses(next)
+            syncAbilityPresentation(current)
+          })}
+        />
+        <SelectField
+          label="Action Type"
+          value={selection.actionType}
+          options={[{ value: '', label: 'NONE' }, ...battleSkillActionTypeValues.map((value) => ({ value, label: value.toUpperCase() }))]}
+          onChange={(value) => onUpdate((current) => {
+            const next = getAbilityClassSelection(current.classes)
+            next.actionType = value as BattleSkillActionType | ''
+            current.classes = buildAbilityClasses(next)
+            syncAbilityPresentation(current)
+          })}
+        />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => onApply(selectedBlueprint)}
-          className="rounded-[8px] border border-ca-red/20 bg-ca-red px-3 py-2 ca-display text-[0.8rem] tracking-[0.06em] text-white transition hover:-translate-y-[1px]"
+          onClick={() => onUpdate((current) => {
+            const next = getAbilityClassSelection(current.classes)
+            next.unique = !next.unique
+            current.classes = buildAbilityClasses(next)
+            syncAbilityPresentation(current)
+          })}
+          className={[
+            'ca-mono-label rounded-md border px-2.5 py-1 text-[0.38rem] transition',
+            selection.unique ? 'border-ca-teal/22 bg-ca-teal-wash text-ca-teal' : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2',
+          ].join(' ')}
         >
-          APPLY BLUEPRINT
+          UNIQUE
+        </button>
+        <button
+          type="button"
+          onClick={() => onUpdate((current) => {
+            const next = getAbilityClassSelection(current.classes)
+            next.ultimate = !next.ultimate
+            current.classes = buildAbilityClasses(next)
+            syncAbilityPresentation(current)
+          })}
+          disabled={isUltimate}
+          className={[
+            'ca-mono-label rounded-md border px-2.5 py-1 text-[0.38rem] transition disabled:opacity-45',
+            selection.ultimate ? 'border-amber-400/22 bg-amber-400/10 text-amber-300' : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2',
+          ].join(' ')}
+        >
+          ULTIMATE
         </button>
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <SelectField
-          label="Technique Archetype"
-          value={selectedBlueprint}
-          options={skillBlueprintOptions.map((option) => ({ value: option.id, label: option.label }))}
-          onChange={(value) => setSelectedBlueprint(value as SkillBlueprintId)}
-        />
-        <div className="rounded-[8px] border border-ca-teal/18 bg-ca-teal-wash px-3 py-2.5">
-          <p className="ca-mono-label text-[0.38rem] text-ca-teal">ARCHETYPE NOTES</p>
-          <p className="mt-1 text-sm leading-6 text-ca-text-2">{activeBlueprint.hint}</p>
-          <p className="mt-2 ca-mono-label text-[0.38rem] text-ca-text-3">{isUltimate ? 'ULTIMATE SKILLS KEEP THE ULT TAG WHEN APPLIED.' : 'STANDARD SKILLS STAY NON-ULT.'}</p>
-        </div>
-      </div>
+      {isUltimate ? (
+        <p className="mt-2 text-sm leading-6 text-ca-text-3">Ultimate class stays tied to the selected fighter ultimate.</p>
+      ) : null}
     </div>
   )
 }

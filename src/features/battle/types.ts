@@ -1,4 +1,4 @@
-import type { BattleEnergyPool, BattleEnergyCost } from '@/features/battle/energy'
+import type { BattleEnergyPool, BattleEnergyCost } from '@/features/battle/energy.ts'
 
 export type BattleTeamId = 'player' | 'enemy'
 
@@ -21,7 +21,19 @@ export type BattleTargetRule =
   | 'ally-single'
   | 'ally-all'
 
-export type BattleAbilityTag = 'ATK' | 'HEAL' | 'BUFF' | 'DEBUFF' | 'UTILITY' | 'ULT'
+export type BattleSkillRange = 'Melee' | 'Ranged'
+export type BattleSkillDamageType = 'Physical' | 'Energy' | 'Affliction' | 'Mental'
+export type BattleSkillActionType = 'Instant' | 'Action' | 'Control'
+export type BattleSkillClass =
+  | BattleSkillRange
+  | BattleSkillDamageType
+  | BattleSkillActionType
+  | 'Unique'
+  | 'Ultimate'
+
+export const battleSkillRangeValues: BattleSkillRange[] = ['Melee', 'Ranged']
+export const battleSkillDamageTypeValues: BattleSkillDamageType[] = ['Physical', 'Energy', 'Affliction', 'Mental']
+export const battleSkillActionTypeValues: BattleSkillActionType[] = ['Instant', 'Action', 'Control']
 
 export type BattleAbilityIcon = {
   src?: string
@@ -35,7 +47,7 @@ export type BattleAbilityTemplate = {
   description: string
   kind: BattleAbilityKind
   targetRule: BattleTargetRule
-  tags: BattleAbilityTag[]
+  classes: BattleSkillClass[]
   icon: BattleAbilityIcon
   cooldown: number
   energyCost?: BattleEnergyCost
@@ -158,7 +170,7 @@ export type BattleReactionCondition =
   | { type: 'actorHasStatus'; status: BattleStatusKind }
   | { type: 'targetHasStatus'; status: BattleStatusKind }
   | { type: 'abilityId'; abilityId: string }
-  | { type: 'abilityTag'; tag: BattleAbilityTag }
+  | { type: 'abilityClass'; class: BattleSkillClass }
   | { type: 'isUltimate' }
 
 export type BattleScheduledPhase = 'roundStart' | 'roundEnd'

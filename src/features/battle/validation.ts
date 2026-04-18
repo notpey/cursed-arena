@@ -1,5 +1,5 @@
-import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
-import { passiveTriggerOrder } from '@/features/battle/reactions'
+import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy.ts'
+import { passiveTriggerOrder } from '@/features/battle/reactions.ts'
 import type {
   BattleAbilityTemplate,
   BattleFighterTemplate,
@@ -9,7 +9,7 @@ import type {
   BattleReactionCondition,
   PassiveEffect,
   SkillEffect,
-} from '@/features/battle/types'
+} from '@/features/battle/types.ts'
 
 export type BattleContentSetup = {
   playerTeamIds: string[]
@@ -55,7 +55,7 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
     case 'abilityId':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'abilityId is required')
       return
-    case 'abilityTag':
+    case 'abilityClass':
     case 'isUltimate':
       return
   }
@@ -66,7 +66,7 @@ function validateEmbeddedAbility(scope: string, ability: BattleAbilityTemplate, 
   if (!ability.name.trim()) pushIssue(issues, scope, 'replacement ability name is required')
   if (!ability.description.trim()) pushIssue(issues, scope, 'replacement ability description is required')
   if (ability.cooldown < 0) pushIssue(issues, scope, 'replacement ability cooldown cannot be negative')
-  if (ability.tags.length === 0) pushIssue(issues, scope, 'replacement ability requires at least one tag')
+  if (ability.classes.length === 0) pushIssue(issues, scope, 'replacement ability requires at least one class')
   if ((ability.effects?.length ?? 0) === 0 && ability.kind !== 'pass') {
     pushIssue(issues, scope, 'replacement ability requires at least one effect')
   }
@@ -187,7 +187,7 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   if (!ability.name.trim()) pushIssue(issues, scope, 'ability name is required')
   if (!ability.description.trim()) pushIssue(issues, scope, 'ability description is required')
   if (ability.cooldown < 0) pushIssue(issues, scope, 'cooldown cannot be negative')
-  if (ability.tags.length === 0) pushIssue(issues, scope, 'ability requires at least one tag')
+  if (ability.classes.length === 0) pushIssue(issues, scope, 'ability requires at least one class')
   if (ability.targetRule === 'none' && ability.kind !== 'pass') {
     pushIssue(issues, scope, 'only pass abilities should use targetRule "none"')
   }
@@ -214,8 +214,8 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     if (cost > 3) pushIssue(issues, scope, 'energy cost exceeds a single-round reserve budget')
   }
 
-  if (ability.tags.includes('ULT') !== (fighter.ultimate.id === ability.id)) {
-    pushIssue(issues, scope, 'ULT tag must appear only on the fighter ultimate')
+  if (ability.classes.includes('Ultimate') !== (fighter.ultimate.id === ability.id)) {
+    pushIssue(issues, scope, 'Ultimate class must appear only on the fighter ultimate')
   }
 
   if (ability.kind === 'attack' && !effects.some((effect) => effect.type === 'damage')) {

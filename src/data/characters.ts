@@ -192,13 +192,13 @@ function getAbilityTargetLabel(ability: BattleAbilityTemplate) {
 }
 
 function getAbilityClasses(ability: BattleAbilityTemplate) {
-  return Array.from(new Set([ability.kind.toUpperCase(), ...ability.tags.filter((tag) => tag !== 'ULT')]))
+  return Array.from(new Set([ability.kind.toUpperCase(), ...ability.classes]))
 }
 
 function mapAbilityType(ability: BattleAbilityTemplate): CharacterSkill['type'] {
   if (ability.kind === 'defend') return 'DEF'
-  if (ability.kind === 'debuff' || ability.tags.includes('DEBUFF')) return 'STN'
-  if (ability.kind === 'heal' || ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('HEAL') || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY')) {
+  if (ability.kind === 'debuff') return 'STN'
+  if (ability.kind === 'heal' || ability.kind === 'buff' || ability.kind === 'utility') {
     return 'SUP'
   }
   return 'ATK'
@@ -220,9 +220,9 @@ function deriveArchetypes(seed: BaseCharacterSeed, battleTemplate?: BattleFighte
 
   const allAbilities = battleTemplate.abilities.concat(battleTemplate.ultimate)
   if (battleTemplate.maxHp >= 108 || allAbilities.some((ability) => ability.kind === 'defend')) tags.add('GUARDIAN')
-  if (allAbilities.some((ability) => ability.kind === 'heal' || ability.tags.includes('HEAL'))) tags.add('RESTORER')
-  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility' || ability.tags.includes('BUFF') || ability.tags.includes('UTILITY'))) tags.add('AMPLIFIER')
-  if (allAbilities.some((ability) => ability.kind === 'debuff' || ability.tags.includes('DEBUFF'))) tags.add('DISRUPTOR')
+  if (allAbilities.some((ability) => ability.kind === 'heal')) tags.add('RESTORER')
+  if (allAbilities.some((ability) => ability.kind === 'buff' || ability.kind === 'utility')) tags.add('AMPLIFIER')
+  if (allAbilities.some((ability) => ability.kind === 'debuff')) tags.add('DISRUPTOR')
   if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-all')) tags.add('BLASTER')
   if (allAbilities.some((ability) => ability.kind === 'attack' && ability.targetRule === 'enemy-single')) tags.add('STRIKER')
 

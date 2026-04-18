@@ -6,7 +6,7 @@ import type {
   PassiveEffect,
   PassiveTrigger,
   SkillEffect,
-} from '@/features/battle/types'
+} from '@/features/battle/types.ts'
 
 export const passiveTriggerOrder: PassiveTrigger[] = [
   'whileAlive',
@@ -108,8 +108,8 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `target has ${condition.status}`
     case 'abilityId':
       return `using ${condition.abilityId}`
-    case 'abilityTag':
-      return `using a ${condition.tag} technique`
+    case 'abilityClass':
+      return `using a ${condition.class} technique`
     case 'isUltimate':
       return 'using an ultimate'
   }

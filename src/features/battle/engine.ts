@@ -3,7 +3,7 @@ import {
   battlePassAbility,
   battleRosterById,
   defaultBattleSetup,
-} from '@/features/battle/data'
+} from '@/features/battle/data.ts'
 import {
   battleEnergyExchangeCost,
   battleEnergyOrder,
@@ -20,15 +20,15 @@ import {
   sumEnergyCosts,
   totalEnergyInPool,
   type BattleEnergyType,
-} from '@/features/battle/energy'
-import { createSeededRandom } from '@/features/battle/random'
+} from '@/features/battle/energy.ts'
+import { createSeededRandom } from '@/features/battle/random.ts'
 import {
   cloneAbilityTemplate,
   clonePassiveEffect,
   cloneScheduledEffect,
   getEffectivePassiveTrigger,
   getPassiveConditions,
-} from '@/features/battle/reactions'
+} from '@/features/battle/reactions.ts'
 import {
   cloneModifiers,
   createModifierInstance,
@@ -44,11 +44,11 @@ import {
   syncFighterStatusesFromModifiers,
   tickModifiers,
   upsertModifier,
-} from '@/features/battle/modifiers'
+} from '@/features/battle/modifiers.ts'
 import {
   cloneStatuses,
   createStatuses,
-} from '@/features/battle/statuses'
+} from '@/features/battle/statuses.ts'
 import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
@@ -78,7 +78,7 @@ import type {
   PassiveTrigger,
   QueuedBattleAction,
   SkillEffect,
-} from '@/features/battle/types'
+} from '@/features/battle/types.ts'
 type ReactionContext = {
   target: BattleFighterState | null
   ability?: BattleAbilityTemplate
@@ -558,10 +558,10 @@ function matchesReactionCondition(
       return Boolean(context.target && hasModifierStatus(context.target.modifiers, condition.status))
     case 'abilityId':
       return context.ability?.id === condition.abilityId
-    case 'abilityTag':
-      return Boolean(context.ability?.tags.includes(condition.tag))
+    case 'abilityClass':
+      return Boolean(context.ability?.classes.includes(condition.class))
     case 'isUltimate':
-      return context.isUltimate ?? Boolean(context.ability?.tags.includes('ULT'))
+      return context.isUltimate ?? Boolean(context.ability?.classes.includes('Ultimate'))
   }
 }
 
@@ -593,11 +593,11 @@ function firePassives(
     ability,
     effect,
     amount,
-    isUltimate: ability?.tags.includes('ULT') ?? false,
+    isUltimate: ability?.classes.includes('Ultimate') ?? false,
   }
 
   getTriggeredPassiveEffects(actor, trigger, context).forEach(({ effects }) => {
-    resolveEffects(state, ctx, actor, target, effects, ability?.id, ability?.tags)
+    resolveEffects(state, ctx, actor, target, effects, ability?.id, ability?.classes)
   })
 }
 
@@ -1039,7 +1039,7 @@ function applyDefeat(
     targetId: defeated.instanceId,
     team: defeated.team,
     abilityId: ability?.id,
-    tags: ability?.tags,
+    tags: ability?.classes,
   })
   firePassives(state, ctx, defeated, source, 'onDefeat', ability)
 }
@@ -1184,8 +1184,8 @@ function calculateHealing(
 ) {
   let amount = basePower
   const ability = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
-  const actorContext: ReactionContext = { target, ability, isUltimate: ability?.tags.includes('ULT') ?? false }
-  const targetContext: ReactionContext = { target: actor, ability, isUltimate: ability?.tags.includes('ULT') ?? false }
+  const actorContext: ReactionContext = { target, ability, isUltimate: ability?.classes.includes('Ultimate') ?? false }
+  const targetContext: ReactionContext = { target: actor, ability, isUltimate: ability?.classes.includes('Ultimate') ?? false }
 
   amount += getNumericModifierTotal(state, actor, 'healDone', 'flat', actorContext)
   amount = Math.round(amount * (1 + getNumericModifierTotal(state, actor, 'healDone', 'percentAdd', actorContext)))
@@ -1205,11 +1205,11 @@ function resolveEffects(
   target: BattleFighterState | null,
   effects: SkillEffect[],
   abilityId?: string,
-  abilityTags?: string[],
+  abilityClasses?: BattleAbilityTemplate['classes'],
 ) {
   const allies = getTeam(state, actor.team).filter(isAlive)
   const enemies = getOpposingTeam(state, actor.team).filter(isAlive)
-  const isUlt = abilityTags?.includes('ULT') ?? false
+  const isUlt = abilityClasses?.includes('Ultimate') ?? false
 
   for (const effect of effects) {
     const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies)
@@ -1264,7 +1264,7 @@ function resolveEffects(
             baseAmount: effect.power,
             amount,
             damageType: 'normal',
-            tags: abilityTags ?? [],
+            tags: abilityClasses ?? [],
             flags: { isUltimate: isUlt },
           }
           applyDamagePacket(state, ctx, actor, t, packet, effect)
@@ -1279,7 +1279,7 @@ function resolveEffects(
             abilityId,
             baseAmount: effect.power,
             amount,
-            tags: abilityTags ?? [],
+            tags: abilityClasses ?? [],
             flags: {},
           }
           applyHealPacket(state, ctx, actor, t, packet)
@@ -1490,7 +1490,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
             .filter((entry) => entry[1] !== 0),
         ),
       },
-      tags: ability.tags,
+      tags: ability.classes,
     })
   }
 
@@ -1501,7 +1501,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
     targetId: command.targetId ?? undefined,
     team: actor.team,
     abilityId: ability.id,
-    tags: ability.tags,
+    tags: ability.classes,
   })
 
   const allies = getTeam(state, actor.team)
@@ -1516,14 +1516,14 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
         : null)
 
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
-  resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.tags)
+  resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.classes)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityResolve', ability)
   makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
     actorId: actor.instanceId,
     targetId: singleTarget?.instanceId,
     team: actor.team,
     abilityId: ability.id,
-    tags: ability.tags,
+    tags: ability.classes,
   })
 }
 
@@ -1681,7 +1681,7 @@ export function buildEnemyCommands(state: BattleState): Record<string, QueuedBat
     const sorted = availableAbilities
       .map((ability) => {
         let score = ability.power ?? ability.healPower ?? ability.attackBuffAmount ?? 0
-        if (ability.tags.includes('ULT') && state.round >= 3) score += 28
+        if (ability.classes.includes('Ultimate') && state.round >= 3) score += 28
         if (ability.kind === 'heal' && lowHpAlly && lowHpAlly.hp / lowHpAlly.maxHp < 0.5) score += 40
         if (ability.kind === 'defend' && fighter.hp / fighter.maxHp < 0.35) score += 26
         if (ability.kind === 'buff' && fighter.hp / fighter.maxHp > 0.35) score += 14
@@ -2042,10 +2042,6 @@ export function resolveRound(
 
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
 }
-
-
-
-
 
 
 

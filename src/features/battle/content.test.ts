@@ -15,7 +15,7 @@ describe('battle content validation', () => {
       ...battleRoster[0].abilities[0],
       kind: 'attack' as const,
       targetRule: 'enemy-single' as const,
-      tags: ['ATK'] as BattleFighterTemplate['abilities'][number]['tags'],
+      classes: ['Melee', 'Physical'] as BattleFighterTemplate['abilities'][number]['classes'],
       energyCost: { mental: 2, technique: 1 },
     }
 
