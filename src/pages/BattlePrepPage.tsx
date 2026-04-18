@@ -108,8 +108,8 @@ function PortraitThumb({
 }) {
   const style = rarityStyles[entry.rarity]
   const initial = entry.battleTemplate.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(entry.battleTemplate.boardPortraitSrc?.startsWith('data:image'))
-  const frame = portraitMode ? {} : entry.battleTemplate.boardPortraitFrame ?? {}
+  const portraitMode = Boolean(entry.battleTemplate.boardPortraitSrc)
+  const frame = {}
   const portraitScale = frame.scale ?? 1
   const portraitX = frame.x ?? '0%'
   const portraitY = frame.y ?? '0%'
@@ -250,7 +250,7 @@ export function BattlePrepPage() {
         searchingRef.current = false
         leaveMatchmakingQueue(user.id).catch(() => {})
       }
-    }
+    }
   }, [user])
 
   const visibleRoster = useMemo(() => {
