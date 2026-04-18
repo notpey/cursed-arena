@@ -1310,85 +1310,87 @@ function SkillQueueModal({
           </div>
         ) : null}
 
-        {/* ── Naruto-Arena-style random energy allocation ── */}
-        {totalRandomNeeded > 0 ? (
-          <div className="px-5 py-4">
-            {/* Column headers */}
-            <div className="mb-2 grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem] items-center gap-x-2">
-              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ENERGY LEFT</p>
-              <span /><span />
-              <p className="ca-mono-label text-right text-[0.42rem] text-ca-text-3">RANDOM</p>
-            </div>
+        {/* ── Energy pool + random allocation ── */}
+        <div className="px-5 py-4">
+          {/* Column headers */}
+          <div className={['mb-2 items-center gap-x-2', totalRandomNeeded > 0 ? 'grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem]' : 'flex'].join(' ')}>
+            <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ENERGY LEFT</p>
+            {totalRandomNeeded > 0 ? (
+              <><span /><span /><p className="ca-mono-label text-right text-[0.42rem] text-ca-text-3">RANDOM</p></>
+            ) : null}
+          </div>
 
-            <div className="space-y-2">
-              {battleEnergyOrder.map((type) => {
-                const meta       = battleEnergyMeta[type]
-                const poolCount  = getEnergyCount(energy, type)
-                const allocated  = globalAlloc[type] ?? 0
-                const atMax      = totalAllocated >= totalRandomNeeded
-                const dim        = poolCount === 0 && allocated === 0
-                return (
-                  <div key={type} className="grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem] items-center gap-x-2">
-                    {/* Left: square + label + pool count */}
-                    <div className="flex items-center gap-1.5">
-                      <div
-                        className="h-[0.6rem] w-[0.6rem] shrink-0 rounded-[0.1rem]"
-                        style={{ background: meta.color, opacity: dim ? 0.2 : 1 }}
-                      />
-                      <span
-                        className="ca-mono-label w-[2.2rem] text-[0.52rem]"
-                        style={{ color: dim ? 'rgba(255,255,255,0.2)' : meta.color }}
-                      >
-                        {meta.short}
-                      </span>
-                      <span className={['ca-mono-label text-[0.52rem] tabular-nums', dim ? 'text-white/20' : 'text-ca-text'].join(' ')}>
-                        {poolCount}
-                      </span>
-                    </div>
-
-                    {/* — button */}
-                    <button
-                      type="button"
-                      disabled={allocated <= 0}
-                      onClick={() => adjustGlobalAlloc(type, -1)}
-                      className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
-                    >−</button>
-
-                    {/* + button */}
-                    <button
-                      type="button"
-                      disabled={poolCount === 0 || allocated >= poolCount || atMax}
-                      onClick={() => adjustGlobalAlloc(type, 1)}
-                      className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
-                    >+</button>
-
-                    {/* Right: allocated amount */}
-                    <p
-                      className="ca-mono-label text-right text-[0.52rem] tabular-nums"
-                      style={{ color: allocated > 0 ? meta.color : 'rgba(255,255,255,0.2)' }}
+          <div className="space-y-2">
+            {battleEnergyOrder.map((type) => {
+              const meta      = battleEnergyMeta[type]
+              const poolCount = getEnergyCount(energy, type)
+              const allocated = globalAlloc[type] ?? 0
+              const atMax     = totalAllocated >= totalRandomNeeded
+              const dim       = poolCount === 0 && allocated === 0
+              return (
+                <div
+                  key={type}
+                  className={['items-center gap-x-2', totalRandomNeeded > 0 ? 'grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem]' : 'flex gap-2'].join(' ')}
+                >
+                  {/* Left: square + label + pool count */}
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className="h-[0.6rem] w-[0.6rem] shrink-0 rounded-[0.1rem]"
+                      style={{ background: meta.color, opacity: dim ? 0.2 : 1 }}
+                    />
+                    <span
+                      className="ca-mono-label w-[2.2rem] text-[0.52rem]"
+                      style={{ color: dim ? 'rgba(255,255,255,0.2)' : meta.color }}
                     >
-                      {allocated}
-                    </p>
+                      {meta.short}
+                    </span>
+                    <span className={['ca-mono-label text-[0.52rem] tabular-nums', dim ? 'text-white/20' : 'text-ca-text'].join(' ')}>
+                      {poolCount}
+                    </span>
                   </div>
-                )
-              })}
-            </div>
 
-            <div className="mt-3">
-              {hasUnallocated ? (
-                <p className="ca-mono-label text-[0.44rem] text-amber-300">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
-              ) : !canAfford ? (
-                <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
-              ) : (
-                <p className="ca-mono-label text-[0.44rem] text-ca-teal">READY TO COMMIT</p>
-              )}
-            </div>
+                  {totalRandomNeeded > 0 ? (
+                    <>
+                      {/* — button */}
+                      <button
+                        type="button"
+                        disabled={allocated <= 0}
+                        onClick={() => adjustGlobalAlloc(type, -1)}
+                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
+                      >−</button>
+
+                      {/* + button */}
+                      <button
+                        type="button"
+                        disabled={poolCount === 0 || allocated >= poolCount || atMax}
+                        onClick={() => adjustGlobalAlloc(type, 1)}
+                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
+                      >+</button>
+
+                      {/* Right: allocated amount */}
+                      <p
+                        className="ca-mono-label text-right text-[0.52rem] tabular-nums"
+                        style={{ color: allocated > 0 ? meta.color : 'rgba(255,255,255,0.2)' }}
+                      >
+                        {allocated}
+                      </p>
+                    </>
+                  ) : null}
+                </div>
+              )
+            })}
           </div>
-        ) : !canAfford ? (
-          <div className="px-5 py-3">
-            <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
+
+          <div className="mt-3">
+            {hasUnallocated ? (
+              <p className="ca-mono-label text-[0.44rem] text-amber-300">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
+            ) : !canAfford ? (
+              <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
+            ) : (
+              <p className="ca-mono-label text-[0.44rem] text-ca-teal">READY TO COMMIT</p>
+            )}
           </div>
-        ) : null}
+        </div>
 
         {/* ── OK / Cancel ── */}
         <div className="grid grid-cols-2 gap-3 border-t border-white/8 px-5 py-4">
