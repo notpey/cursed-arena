@@ -8,10 +8,10 @@ import {
   healSkill,
   utilitySkill,
   type BattleFighterBoardMeta,
-} from '@/features/battle/content'
-import { createContentSnapshot, readPublishedBattleContent } from '@/features/battle/contentStore'
-import { assertValidBattleContent, validateBattleContent } from '@/features/battle/validation'
-import type { BattlefieldEffect, BattleFighterTemplate, BattleUserProfile } from '@/features/battle/types'
+} from '@/features/battle/content.ts'
+import { createContentSnapshot, readPublishedBattleContent } from '@/features/battle/contentSnapshot.ts'
+import { assertValidBattleContent, validateBattleContent } from '@/features/battle/validation.ts'
+import type { BattlefieldEffect, BattleFighterTemplate, BattleUserProfile } from '@/features/battle/types.ts'
 
 
 const fighterBoardMeta: Record<string, BattleFighterBoardMeta> = {
@@ -593,7 +593,10 @@ export const authoredDefaultBattleSetup = {
 
 assertValidBattleContent(authoredBattleRoster, authoredDefaultBattleSetup)
 
-export const authoredBattleContent = createContentSnapshot(authoredBattleRoster, authoredDefaultBattleSetup)
+export const authoredBattleContent: ReturnType<typeof createContentSnapshot> = {
+  ...createContentSnapshot(authoredBattleRoster, authoredDefaultBattleSetup),
+  updatedAt: 0,
+}
 
 const publishedBattleContent = readPublishedBattleContent(authoredBattleContent)
 const publishedBattleValidation = validateBattleContent(
