@@ -1265,8 +1265,8 @@ function SkillQueueModal({
           )}
         </div>
 
-        {/* ── Execution order tiles (non-pass fighters only, only when >1) ── */}
-        {activeRows.length > 1 ? (
+        {/* ── Execution order tiles (non-pass fighters only) ── */}
+        {activeRows.length > 0 ? (
           <div className="border-b border-white/8 px-5 py-3">
             <p className="ca-mono-label mb-2 text-[0.4rem] text-ca-text-3">EXECUTION ORDER — DRAG TO REORDER</p>
             <div className="flex items-end gap-2.5">
