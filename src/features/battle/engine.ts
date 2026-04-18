@@ -90,6 +90,7 @@ type ReactionContext = {
   effect?: SkillEffect
   amount?: number
   isUltimate?: boolean
+  brokenShieldTags?: string[]
 }
 
 type ResolutionContext = {
@@ -704,6 +705,8 @@ function matchesReactionCondition(
       return actor.lastUsedAbilityId === condition.abilityId
     case 'shieldActive':
       return Boolean(actor.shield && (!condition.tag || actor.shield.tags.includes(condition.tag)))
+    case 'brokenShieldTag':
+      return Boolean(context.brokenShieldTags?.includes(condition.tag))
     case 'isUltimate':
       return context.isUltimate ?? Boolean(context.ability?.classes.includes('Ultimate'))
   }
@@ -731,6 +734,7 @@ function firePassives(
   ability?: BattleAbilityTemplate,
   effect?: SkillEffect,
   amount?: number,
+  extraContext: Partial<ReactionContext> = {},
 ) {
   const context: ReactionContext = {
     target,
@@ -738,6 +742,7 @@ function firePassives(
     effect,
     amount,
     isUltimate: ability?.classes.includes('Ultimate') ?? false,
+    ...extraContext,
   }
 
   getTriggeredPassiveEffects(actor, trigger, context).forEach(({ effects }) => {
@@ -1415,6 +1420,7 @@ function applyDamagePacket(
         actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
         effect,
         absorbed,
+        { brokenShieldTags: brokenShield.tags },
       )
     }
   }
@@ -2449,5 +2455,3 @@ export function resolveRound(
 
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
 }
-
-

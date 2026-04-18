@@ -1,0 +1,188 @@
+{
+  "id": "yuji",
+  "name": "Yuji Itadori",
+  "shortName": "Yuji",
+  "rarity": "SSR",
+  "role": "Striker / Tempo",
+  "affiliationLabel": "Tokyo Campus",
+  "battleTitle": "Vessel of Sukuna",
+  "bio": "A close-range striker built around pressure loops, shield counterplay, and explosive Black Flash turns.",
+  "portraitFrame": {
+    "scale": 2.06,
+    "y": "-10%"
+  },
+  "maxHp": 100,
+  "passiveEffects": [
+    {
+      "label": "Vessel of Sukuna",
+      "trigger": "whileAlive",
+      "conditions": [
+        { "type": "selfHpBelow", "threshold": 0.4 },
+        { "type": "fighterFlag", "key": "vessel_triggered", "value": false }
+      ],
+      "effects": [
+        { "type": "setFlag", "key": "vessel_triggered", "value": true, "target": "self" },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Vessel Black Flash Discount",
+            "abilityId": "yuji-black-flash",
+            "mode": "set",
+            "cost": {},
+            "duration": 2,
+            "uses": 1
+          }
+        }
+      ]
+    },
+    {
+      "label": "Sukuna Surge",
+      "trigger": "onDefeatEnemy",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "yuji-black-flash" },
+        { "type": "fighterFlag", "key": "vessel_triggered", "value": true }
+      ],
+      "effects": [
+        {
+          "type": "effectImmunity",
+          "label": "Ignore Non-Damage",
+          "blocks": ["nonDamage"],
+          "duration": 1,
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "label": "Black Flash Chain",
+      "trigger": "onAbilityUse",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "yuji-black-flash" },
+        { "type": "usedAbilityLastTurn", "abilityId": "yuji-black-flash" }
+      ],
+      "effects": [
+        {
+          "type": "addModifier",
+          "target": "self",
+          "modifier": {
+            "label": "Black Flash Chain Bonus",
+            "stat": "damageDealt",
+            "mode": "flat",
+            "value": 10,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["black-flash-chain"],
+            "visible": false,
+            "stacking": "replace"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Soul Counter",
+      "trigger": "onShieldBroken",
+      "conditions": [
+        { "type": "brokenShieldTag", "tag": "soul-perception" }
+      ],
+      "effects": [
+        { "type": "damage", "power": 15, "target": "inherit" }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "yuji-divergent-fist",
+      "name": "Divergent Fist",
+      "description": "Deals 15 damage, permanently raises Yuji's damage by 5, and makes the next Black Flash cheaper.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Instant"],
+      "icon": { "label": "DF", "tone": "red" },
+      "cooldown": 1,
+      "energyCost": { "physical": 1 },
+      "effects": [
+        { "type": "damage", "power": 15, "target": "inherit" },
+        {
+          "type": "addModifier",
+          "target": "self",
+          "modifier": {
+            "label": "Divergent Momentum",
+            "stat": "damageDealt",
+            "mode": "flat",
+            "value": 5,
+            "duration": { "kind": "permanent" },
+            "tags": ["divergent-fist"],
+            "visible": true,
+            "stacking": "stack",
+            "statusKind": "attackUp"
+          }
+        },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Black Flash Setup",
+            "abilityId": "yuji-black-flash",
+            "mode": "reduceRandom",
+            "amount": 1,
+            "duration": 1,
+            "uses": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "yuji-black-flash",
+      "name": "Black Flash",
+      "description": "Deals 20 damage. Repeated Black Flash uses gain a temporary damage bonus through the chain passive.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Instant"],
+      "icon": { "label": "BF", "tone": "red" },
+      "cooldown": 0,
+      "energyCost": { "random": 1 },
+      "effects": [
+        { "type": "damage", "power": 20, "target": "inherit" },
+        { "type": "adjustCounter", "key": "black_flash_chain", "amount": 1, "target": "self" }
+      ]
+    },
+    {
+      "id": "yuji-soul-perception",
+      "name": "Soul Perception",
+      "description": "Yuji gains a 25-point shield. While active, the next Black Flash becomes free. If the shield is broken, the breaker takes 15 damage.",
+      "kind": "utility",
+      "targetRule": "self",
+      "classes": ["Unique", "Mental", "Instant"],
+      "icon": { "label": "SP", "tone": "teal" },
+      "cooldown": 3,
+      "energyCost": { "vow": 1 },
+      "effects": [
+        { "type": "shield", "amount": 25, "label": "Soul Perception", "tags": ["soul-perception"], "target": "self" },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Soul Perception Flash Discount",
+            "abilityId": "yuji-black-flash",
+            "mode": "set",
+            "cost": {},
+            "duration": 2,
+            "uses": 1
+          }
+        }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "yuji-manji-kick",
+    "name": "Manji Kick",
+    "description": "A heavy finishing rush that fits the required ultimate slot for the current engine.",
+    "kind": "attack",
+    "targetRule": "enemy-single",
+    "classes": ["Melee", "Physical", "Ultimate", "Action"],
+    "icon": { "label": "MK", "tone": "gold" },
+    "cooldown": 4,
+    "effects": [
+      { "type": "damage", "power": 40, "target": "inherit" }
+    ]
+  }
+}

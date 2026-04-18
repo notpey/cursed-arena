@@ -66,6 +66,10 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityLastTurn abilityId is required')
       return
     case 'shieldActive':
+      return
+    case 'brokenShieldTag':
+      if (!condition.tag.trim()) pushIssue(issues, scope, 'brokenShieldTag tag is required')
+      return
     case 'abilityClass':
     case 'isUltimate':
       return

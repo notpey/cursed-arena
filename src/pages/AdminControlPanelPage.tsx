@@ -43,6 +43,7 @@ const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', '
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
 const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost', 'shield', 'modifyAbilityCost', 'effectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
+const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
@@ -309,6 +310,35 @@ function usesBooleanModifierValue(effect: Extract<SkillEffect, { type: 'addModif
   return effect.modifier.stat === 'canAct' || effect.modifier.stat === 'isInvulnerable' || typeof effect.modifier.value === 'boolean'
 }
 
+function createReactionCondition(type: BattleReactionCondition['type']): BattleReactionCondition {
+  switch (type) {
+    case 'selfHpBelow':
+      return { type: 'selfHpBelow', threshold: 0.4 }
+    case 'targetHpBelow':
+      return { type: 'targetHpBelow', threshold: 0.4 }
+    case 'actorHasStatus':
+      return { type: 'actorHasStatus', status: 'stun' }
+    case 'targetHasStatus':
+      return { type: 'targetHasStatus', status: 'stun' }
+    case 'abilityId':
+      return { type: 'abilityId', abilityId: 'ability-id' }
+    case 'abilityClass':
+      return { type: 'abilityClass', class: 'Unique' }
+    case 'fighterFlag':
+      return { type: 'fighterFlag', key: 'state-flag', value: true }
+    case 'counterAtLeast':
+      return { type: 'counterAtLeast', key: 'state-counter', value: 1 }
+    case 'usedAbilityLastTurn':
+      return { type: 'usedAbilityLastTurn', abilityId: 'ability-id' }
+    case 'shieldActive':
+      return { type: 'shieldActive', tag: 'shield-tag' }
+    case 'brokenShieldTag':
+      return { type: 'brokenShieldTag', tag: 'shield-tag' }
+    case 'isUltimate':
+      return { type: 'isUltimate' }
+  }
+}
+
 function describeCondition(condition: BattleReactionCondition) {
   switch (condition.type) {
     case 'targetHpBelow':
@@ -331,6 +361,8 @@ function describeCondition(condition: BattleReactionCondition) {
       return `last ability was ${condition.abilityId}`
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'shield active'
+    case 'brokenShieldTag':
+      return `broken shield had ${condition.tag}`
     case 'isUltimate':
       return 'ability is an ultimate'
   }
@@ -1303,6 +1335,10 @@ export function AdminControlPanelPage() {
                                 advancedJson={JSON.stringify(selectedPassive.effects, null, 2)}
                                 onAdvancedJsonChange={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedPassive((p) => { p.effects = parsed }), "PASSIVE EFFECTS UPDATED")}
                               />
+                              <ConditionListEditor
+                                conditions={selectedPassive.conditions ?? []}
+                                onChange={(conditions) => updateSelectedPassive((p) => { p.conditions = conditions.length > 0 ? conditions : undefined })}
+                              />
                               <details className="rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.6)] px-3 py-2">
                                 <summary className="ca-mono-label cursor-pointer text-[0.42rem] text-ca-text-2">Conditions JSON</summary>
                                 <div className="mt-3">
@@ -2074,6 +2110,107 @@ function EffectListEditor({
           <TextAreaField label="Effects JSON" value={advancedJson} onChange={onAdvancedJsonChange} rows={8} mono />
         </div>
       </details>
+    </div>
+  )
+}
+
+function ConditionListEditor({
+  conditions,
+  onChange,
+}: {
+  conditions: BattleReactionCondition[]
+  onChange: (conditions: BattleReactionCondition[]) => void
+}) {
+  function addCondition(type: BattleReactionCondition['type']) {
+    onChange([...conditions, createReactionCondition(type)])
+  }
+
+  function updateCondition(index: number, condition: BattleReactionCondition) {
+    onChange(conditions.map((entry, entryIndex) => (entryIndex === index ? condition : entry)))
+  }
+
+  function removeCondition(index: number) {
+    onChange(conditions.filter((_, entryIndex) => entryIndex !== index))
+  }
+
+  return (
+    <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
+      <div>
+        <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Conditions</p>
+        <p className="mt-1 text-xs leading-5 text-ca-text-2">Gate passive triggers with HP, ability use, flags, counters, or shield context.</p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {conditionTypes.map((type) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => addCondition(type)}
+            className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2 hover:border-ca-teal/25 hover:text-ca-teal"
+          >
+            ADD {type.toUpperCase()}
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 space-y-3">
+        {conditions.length > 0 ? (
+          conditions.map((condition, index) => (
+            <ConditionRowEditor
+              key={`${condition.type}-${index}`}
+              condition={condition}
+              index={index}
+              onChange={(next) => updateCondition(index, next)}
+              onRemove={() => removeCondition(index)}
+            />
+          ))
+        ) : (
+          <div className="rounded-[8px] border border-dashed border-white/10 px-3 py-3 text-sm text-ca-text-3">No conditions yet. Leave empty for an unconditional trigger.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ConditionRowEditor({
+  condition,
+  index,
+  onChange,
+  onRemove,
+}: {
+  condition: BattleReactionCondition
+  index: number
+  onChange: (condition: BattleReactionCondition) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="rounded-[10px] border border-white/8 bg-[rgba(11,11,18,0.72)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Condition {index + 1}</p>
+        <button type="button" onClick={onRemove} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.38rem] text-ca-red">REMOVE</button>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <SelectField
+          label="Type"
+          value={condition.type}
+          options={conditionTypes.map((value) => ({ value, label: value.toUpperCase() }))}
+          onChange={(value) => onChange(createReactionCondition(value as BattleReactionCondition['type']))}
+        />
+        {(condition.type === 'selfHpBelow' || condition.type === 'targetHpBelow') ? (
+          <NumberField label="Threshold %" value={Math.round(condition.threshold * 100)} onChange={(value) => onChange({ ...condition, threshold: value / 100 })} />
+        ) : null}
+        {(condition.type === 'actorHasStatus' || condition.type === 'targetHasStatus') ? (
+          <SelectField label="Status" value={condition.status} options={modifierStatusKinds.filter(Boolean).map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...condition, status: value as BattleStatusKind })} />
+        ) : null}
+        {condition.type === 'abilityId' ? <InputField label="Ability ID" value={condition.abilityId} onChange={(value) => onChange({ ...condition, abilityId: value })} /> : null}
+        {condition.type === 'abilityClass' ? <SelectField label="Ability Class" value={condition.class} options={battleSkillClassOptions.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...condition, class: value as BattleSkillClass })} /> : null}
+        {condition.type === 'fighterFlag' ? <InputField label="Flag Key" value={condition.key} onChange={(value) => onChange({ ...condition, key: value })} /> : null}
+        {condition.type === 'fighterFlag' ? <SelectField label="Value" value={String(condition.value)} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...condition, value: value === 'true' })} /> : null}
+        {condition.type === 'counterAtLeast' ? <InputField label="Counter Key" value={condition.key} onChange={(value) => onChange({ ...condition, key: value })} /> : null}
+        {condition.type === 'counterAtLeast' ? <NumberField label="At Least" value={condition.value} onChange={(value) => onChange({ ...condition, value })} /> : null}
+        {condition.type === 'usedAbilityLastTurn' ? <InputField label="Ability ID" value={condition.abilityId} onChange={(value) => onChange({ ...condition, abilityId: value })} /> : null}
+        {condition.type === 'shieldActive' ? <InputField label="Shield Tag" value={condition.tag ?? ''} onChange={(value) => onChange({ ...condition, tag: value || undefined })} /> : null}
+        {condition.type === 'brokenShieldTag' ? <InputField label="Shield Tag" value={condition.tag} onChange={(value) => onChange({ ...condition, tag: value })} /> : null}
+      </div>
+      <p className="mt-3 text-sm leading-6 text-ca-text-2">{describeCondition(condition)}</p>
     </div>
   )
 }

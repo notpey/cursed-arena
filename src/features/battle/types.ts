@@ -235,6 +235,7 @@ export type BattleReactionCondition =
   | { type: 'counterAtLeast'; key: string; value: number }
   | { type: 'usedAbilityLastTurn'; abilityId: string }
   | { type: 'shieldActive'; tag?: string }
+  | { type: 'brokenShieldTag'; tag: string }
   | { type: 'isUltimate' }
 
 export type BattleScheduledPhase = 'roundStart' | 'roundEnd'

@@ -120,6 +120,8 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `last used ${condition.abilityId}`
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'any shield active'
+    case 'brokenShieldTag':
+      return `broken shield had ${condition.tag}`
     case 'isUltimate':
       return 'using an ultimate'
   }
