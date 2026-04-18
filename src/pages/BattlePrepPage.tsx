@@ -108,13 +108,6 @@ function PortraitThumb({
 }) {
   const style = rarityStyles[entry.rarity]
   const initial = entry.battleTemplate.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(entry.battleTemplate.boardPortraitSrc)
-  const frame = {}
-  const portraitScale = frame.scale ?? 1
-  const portraitX = frame.x ?? '0%'
-  const portraitY = frame.y ?? '0%'
-  const portraitOpacity = frame.opacity ?? 1
-  const portraitWidth = frame.maxWidth ?? '100%'
 
   return (
     <div
@@ -130,28 +123,12 @@ function PortraitThumb({
 
       {entry.battleTemplate.boardPortraitSrc ? (
         <div className="absolute inset-0 overflow-hidden">
-          {portraitMode ? (
-            <img
-              src={entry.battleTemplate.boardPortraitSrc}
-              alt={entry.name}
-              className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
-              style={{ opacity: portraitOpacity }}
-              draggable={false}
-            />
-          ) : (
-            <img
-              src={entry.battleTemplate.boardPortraitSrc}
-              alt={entry.name}
-              className="pointer-events-none absolute left-1/2 top-0 h-full max-w-none select-none object-cover"
-              style={{
-                width: portraitWidth,
-                opacity: portraitOpacity,
-                transform: `translate(-50%, 0) translate(${portraitX}, ${portraitY}) scale(${portraitScale})`,
-                transformOrigin: 'top center',
-              }}
-              draggable={false}
-            />
-          )}
+          <img
+            src={entry.battleTemplate.boardPortraitSrc}
+            alt={entry.name}
+            className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+            draggable={false}
+          />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.24))]" />
         </div>
       ) : (

@@ -1777,41 +1777,18 @@ function AssetField({
 
 function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterTemplate; compact?: boolean }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(fighter.boardPortraitSrc)
-  const frame = {}
-  const scale = frame.scale ?? 1
-  const x = frame.x ?? '0%'
-  const y = frame.y ?? '0%'
-  const opacity = frame.opacity ?? 1
-  const width = frame.maxWidth ?? '100%'
   const sizeClass = compact ? 'h-[5rem] w-[5rem]' : 'h-[8rem] w-[8rem]'
 
   return (
     <div className={`relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))] ${sizeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(5,216,189,0.08),transparent_70%)]" />
       {fighter.boardPortraitSrc ? (
-        portraitMode ? (
-          <img
-            src={fighter.boardPortraitSrc}
-            alt={fighter.name}
-            className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
-            style={{ opacity }}
-            draggable={false}
-          />
-        ) : (
-          <img
-            src={fighter.boardPortraitSrc}
-            alt={fighter.name}
-            className="pointer-events-none absolute left-1/2 top-0 h-full max-w-none select-none object-cover"
-            style={{
-              width,
-              opacity,
-              transform: `translate(-50%, 0) translate(${x}, ${y}) scale(${scale})`,
-              transformOrigin: 'top center',
-            }}
-            draggable={false}
-          />
-        )
+        <img
+          src={fighter.boardPortraitSrc}
+          alt={fighter.name}
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+          draggable={false}
+        />
       ) : (
         <div className="absolute inset-0 grid place-items-center">
           <span className="ca-display text-[2rem] text-white/35">{initial}</span>
