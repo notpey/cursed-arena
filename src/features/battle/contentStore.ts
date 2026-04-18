@@ -12,6 +12,11 @@ import {
 } from '@/features/battle/contentSnapshot.ts'
 
 const supabaseContentKey = 'published_roster'
+
+export type PublishBattleContentResult = {
+  snapshot: BattleContentSnapshot
+  mode: 'local' | 'remote'
+}
 export {
   createContentSnapshot,
   clearDraftBattleContent,
@@ -24,28 +29,59 @@ export {
   type BattleContentSetup,
 }
 
+function clonePublishedSnapshot(snapshot: BattleContentSnapshot): BattleContentSnapshot {
+  return {
+    roster: JSON.parse(JSON.stringify(snapshot.roster)) as BattleContentSnapshot['roster'],
+    defaultSetup: {
+      playerTeamIds: snapshot.defaultSetup.playerTeamIds.slice(),
+      enemyTeamIds: snapshot.defaultSetup.enemyTeamIds.slice(),
+    },
+    updatedAt: Date.now(),
+  }
+}
+
 /**
- * Publish content locally (localStorage) and to Supabase so all users see it.
- * The Supabase write is fire-and-forget from the caller's perspective — await it
- * if you need confirmation.
+ * Publish content to Supabase so all users see it, then mirror the confirmed
+ * snapshot into localStorage. When Supabase is unavailable, this falls back to
+ * a local-only publish.
  */
-export async function publishBattleContent(snapshot: BattleContentSnapshot): Promise<BattleContentSnapshot> {
-  const published = savePublishedBattleContent(snapshot)
-
-  // Always persist locally first so the ACP stays responsive
-  // Push to Supabase
+export async function publishBattleContent(snapshot: BattleContentSnapshot): Promise<PublishBattleContentResult> {
+  const published = clonePublishedSnapshot(snapshot)
   const client = getSupabaseClient()
-  if (client) {
-    const { error } = await client
-      .from('game_content')
-      .upsert({ key: supabaseContentKey, content: published, updated_at: new Date().toISOString() }, { onConflict: 'key' })
 
-    if (error) {
-      console.warn('[contentStore] Failed to push published content to Supabase:', error.message)
+  if (!client) {
+    return {
+      snapshot: savePublishedBattleContent(published),
+      mode: 'local',
     }
   }
 
-  return published
+  const { error } = await client
+    .from('game_content')
+    .upsert({ key: supabaseContentKey, content: published, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const { data: confirmed, error: confirmError } = await client
+    .from('game_content')
+    .select('content')
+    .eq('key', supabaseContentKey)
+    .maybeSingle<{ content: BattleContentSnapshot }>()
+
+  if (confirmError) {
+    throw new Error(confirmError.message)
+  }
+
+  if (!confirmed?.content || typeof confirmed.content.updatedAt !== 'number') {
+    throw new Error('Published content could not be verified after the write.')
+  }
+
+  return {
+    snapshot: savePublishedBattleContent(confirmed.content),
+    mode: 'remote',
+  }
 }
 
 /**

@@ -80,7 +80,8 @@ export function clearPublishedBattleContent() {
 }
 
 export function savePublishedBattleContent(snapshot: BattleContentSnapshot) {
-  const next = { ...cloneSnapshot(snapshot), updatedAt: Date.now() }
+  const next = cloneSnapshot(snapshot)
+  next.updatedAt = typeof snapshot.updatedAt === 'number' ? snapshot.updatedAt : Date.now()
   writeStorage(publishedContentKey, next)
   return next
 }

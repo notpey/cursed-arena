@@ -483,6 +483,7 @@ export function AdminControlPanelPage() {
   const [expandedPassiveIndices, setExpandedPassiveIndices] = useState<Set<number>>(new Set([0]))
   const [showReference, setShowReference] = useState(false)
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
+  const [isPublishing, setIsPublishing] = useState(false)
   const [fighterJsonDraft, setFighterJsonDraft] = useState('')
   const draftRef = useRef(draft)
 
@@ -887,8 +888,19 @@ export function AdminControlPanelPage() {
       abilityId: selectedAbilityId,
       passiveIndex: selectedPassiveIndex,
     })
-    await publishBattleContent(draft)
-    window.location.reload()
+
+    setIsPublishing(true)
+    try {
+      const result = await publishBattleContent(draft)
+      setStatusFlash(result.mode === 'remote' ? 'PUBLISHED LIVE' : 'PUBLISHED LOCAL ONLY')
+      window.location.reload()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown publish error.'
+      console.warn('[ACP] Publish failed:', message)
+      setStatusFlash('PUBLISH FAILED')
+    } finally {
+      setIsPublishing(false)
+    }
   }
 
   function handleRevertPublished() {
@@ -959,9 +971,10 @@ export function AdminControlPanelPage() {
               <button
                 type="button"
                 onClick={handlePublish}
+                disabled={isPublishing}
                 className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2.5 text-[1rem] text-white"
               >
-                Publish
+                {isPublishing ? 'Publishing...' : 'Publish'}
               </button>
               <button
                 type="button"
