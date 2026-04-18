@@ -19,6 +19,7 @@ import {
   spendEnergy,
   sumEnergyCosts,
   totalEnergyInPool,
+  type BattleEnergyCost,
   type BattleEnergyType,
 } from '@/features/battle/energy.ts'
 import { createSeededRandom } from '@/features/battle/random.ts'
@@ -52,7 +53,10 @@ import {
 import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
+  BattleCostModifierState,
+  BattleCostModifierTemplate,
   BattleDamagePacket,
+  BattleEffectImmunityState,
   BattleEvent,
   BattleEventTone,
   BattleFighterState,
@@ -64,6 +68,7 @@ import type {
   BattleReactionCondition,
   BattleResolutionResult,
   BattleResourceKey,
+  BattleShieldState,
   BattleResourcePacket,
   BattleRuntimeEvent,
   BattleRuntimeEventType,
@@ -103,6 +108,24 @@ function cloneAbilityStateDelta(delta: BattleAbilityStateDelta): BattleAbilitySt
   }
 }
 
+function cloneCostModifier(modifier: BattleCostModifierState): BattleCostModifierState {
+  return {
+    ...modifier,
+    cost: modifier.cost ? { ...modifier.cost } : undefined,
+  }
+}
+
+function cloneEffectImmunity(immunity: BattleEffectImmunityState): BattleEffectImmunityState {
+  return {
+    ...immunity,
+    blocks: [...immunity.blocks],
+  }
+}
+
+function cloneShield(shield: BattleShieldState | null): BattleShieldState | null {
+  return shield ? { ...shield, tags: [...shield.tags] } : null
+}
+
 function cloneFighter(fighter: BattleFighterState): BattleFighterState {
   return {
     ...fighter,
@@ -113,6 +136,12 @@ function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     statuses: cloneStatuses(fighter.statuses),
     modifiers: cloneModifiers(fighter.modifiers),
     abilityState: fighter.abilityState.map(cloneAbilityStateDelta),
+    shield: cloneShield(fighter.shield),
+    costModifiers: fighter.costModifiers.map(cloneCostModifier),
+    effectImmunities: fighter.effectImmunities.map(cloneEffectImmunity),
+    stateFlags: { ...fighter.stateFlags },
+    stateCounters: { ...fighter.stateCounters },
+    lastUsedAbilityId: fighter.lastUsedAbilityId,
   }
 }
 
@@ -208,6 +237,12 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         statuses: createStatuses(),
         modifiers: createModifiers(),
         abilityState: [],
+        shield: null,
+        costModifiers: [],
+        effectImmunities: [],
+        stateFlags: {},
+        stateCounters: {},
+        lastUsedAbilityId: null,
       }
     })
     .filter(Boolean) as BattleFighterState[]
@@ -275,6 +310,107 @@ function tickAbilityState(fighter: BattleFighterState) {
   fighter.abilityState = fighter.abilityState
     .map((delta) => ({ ...delta, duration: Math.max(0, delta.duration - 1) }))
     .filter((delta) => delta.duration > 0)
+}
+
+function tickCostModifiers(fighter: BattleFighterState) {
+  fighter.costModifiers = fighter.costModifiers
+    .map((modifier) => ({ ...modifier, remainingRounds: Math.max(0, modifier.remainingRounds - 1) }))
+    .filter((modifier) => modifier.remainingRounds > 0 && (modifier.remainingUses == null || modifier.remainingUses > 0))
+}
+
+function tickEffectImmunities(fighter: BattleFighterState) {
+  fighter.effectImmunities = fighter.effectImmunities
+    .map((immunity) => ({ ...immunity, remainingRounds: Math.max(0, immunity.remainingRounds - 1) }))
+    .filter((immunity) => immunity.remainingRounds > 0)
+}
+
+function createCostModifierState(
+  actor: BattleFighterState,
+  abilityId: string | undefined,
+  template: BattleCostModifierTemplate,
+): BattleCostModifierState {
+  return {
+    ...template,
+    id: `cost-${actor.instanceId}-${abilityId ?? 'passive'}-${actor.costModifiers.length}`,
+    cost: template.cost ? { ...template.cost } : undefined,
+    remainingRounds: template.duration,
+    remainingUses: template.uses == null ? null : Math.max(0, template.uses),
+    sourceActorId: actor.instanceId,
+    sourceAbilityId: abilityId,
+  }
+}
+
+function matchesCostModifier(modifier: BattleCostModifierState, ability: BattleAbilityTemplate) {
+  if (modifier.abilityId && modifier.abilityId !== ability.id) return false
+  if (modifier.abilityClass && !ability.classes.includes(modifier.abilityClass)) return false
+  return true
+}
+
+function applyCostModifier(cost: BattleEnergyCost, modifier: BattleCostModifierState): BattleEnergyCost {
+  if (modifier.mode === 'set') {
+    return { ...(modifier.cost ?? {}) }
+  }
+
+  if (modifier.mode === 'reduceRandom') {
+    return {
+      ...cost,
+      random: Math.max(0, (cost.random ?? 0) - Math.max(0, modifier.amount ?? 0)),
+    }
+  }
+
+  const next = { ...cost }
+  battleEnergyOrder.forEach((type) => {
+    next[type] = Math.max(0, (next[type] ?? 0) - Math.max(0, modifier.amount ?? 0))
+  })
+  return next
+}
+
+function getResolvedAbilityEnergyCost(
+  fighter: BattleFighterState,
+  ability: BattleAbilityTemplate,
+) {
+  const base = { ...getAbilityEnergyCost(ability) }
+  const applied = fighter.costModifiers.filter((modifier) => matchesCostModifier(modifier, ability))
+  const cost = applied.reduce((current, modifier) => applyCostModifier(current, modifier), base)
+  return { cost, applied }
+}
+
+function consumeCostModifiers(fighter: BattleFighterState, ability: BattleAbilityTemplate) {
+  fighter.costModifiers = fighter.costModifiers
+    .map((modifier) => {
+      if (!matchesCostModifier(modifier, ability) || modifier.remainingUses == null) return modifier
+      return { ...modifier, remainingUses: Math.max(0, modifier.remainingUses - 1) }
+    })
+    .filter((modifier) => modifier.remainingRounds > 0 && (modifier.remainingUses == null || modifier.remainingUses > 0))
+}
+
+function createEffectImmunityState(
+  actor: BattleFighterState,
+  abilityId: string | undefined,
+  effect: Extract<SkillEffect, { type: 'effectImmunity' }>,
+): BattleEffectImmunityState {
+  return {
+    id: `immunity-${actor.instanceId}-${abilityId ?? 'passive'}-${actor.effectImmunities.length}`,
+    label: effect.label,
+    blocks: [...effect.blocks],
+    remainingRounds: effect.duration,
+    sourceActorId: actor.instanceId,
+    sourceAbilityId: abilityId,
+  }
+}
+
+function isEffectBlocked(target: BattleFighterState, effect: SkillEffect) {
+  return target.effectImmunities.some((immunity) =>
+    immunity.blocks.includes(effect.type) || (effect.type !== 'damage' && immunity.blocks.includes('nonDamage')),
+  )
+}
+
+function setFighterFlag(fighter: BattleFighterState, key: string, value: boolean) {
+  fighter.stateFlags[key] = value
+}
+
+function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: number) {
+  fighter.stateCounters[key] = (fighter.stateCounters[key] ?? 0) + amount
 }
 export function coinFlip(seed = 'default-battle-seed'): BattleTeamId {
   return createSeededRandom(seed)() < 0.5 ? 'player' : 'enemy'
@@ -364,7 +500,7 @@ function getCommandEnergyCost(state: BattleState, command: QueuedBattleAction) {
   if (!actor) return {}
 
   const ability = getAbilityById(actor, command.abilityId)
-  return ability ? getAbilityEnergyCost(ability) : {}
+  return ability ? getResolvedAbilityEnergyCost(actor, ability).cost : {}
 }
 
 function cloneEnergyPool(state: BattleState, team: BattleTeamId) {
@@ -431,7 +567,7 @@ export function canUseAbility(state: BattleState, fighter: BattleFighterState, a
   if (!ability) return false
   if (!isAlive(fighter)) return false
   if (abilityId === PASS_ABILITY_ID) return true
-  if (!canPayEnergy(getEnergyPool(state, fighter.team), getAbilityEnergyCost(ability))) return false
+  if (!canPayEnergy(getEnergyPool(state, fighter.team), getResolvedAbilityEnergyCost(fighter, ability).cost)) return false
   return getCooldown(fighter, abilityId) <= 0
 }
 
@@ -448,7 +584,7 @@ export function canQueueAbility(
   if (getCooldown(fighter, abilityId) > 0) return false
 
   const projectedPool = getProjectedTeamEnergy(state, queued, fighter.team, fighter.instanceId)
-  return canPayEnergy(projectedPool, getAbilityEnergyCost(ability))
+  return canPayEnergy(projectedPool, getResolvedAbilityEnergyCost(fighter, ability).cost)
 }
 
 export function getValidTargetIds(state: BattleState, actorId: string, abilityId: string) {
@@ -560,6 +696,14 @@ function matchesReactionCondition(
       return context.ability?.id === condition.abilityId
     case 'abilityClass':
       return Boolean(context.ability?.classes.includes(condition.class))
+    case 'fighterFlag':
+      return (actor.stateFlags[condition.key] ?? false) === condition.value
+    case 'counterAtLeast':
+      return (actor.stateCounters[condition.key] ?? 0) >= condition.value
+    case 'usedAbilityLastTurn':
+      return actor.lastUsedAbilityId === condition.abilityId
+    case 'shieldActive':
+      return Boolean(actor.shield && (!condition.tag || actor.shield.tags.includes(condition.tag)))
     case 'isUltimate':
       return context.isUltimate ?? Boolean(context.ability?.classes.includes('Ultimate'))
   }
@@ -729,6 +873,75 @@ function emitResourceChange(
     amount: getResourcePacketAmount(packet.amounts),
     tags: packet.tags,
     packet,
+  })
+}
+
+function emitShieldEvent(
+  ctx: ResolutionContext,
+  round: number,
+  type: Extract<BattleRuntimeEventType, 'shield_applied' | 'shield_damaged' | 'shield_broken'>,
+  target: BattleFighterState,
+  payload: {
+    actorId?: string
+    abilityId?: string
+    amount: number
+    label?: string
+    tags?: string[]
+  },
+) {
+  makeRuntimeEvent(ctx, round, type, {
+    actorId: payload.actorId,
+    targetId: target.instanceId,
+    team: target.team,
+    abilityId: payload.abilityId,
+    amount: payload.amount,
+    tags: payload.tags,
+    meta: {
+      label: payload.label ?? null,
+    },
+  })
+}
+
+function emitFlagChange(
+  ctx: ResolutionContext,
+  round: number,
+  fighter: BattleFighterState,
+  key: string,
+  value: boolean,
+  actorId?: string,
+  abilityId?: string,
+) {
+  makeRuntimeEvent(ctx, round, 'fighter_flag_changed', {
+    actorId,
+    targetId: fighter.instanceId,
+    team: fighter.team,
+    abilityId,
+    meta: {
+      key,
+      value,
+    },
+  })
+}
+
+function emitCounterChange(
+  ctx: ResolutionContext,
+  round: number,
+  fighter: BattleFighterState,
+  key: string,
+  value: number,
+  actorId?: string,
+  abilityId?: string,
+) {
+  makeRuntimeEvent(ctx, round, 'counter_changed', {
+    actorId,
+    targetId: fighter.instanceId,
+    team: fighter.team,
+    abilityId,
+    amount: value,
+    meta: {
+      key,
+      value,
+    },
   })
 }
 
@@ -1026,6 +1239,94 @@ function applyAbilityStateDeltaToFighter(
     },
   })
 }
+
+function applyShieldToFighter(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'shield' }>,
+  abilityId?: string,
+) {
+  const label = effect.label?.trim() || 'Barrier'
+  const tags = effect.tags ?? []
+  const previous = target.shield
+  target.shield = previous
+    ? {
+        ...previous,
+        amount: previous.amount + effect.amount,
+        label,
+        sourceActorId: actor.instanceId,
+        sourceAbilityId: abilityId,
+        tags: Array.from(new Set(previous.tags.concat(tags))),
+      }
+    : {
+        amount: effect.amount,
+        label,
+        sourceActorId: actor.instanceId,
+        sourceAbilityId: abilityId,
+        tags: [...tags],
+      }
+
+  emitShieldEvent(ctx, state.round, 'shield_applied', target, {
+    actorId: actor.instanceId,
+    abilityId,
+    amount: effect.amount,
+    label,
+    tags,
+  })
+}
+
+function applyCostModifierToFighter(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'modifyAbilityCost' }>,
+  abilityId?: string,
+) {
+  const modifier = createCostModifierState(actor, abilityId, effect.modifier)
+  target.costModifiers.push(modifier)
+  makeRuntimeEvent(ctx, state.round, 'ability_cost_modified', {
+    actorId: actor.instanceId,
+    targetId: target.instanceId,
+    team: target.team,
+    abilityId,
+    meta: {
+      label: modifier.label,
+      mode: modifier.mode,
+      duration: modifier.duration,
+      uses: modifier.uses ?? null,
+      abilityId: modifier.abilityId ?? null,
+      abilityClass: modifier.abilityClass ?? null,
+    },
+  })
+}
+
+function applyEffectImmunityToFighter(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'effectImmunity' }>,
+  abilityId?: string,
+) {
+  target.effectImmunities.push(createEffectImmunityState(actor, abilityId, effect))
+  makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
+    actorId: actor.instanceId,
+    targetId: target.instanceId,
+    team: target.team,
+    abilityId,
+    meta: {
+      label: effect.label,
+      stat: 'effectImmunity',
+      mode: 'set',
+      scope: 'fighter',
+      status: null,
+    },
+  })
+}
+
 function applyDefeat(
   state: BattleState,
   ctx: ResolutionContext,
@@ -1042,6 +1343,9 @@ function applyDefeat(
     tags: ability?.classes,
   })
   firePassives(state, ctx, defeated, source, 'onDefeat', ability)
+  if (source) {
+    firePassives(state, ctx, source, defeated, 'onDefeatEnemy', ability)
+  }
 }
 
 function applyDamagePacket(
@@ -1079,22 +1383,73 @@ function applyDamagePacket(
     return 0
   }
 
-  target.hp = Math.max(0, target.hp - packet.amount)
-  makeEvent(ctx, state.round, 'damage', 'red', `${actor?.shortName ?? target.shortName} hit ${target.shortName} for ${packet.amount}.`, actor?.instanceId, target.instanceId, packet.amount, packet.abilityId)
+  let remainingDamage = packet.amount
+  if (target.shield && target.shield.amount > 0) {
+    const absorbed = Math.min(target.shield.amount, remainingDamage)
+    target.shield.amount -= absorbed
+    remainingDamage -= absorbed
+    emitShieldEvent(ctx, state.round, 'shield_damaged', target, {
+      actorId: actor?.instanceId,
+      abilityId: packet.abilityId,
+      amount: absorbed,
+      label: target.shield.label,
+      tags: target.shield.tags,
+    })
+
+    if (target.shield.amount <= 0) {
+      const brokenShield = target.shield
+      target.shield = null
+      emitShieldEvent(ctx, state.round, 'shield_broken', target, {
+        actorId: actor?.instanceId,
+        abilityId: packet.abilityId,
+        amount: absorbed,
+        label: brokenShield.label,
+        tags: brokenShield.tags,
+      })
+      firePassives(
+        state,
+        ctx,
+        target,
+        actor,
+        'onShieldBroken',
+        actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
+        effect,
+        absorbed,
+      )
+    }
+  }
+
+  if (remainingDamage <= 0) {
+    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s shield absorbed the hit.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
+    makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
+      actorId: packet.sourceActorId,
+      targetId: packet.targetId,
+      team: target.team,
+      abilityId: packet.abilityId,
+      amount: 0,
+      tags: packet.tags,
+      packet: { ...packet, amount: 0 },
+      meta: { blockedByShield: true },
+    })
+    return 0
+  }
+
+  target.hp = Math.max(0, target.hp - remainingDamage)
+  makeEvent(ctx, state.round, 'damage', 'red', `${actor?.shortName ?? target.shortName} hit ${target.shortName} for ${remainingDamage}.`, actor?.instanceId, target.instanceId, remainingDamage, packet.abilityId)
   makeRuntimeEvent(ctx, state.round, 'damage_applied', {
     actorId: packet.sourceActorId,
     targetId: packet.targetId,
     team: target.team,
     abilityId: packet.abilityId,
-    amount: packet.amount,
+    amount: remainingDamage,
     tags: packet.tags,
-    packet,
+    packet: { ...packet, amount: remainingDamage },
   })
 
   if (actor) {
     const ability = packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
-    firePassives(state, ctx, actor, target, 'onDealDamage', ability, effect, packet.amount)
-    firePassives(state, ctx, target, actor, 'onTakeDamage', ability, effect, packet.amount)
+    firePassives(state, ctx, actor, target, 'onDealDamage', ability, effect, remainingDamage)
+    firePassives(state, ctx, target, actor, 'onTakeDamage', ability, effect, remainingDamage)
     if (target.hp <= 0) {
       applyDefeat(state, ctx, target, actor, ability)
     }
@@ -1102,7 +1457,7 @@ function applyDamagePacket(
     applyDefeat(state, ctx, target, null)
   }
 
-  return packet.amount
+  return remainingDamage
 }
 
 function applyHealPacket(
@@ -1253,6 +1608,21 @@ function resolveEffects(
         scopedTargets.add(scopeKey)
       }
 
+      if (isEffectBlocked(t, effect)) {
+        makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+          actorId: actor.instanceId,
+          targetId: t.instanceId,
+          team: t.team,
+          abilityId,
+          tags: abilityClasses ?? [],
+          meta: {
+            effectType: effect.type,
+            blockedBy: 'effectImmunity',
+          },
+        })
+        continue
+      }
+
       switch (effect.type) {
         case 'damage': {
           const amount = calculateDamage(state, actor, t, effect.power, isUlt, abilityId)
@@ -1400,6 +1770,26 @@ function resolveEffects(
           }, actor.instanceId, abilityId)
           makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} replaced ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
+        case 'shield':
+          applyShieldToFighter(state, ctx, actor, t, effect, abilityId)
+          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.amount} shield.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
+          break
+        case 'modifyAbilityCost':
+          applyCostModifierToFighter(state, ctx, actor, t, effect, abilityId)
+          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName}'s technique cost shifted via ${effect.modifier.label}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          break
+        case 'effectImmunity':
+          applyEffectImmunityToFighter(state, ctx, actor, t, effect, abilityId)
+          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.label}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          break
+        case 'setFlag':
+          setFighterFlag(t, effect.key, effect.value)
+          emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
+          break
+        case 'adjustCounter':
+          adjustFighterCounter(t, effect.key, effect.amount)
+          emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          break
         case 'cooldownReduction':
         case 'damageBoost':
           break
@@ -1431,6 +1821,8 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     })
     emitRemovedStatusEvents(ctx, state.round, fighter, beforeKinds)
     tickAbilityState(fighter)
+    tickCostModifiers(fighter)
+    tickEffectImmunities(fighter)
   })
 
   ;(['player', 'enemy'] as BattleTeamId[]).forEach((team) => {
@@ -1466,7 +1858,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   }
 
   if (ability.id !== PASS_ABILITY_ID) {
-    const cost = getAbilityEnergyCost(ability)
+    const { cost, applied } = getResolvedAbilityEnergyCost(actor, ability)
     const currentPool = getEnergyPool(state, actor.team)
     const spent = getSpentEnergyAmounts(currentPool, cost)
     const nextPool = spendEnergy(currentPool, cost)
@@ -1492,6 +1884,20 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       },
       tags: ability.classes,
     })
+    applied.forEach((modifier) => {
+      makeRuntimeEvent(ctx, state.round, 'ability_cost_modified', {
+        actorId: actor.instanceId,
+        targetId: actor.instanceId,
+        team: actor.team,
+        abilityId: ability.id,
+        meta: {
+          label: modifier.label,
+          mode: modifier.mode,
+          applied: true,
+        },
+      })
+    })
+    consumeCostModifiers(actor, ability)
   }
 
   makeEvent(ctx, state.round, 'action', 'frost', `${actor.shortName} activated ${ability.name}.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
@@ -1518,6 +1924,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
   resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.classes)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityResolve', ability)
+  actor.lastUsedAbilityId = ability.id
   makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
     actorId: actor.instanceId,
     targetId: singleTarget?.instanceId,
@@ -1693,7 +2100,7 @@ export function buildEnemyCommands(state: BattleState): Record<string, QueuedBat
     const plannedAction =
       sorted
         .map(({ ability }) => {
-          const cost = getAbilityEnergyCost(ability)
+          const cost = getResolvedAbilityEnergyCost(fighter, ability).cost
           if (canPayEnergy(plannedPool, cost)) {
             return { ability, pool: plannedPool }
           }
@@ -1727,7 +2134,7 @@ export function buildEnemyCommands(state: BattleState): Record<string, QueuedBat
     }
 
     if (ability.id !== PASS_ABILITY_ID) {
-      plannedPool = spendEnergy(plannedAction?.pool ?? plannedPool, getAbilityEnergyCost(ability))
+      plannedPool = spendEnergy(plannedAction?.pool ?? plannedPool, getResolvedAbilityEnergyCost(fighter, ability).cost)
     }
   })
 
@@ -2042,16 +2449,5 @@ export function resolveRound(
 
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 

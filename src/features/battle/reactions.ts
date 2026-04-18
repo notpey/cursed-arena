@@ -16,7 +16,9 @@ export const passiveTriggerOrder: PassiveTrigger[] = [
   'onAbilityResolve',
   'onDealDamage',
   'onTakeDamage',
+  'onShieldBroken',
   'onDefeat',
+  'onDefeatEnemy',
   'onTargetBelow',
 ]
 
@@ -110,6 +112,14 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `using ${condition.abilityId}`
     case 'abilityClass':
       return `using a ${condition.class} technique`
+    case 'fighterFlag':
+      return `${condition.key} is ${condition.value ? 'true' : 'false'}`
+    case 'counterAtLeast':
+      return `${condition.key} at least ${condition.value}`
+    case 'usedAbilityLastTurn':
+      return `last used ${condition.abilityId}`
+    case 'shieldActive':
+      return condition.tag ? `shield ${condition.tag} active` : 'any shield active'
     case 'isUltimate':
       return 'using an ultimate'
   }

@@ -55,6 +55,17 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
     case 'abilityId':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'abilityId is required')
       return
+    case 'fighterFlag':
+      if (!condition.key.trim()) pushIssue(issues, scope, 'fighterFlag key is required')
+      return
+    case 'counterAtLeast':
+      if (!condition.key.trim()) pushIssue(issues, scope, 'counterAtLeast key is required')
+      if (!Number.isFinite(condition.value)) pushIssue(issues, scope, 'counterAtLeast value must be finite')
+      return
+    case 'usedAbilityLastTurn':
+      if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityLastTurn abilityId is required')
+      return
+    case 'shieldActive':
     case 'abilityClass':
     case 'isUltimate':
       return
@@ -115,6 +126,30 @@ function validateSkillEffect(
       if (context.source !== 'passive' || !['whileAlive', 'onTargetBelow'].includes(context.trigger) || effect.target !== 'self') {
         pushIssue(issues, scope, 'damageBoost is only supported on self-targeted whileAlive or onTargetBelow passives')
       }
+      return
+    case 'shield':
+      if (effect.amount <= 0) pushIssue(issues, scope, 'shield amount must be positive')
+      return
+    case 'modifyAbilityCost':
+      if (!effect.modifier.label.trim()) pushIssue(issues, scope, 'modifyAbilityCost label is required')
+      if (effect.modifier.duration <= 0) pushIssue(issues, scope, 'modifyAbilityCost duration must be positive')
+      if (effect.modifier.uses != null && effect.modifier.uses <= 0) pushIssue(issues, scope, 'modifyAbilityCost uses must be positive when authored')
+      if (effect.modifier.mode === 'set' && !effect.modifier.cost) pushIssue(issues, scope, 'modifyAbilityCost set mode requires a cost payload')
+      if ((effect.modifier.mode === 'reduceTyped' || effect.modifier.mode === 'reduceRandom') && (effect.modifier.amount ?? 0) <= 0) {
+        pushIssue(issues, scope, 'modifyAbilityCost reduction modes require a positive amount')
+      }
+      return
+    case 'effectImmunity':
+      if (!effect.label.trim()) pushIssue(issues, scope, 'effectImmunity label is required')
+      if (effect.duration <= 0) pushIssue(issues, scope, 'effectImmunity duration must be positive')
+      if (effect.blocks.length === 0) pushIssue(issues, scope, 'effectImmunity requires at least one block rule')
+      return
+    case 'setFlag':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'setFlag key is required')
+      return
+    case 'adjustCounter':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounter key is required')
+      if (effect.amount === 0) pushIssue(issues, scope, 'adjustCounter amount cannot be zero')
       return
     case 'addModifier':
       if (!effect.modifier.label.trim()) pushIssue(issues, scope, 'addModifier label is required')

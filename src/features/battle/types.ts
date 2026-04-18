@@ -59,6 +59,66 @@ export type BattleAbilityTemplate = {
   statusPower?: number
 }
 
+export type BattleCostModifierMode = 'set' | 'reduceTyped' | 'reduceRandom'
+
+export type BattleCostModifierTemplate = {
+  label: string
+  abilityId?: string
+  abilityClass?: BattleSkillClass
+  mode: BattleCostModifierMode
+  cost?: BattleEnergyCost
+  amount?: number
+  duration: number
+  uses?: number
+}
+
+export type BattleCostModifierState = BattleCostModifierTemplate & {
+  id: string
+  remainingRounds: number
+  remainingUses: number | null
+  sourceActorId?: string
+  sourceAbilityId?: string
+}
+
+export type BattleEffectImmunityBlock =
+  | 'damage'
+  | 'heal'
+  | 'invulnerable'
+  | 'attackUp'
+  | 'stun'
+  | 'mark'
+  | 'burn'
+  | 'cooldownReduction'
+  | 'damageBoost'
+  | 'addModifier'
+  | 'removeModifier'
+  | 'modifyAbilityState'
+  | 'schedule'
+  | 'replaceAbility'
+  | 'shield'
+  | 'modifyAbilityCost'
+  | 'effectImmunity'
+  | 'setFlag'
+  | 'adjustCounter'
+  | 'nonDamage'
+
+export type BattleEffectImmunityState = {
+  id: string
+  label: string
+  blocks: BattleEffectImmunityBlock[]
+  remainingRounds: number
+  sourceActorId?: string
+  sourceAbilityId?: string
+}
+
+export type BattleShieldState = {
+  amount: number
+  label: string
+  sourceActorId?: string
+  sourceAbilityId?: string
+  tags: string[]
+}
+
 export type BattlePortraitFrame = {
   scale?: number
   x?: string
@@ -171,6 +231,10 @@ export type BattleReactionCondition =
   | { type: 'targetHasStatus'; status: BattleStatusKind }
   | { type: 'abilityId'; abilityId: string }
   | { type: 'abilityClass'; class: BattleSkillClass }
+  | { type: 'fighterFlag'; key: string; value: boolean }
+  | { type: 'counterAtLeast'; key: string; value: number }
+  | { type: 'usedAbilityLastTurn'; abilityId: string }
+  | { type: 'shieldActive'; tag?: string }
   | { type: 'isUltimate' }
 
 export type BattleScheduledPhase = 'roundStart' | 'roundEnd'
@@ -214,6 +278,12 @@ export type BattleFighterState = {
   statuses: BattleStatuses
   modifiers: BattleModifierInstance[]
   abilityState: BattleAbilityStateDelta[]
+  shield: BattleShieldState | null
+  costModifiers: BattleCostModifierState[]
+  effectImmunities: BattleEffectImmunityState[]
+  stateFlags: Record<string, boolean>
+  stateCounters: Record<string, number>
+  lastUsedAbilityId: string | null
 }
 
 export type BattlefieldEffect = {
@@ -321,6 +391,13 @@ export type BattleRuntimeEventType =
   | 'resource_changed'
   | 'modifier_applied'
   | 'modifier_removed'
+  | 'shield_applied'
+  | 'shield_damaged'
+  | 'shield_broken'
+  | 'ability_cost_modified'
+  | 'fighter_flag_changed'
+  | 'counter_changed'
+  | 'effect_ignored'
   | 'fighter_defeated'
   | 'status_applied'
   | 'status_removed'
@@ -379,6 +456,11 @@ export type SkillEffect =
   | { type: 'burn'; damage: number; duration: number; target: EffectTarget }
   | { type: 'cooldownReduction'; amount: number; target: EffectTarget }
   | { type: 'damageBoost'; amount: number; target: EffectTarget }
+  | { type: 'shield'; amount: number; label?: string; tags?: string[]; target: EffectTarget }
+  | { type: 'modifyAbilityCost'; modifier: BattleCostModifierTemplate; target: EffectTarget }
+  | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; target: EffectTarget }
+  | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
+  | { type: 'adjustCounter'; key: string; amount: number; target: EffectTarget }
   | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
   | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget }
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
@@ -392,7 +474,9 @@ export type PassiveTrigger =
   | 'onAbilityUse'
   | 'onAbilityResolve'
   | 'onTakeDamage'
+  | 'onShieldBroken'
   | 'onDefeat'
+  | 'onDefeatEnemy'
   | 'whileAlive'
   | 'onTargetBelow'
 

@@ -3,6 +3,7 @@ import { createEnergyAmounts, totalEnergyInPool } from '@/features/battle/energy
 import { battleRoster } from '@/features/battle/data'
 import {
   beginNewRound,
+  canUseAbility,
   createInitialBattleState,
   endRound,
   endRoundTimeline,
@@ -534,6 +535,147 @@ describe('battle engine scenarios', () => {
 
     const afterRound = endRound(acted.state)
     expect(getAbilityById(getFighter(afterRound.state, 'enemy', 'yuji'), 'yuji-feint')).toBeNull()
+  })
+
+  test('shield effects absorb damage and fire onShieldBroken passives', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'shield', amount: 18, label: 'Soul Shell', tags: ['soul-shell'], target: 'self' }]
+    yuji.passiveEffects = [{
+      label: 'Shield Break Counter',
+      trigger: 'onShieldBroken',
+      effects: [{ type: 'setFlag', key: 'shieldBroken', value: true, target: 'self' }],
+    }]
+
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    const shielded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const afterShield = getFighter(shielded.state, 'enemy', 'yuji')
+    expect(afterShield.shield?.amount).toBe(18)
+
+    const broken = resolveTeamTurn(
+      shielded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedYuji = getFighter(broken.state, 'enemy', 'yuji')
+
+    expect(updatedYuji.shield).toBeNull()
+    expect(updatedYuji.hp).toBe(92)
+    expect(updatedYuji.stateFlags.shieldBroken).toBe(true)
+    expect(broken.runtimeEvents.some((event) => event.type === 'shield_broken' && event.targetId === yuji.instanceId)).toBe(true)
+  })
+
+  test('modifyAbilityCost effects can temporarily rewrite a specific skill cost', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    state.enemyEnergy.amounts = createEnergyAmounts()
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{
+      type: 'modifyAbilityCost',
+      target: 'self',
+      modifier: {
+        label: 'Flash Discount',
+        abilityId: yuji.abilities[1].id,
+        mode: 'set',
+        cost: {},
+        duration: 2,
+        uses: 1,
+      },
+    }]
+
+    yuji.abilities[1].energyCost = { physical: 1 }
+
+    const buffed = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const buffedYuji = getFighter(buffed.state, 'enemy', 'yuji')
+
+    expect(canUseAbility(buffed.state, buffedYuji, yuji.abilities[1].id)).toBe(true)
+
+    const used = resolveTeamTurn(
+      buffed.state,
+      queue('enemy', buffedYuji.instanceId, yuji.abilities[1].id, getFighter(buffed.state, 'player', 'gojo').instanceId),
+      'enemy',
+    )
+    const usedYuji = getFighter(used.state, 'enemy', 'yuji')
+
+    expect(usedYuji.costModifiers).toHaveLength(0)
+    expect(canUseAbility(used.state, usedYuji, yuji.abilities[1].id)).toBe(false)
+  })
+
+  test('effect immunity blocks non-damage status effects', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'effectImmunity', label: 'Ignore Effects', blocks: ['nonDamage'], duration: 2, target: 'self' }]
+
+    gojo.abilities[0].kind = 'debuff'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'stun', duration: 1, target: 'inherit' }]
+
+    const immune = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const blocked = resolveTeamTurn(
+      immune.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, getFighter(immune.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+
+    expect(getStatusDuration(getFighter(blocked.state, 'enemy', 'yuji').statuses, 'stun')).toBe(0)
+    expect(blocked.runtimeEvents.some((event) => event.type === 'effect_ignored')).toBe(true)
+  })
+
+  test('onDefeatEnemy passives can react to kills', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    gojo.hp = 15
+    yuji.passiveEffects = [{
+      label: 'Execution High',
+      trigger: 'onDefeatEnemy',
+      conditions: [{ type: 'abilityId', abilityId: yuji.abilities[0].id }],
+      effects: [{ type: 'setFlag', key: 'executed', value: true, target: 'self' }],
+    }]
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    const result = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, gojo.instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(result.state, 'enemy', 'yuji').stateFlags.executed).toBe(true)
   })
 
   test('battle content validation no longer requires renderSrc', () => {

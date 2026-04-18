@@ -249,6 +249,16 @@ function describeSkillEffect(effect: SkillEffect) {
       return `reduce cooldowns by ${effect.amount} extra each round`
     case 'damageBoost':
       return `gain ${Math.round(effect.amount * 100)}% bonus damage`
+    case 'shield':
+      return `gain ${effect.amount} shield`
+    case 'modifyAbilityCost':
+      return `shift ability costs via ${effect.modifier.label}`
+    case 'effectImmunity':
+      return `ignore ${effect.blocks.join(', ')} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'setFlag':
+      return `set ${effect.key} to ${effect.value ? 'true' : 'false'}`
+    case 'adjustCounter':
+      return `adjust ${effect.key} by ${effect.amount}`
     case 'schedule':
       return `schedule ${effect.effects.length} delayed effect row${effect.effects.length === 1 ? '' : 's'} for ${effect.delay} ${effect.phase === 'roundStart' ? 'round start' : 'round end'}`
     case 'replaceAbility':
@@ -265,7 +275,9 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     onAbilityResolve: 'On Ability Resolve',
     onDealDamage: 'On Deal Damage',
     onTakeDamage: 'On Take Damage',
+    onShieldBroken: 'On Shield Broken',
     onDefeat: 'On Defeat',
+    onDefeatEnemy: 'On Defeat Enemy',
     onTargetBelow: 'Execute Window',
   }
 
@@ -277,7 +289,9 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     onAbilityResolve: 'After resolving an ability, ',
     onDealDamage: 'After dealing damage, ',
     onTakeDamage: 'After taking damage, ',
+    onShieldBroken: 'When a shield breaks, ',
     onDefeat: 'On defeat, ',
+    onDefeatEnemy: 'After defeating an enemy, ',
     onTargetBelow: '',
   }
 
