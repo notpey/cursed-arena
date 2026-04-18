@@ -1876,11 +1876,14 @@ function SkillProfileRow({ ability, isUltimate }: { ability: BattleAbilityTempla
         </div>
         <div className="flex flex-shrink-0 flex-wrap gap-1">
           {costEntries.length > 0 ? (
-            costEntries.map(([type, value]) => (
-              <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
-                {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
-              </span>
-            ))
+            costEntries.map(([type, value]) => {
+              const meta = type === 'random' ? randomEnergyMeta : battleEnergyMeta[type as keyof typeof battleEnergyMeta]
+              return (
+                <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
+                  {meta.short} {value}
+                </span>
+              )
+            })
           ) : (
             <span className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">FREE</span>
           )}
@@ -1945,11 +1948,14 @@ function SelectionPreviewPanel({
             </div>
             <div className="flex flex-wrap gap-1">
               {costEntries.length > 0 ? (
-                costEntries.map(([type, value]) => (
-                  <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
-                    {battleEnergyMeta[type as keyof typeof battleEnergyMeta].short} {value}
-                  </span>
-                ))
+                costEntries.map(([type, value]) => {
+                  const meta = type === 'random' ? randomEnergyMeta : battleEnergyMeta[type as keyof typeof battleEnergyMeta]
+                  return (
+                    <span key={type} className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">
+                      {meta.short} {value}
+                    </span>
+                  )
+                })
               ) : (
                 <span className="ca-mono-label rounded-md border border-white/25 bg-black/30 px-1.5 py-0.5 text-[0.36rem] text-white">FREE</span>
               )}

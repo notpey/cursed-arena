@@ -5,7 +5,7 @@ import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
-import { SkillQueueCommitModal } from '@/components/battle/SkillQueueCommitModal'
+import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
@@ -924,7 +924,7 @@ export function BattlePage() {
         ) : null}
 
         {queueDialogOpen ? (
-          <SkillQueueCommitModal
+          <NarutoQueueCommitModal
             round={battle.state.round}
             state={battle.state}
             queued={battle.queued}
