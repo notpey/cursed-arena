@@ -20,7 +20,6 @@ import {
   type LeaderboardEntry,
 } from '@/features/ranking/client'
 import { fetchPlayerMatchHistory } from '@/features/multiplayer/client'
-import type { MatchHistoryEntry } from '@/features/battle/matches'
 
 const rosterById = Object.fromEntries(ownedRosterCharacters.map((character) => [character.id, character]))
 

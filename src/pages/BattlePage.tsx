@@ -2,7 +2,7 @@ import { type DragEvent, type TouchEvent, useEffect, useEffectEvent, useRef, use
 import { useNavigate, useParams } from 'react-router-dom'
 import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
-import { battleEnergyOrder, battleEnergyMeta, canPayEnergy, getAbilityEnergyCost, getEnergyCount, setEnergyFocus, spendEnergy, sumEnergyCosts, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyOrder, battleEnergyMeta, canPayEnergy, getAbilityEnergyCost, getEnergyCount, setEnergyFocus, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
@@ -1109,9 +1109,6 @@ function buildDefaultRandomAllocation(
   return allocation
 }
 
-function totalRandomAllocated(alloc: Partial<Record<BattleEnergyType, number>>) {
-  return battleEnergyOrder.reduce((sum, t) => sum + (alloc[t] ?? 0), 0)
-}
 
 function SkillQueueModal({
   round,
@@ -1240,7 +1237,7 @@ function SkillQueueModal({
   function handleDragOver(e: DragEvent<HTMLDivElement>, i: number) { e.preventDefault(); setDragOverIndex(i) }
   function handleDrop(e: DragEvent<HTMLDivElement>, i: number) { e.preventDefault(); if (dragIndex !== null) applyReorder(dragIndex, i); clearDrag() }
   function handleDragEnd() { clearDrag() }
-  function handleTouchStart(e: TouchEvent<HTMLDivElement>, i: number) { touchDragFromRef.current = i; setDragIndex(i) }
+  function handleTouchStart(_e: TouchEvent<HTMLDivElement>, i: number) { touchDragFromRef.current = i; setDragIndex(i) }
   function handleTouchMove(e: TouchEvent<HTMLDivElement>) {
     if (touchDragFromRef.current === null) return
     const t = e.touches[0]
