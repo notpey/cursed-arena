@@ -1,7 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+function getEnvValue(key: string) {
+  const metaEnv = (import.meta as { env?: Record<string, string | undefined> }).env
+  return metaEnv?.[key]?.trim()
+}
+
+const supabaseUrl = getEnvValue('VITE_SUPABASE_URL')
+const supabaseAnonKey = getEnvValue('VITE_SUPABASE_ANON_KEY')
 
 let cachedClient: SupabaseClient | null | undefined
 

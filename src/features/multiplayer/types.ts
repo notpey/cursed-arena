@@ -28,8 +28,11 @@ export type MatchRow = {
   current_round: number
   active_player: BattleTeamId
   winner: BattleTeamId | null
+  match_revision: number
   resolution_id: string | null
   resolution_steps: BattleTimelineStep[] | null
+  last_submission_id: string | null
+  last_submission_player_id: string | null
   room_code: string | null
   created_at: string
   updated_at: string
@@ -45,10 +48,13 @@ export type MatchCommandRow = {
   id: string
   match_id: string
   player_id: string
+  submission_id: string
   round: number
   phase: 'firstPlayerCommand' | 'secondPlayerCommand'
   // canonical perspective (a=player, b=enemy)
   commands: Record<string, QueuedBattleAction>
+  action_order: string[] | null
+  command_source: string
   created_at: string
 }
 

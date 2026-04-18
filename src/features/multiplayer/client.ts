@@ -8,6 +8,7 @@
 import { getSupabaseClient } from '@/lib/supabase'
 import type { BattleState, BattleTeamId, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types'
 import type { BattleMatchMode, MatchHistoryEntry } from '@/features/battle/matches'
+import type { SubmitMatchTurnRequest, SubmitMatchTurnResponse } from '@/features/multiplayer/protocol'
 import type { MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -312,24 +313,53 @@ export async function commitMatchState({
 export async function submitCommandRecord({
   matchId,
   playerId,
+  submissionId,
   round,
   phase,
   commands,
+  actionOrder,
+  commandSource = 'client',
 }: {
   matchId: string
   playerId: string
+  submissionId: string
   round: number
   phase: 'firstPlayerCommand' | 'secondPlayerCommand'
   commands: Record<string, QueuedBattleAction>
+  actionOrder?: string[] | null
+  commandSource?: string
 }): Promise<{ error: string | null }> {
   const { error } = await db()
     .from('match_commands')
     .upsert(
-      { match_id: matchId, player_id: playerId, round, phase, commands },
-      { onConflict: 'match_id,player_id,round,phase' },
+      {
+        match_id: matchId,
+        player_id: playerId,
+        submission_id: submissionId,
+        round,
+        phase,
+        commands,
+        action_order: actionOrder ?? null,
+        command_source: commandSource,
+      },
+      { onConflict: 'match_id,submission_id' },
     )
 
   return { error: error?.message ?? null }
+}
+
+export async function submitAuthoritativeMatchTurn(
+  request: SubmitMatchTurnRequest,
+): Promise<{ data: SubmitMatchTurnResponse | null; error: string | null }> {
+  const client = getSupabaseClient()
+  if (!client) return { data: null, error: 'Supabase is not configured' }
+
+  const { data, error } = await client.functions.invoke<SubmitMatchTurnResponse>('submit-match-turn', {
+    body: request,
+  })
+
+  if (error) return { data: null, error: error.message }
+  return { data: data ?? null, error: null }
 }
 
 // ── Realtime subscriptions ────────────────────────────────────────────────────

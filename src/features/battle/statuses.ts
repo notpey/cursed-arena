@@ -1,4 +1,4 @@
-import type { BattleStatus, BattleStatusKind, BattleStatuses } from '@/features/battle/types'
+import type { BattleStatus, BattleStatusKind, BattleStatuses } from '@/features/battle/types.ts'
 
 export function createStatuses(): BattleStatuses {
   return []

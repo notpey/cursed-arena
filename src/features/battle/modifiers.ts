@@ -13,7 +13,7 @@ import type {
   BattleStatus,
   BattleStatusKind,
   BattleTeamId,
-} from '@/features/battle/types'
+} from '@/features/battle/types.ts'
 
 function createModifierId(scope: BattleModifierScope, targetId: string | undefined, label: string, index: number) {
   return `modifier-${scope}-${targetId ?? 'global'}-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${index}`

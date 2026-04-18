@@ -1,4 +1,4 @@
-/**
+﻿/**
  * useMultiplayerMatch
  *
  * Manages the full lifecycle of a live online match:
@@ -8,18 +8,15 @@
  *   - Handles command submission + engine resolution + state commit
  *
  * Turn model (N-A style alternating):
- *   First player submits → resolveTeamTurn + transitionToSecondPlayer → commit
- *   Second player submits → resolveTeamTurn + endRound → commit
+ *   First player submits â†’ resolveTeamTurn + transitionToSecondPlayer â†’ commit
+ *   Second player submits â†’ resolveTeamTurn + endRound â†’ commit
  *   Both clients see every state change via Realtime.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  endRoundTimeline,
-  transitionToSecondPlayer,
   getCommandablePlayerUnits,
   createAutoCommands,
-  resolveTeamTurnTimeline,
 } from '@/features/battle/engine'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import type {
@@ -30,17 +27,18 @@ import type {
   BattleEvent,
 } from '@/features/battle/types'
 import {
-  commitMatchState,
   fetchMatch,
   getMyRole,
   submitCommandRecord,
+  submitAuthoritativeMatchTurn,
   subscribeToMatch,
   claimVictoryDueToDisconnect,
 } from '@/features/multiplayer/client'
+import { buildTurnSubmissionId, isSuccessfulTurnSubmit } from '@/features/multiplayer/protocol'
 import type { MatchRow, MultiplayerResolutionReplay, MultiplayerRole, MultiplayerStatus } from '@/features/multiplayer/types'
 import { roleToTeam } from '@/features/multiplayer/types'
 
-// ── Perspective helpers ───────────────────────────────────────────────────────
+// â”€â”€ Perspective helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Swap a BattleState so the calling player always sees themselves as 'player'.
@@ -69,7 +67,7 @@ function flipTeam(team: BattleTeamId): BattleTeamId {
 
 /**
  * Swap command team fields from local ('player') perspective back to canonical.
- * Instance IDs stay the same — only the 'team' tag on each action is flipped.
+ * Instance IDs stay the same â€” only the 'team' tag on each action is flipped.
  */
 function swapCommandPerspective(
   commands: Record<string, QueuedBattleAction>,
@@ -105,7 +103,7 @@ function calcIsMyTurn(canonical: BattleState, myTeam: BattleTeamId): boolean {
   )
 }
 
-// ── Auto-pass helpers ─────────────────────────────────────────────────────────
+// â”€â”€ Auto-pass helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function buildPassCommands(
   state: BattleState,
@@ -120,7 +118,7 @@ function buildPassCommands(
   )
 }
 
-// ── Hook return type ──────────────────────────────────────────────────────────
+// â”€â”€ Hook return type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type MultiplayerMatchHandle = {
   /** BattleState from this player's perspective (always 'player' = you). */
@@ -132,7 +130,7 @@ export type MultiplayerMatchHandle = {
   opponentDisplayName: string
   status: MultiplayerStatus
   error: string | null
-  /** Raw match row — useful for reading mode, team lists, etc. on match end. */
+  /** Raw match row â€” useful for reading mode, team lists, etc. on match end. */
   matchRow: MatchRow | null
   latestResolution: MultiplayerResolutionReplay | null
   /**
@@ -141,7 +139,7 @@ export type MultiplayerMatchHandle = {
    * the opponent may have left the match.
    */
   lastOpponentActionAt: number
-  /** Claim victory because the opponent has not responded — marks match abandoned. */
+  /** Claim victory because the opponent has not responded â€” marks match abandoned. */
   claimVictory: () => Promise<void>
   /**
    * Submit commands and run engine resolution.
@@ -156,13 +154,13 @@ export type MultiplayerMatchHandle = {
   ) => Promise<{ events: BattleEvent[] }>
 }
 
-// ── Hook ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function useMultiplayerMatch(
   matchId: string | null,
   currentUserId: string | null,
 ): MultiplayerMatchHandle | null {
-  // Canonical state (a=player, b=enemy) — source of truth
+  // Canonical state (a=player, b=enemy) â€” source of truth
   const canonicalRef            = useRef<BattleState | null>(null)
   const roleRef                 = useRef<MultiplayerRole | null>(null)
   const matchRowRef             = useRef<MatchRow | null>(null)
@@ -184,7 +182,7 @@ export function useMultiplayerMatch(
   useEffect(() => { canonicalRef.current = canonical },  [canonical])
   useEffect(() => { roleRef.current      = role },       [role])
 
-  // ── Initial load ────────────────────────────────────────────────────────────
+  // â”€â”€ Initial load â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!matchId || !currentUserId) return
 
@@ -232,7 +230,7 @@ export function useMultiplayerMatch(
     return () => { cancelled = true }
   }, [matchId, currentUserId])
 
-  // ── Realtime subscription ───────────────────────────────────────────────────
+  // â”€â”€ Realtime subscription â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!matchId || !currentUserId) return
 
@@ -285,7 +283,7 @@ export function useMultiplayerMatch(
     return unsubscribe
   }, [matchId, currentUserId])
 
-  // ── Command submission ──────────────────────────────────────────────────────
+  // â”€â”€ Command submission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const submitCommands = useCallback(
     async (
       localCommands: Record<string, QueuedBattleAction>,
@@ -299,95 +297,85 @@ export function useMultiplayerMatch(
         return { events: [] }
       }
 
-      const myTeam: BattleTeamId = roleToTeam(myRole)
-      const isFirstPhase = canon.phase === 'firstPlayerCommand'
-      const commandPhase = isFirstPhase ? 'firstPlayerCommand' : 'secondPlayerCommand'
-      const resolutionId = `${matchId}:${canon.round}:${commandPhase}:${Date.now()}`
+      const commandPhase = canon.phase === 'firstPlayerCommand' ? 'firstPlayerCommand' : 'secondPlayerCommand'
+      const submissionId = buildTurnSubmissionId(matchId, canon.round, commandPhase)
+      const expectedRevision = matchRowRef.current?.match_revision ?? 0
 
-      // Re-map local ('player') commands to canonical perspective for Player B
       const canonicalCommands =
         myRole === 'b' ? swapCommandPerspective(localCommands) : localCommands
 
-      // Persist raw commands (audit trail / desync detection)
       await submitCommandRecord({
         matchId,
         playerId: currentUserId,
+        submissionId,
         round: canon.round,
         phase: commandPhase,
         commands: canonicalCommands,
+        actionOrder: actionOrder ?? null,
+        commandSource: 'client-legacy',
       })
 
-      // ── Engine resolution ─────────────────────────────────────────────────
-      const allEvents: BattleEvent[] = []
-      const resolutionSteps: BattleTimelineStep[] = []
-
-      if (_preludeEvents && _preludeEvents.length > 0) {
-        allEvents.push(..._preludeEvents)
-        resolutionSteps.push({
-          id: `timeline-system-${resolutionId}`,
-          kind: 'system',
-          round: canon.round,
-          state: canon,
-          events: _preludeEvents,
-          runtimeEvents: [],
-          team: myTeam,
-        })
-      }
-
-      // 1. Resolve this player's turn, respecting player-chosen action order
-      const turnTimeline = resolveTeamTurnTimeline(canon, canonicalCommands, myTeam, actionOrder)
-      allEvents.push(...turnTimeline.steps.flatMap((step) => step.events))
-      resolutionSteps.push(...turnTimeline.steps)
-      let nextState = turnTimeline.state
-
-      if (nextState.phase === 'finished') {
-        await commitMatchState({
-          matchId,
-          newState: nextState,
-          resolutionId,
-          resolutionSteps,
-        })
-        lastLocalResolutionIdRef.current = resolutionId
-        lastSeenResolutionIdRef.current = resolutionId
-        setCanonical(nextState)
-        setLatestResolution({
-          id: resolutionId,
-          steps: localizeTimelineSteps(resolutionSteps, myRole),
-          source: 'local',
-        })
-        setStatus('finished')
-        return { events: allEvents }
-      }
-
-      if (isFirstPhase) {
-        // First player done → transition to second player's command phase
-        nextState = transitionToSecondPlayer(nextState)
-      } else {
-        // Second player done → close the round (ticks statuses, fatigue, begins new round)
-        const roundTimeline = endRoundTimeline(nextState)
-        allEvents.push(...roundTimeline.steps.flatMap((step) => step.events))
-        resolutionSteps.push(...roundTimeline.steps)
-        nextState = roundTimeline.state
-      }
-
-      // ── Commit to DB (Realtime broadcasts to opponent) ────────────────────
-      await commitMatchState({
+      const authoritative = await submitAuthoritativeMatchTurn({
         matchId,
-        newState: nextState,
-        resolutionId,
-        resolutionSteps,
+        submissionId,
+        expectedRevision,
+        round: canon.round,
+        phase: commandPhase,
+        commands: canonicalCommands,
+        actionOrder: actionOrder ?? [],
       })
+
+      if (authoritative.error || !authoritative.data) {
+        setError(authoritative.error ?? 'Failed to submit authoritative turn.')
+        return { events: [] }
+      }
+
+      if (!isSuccessfulTurnSubmit(authoritative.data)) {
+        if (authoritative.data.latestState) {
+          const latestState = authoritative.data.latestState
+          canonicalRef.current = latestState
+          setCanonical(latestState)
+        }
+        setError(authoritative.data.message)
+        return { events: [] }
+      }
+
+      const nextState = authoritative.data.resolution.finalState
+      const resolutionId = authoritative.data.resolution.resolutionId
+      const resolutionSteps = authoritative.data.resolution.steps
+      const mergedEvents = [...(_preludeEvents ?? []), ...resolutionSteps.flatMap((step) => step.events)]
+
       lastLocalResolutionIdRef.current = resolutionId
       lastSeenResolutionIdRef.current = resolutionId
 
-      // Optimistic local update so this client doesn't wait for its own Realtime echo
       canonicalRef.current = nextState
       setCanonical(nextState)
+
+      const nextMatchRow = matchRowRef.current
+        ? {
+            ...matchRowRef.current,
+            battle_state: nextState,
+            current_phase: nextState.phase,
+            current_round: nextState.round,
+            active_player: nextState.activePlayer,
+            winner: nextState.winner,
+            status: authoritative.data.status,
+            match_revision: authoritative.data.revision,
+            resolution_id: resolutionId,
+            resolution_steps: resolutionSteps,
+            last_submission_id: submissionId,
+            last_submission_player_id: currentUserId,
+          }
+        : null
+
+      matchRowRef.current = nextMatchRow
+      setMatchRow(nextMatchRow)
       setLatestResolution({
         id: resolutionId,
         steps: localizeTimelineSteps(resolutionSteps, myRole),
         source: 'local',
       })
+      setError(null)
 
       if (nextState.phase === 'finished') {
         setStatus('finished')
@@ -396,19 +384,18 @@ export function useMultiplayerMatch(
         setStatus(calcIsMyTurn(nextState, myTeamNext) ? 'my_turn' : 'opponent_turn')
       }
 
-      return { events: allEvents }
+      return { events: mergedEvents }
     },
     [matchId, currentUserId],
   )
-
-  // ── Claim victory (opponent disconnected) ────────────────────────────────
+  // â”€â”€ Claim victory (opponent disconnected) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const claimVictory = useCallback(async () => {
     const myRole = roleRef.current
     if (!myRole || !matchId) return
     await claimVictoryDueToDisconnect(matchId, myRole)
   }, [matchId])
 
-  // ── Assemble return value ───────────────────────────────────────────────────
+  // â”€â”€ Assemble return value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!matchId || !currentUserId || !canonical || !role) {
     // Not ready or not in online mode
     return null
@@ -434,10 +421,11 @@ export function useMultiplayerMatch(
   }
 }
 
-// ── Utility: build a pass-all command set for timeout ────────────────────────
+// â”€â”€ Utility: build a pass-all command set for timeout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function buildTimeoutCommands(
   localState: BattleState,
 ): Record<string, QueuedBattleAction> {
   // Pass for every commandable unit on the local player's team
   return buildPassCommands(localState, 'player')
 }
+
