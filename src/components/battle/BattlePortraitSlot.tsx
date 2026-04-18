@@ -193,7 +193,8 @@ function PortraitSquare({
   sizeClass?: string
   mirrored?: boolean
 }) {
-  const portraitMode = Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
+  const hasFrame = Boolean(fighter.boardPortraitFrame && Object.keys(fighter.boardPortraitFrame).length > 0)
+  const portraitMode = !hasFrame || Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
   const frame = portraitMode ? {} : fighter.boardPortraitFrame ?? {}
   const portraitScale = frame.scale ?? 1
   const portraitX = frame.x ?? '0%'

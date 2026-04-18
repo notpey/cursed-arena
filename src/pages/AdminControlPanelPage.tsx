@@ -1777,7 +1777,8 @@ function AssetField({
 
 function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterTemplate; compact?: boolean }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
-  const portraitMode = Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
+  const hasFrame = Boolean(fighter.boardPortraitFrame && Object.keys(fighter.boardPortraitFrame).length > 0)
+  const portraitMode = !hasFrame || Boolean(fighter.boardPortraitSrc?.startsWith('data:image'))
   const frame = portraitMode ? {} : fighter.boardPortraitFrame ?? {}
   const scale = frame.scale ?? 1
   const x = frame.x ?? '0%'
