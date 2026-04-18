@@ -3,6 +3,9 @@
 ## Purpose
 This document freezes the target battle experience for Cursed Arena before more UI polish, content work, or character expansion continues.
 
+Execution companion:
+- [battle-roadblocks-workstreams.md](C:/Users/breed/OneDrive/Documents/cursed-arena-main/cursed-arena/reference/battle-roadblocks-workstreams.md)
+
 The goal is not "inspired by Naruto-Arena."
 
 The goal is:
