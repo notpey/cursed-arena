@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
 import {
@@ -714,6 +714,7 @@ export function AdminControlPanelPage() {
   const [editorTab, setEditorTab] = useState<'identity' | 'skills' | 'passives' | 'advanced'>('identity')
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
   const [fighterJsonDraft, setFighterJsonDraft] = useState('')
+  const draftRef = useRef(draft)
 
   const selectedFighter = draft.roster.find((fighter) => fighter.id === selectedFighterId) ?? draft.roster[0] ?? null
   const selectedAbilityIdResolved = selectedFighter
@@ -730,6 +731,10 @@ export function AdminControlPanelPage() {
   const selectedPassive = selectedFighter?.passiveEffects?.[selectedPassiveIndexResolved] ?? null
 
   useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
     if (!statusFlash) return
     const timeout = window.setTimeout(() => setStatusFlash(null), 1800)
     return () => window.clearTimeout(timeout)
@@ -742,6 +747,37 @@ export function AdminControlPanelPage() {
       passiveIndex: selectedPassiveIndex,
     })
   }, [selectedFighterId, selectedAbilityId, selectedPassiveIndex])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      saveDraftBattleContent(draft)
+    }, 250)
+    return () => window.clearTimeout(timeout)
+  }, [draft])
+
+  useEffect(() => {
+    const persistCurrentState = () => {
+      saveDraftBattleContent(draftRef.current)
+      writeAdminSelection({
+        fighterId: selectedFighterId,
+        abilityId: selectedAbilityId,
+        passiveIndex: selectedPassiveIndex,
+      })
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') return
+      persistCurrentState()
+    }
+
+    window.addEventListener('beforeunload', persistCurrentState)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('beforeunload', persistCurrentState)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [selectedAbilityId, selectedFighterId, selectedPassiveIndex])
 
   const validationReport = useMemo(
     () => validateBattleContent(draft.roster, draft.defaultSetup),

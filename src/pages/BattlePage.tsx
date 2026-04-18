@@ -312,6 +312,9 @@ export function BattlePage() {
   const [opponentDisconnected, setOpponentDisconnected] = useState(false)
   const [timelineLocked, setTimelineLocked] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(
+    () => typeof document === 'undefined' || document.visibilityState === 'visible',
+  )
   const timelineRunRef = useRef(0)
   const lastPlayedMultiplayerResolutionRef = useRef<string | null>(null)
 
@@ -372,6 +375,25 @@ export function BattlePage() {
   useEffect(() => {
     lastPlayedMultiplayerResolutionRef.current = null
   }, [matchId])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+
+    const syncVisibility = () => {
+      setIsDocumentVisible(document.visibilityState === 'visible')
+    }
+
+    syncVisibility()
+    document.addEventListener('visibilitychange', syncVisibility)
+    window.addEventListener('focus', syncVisibility)
+    window.addEventListener('blur', syncVisibility)
+
+    return () => {
+      document.removeEventListener('visibilitychange', syncVisibility)
+      window.removeEventListener('focus', syncVisibility)
+      window.removeEventListener('blur', syncVisibility)
+    }
+  }, [])
 
   // ── Sync multiplayer state → local battle view ──────────────────────────
   useEffect(() => {
@@ -464,7 +486,7 @@ export function BattlePage() {
   }, [multiplayer, multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn, multiplayerLatestResolution, playTimelineSteps])
 
   const onTurnTimeout = useEffectEvent(() => {
-    if (battle.state.phase === 'finished' || timelineLocked) return
+    if (battle.state.phase === 'finished' || timelineLocked || !isDocumentVisible) return
     handleTurnTimeout()
   })
 
@@ -475,6 +497,7 @@ export function BattlePage() {
   useEffect(() => {
     if (battle.state.phase === 'finished') return undefined
     if (timelineLocked) return undefined
+    if (!isDocumentVisible) return undefined
     // In online mode only tick down when it's our turn
     if (multiplayerBattleState && !multiplayerIsMyTurn) return undefined
     const timer = window.setInterval(() => {
@@ -482,7 +505,7 @@ export function BattlePage() {
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [battle.state.phase, battle.state.round, multiplayerBattleState, multiplayerIsMyTurn, timelineLocked])
+  }, [battle.state.phase, battle.state.round, isDocumentVisible, multiplayerBattleState, multiplayerIsMyTurn, timelineLocked])
 
   useEffect(() => {
     if (turnSecondsLeft > 0) return
@@ -493,7 +516,7 @@ export function BattlePage() {
   // If it's opponent's turn in an online match and we haven't received a
   // Realtime update in 90 seconds, they may have left.
   useEffect(() => {
-    if (!multiplayer || multiplayerIsMyTurn || battle.state.phase === 'finished') {
+    if (!multiplayer || multiplayerIsMyTurn || battle.state.phase === 'finished' || !isDocumentVisible) {
       setOpponentDisconnected(false)
       return undefined
     }
@@ -506,7 +529,7 @@ export function BattlePage() {
     check()
     const interval = window.setInterval(check, 5_000)
     return () => window.clearInterval(interval)
-  }, [multiplayer, multiplayerIsMyTurn, battle.state.phase, multiplayer?.lastOpponentActionAt])
+  }, [battle.state.phase, isDocumentVisible, multiplayer, multiplayerIsMyTurn, multiplayer?.lastOpponentActionAt])
 
   useEffect(() => {
     if (battle.state.phase !== 'finished' || !battle.state.winner) return

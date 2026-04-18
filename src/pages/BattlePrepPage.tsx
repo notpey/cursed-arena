@@ -213,9 +213,9 @@ export function BattlePrepPage() {
   const searchingRef = useRef(false)
   const searchAttemptsRef = useRef(0)
 
-  // Timeout before falling back to AI: quick = 20 s, ranked = 45 s
+  // Timeout before falling back to AI: quick = 3 s, ranked = 45 s
   const POLL_INTERVAL_MS = 2_500
-  const AI_FALLBACK_MS: Record<string, number> = { quick: 20_000, ranked: 45_000 }
+  const AI_FALLBACK_MS: Record<string, number> = { quick: 3_000, ranked: 45_000 }
 
   // Search debounce
   useEffect(() => {
