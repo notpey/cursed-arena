@@ -255,8 +255,8 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     if (cost > 3) pushIssue(issues, scope, 'energy cost exceeds a single-round reserve budget')
   }
 
-  if (classes.includes('Ultimate') !== (fighter.ultimate.id === ability.id)) {
-    pushIssue(issues, scope, 'Ultimate class must appear only on the fighter ultimate')
+  if (classes.includes('Ultimate') && fighter.ultimate.id !== ability.id) {
+    pushIssue(issues, scope, 'Ultimate class may only appear on the dedicated fourth slot')
   }
 
   if (ability.kind === 'attack' && !effects.some((effect) => effect.type === 'damage')) {

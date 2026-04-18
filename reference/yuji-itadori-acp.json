@@ -173,16 +173,16 @@
     }
   ],
   "ultimate": {
-    "id": "yuji-manji-kick",
-    "name": "Manji Kick",
-    "description": "A heavy finishing rush that fits the required ultimate slot for the current engine.",
-    "kind": "attack",
-    "targetRule": "enemy-single",
-    "classes": ["Melee", "Physical", "Ultimate", "Action"],
-    "icon": { "label": "MK", "tone": "gold" },
+    "id": "yuji-taunt",
+    "name": "Taunt",
+    "description": "Yuji becomes invulnerable for 1 turn.",
+    "kind": "defend",
+    "targetRule": "self",
+    "classes": ["Mental", "Instant"],
+    "icon": { "label": "TA", "tone": "teal" },
     "cooldown": 4,
     "effects": [
-      { "type": "damage", "power": 40, "target": "inherit" }
+      { "type": "invulnerable", "duration": 1, "target": "self" }
     ]
   }
 }

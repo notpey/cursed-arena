@@ -238,8 +238,8 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
         target: 'self',
         modifier: {
           label: 'Cost Shift',
-          mode: 'reduceRandom',
-          amount: 1,
+          mode: 'set',
+          cost: {},
           duration: 1,
           uses: 1,
         },
@@ -1828,7 +1828,7 @@ function SkillEditorCard({
       >
         <div>
           <p className="ca-display text-[1.1rem] leading-none text-white">{ability.name || 'Untitled Skill'}</p>
-          <p className="ca-mono-label mt-1 text-[0.38rem] text-white/75">{isUltimate ? 'ULTIMATE TECHNIQUE' : 'CORE SKILL'}</p>
+          <p className="ca-mono-label mt-1 text-[0.38rem] text-white/75">{isUltimate ? 'FOURTH SKILL SLOT' : 'CORE SKILL'}</p>
         </div>
         <span className="ca-mono-label rounded-md border border-white/18 bg-black/20 px-2 py-1 text-[0.38rem] text-white">CD {ability.cooldown}</span>
       </button>
@@ -1898,7 +1898,7 @@ function SkillClassEditor({
     <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
       <div>
         <p className="ca-mono-label text-[0.4rem] text-ca-text-3">SKILL CLASSES</p>
-        <p className="mt-1 text-sm leading-6 text-ca-text-2">Classes are descriptive metadata for reactions and future rules. Runtime behavior still keys off the skill kind and the fighter's actual ultimate slot.</p>
+        <p className="mt-1 text-sm leading-6 text-ca-text-2">Classes are descriptive metadata for reactions and future rules. The fourth slot does not need to be a true ultimate unless you give it the Ultimate class.</p>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
         <SelectField
@@ -1969,7 +1969,7 @@ function SkillClassEditor({
         </button>
       </div>
       {isUltimate ? (
-        <p className="mt-2 text-sm leading-6 text-ca-text-3">Ultimate class stays tied to the selected fighter ultimate.</p>
+        <p className="mt-2 text-sm leading-6 text-ca-text-3">Use Ultimate only when you want this fourth slot to behave as a true ultimate.</p>
       ) : null}
     </div>
   )
@@ -2252,7 +2252,7 @@ function EffectRowEditor({
           <InputField label="Label" value={effect.modifier.label} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, label: value } })} />
         ) : null}
         {effect.type === 'modifyAbilityCost' ? (
-          <SelectField label="Mode" value={effect.modifier.mode} options={costModifierModes.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, mode: value as typeof costModifierModes[number] } })} />
+          <SelectField label="Mode" value={effect.modifier.mode} options={costModifierModes.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, mode: value as typeof costModifierModes[number], cost: value === 'set' ? (effect.modifier.cost ?? {}) : undefined, amount: value === 'set' ? undefined : (effect.modifier.amount ?? 1) } })} />
         ) : null}
         {effect.type === 'modifyAbilityCost' ? (
           <InputField label="Ability ID" value={effect.modifier.abilityId ?? ''} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, abilityId: value || undefined } })} />

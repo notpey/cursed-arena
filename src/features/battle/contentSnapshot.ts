@@ -143,7 +143,7 @@ function normalizeFighter(rawFighter: unknown) {
   return {
     ...fighter,
     abilities: rawAbilities.map((ability) => normalizeAbility(ability, false)),
-    ultimate: normalizeAbility(rawUltimate, true),
+    ultimate: normalizeAbility(rawUltimate, false),
     passiveEffects: Array.isArray(fighter.passiveEffects)
       ? fighter.passiveEffects.map((passive) => normalizePassive(passive))
       : [],
