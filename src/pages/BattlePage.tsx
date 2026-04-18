@@ -1130,7 +1130,6 @@ function SkillQueueModal({
   onConfirm: (actionOrder: string[]) => void
   onBack: () => void
 }) {
-  // Build an ordered list of actorIds from initialOrder, then any remaining alive fighters.
   const [order, setOrder] = useState<string[]>(() => {
     const aliveIds = new Set(playerTeam.filter((f) => f.hp > 0).map((f) => f.instanceId))
     const filtered = initialOrder.filter((id) => aliveIds.has(id))
@@ -1138,7 +1137,6 @@ function SkillQueueModal({
     return [...filtered, ...rest]
   })
 
-  // Base rows keyed by actorId
   const rowMap = new Map(
     playerTeam.map((fighter) => {
       const action = queued[fighter.instanceId]
@@ -1149,313 +1147,268 @@ function SkillQueueModal({
     }),
   )
 
-  // Ordered rows in the user-chosen execution sequence
   const rows = order
     .map((id) => rowMap.get(id))
     .filter((r): r is NonNullable<typeof r> => r !== undefined)
 
-  // Random CE allocation state (per-actor)
-  const [randomAlloc, setRandomAlloc] = useState<RandomAllocation>(() =>
-    buildDefaultRandomAllocation(rows, energy),
-  )
+  // Only non-pass fighters appear in the drag tiles
+  const activeRows = rows.filter((r) => !r.isPass)
 
-  // Build the effective cost for each row: typed cost + random cost resolved via allocation
-  function getEffectiveCost(actorId: string, cost: BattleEnergyCost): BattleEnergyCost {
-    if (!cost.random) return cost
-    const alloc = randomAlloc[actorId] ?? {}
-    const resolved: BattleEnergyCost = { ...cost }
-    delete resolved.random
-    for (const type of battleEnergyOrder) {
-      const extra = alloc[type] ?? 0
-      if (extra > 0) resolved[type] = (resolved[type] ?? 0) + extra
+  // Total random energy pips needed across all queued skills
+  const randomRows = rows.filter(({ cost, isPass }) => !isPass && (cost?.random ?? 0) > 0)
+  const totalRandomNeeded = randomRows.reduce((sum, { cost }) => sum + (cost?.random ?? 0), 0)
+
+  // Single aggregate allocation (one pool for all random pips)
+  const [globalAlloc, setGlobalAlloc] = useState<Partial<Record<BattleEnergyType, number>>>(() => {
+    const defaults = buildDefaultRandomAllocation(rows, energy)
+    const agg: Partial<Record<BattleEnergyType, number>> = {}
+    for (const perType of Object.values(defaults)) {
+      for (const [t, count] of Object.entries(perType)) {
+        agg[t as BattleEnergyType] = (agg[t as BattleEnergyType] ?? 0) + (count as number)
+      }
     }
-    return resolved
+    return agg
+  })
+
+  const totalAllocated = battleEnergyOrder.reduce((s, t) => s + (globalAlloc[t] ?? 0), 0)
+  const hasUnallocated = totalRandomNeeded > 0 && totalAllocated < totalRandomNeeded
+
+  function adjustGlobalAlloc(type: BattleEnergyType, delta: number) {
+    setGlobalAlloc((prev) => ({ ...prev, [type]: Math.max(0, (prev[type] ?? 0) + delta) }))
   }
 
-  const effectiveRows = rows.map(({ fighter, ability, cost, isPass }) => ({
-    fighter,
-    ability,
-    cost,
-    isPass,
-    effectiveCost: cost && !isPass ? getEffectiveCost(fighter.instanceId, cost) : null,
-  }))
+  // Distribute global alloc back to per-actor for cost checking
+  function buildPerActorAlloc(): RandomAllocation {
+    const result: RandomAllocation = {}
+    const rem = { ...globalAlloc } as Record<BattleEnergyType, number>
+    for (const { fighter, cost } of randomRows) {
+      const needed = cost?.random ?? 0
+      if (!needed) continue
+      const actorAlloc: Partial<Record<BattleEnergyType, number>> = {}
+      let left = needed
+      for (const type of battleEnergyOrder) {
+        if (left <= 0) break
+        const take = Math.min(rem[type] ?? 0, left)
+        if (take > 0) { actorAlloc[type] = take; rem[type] = (rem[type] ?? 0) - take; left -= take }
+      }
+      result[fighter.instanceId] = actorAlloc
+    }
+    return result
+  }
 
+  function resolvedCost(actorId: string, cost: BattleEnergyCost, alloc: RandomAllocation): BattleEnergyCost {
+    if (!cost.random) return cost
+    const a = alloc[actorId] ?? {}
+    const r: BattleEnergyCost = { ...cost }
+    delete r.random
+    for (const type of battleEnergyOrder) {
+      if ((a[type] ?? 0) > 0) r[type] = (r[type] ?? 0) + (a[type] ?? 0)
+    }
+    return r
+  }
+
+  const perActorAlloc = buildPerActorAlloc()
   const aggregateCost = sumEnergyCosts(
-    effectiveRows.flatMap(({ effectiveCost }) => (effectiveCost ? [effectiveCost] : [])),
+    rows.flatMap(({ fighter, cost, isPass }) =>
+      isPass || !cost ? [] : [resolvedCost(fighter.instanceId, cost, perActorAlloc)],
+    ),
   )
   const canAfford = canPayEnergy(energy, aggregateCost)
-  const energyAfter = canAfford ? spendEnergy(energy, aggregateCost) : energy
-  const totalBefore = totalEnergyInPool(energy)
-  const totalAfter = totalEnergyInPool(energyAfter)
 
-  // Unallocated random pips per actor (shows warning if user deleted allocation without replacing)
-  function getUnallocated(actorId: string, cost: BattleEnergyCost | null) {
-    if (!cost?.random) return 0
-    const alloc = randomAlloc[actorId] ?? {}
-    return cost.random - totalRandomAllocated(alloc)
-  }
-  const hasUnallocated = rows.some(({ fighter, cost }) => getUnallocated(fighter.instanceId, cost) > 0)
-
+  // ── Drag / touch state ────────────────────────────────────────────────────
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-  // Touch drag tracking
   const touchDragFromRef = useRef<number | null>(null)
 
   function applyReorder(from: number, to: number) {
     if (from === to) return
+    // Map active-row indices back to full order indices
+    const fromId = activeRows[from]?.fighter.instanceId
+    const toId   = activeRows[to]?.fighter.instanceId
+    if (!fromId || !toId) return
+    const fi = order.indexOf(fromId)
+    const ti = order.indexOf(toId)
+    if (fi === -1 || ti === -1) return
     const next = [...order]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
+    const [m] = next.splice(fi, 1)
+    next.splice(ti, 0, m)
     setOrder(next)
   }
 
-  function clearDrag() {
-    setDragIndex(null)
-    setDragOverIndex(null)
-    touchDragFromRef.current = null
-  }
-
-  // ── Mouse / desktop drag ──────────────────────────────────────────────────
-  function handleDragStart(index: number) {
-    setDragIndex(index)
-  }
-
-  function handleDragOver(e: DragEvent<HTMLDivElement>, index: number) {
-    e.preventDefault()
-    setDragOverIndex(index)
-  }
-
-  function handleDrop(e: DragEvent<HTMLDivElement>, targetIndex: number) {
-    e.preventDefault()
-    if (dragIndex !== null) applyReorder(dragIndex, targetIndex)
-    clearDrag()
-  }
-
-  function handleDragEnd() {
-    clearDrag()
-  }
-
-  // ── Touch / mobile drag ───────────────────────────────────────────────────
-  function handleTouchStart(e: TouchEvent<HTMLDivElement>, index: number) {
-    touchDragFromRef.current = index
-    setDragIndex(index)
-  }
-
+  function clearDrag() { setDragIndex(null); setDragOverIndex(null); touchDragFromRef.current = null }
+  function handleDragStart(i: number) { setDragIndex(i) }
+  function handleDragOver(e: DragEvent<HTMLDivElement>, i: number) { e.preventDefault(); setDragOverIndex(i) }
+  function handleDrop(e: DragEvent<HTMLDivElement>, i: number) { e.preventDefault(); if (dragIndex !== null) applyReorder(dragIndex, i); clearDrag() }
+  function handleDragEnd() { clearDrag() }
+  function handleTouchStart(e: TouchEvent<HTMLDivElement>, i: number) { touchDragFromRef.current = i; setDragIndex(i) }
   function handleTouchMove(e: TouchEvent<HTMLDivElement>) {
     if (touchDragFromRef.current === null) return
-    const touch = e.touches[0]
-    const el = document.elementFromPoint(touch.clientX, touch.clientY)
-    const tileEl = el?.closest('[data-tile-index]')
-    if (tileEl) {
-      const idx = parseInt((tileEl as HTMLElement).dataset.tileIndex ?? '-1', 10)
-      if (idx >= 0) setDragOverIndex(idx)
-    }
+    const t = e.touches[0]
+    const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-tile-index]')
+    if (el) { const idx = parseInt((el as HTMLElement).dataset.tileIndex ?? '-1', 10); if (idx >= 0) setDragOverIndex(idx) }
   }
-
   function handleTouchEnd() {
-    const from = touchDragFromRef.current
-    const to = dragOverIndex
-    if (from !== null && to !== null) applyReorder(from, to)
+    if (touchDragFromRef.current !== null && dragOverIndex !== null) applyReorder(touchDragFromRef.current, dragOverIndex)
     clearDrag()
   }
 
-  function adjustRandomAlloc(actorId: string, type: BattleEnergyType, delta: number) {
-    setRandomAlloc((prev) => {
-      const current = { ...(prev[actorId] ?? {}) }
-      const next = Math.max(0, (current[type] ?? 0) + delta)
-      current[type] = next
-      return { ...prev, [actorId]: current }
-    })
-  }
-
-  // Any random-cost rows that need allocation
-  const randomRows = effectiveRows.filter(({ cost, isPass }) => !isPass && (cost?.random ?? 0) > 0)
-
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.78)] backdrop-blur-[3px]">
-      <div className="w-full max-w-lg rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.98),rgba(10,9,18,0.99))] shadow-[0_24px_60px_rgba(0,0,0,0.5)]">
-        <div className="border-b border-white/8 px-6 py-4">
-          <p className="ca-mono-label text-[0.5rem] text-ca-text-3">ACTION QUEUE — ROUND {round}</p>
-          <h2 className="ca-display mt-1.5 text-3xl text-ca-text">PRESS WHEN READY</h2>
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.82)] backdrop-blur-[3px]">
+      <div className="w-full max-w-[22rem] rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.99),rgba(10,9,18,1))] shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
+
+        {/* ── Header ── */}
+        <div className="border-b border-white/8 px-5 py-4 text-center">
+          <p className="ca-mono-label text-[0.46rem] text-ca-text-3">ROUND {round}</p>
+          {totalRandomNeeded > 0 ? (
+            <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">
+              CHOOSE {totalRandomNeeded} RANDOM ENERGY
+            </p>
+          ) : (
+            <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">CONFIRM ACTIONS</p>
+          )}
         </div>
 
-        {/* ── Execution order: horizontal drag-and-drop skill tiles ── */}
-        <div className="px-5 py-4">
-          <p className="ca-mono-label mb-3 text-[0.44rem] text-ca-text-3">EXECUTION ORDER — DRAG OR TOUCH TO REORDER</p>
-          <div className="flex items-end gap-3">
-            {effectiveRows.map(({ fighter, ability, isPass, effectiveCost }, index) => {
-              const isDragging = dragIndex === index
-              const isTarget = dragOverIndex === index && dragIndex !== index
-              return (
-                <div
-                  key={fighter.instanceId}
-                  data-tile-index={index}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                  onTouchStart={(e) => handleTouchStart(e, index)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                  className={[
-                    'flex flex-col items-center gap-1.5 cursor-grab active:cursor-grabbing select-none transition-all touch-none',
-                    isDragging ? 'opacity-30' : 'opacity-100',
-                  ].join(' ')}
-                  style={{ transform: isTarget ? 'scale(1.05) translateX(4px)' : undefined }}
-                >
-                  {/* Position number */}
-                  <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{index + 1}</span>
-
-                  {/* Skill icon tile */}
-                  <div className={[
-                    'relative h-[3.5rem] w-[3.5rem] overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)]',
-                    isPass ? 'border-white/10 opacity-45' : 'border-white/25',
-                    isTarget ? 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.3)]' : '',
-                  ].join(' ')}>
-                    {ability?.icon.src && !isPass ? (
-                      <img src={ability.icon.src} alt={ability.name} className="h-full w-full object-cover" draggable={false} />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center text-[0.55rem] font-black text-white/20">
-                        {fighter.shortName.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    {/* Cost badge */}
-                    {effectiveCost && !isPass ? (
-                      <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.75)] px-0.5 py-0.5">
-                        <EnergyCostRow cost={effectiveCost} compact />
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {/* Fighter name */}
-                  <p className="ca-mono-label max-w-[3.5rem] truncate text-center text-[0.44rem] text-ca-text-2">
-                    {fighter.shortName.toUpperCase()}
-                  </p>
-
-                  {/* Ability name */}
-                  <p className={['ca-mono-label max-w-[3.5rem] truncate text-center text-[0.4rem]', isPass ? 'text-ca-text-3' : 'text-ca-text-2'].join(' ')}>
-                    {isPass ? 'PASS' : (ability?.name.toUpperCase() ?? '—')}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* ── Random CE allocation (only shown when needed) ── */}
-        {randomRows.length > 0 ? (
-          <div className="border-t border-white/8 px-5 py-3">
-            <p className="ca-mono-label mb-2 text-[0.44rem] text-ca-text-3">ASSIGN RANDOM CHAKRA</p>
-            {randomRows.map(({ fighter, cost }) => {
-              const unallocated = getUnallocated(fighter.instanceId, cost)
-              return (
-                <div key={fighter.instanceId} className="mb-2 last:mb-0">
-                  <p className="ca-mono-label mb-1 text-[0.44rem] text-ca-text-2">
-                    {fighter.shortName.toUpperCase()} — CHOOSE {cost!.random} RANDOM
-                    {unallocated > 0 ? (
-                      <span className="ml-1.5 text-ca-red">({unallocated} LEFT)</span>
-                    ) : (
-                      <span className="ml-1.5 text-ca-teal">✓</span>
-                    )}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {battleEnergyOrder.map((type) => {
-                      const meta = battleEnergyMeta[type]
-                      const allocated = randomAlloc[fighter.instanceId]?.[type] ?? 0
-                      const poolCount = getEnergyCount(energy, type)
-                      const atMax = totalRandomAllocated(randomAlloc[fighter.instanceId] ?? {}) >= cost!.random!
-                      return (
-                        <div key={type} className="flex items-center gap-1 rounded-[0.2rem] border border-white/8 bg-[rgba(255,255,255,0.03)] px-1.5 py-1">
-                          <span className="ca-mono-label text-[0.44rem]" style={{ color: meta.color }}>
-                            {meta.short}
-                          </span>
-                          <span className="ca-mono-label text-[0.42rem] text-ca-text-3">({poolCount})</span>
-                          <button
-                            type="button"
-                            disabled={allocated <= 0}
-                            onClick={() => adjustRandomAlloc(fighter.instanceId, type, -1)}
-                            className="grid h-4 w-4 place-items-center rounded border border-white/10 bg-[rgba(255,255,255,0.04)] ca-mono-label text-[0.6rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.08)] disabled:opacity-25"
-                          >−</button>
-                          <span
-                            className="ca-mono-label w-3 text-center text-[0.52rem]"
-                            style={{ color: allocated > 0 ? meta.color : undefined }}
-                          >
-                            {allocated}
-                          </span>
-                          <button
-                            type="button"
-                            disabled={allocated >= poolCount || atMax}
-                            onClick={() => adjustRandomAlloc(fighter.instanceId, type, 1)}
-                            className="grid h-4 w-4 place-items-center rounded border border-white/10 bg-[rgba(255,255,255,0.04)] ca-mono-label text-[0.6rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.08)] disabled:opacity-25"
-                          >+</button>
+        {/* ── Execution order tiles (non-pass fighters only, only when >1) ── */}
+        {activeRows.length > 1 ? (
+          <div className="border-b border-white/8 px-5 py-3">
+            <p className="ca-mono-label mb-2 text-[0.4rem] text-ca-text-3">EXECUTION ORDER — DRAG TO REORDER</p>
+            <div className="flex items-end gap-2.5">
+              {activeRows.map((row, index) => {
+                const isDragging = dragIndex === index
+                const isTarget   = dragOverIndex === index && dragIndex !== index
+                const effCost    = row.cost ? resolvedCost(row.fighter.instanceId, row.cost, perActorAlloc) : null
+                return (
+                  <div
+                    key={row.fighter.instanceId}
+                    data-tile-index={index}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleTouchStart(e, index)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    className={['flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing select-none transition-all touch-none', isDragging ? 'opacity-30' : 'opacity-100'].join(' ')}
+                    style={{ transform: isTarget ? 'scale(1.05) translateX(4px)' : undefined }}
+                  >
+                    <span className="ca-mono-label text-[0.4rem] text-ca-text-3">{index + 1}</span>
+                    <div className={['relative h-[3rem] w-[3rem] overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)]', isTarget ? 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.3)]' : 'border-white/25'].join(' ')}>
+                      {row.ability?.icon.src ? (
+                        <img src={row.ability.icon.src} alt={row.ability.name} className="h-full w-full object-cover" draggable={false} />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center ca-mono-label text-[0.5rem] font-black text-white/20">{row.fighter.shortName.slice(0, 2).toUpperCase()}</div>
+                      )}
+                      {effCost ? (
+                        <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.75)] px-0.5 py-0.5">
+                          <EnergyCostRow cost={effCost} compact />
                         </div>
-                      )
-                    })}
+                      ) : null}
+                    </div>
+                    <p className="ca-mono-label max-w-[3rem] truncate text-center text-[0.4rem] text-ca-text-2">{row.fighter.shortName.toUpperCase()}</p>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         ) : null}
 
-        <div className="border-t border-white/8 px-6 py-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">CE BEFORE</span>
-              <span className="ca-mono-label text-[0.56rem] text-ca-text">{totalBefore}</span>
+        {/* ── Naruto-Arena-style random energy allocation ── */}
+        {totalRandomNeeded > 0 ? (
+          <div className="px-5 py-4">
+            {/* Column headers */}
+            <div className="mb-2 grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem] items-center gap-x-2">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ENERGY LEFT</p>
+              <span /><span />
+              <p className="ca-mono-label text-right text-[0.42rem] text-ca-text-3">RANDOM</p>
             </div>
-            <div className="h-3 w-px bg-white/12" />
-            <div className="flex items-center gap-2">
-              <span className="ca-mono-label text-[0.46rem] text-ca-text-3">CE AFTER</span>
-              <span className={['ca-mono-label text-[0.56rem]', totalAfter === 0 ? 'text-amber-300' : 'text-ca-teal'].join(' ')}>
-                {totalAfter}
-              </span>
+
+            <div className="space-y-2">
+              {battleEnergyOrder.map((type) => {
+                const meta       = battleEnergyMeta[type]
+                const poolCount  = getEnergyCount(energy, type)
+                const allocated  = globalAlloc[type] ?? 0
+                const atMax      = totalAllocated >= totalRandomNeeded
+                const dim        = poolCount === 0 && allocated === 0
+                return (
+                  <div key={type} className="grid grid-cols-[1fr_1.6rem_1.6rem_2.2rem] items-center gap-x-2">
+                    {/* Left: square + label + pool count */}
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className="h-[0.6rem] w-[0.6rem] shrink-0 rounded-[0.1rem]"
+                        style={{ background: meta.color, opacity: dim ? 0.2 : 1 }}
+                      />
+                      <span
+                        className="ca-mono-label w-[2.2rem] text-[0.52rem]"
+                        style={{ color: dim ? 'rgba(255,255,255,0.2)' : meta.color }}
+                      >
+                        {meta.short}
+                      </span>
+                      <span className={['ca-mono-label text-[0.52rem] tabular-nums', dim ? 'text-white/20' : 'text-ca-text'].join(' ')}>
+                        {poolCount}
+                      </span>
+                    </div>
+
+                    {/* — button */}
+                    <button
+                      type="button"
+                      disabled={allocated <= 0}
+                      onClick={() => adjustGlobalAlloc(type, -1)}
+                      className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
+                    >−</button>
+
+                    {/* + button */}
+                    <button
+                      type="button"
+                      disabled={poolCount === 0 || allocated >= poolCount || atMax}
+                      onClick={() => adjustGlobalAlloc(type, 1)}
+                      className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
+                    >+</button>
+
+                    {/* Right: allocated amount */}
+                    <p
+                      className="ca-mono-label text-right text-[0.52rem] tabular-nums"
+                      style={{ color: allocated > 0 ? meta.color : 'rgba(255,255,255,0.2)' }}
+                    >
+                      {allocated}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="mt-3">
+              {hasUnallocated ? (
+                <p className="ca-mono-label text-[0.44rem] text-amber-300">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
+              ) : !canAfford ? (
+                <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
+              ) : (
+                <p className="ca-mono-label text-[0.44rem] text-ca-teal">READY TO COMMIT</p>
+              )}
             </div>
           </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {battleEnergyOrder.map((type) => {
-              const meta = battleEnergyMeta[type]
-              const before = getEnergyCount(energy, type)
-              const after = getEnergyCount(energyAfter, type)
-              return (
-                <div
-                  key={type}
-                  className="rounded-[0.25rem] border bg-[rgba(255,255,255,0.03)] px-2 py-1.5"
-                  style={{ borderColor: meta.border }}
-                >
-                  <p className="ca-mono-label text-[0.42rem]" style={{ color: meta.color }}>{meta.short}</p>
-                  <p className="mt-1 ca-mono-label text-[0.56rem] text-ca-text">
-                    {before} → {after}
-                  </p>
-                </div>
-              )
-            })}
+        ) : !canAfford ? (
+          <div className="px-5 py-3">
+            <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
           </div>
+        ) : null}
 
-          {!canAfford ? (
-            <p className="mt-3 ca-mono-label text-[0.46rem] text-ca-red">CANNOT AFFORD THIS QUEUE — ADJUST ALLOCATION.</p>
-          ) : hasUnallocated ? (
-            <p className="mt-3 ca-mono-label text-[0.46rem] text-amber-300">RANDOM PIPS NOT FULLY ALLOCATED — ASSIGN BEFORE COMMITTING.</p>
-          ) : null}
-        </div>
-
-        <div className="flex gap-3 border-t border-white/8 px-6 py-4">
+        {/* ── OK / Cancel ── */}
+        <div className="grid grid-cols-2 gap-3 border-t border-white/8 px-5 py-4">
           <button
             type="button"
             disabled={!canAfford || hasUnallocated}
             onClick={() => onConfirm(order)}
-            className="ca-display flex-1 rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 text-[1.05rem] text-white transition hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="ca-display rounded-lg border border-ca-teal/35 bg-[linear-gradient(180deg,rgba(5,216,189,0.16),rgba(5,216,189,0.07))] py-2.5 text-[1.05rem] text-ca-teal transition hover:brightness-110 disabled:opacity-35 disabled:cursor-not-allowed"
           >
-            CONFIRM
+            OK
           </button>
           <button
             type="button"
             onClick={onBack}
-            className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-5 py-2.5 text-[1.05rem] text-ca-text transition hover:bg-[rgba(36,34,48,0.8)]"
+            className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] py-2.5 text-[1.05rem] text-ca-text transition hover:bg-[rgba(36,34,48,0.8)]"
           >
-            BACK
+            CANCEL
           </button>
         </div>
       </div>
