@@ -1,5 +1,6 @@
 
 > Detailed follow-up spec: [battle-engine-effects-spec.md](./battle-engine-effects-spec.md)
+> Core gameplay target: [battle-parity-spec.md](./battle-parity-spec.md)
 
 
 ## Philosophy
@@ -43,7 +44,7 @@ Naruto-Arena was **not** simultaneous. It was sequential:
    - Apply DoT damage (burn, etc.)
    - Apply regen/passive healing
    - Check for deaths from DoT
-   - Generate energy for both teams (1 per living character per team)
+   - Generate random chakra for both teams (1 per living character per team)
 
 2. FIRST PLAYER'S TURN
    - Player selects one skill per living character
@@ -304,7 +305,7 @@ Design and implement characters that showcase the new trigger system capabilitie
 | Aspect | Naruto-Arena | Cursed Arena |
 |--------|-------------|--------------|
 | Turn structure | Sequential (P1 â†’ resolve â†’ P2 â†’ resolve), coin flip for order | Same â€” preserved faithfully |
-| Energy generation | Random chakra types each turn | Deterministic: 1 per living character, shared pool |
+| Energy generation | Random chakra types each turn | Random chakra types each turn, 1 per living character, shared pool, plus 5-for-1 exchange |
 | HP pools | Fixed 100 for all characters | Variable (80â€“115) per character |
 | Speed stat | None | Determines resolution order within a turn |
 | Passive abilities | None (characters were purely their 4 skills) | Unique per-character passives with trigger system |

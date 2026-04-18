@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'vitest'
-import { createEnergyAmounts } from '@/features/battle/energy'
+import { createEnergyAmounts, totalEnergyInPool } from '@/features/battle/energy'
 import { battleRoster } from '@/features/battle/data'
 import {
   beginNewRound,
   createInitialBattleState,
   endRound,
+  endRoundTimeline,
   getAbilityById,
   getTeam,
   resolveTeamTurn,
+  resolveTeamTurnTimeline,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
 import { getBurnDamage, getStatusDuration } from '@/features/battle/statuses'
@@ -32,7 +34,7 @@ function createChargedBattleState(overrides?: Parameters<typeof createInitialBat
   const state = createInitialBattleState(overrides)
   const chargedPool = {
     amounts: createEnergyAmounts({ physical: 6, technique: 6, vow: 6, mental: 6 }),
-    focus: 'technique' as const,
+    focus: null,
   }
   state.playerEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
   state.enemyEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
@@ -40,6 +42,15 @@ function createChargedBattleState(overrides?: Parameters<typeof createInitialBat
 }
 
 describe('battle engine scenarios', () => {
+  test('initial chakra gives the opening player 1 and the second player normal distribution', () => {
+    const state = createInitialBattleState({ battleSeed: 'opening-distribution' })
+    const openingTotal = state.firstPlayer === 'player' ? totalEnergyInPool(state.playerEnergy) : totalEnergyInPool(state.enemyEnergy)
+    const secondTotal = state.firstPlayer === 'player' ? totalEnergyInPool(state.enemyEnergy) : totalEnergyInPool(state.playerEnergy)
+
+    expect(openingTotal).toBe(1)
+    expect(secondTotal).toBe(3)
+  })
+
   test('Gojo passive reduces cooldowns by an extra turn at round end', () => {
     const state = createChargedBattleState()
     const gojo = getFighter(state, 'player', 'gojo')
@@ -157,6 +168,39 @@ describe('battle engine scenarios', () => {
     if (healEvent?.packet?.kind === 'heal') {
       expect(healEvent.packet.amount).toBe(6)
     }
+  })
+
+  test('resolveTeamTurnTimeline returns per-action state snapshots', () => {
+    const state = createChargedBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const gojo = getFighter(state, 'player', 'gojo')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    const timeline = resolveTeamTurnTimeline(
+      state,
+      {
+        [megumi.instanceId]: { actorId: megumi.instanceId, team: 'player', abilityId: 'megumi-dogs', targetId: yuji.instanceId },
+        [gojo.instanceId]: { actorId: gojo.instanceId, team: 'player', abilityId: 'gojo-red', targetId: yuji.instanceId },
+      },
+      'player',
+      [megumi.instanceId, gojo.instanceId],
+    )
+
+    expect(timeline.steps).toHaveLength(3)
+    expect(timeline.steps[0]?.actorId).toBe(megumi.instanceId)
+    expect(getFighter(timeline.steps[0]!.state, 'enemy', 'yuji').hp).toBeLessThan(yuji.hp)
+    expect(timeline.steps[1]?.actorId).toBe(gojo.instanceId)
+    expect(getFighter(timeline.steps[1]!.state, 'enemy', 'yuji').hp).toBeLessThan(getFighter(timeline.steps[0]!.state, 'enemy', 'yuji').hp)
+  })
+
+  test('endRoundTimeline separates cleanup from next-round setup', () => {
+    const state = createChargedBattleState()
+
+    const timeline = endRoundTimeline(state)
+
+    expect(timeline.steps.some((step) => step.kind === 'roundEnd')).toBe(true)
+    expect(timeline.steps.some((step) => step.kind === 'roundStart')).toBe(true)
+    expect(timeline.state.round).toBe(state.round + 1)
   })
 
   test('generic addModifier effects feed the runtime damage calculation and status sync', () => {

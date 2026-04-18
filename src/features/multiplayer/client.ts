@@ -6,7 +6,7 @@
  */
 
 import { getSupabaseClient } from '@/lib/supabase'
-import type { BattleState, BattleTeamId, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleState, BattleTeamId, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types'
 import type { BattleMatchMode, MatchHistoryEntry } from '@/features/battle/matches'
 import type { MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
 
@@ -279,9 +279,13 @@ export async function fetchMatch(matchId: string): Promise<{ data: MatchRow | nu
 export async function commitMatchState({
   matchId,
   newState,
+  resolutionId,
+  resolutionSteps,
 }: {
   matchId: string
   newState: BattleState
+  resolutionId?: string | null
+  resolutionSteps?: BattleTimelineStep[] | null
 }): Promise<{ error: string | null }> {
   const { error } = await db()
     .from('matches')
@@ -292,6 +296,8 @@ export async function commitMatchState({
       active_player: newState.activePlayer ?? 'player',
       winner: newState.winner ?? null,
       status: newState.phase === 'finished' ? 'finished' : 'in_progress',
+      resolution_id: resolutionId ?? null,
+      resolution_steps: resolutionSteps ?? null,
       last_activity_at: new Date().toISOString(),
     })
     .eq('id', matchId)

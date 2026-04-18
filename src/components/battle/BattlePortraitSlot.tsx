@@ -278,6 +278,8 @@ export function BattlePortraitSlot({
   showName = false,
   hideHp = false,
   carryoverLabels = [],
+  timelineRole = null,
+  timelineTone = null,
   onClick,
 }: {
   fighter: BattleFighterState
@@ -291,6 +293,8 @@ export function BattlePortraitSlot({
   showName?: boolean
   hideHp?: boolean
   carryoverLabels?: string[]
+  timelineRole?: 'actor' | 'target' | null
+  timelineTone?: 'red' | 'teal' | 'gold' | 'frost' | null
   onClick?: () => void
 }) {
   const accentStyles = getAccentStyles(accent)
@@ -329,12 +333,15 @@ export function BattlePortraitSlot({
         </div>
       ) : null}
 
-      <div
+        <div
         className={cn(
           'rounded-[0.2rem] p-0.5 transition',
           active && accentStyles.glow,
           targetable && 'shadow-[0_0_0_2px_rgba(255,209,102,0.5),0_0_18px_rgba(255,209,102,0.2)]',
           selectedTarget && 'shadow-[0_0_0_2px_rgba(255,255,255,0.55),0_0_18px_rgba(255,255,255,0.2)]',
+          timelineRole === 'actor' && timelineTone === 'red' && 'shadow-[0_0_0_2px_rgba(250,39,66,0.5),0_0_20px_rgba(250,39,66,0.2)]',
+          timelineRole === 'actor' && timelineTone !== 'red' && 'shadow-[0_0_0_2px_rgba(5,216,189,0.5),0_0_20px_rgba(5,216,189,0.2)]',
+          timelineRole === 'target' && 'shadow-[0_0_0_2px_rgba(252,211,77,0.45),0_0_20px_rgba(252,211,77,0.16)]',
         )}
       >
         <PortraitSquare fighter={fighter} dimmed={muted} sizeClass={portraitSizeClass} mirrored={mirrored} />

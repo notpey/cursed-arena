@@ -1,5 +1,7 @@
 # Cursed Arena Battle Board Spec
 
+> Core gameplay target: [battle-parity-spec.md](./battle-parity-spec.md)
+
 ## Goal
 Convert the current battle screen from a cinematic stage layout into a Naruto-Arena-style combat board while preserving Cursed Arena's visual language, battle engine, and design tokens.
 
@@ -393,7 +395,7 @@ Only add tokens if the current set is insufficient. Prefer existing variables.
 ## Risks And Unknowns
 - The current project does not appear to include dedicated square portraits or true skill icons, so placeholders or generated crops will be needed early.
 - [src/pages/BattlePage.tsx](c:/Users/breed/OneDrive/Documents/cursed-arena-main/cursed-arena/src/pages/BattlePage.tsx) is large and currently owns too much UI logic, so layout rewrites without extraction will be brittle.
-- The current energy system is Cursed Arena-specific and not a direct Naruto-Arena chakra system. If exact Naruto-like exchange behavior is desired later, that becomes a gameplay change, not just a layout change.
+- Chakra parity is now a gameplay requirement, not a later optional change. The battle UI should assume random round gain, carryover, and 5-for-1 exchange.
 - The current fighter data includes `ce/maxCe`, but the visible battle UI is driven by shared team energy. That mismatch may need cleanup in a later pass.
 - Responsive behavior will require deliberate design because Naruto-Arena's original layout assumes a wide desktop canvas.
 

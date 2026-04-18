@@ -1,6 +1,8 @@
 import {
+  battleEnergyExchangeCost,
   battleEnergyMeta,
   battleEnergyOrder,
+  canExchangeEnergy,
   getEnergyCount,
   randomEnergyMeta,
   totalEnergyInPool,
@@ -49,37 +51,37 @@ export function EnergyCostRow({ cost, compact = false }: { cost: BattleEnergyCos
   )
 }
 
-function FocusChip({
+function ExchangeChip({
   type,
-  active,
   count,
   disabled,
-  onSelect,
+  canExchange,
+  onExchange,
 }: {
   type: BattleEnergyType
-  active: boolean
   count: number
   disabled: boolean
-  onSelect?: (type: BattleEnergyType) => void
+  canExchange: boolean
+  onExchange?: (type: BattleEnergyType) => void
 }) {
   const meta = battleEnergyMeta[type]
 
   return (
     <button
       type="button"
-      disabled={disabled}
-      onClick={onSelect ? () => onSelect(type) : undefined}
+      disabled={disabled || !canExchange}
+      onClick={onExchange ? () => onExchange(type) : undefined}
       className={cn(
         'flex items-center gap-1.5 rounded-full border px-2 py-1 transition',
-        active ? 'bg-[rgba(255,255,255,0.08)] text-ca-text' : 'bg-[rgba(255,255,255,0.03)] text-ca-text-3',
+        canExchange ? 'bg-[rgba(255,255,255,0.06)] text-ca-text' : 'bg-[rgba(255,255,255,0.03)] text-ca-text-3',
         disabled && 'cursor-default opacity-70',
-        !disabled && 'hover:bg-[rgba(255,255,255,0.06)]',
+        !disabled && canExchange && 'hover:bg-[rgba(255,255,255,0.09)]',
       )}
       style={{
-        borderColor: active ? meta.border : 'rgba(255,255,255,0.08)',
-        boxShadow: active ? `0 0 14px ${meta.glow}` : 'none',
+        borderColor: canExchange ? meta.border : 'rgba(255,255,255,0.08)',
+        boxShadow: canExchange ? `0 0 14px ${meta.glow}` : 'none',
       }}
-      title={active ? `${meta.label} focus selected for the next refresh` : meta.label}
+      title={canExchange ? `Exchange ${battleEnergyExchangeCost} chakra into 1 ${meta.label}` : meta.label}
     >
       <EnergyPip type={type} small />
       <span className="ca-mono-label text-[0.6rem]">{meta.short}</span>
@@ -91,13 +93,13 @@ function FocusChip({
 export function TeamEnergyReserve({
   pool,
   disabled = false,
-  onSelectFocus,
+  onExchangeEnergy,
 }: {
   pool: BattleEnergyPool
   disabled?: boolean
-  onSelectFocus?: (type: BattleEnergyType) => void
+  onExchangeEnergy?: (type: BattleEnergyType) => void
 }) {
-  const selectedFocus = pool.focus ?? 'technique'
+  const exchangeReady = canExchangeEnergy(pool)
 
   return (
     <div className="rounded-[0.3rem] border border-white/10 bg-[rgba(10,10,15,0.84)] px-2.5 py-2 shadow-[0_8px_18px_rgba(0,0,0,0.2)] backdrop-blur-xl">
@@ -112,25 +114,27 @@ export function TeamEnergyReserve({
 
         <div className="min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">NEXT REFRESH FOCUS</p>
+            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">EXCHANGE CHAKRA</p>
             <span className="rounded-full border border-ca-teal/25 bg-ca-teal-wash px-1.5 py-0.5 ca-mono-label text-[0.6rem] text-ca-teal">
-              {selectedFocus.toUpperCase()}
+              {battleEnergyExchangeCost} TO 1
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {battleEnergyOrder.map((type) => (
-              <FocusChip
+              <ExchangeChip
                 key={type}
                 type={type}
-                active={selectedFocus === type}
                 count={getEnergyCount(pool, type)}
                 disabled={disabled}
-                onSelect={onSelectFocus}
+                canExchange={exchangeReady}
+                onExchange={onExchangeEnergy}
               />
             ))}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">1 MATCHING PIP IS GUARANTEED ON THE NEXT REFRESH</span>
+            <span className="ca-mono-label text-[0.6rem] text-ca-text-3">
+              {exchangeReady ? 'CLICK A TYPE TO CONVERT 5 CHAKRA INTO 1 CHOSEN PIP' : `BANK ${battleEnergyExchangeCost} CHAKRA TO ENABLE EXCHANGE`}
+            </span>
             <span className="ca-mono-label text-[0.6rem] text-ca-text-3">CURRENT TOTAL {totalEnergyInPool(pool)}</span>
           </div>
         </div>

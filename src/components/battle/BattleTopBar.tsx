@@ -1,5 +1,5 @@
 import { EnergyPip } from '@/components/battle/BattleEnergy'
-import { battleEnergyMeta, battleEnergyOrder, getEnergyCount, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyExchangeCost, battleEnergyMeta, battleEnergyOrder, canExchangeEnergy, getEnergyCount, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyType } from '@/features/battle/energy'
 import type { BattleUserProfile } from '@/features/battle/types'
 import { cn, getAccentStyles } from '@/components/battle/battleDisplay'
 
@@ -34,7 +34,7 @@ export function BattleTopBar({
   commitReady,
   battleFinished,
   onReady,
-  onSelectFocus,
+  onExchangeEnergy,
 }: {
   playerProfile: BattleUserProfile
   enemyProfile: BattleUserProfile
@@ -44,10 +44,11 @@ export function BattleTopBar({
   commitReady: boolean
   battleFinished: boolean
   onReady: () => void
-  onSelectFocus: (type: BattleEnergyType) => void
+  onExchangeEnergy: (type: BattleEnergyType) => void
 }) {
-  const timerPercent = Math.max(0, Math.min(100, (turnSecondsLeft / 30) * 100))
+  const timerPercent = Math.max(0, Math.min(100, (turnSecondsLeft / 60) * 100))
   const timerUrgent = turnSecondsLeft <= 10 && turnSecondsLeft > 0
+  const exchangeReady = canExchangeEnergy(playerEnergy)
 
   return (
     <header className="flex items-center gap-4 border-b border-white/8 bg-[linear-gradient(180deg,rgba(12,10,22,0.92),rgba(16,13,28,0.88))] px-4 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
@@ -59,20 +60,19 @@ export function BattleTopBar({
         <div className="flex items-center gap-2">
           {battleEnergyOrder.map((type) => {
             const meta = battleEnergyMeta[type]
-            const active = playerEnergy.focus === type
             const count = getEnergyCount(playerEnergy, type)
             return (
               <button
                 key={type}
                 type="button"
-                disabled={battleFinished}
-                onClick={() => onSelectFocus(type)}
+                disabled={battleFinished || !exchangeReady}
+                onClick={() => onExchangeEnergy(type)}
                 className={cn(
                   'flex items-center gap-1 rounded-[0.2rem] border px-1.5 py-1 transition',
-                  active ? 'border-white/20 bg-white/10' : 'border-transparent bg-transparent',
-                  battleFinished ? 'cursor-default opacity-70' : 'hover:border-white/12 hover:bg-white/8',
+                  exchangeReady ? 'border-white/10 bg-[rgba(255,255,255,0.06)] hover:border-white/20 hover:bg-white/10' : 'border-transparent bg-transparent',
+                  battleFinished ? 'cursor-default opacity-70' : !exchangeReady ? 'cursor-not-allowed opacity-60' : undefined,
                 )}
-                title={`${meta.label} reserve`}
+                title={exchangeReady ? `Exchange ${battleEnergyExchangeCost} chakra into 1 ${meta.label}` : `${meta.label} reserve`}
               >
                 <EnergyPip type={type} small />
                 <span className="ca-mono-label text-[0.6rem] text-ca-text">x{count}</span>
@@ -80,6 +80,9 @@ export function BattleTopBar({
             )
           })}
           <span className="ca-mono-label text-[0.6rem] text-ca-text-2">T x{totalEnergyInPool(playerEnergy)}</span>
+          <span className={cn('ca-mono-label text-[0.6rem]', exchangeReady ? 'text-ca-teal' : 'text-ca-text-3')}>
+            {exchangeReady ? `EXCHANGE ${battleEnergyExchangeCost}->1` : `EXCHANGE ${battleEnergyExchangeCost}`}
+          </span>
         </div>
 
         <div className="flex flex-col items-center gap-1">

@@ -1,4 +1,4 @@
-import type { BattleState, BattleTeamId, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleState, BattleTeamId, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types'
 import type { BattleMatchMode } from '@/features/battle/matches'
 
 // ── Roles ────────────────────────────────────────────────────────────────────
@@ -28,9 +28,17 @@ export type MatchRow = {
   current_round: number
   active_player: BattleTeamId
   winner: BattleTeamId | null
+  resolution_id: string | null
+  resolution_steps: BattleTimelineStep[] | null
   room_code: string | null
   created_at: string
   updated_at: string
+}
+
+export type MultiplayerResolutionReplay = {
+  id: string
+  steps: BattleTimelineStep[]
+  source: 'local' | 'remote'
 }
 
 export type MatchCommandRow = {

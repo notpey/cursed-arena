@@ -1,12 +1,11 @@
-import { type DragEvent, type TouchEvent, useEffect, useEffectEvent, useRef, useState } from 'react'
+import { type DragEvent, type TouchEvent, useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getCommandSummary } from '@/components/battle/battleDisplay'
-import { getStatusDuration, hasStatus } from '@/features/battle/statuses'
-import { battleEnergyOrder, battleEnergyMeta, canPayEnergy, getAbilityEnergyCost, getEnergyCount, setEnergyFocus, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, exchangeEnergy, getAbilityEnergyCost, getEnergyCount, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
+import { SkillQueueCommitModal } from '@/components/battle/SkillQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
@@ -27,16 +26,24 @@ import {
   canQueueAbility,
   createAutoCommands,
   createInitialBattleState,
-  endRound,
   getAbilityById,
   getCommandablePlayerUnits,
   getFighterById,
   getValidTargetIds,
   isAlive,
   resolveTeamTurn,
+  resolveTeamTurnTimeline,
+  endRoundTimeline,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
-import type { BattleEvent, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import type {
+  BattleEvent,
+  BattleFighterState,
+  BattleRuntimeEvent,
+  BattleState,
+  BattleTimelineStep,
+  QueuedBattleAction,
+} from '@/features/battle/types'
 import {
   useMultiplayerMatch,
   buildTimeoutCommands,
@@ -55,16 +62,112 @@ type HoveredAbilityState = {
   abilityId: string
 }
 
-type CarryoverHighlightMap = Record<string, string[]>
+type BattleTimelineFocus = {
+  actorId?: string
+  targetId?: string
+  label: string
+  tone: 'red' | 'teal' | 'gold' | 'frost'
+}
 
-type RoundTransitionState = {
-  key: string
-  round: number
-  title: string
-  subtitle: string
-  badges: string[]
-  tone: 'teal' | 'red' | 'gold'
-  highlights: CarryoverHighlightMap
+const timelineStepDelayMs = 360
+const timelineEventPriority: BattleRuntimeEvent['type'][] = [
+  'fighter_defeated',
+  'damage_applied',
+  'heal_applied',
+  'status_applied',
+  'modifier_applied',
+  'modifier_removed',
+  'resource_changed',
+  'ability_used',
+  'round_ended',
+  'round_started',
+]
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
+function createTimelineFocus(step: BattleTimelineStep): BattleTimelineFocus | null {
+  const runtime = timelineEventPriority
+    .map((type) => step.runtimeEvents.find((event) => event.type === type))
+    .find(Boolean)
+
+  if (runtime) {
+    switch (runtime.type) {
+      case 'damage_applied':
+        return {
+          actorId: runtime.actorId ?? (runtime.packet?.kind === 'damage' ? runtime.packet.sourceActorId : undefined),
+          targetId: runtime.targetId,
+          label: `${runtime.amount ?? (runtime.packet?.kind === 'damage' ? runtime.packet.amount : 0)} DAMAGE`,
+          tone: 'red',
+        }
+      case 'heal_applied':
+        return {
+          actorId: runtime.actorId ?? (runtime.packet?.kind === 'heal' ? runtime.packet.sourceActorId : undefined),
+          targetId: runtime.targetId,
+          label: `${runtime.amount ?? (runtime.packet?.kind === 'heal' ? runtime.packet.amount : 0)} HEAL`,
+          tone: 'teal',
+        }
+      case 'fighter_defeated':
+        return {
+          actorId: runtime.actorId,
+          targetId: runtime.targetId,
+          label: 'FIGHTER DEFEATED',
+          tone: 'red',
+        }
+      case 'status_applied':
+      case 'modifier_applied':
+        return {
+          actorId: runtime.actorId,
+          targetId: runtime.targetId,
+          label: String(runtime.meta?.status ?? 'STATUS').replace(/_/g, ' ').toUpperCase(),
+          tone: runtime.tags?.includes('burn') || runtime.tags?.includes('mark') ? 'red' : 'gold',
+        }
+      case 'modifier_removed':
+        return {
+          actorId: runtime.actorId,
+          targetId: runtime.targetId,
+          label: 'STATUS CLEARED',
+          tone: 'frost',
+        }
+      case 'resource_changed':
+        return {
+          actorId: runtime.actorId,
+          targetId: runtime.targetId,
+          label: runtime.packet?.kind === 'resource' && runtime.packet.mode === 'spend' ? 'ENERGY SPENT' : 'ENERGY SHIFT',
+          tone: 'gold',
+        }
+      case 'ability_used':
+        return {
+          actorId: runtime.actorId,
+          targetId: runtime.targetId,
+          label: 'TECHNIQUE RELEASED',
+          tone: runtime.team === 'enemy' ? 'red' : 'teal',
+        }
+      case 'round_ended':
+        return {
+          label: 'ROUND END',
+          tone: 'frost',
+        }
+      case 'round_started':
+        return {
+          label: `ROUND ${step.state.round}`,
+          tone: 'frost',
+        }
+      default:
+        break
+    }
+  }
+
+  const lastEvent = step.events[step.events.length - 1]
+  if (!lastEvent) return null
+
+  return {
+    actorId: lastEvent.actorId,
+    targetId: lastEvent.targetId,
+    label: lastEvent.message.toUpperCase(),
+    tone: lastEvent.tone,
+  }
 }
 
 function getNextActorId(
@@ -113,161 +216,16 @@ function hasCommittedPlayerAction(command?: QueuedBattleAction) {
   return Boolean(command?.team === 'player' && command.abilityId !== PASS_ABILITY_ID)
 }
 
-function buildTimedOutQueuedActions(
-  state: BattleState,
-  queued: Record<string, QueuedBattleAction>,
-) {
-  return getCommandablePlayerUnits(state).reduce<Record<string, QueuedBattleAction>>((acc, fighter) => {
-    acc[fighter.instanceId] =
-      queued[fighter.instanceId] ?? {
-        actorId: fighter.instanceId,
-        team: 'player',
-        abilityId: PASS_ABILITY_ID,
-        targetId: null,
-      }
-
-    return acc
-  }, { ...queued })
-}
-
-function createTimeoutEvent(round: number, autoPassedCount: number): BattleEvent {
-  const message =
-    autoPassedCount > 0
-      ? `Turn timer expired. ${autoPassedCount} unresolved action${autoPassedCount === 1 ? ' was' : 's were'} auto-passed.`
-      : 'Turn timer expired. Queued actions locked automatically.'
-
+function createTimeoutEvent(round: number, hadQueuedActions: boolean): BattleEvent {
   return {
     id: `timeout-${round}-${Date.now()}`,
     round,
     kind: 'system',
     tone: 'red',
-    message,
+    message: hadQueuedActions
+      ? 'Turn timer expired. Unconfirmed actions were canceled and the turn was passed.'
+      : 'Turn timer expired. The turn was passed automatically.',
   }
-}
-
-function getFighterLabel(previousState: BattleState, nextState: BattleState, fighterId?: string) {
-  if (!fighterId) return null
-  return getFighterById(nextState, fighterId)?.shortName ?? getFighterById(previousState, fighterId)?.shortName ?? null
-}
-
-function pushHighlight(labels: string[], label: string) {
-  if (!labels.includes(label)) labels.push(label)
-}
-
-function buildCarryoverHighlights(previousState: BattleState, nextState: BattleState): CarryoverHighlightMap {
-  const highlights: CarryoverHighlightMap = {}
-  const nextFighters = nextState.playerTeam.concat(nextState.enemyTeam)
-
-  nextFighters.forEach((fighter) => {
-    const previous = getFighterById(previousState, fighter.instanceId)
-    if (!previous) return
-
-    const labels: string[] = []
-
-    if (fighter.hp > previous.hp) {
-      pushHighlight(labels, `+${fighter.hp - previous.hp} HP`)
-    }
-
-    if (hasStatus(fighter.statuses, 'stun') && getStatusDuration(fighter.statuses, 'stun') !== getStatusDuration(previous.statuses, 'stun')) {
-      pushHighlight(labels, 'STUNNED')
-    }
-
-    if (hasStatus(fighter.statuses, 'invincible') && getStatusDuration(fighter.statuses, 'invincible') !== getStatusDuration(previous.statuses, 'invincible')) {
-      pushHighlight(labels, 'VOID')
-    }
-
-    if (hasStatus(fighter.statuses, 'attackUp') && getStatusDuration(fighter.statuses, 'attackUp') !== getStatusDuration(previous.statuses, 'attackUp')) {
-      pushHighlight(labels, 'DMG UP')
-    }
-
-    if (hasStatus(fighter.statuses, 'burn') && getStatusDuration(fighter.statuses, 'burn') !== getStatusDuration(previous.statuses, 'burn')) {
-      pushHighlight(labels, `BURN ${getStatusDuration(fighter.statuses, 'burn')}T`)
-    }
-
-    if (hasStatus(fighter.statuses, 'mark') && getStatusDuration(fighter.statuses, 'mark') !== getStatusDuration(previous.statuses, 'mark')) {
-      pushHighlight(labels, 'MARKED')
-    }
-
-    const readyAbility = Object.keys(fighter.cooldowns).some((abilityId) => {
-      const before = previous.cooldowns[abilityId] ?? 0
-      const after = fighter.cooldowns[abilityId] ?? 0
-      return before > 0 && after === 0
-    })
-
-    if (readyAbility) {
-      pushHighlight(labels, 'CD READY')
-    }
-
-    if (labels.length > 0) {
-      highlights[fighter.instanceId] = labels.slice(0, 2)
-    }
-  })
-
-  return highlights
-}
-
-function buildRoundTransition(previousState: BattleState, nextState: BattleState, events: BattleEvent[]): RoundTransitionState | null {
-  if (nextState.round <= previousState.round) return null
-
-  const highlights = buildCarryoverHighlights(previousState, nextState)
-  const tone = nextState.firstPlayer === 'player' ? 'teal' : 'red'
-  const title = `ROUND ${nextState.round}`
-  const subtitle = nextState.firstPlayer === 'player'
-    ? 'Your squad has opening initiative.'
-    : 'Enemy initiative leads the next exchange.'
-
-  const badges: string[] = []
-
-  const fatigueEvents = events.filter(
-    (event) => event.round === previousState.round && event.kind === 'system' && event.message.includes('Domain pressure'),
-  )
-  if (fatigueEvents.length > 0) {
-    badges.push(`FATIGUE x${fatigueEvents.length}`)
-  }
-
-  const defeatNames = Array.from(
-    new Set(
-      events
-        .filter((event) => event.round === previousState.round && event.kind === 'defeat')
-        .map((event) => getFighterLabel(previousState, nextState, event.targetId))
-        .filter((name): name is string => Boolean(name)),
-    ),
-  )
-  if (defeatNames.length > 0) {
-    badges.push(`KO ${defeatNames.slice(0, 2).join(', ')}`)
-  }
-
-  const roundStartHeals = events.filter((event) => event.round === nextState.round && event.kind === 'heal')
-  if (roundStartHeals.length > 0) {
-    badges.push(`ROUND START HEAL x${roundStartHeals.length}`)
-  }
-
-  const cooldownReadyCount = Object.values(highlights).flat().filter((label) => label === 'CD READY').length
-  if (cooldownReadyCount > 0) {
-    badges.push(`${cooldownReadyCount} CD READY`)
-  }
-
-  badges.push('ENERGY REFRESHED')
-  badges.push(nextState.firstPlayer === 'player' ? 'PLAYER OPENS' : 'ENEMY OPENS')
-
-  return {
-    key: `round-${nextState.round}`,
-    round: nextState.round,
-    title,
-    subtitle,
-    badges: badges.slice(0, 4),
-    tone,
-    highlights,
-  }
-}
-
-function getEnemyIntentSummaries(state: BattleState) {
-  const previewState = JSON.parse(JSON.stringify(state)) as BattleState
-  const commands = buildEnemyCommands(previewState)
-
-  return Object.fromEntries(
-    Object.entries(commands).map(([actorId, command]) => [actorId, getCommandSummary(previewState, command)]),
-  )
 }
 
 function getInitials(value: string) {
@@ -330,15 +288,15 @@ function UtilityRail({
     </aside>
   )
 }
-
 export function BattlePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
   const { user } = useAuth()
   const { matchId } = useParams<{ matchId?: string }>()
+  const currentUserId = user?.id ?? null
 
   // ── Multiplayer hook (null when playing vs AI) ──────────────────────────
-  const multiplayer = useMultiplayerMatch(matchId ?? null, user?.id ?? null)
+  const multiplayer = useMultiplayerMatch(matchId ?? null, currentUserId)
 
   const [stagedSession] = useState(() => readStagedBattleSession())
   const [initialBattle] = useState(createNewBattle)
@@ -348,11 +306,14 @@ export function BattlePage() {
   const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
   const [battleLog, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
-  const [roundTransition, setRoundTransition] = useState<RoundTransitionState | null>(null)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
   const [queueDialogOpen, setQueueDialogOpen] = useState(false)
   const [opponentDisconnected, setOpponentDisconnected] = useState(false)
+  const [timelineLocked, setTimelineLocked] = useState(false)
+  const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
+  const timelineRunRef = useRef(0)
+  const lastPlayedMultiplayerResolutionRef = useRef<string | null>(null)
 
   const playerBoardProfile = {
     username: profile.displayName,
@@ -383,7 +344,7 @@ export function BattlePage() {
       : []
   const commandableUnits = getCommandablePlayerUnits(battle.state)
   const hasPendingTargetSelection = Boolean(selectedAbilityId)
-  const commitReady = commandableUnits.length > 0 && !hasPendingTargetSelection
+  const commitReady = commandableUnits.length > 0 && !hasPendingTargetSelection && !timelineLocked
   const targetingAllies = selectedAbility?.targetRule === 'ally-single'
   const targetingEnemies = selectedAbility?.targetRule === 'enemy-single'
   const hoveredActor = hoveredAbility ? getFighterById(battle.state, hoveredAbility.actorId) : null
@@ -392,11 +353,13 @@ export function BattlePage() {
   const inspectedAbility =
     hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
-  const enemyIntentSummaries = getEnemyIntentSummaries(battle.state)
   const multiplayerBattleState = multiplayer?.battleState
   const multiplayerAutoCommands = multiplayer?.autoCommands
   const multiplayerIsMyTurn = multiplayer?.isMyTurn ?? false
-  const topBarPrompt = targetingEnemies
+  const multiplayerLatestResolution = multiplayer?.latestResolution ?? null
+  const topBarPrompt = timelineFocus
+    ? timelineFocus.label
+    : targetingEnemies
     ? `TARGET ENEMY WITH ${selectedAbility?.name.toUpperCase() ?? 'TECHNIQUE'}`
     : targetingAllies
       ? `TARGET ALLY WITH ${selectedAbility?.name.toUpperCase() ?? 'TECHNIQUE'}`
@@ -406,9 +369,19 @@ export function BattlePage() {
           ? `RESPONSE TURN (${turnOrderLabel})`
           : `OPENING TURN (${turnOrderLabel})`
 
+  useEffect(() => {
+    lastPlayedMultiplayerResolutionRef.current = null
+  }, [matchId])
+
   // ── Sync multiplayer state → local battle view ──────────────────────────
   useEffect(() => {
     if (!multiplayerBattleState || !multiplayerAutoCommands) return
+    if (
+      multiplayerLatestResolution &&
+      multiplayerLatestResolution.id !== lastPlayedMultiplayerResolutionRef.current
+    ) {
+      return
+    }
     const nextActorId = multiplayerIsMyTurn
       ? getNextActorId(multiplayerBattleState, multiplayerAutoCommands)
       : null
@@ -421,10 +394,77 @@ export function BattlePage() {
     })
     setSelectedAbilityId(null)
     setSelectedTargetId(null)
-  }, [multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn])
+  }, [multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn, multiplayerLatestResolution])
+
+  const playTimelineSteps = useCallback(async (steps: BattleTimelineStep[]) => {
+    const runId = ++timelineRunRef.current
+
+    setTimelineLocked(true)
+    setTimelineFocus(null)
+    clearPendingSelection()
+    setHoveredAbility(null)
+    setBattle((current) => ({
+      ...current,
+      queued: {},
+      selectedActorId: null,
+    }))
+
+    for (const step of steps) {
+      if (timelineRunRef.current !== runId) {
+        return false
+      }
+
+      setTimelineFocus(createTimelineFocus(step))
+      setBattle((current) => ({
+        ...current,
+        state: step.state,
+        queued: {},
+        selectedActorId: null,
+      }))
+      if (step.events.length > 0) {
+        setBattleLog((current) => [...current, ...step.events].slice(-36))
+      }
+
+      await wait(step.kind === 'action' ? timelineStepDelayMs : timelineStepDelayMs - 60)
+    }
+
+    if (timelineRunRef.current !== runId) {
+      return false
+    }
+
+    setTimelineFocus(null)
+    return true
+  }, [])
+
+  useEffect(() => {
+    if (!multiplayer || !multiplayerBattleState || !multiplayerAutoCommands || !multiplayerLatestResolution) return
+    if (multiplayerLatestResolution.id === lastPlayedMultiplayerResolutionRef.current) return
+
+    lastPlayedMultiplayerResolutionRef.current = multiplayerLatestResolution.id
+
+    void (async () => {
+      const finished = await playTimelineSteps(multiplayerLatestResolution.steps)
+      if (!finished) return
+
+      const nextActorId = multiplayerIsMyTurn
+        ? getNextActorId(multiplayerBattleState, multiplayerAutoCommands)
+        : null
+
+      setBattle({
+        state: multiplayerBattleState,
+        queued: multiplayerAutoCommands,
+        actionOrder: getCommandablePlayerUnits(multiplayerBattleState).map((fighter) => fighter.instanceId),
+        selectedActorId: nextActorId,
+      })
+      setSelectedAbilityId(null)
+      setSelectedTargetId(null)
+      setTimelineLocked(false)
+      setTimelineFocus(null)
+    })()
+  }, [multiplayer, multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn, multiplayerLatestResolution, playTimelineSteps])
 
   const onTurnTimeout = useEffectEvent(() => {
-    if (battle.state.phase === 'finished') return
+    if (battle.state.phase === 'finished' || timelineLocked) return
     handleTurnTimeout()
   })
 
@@ -434,6 +474,7 @@ export function BattlePage() {
 
   useEffect(() => {
     if (battle.state.phase === 'finished') return undefined
+    if (timelineLocked) return undefined
     // In online mode only tick down when it's our turn
     if (multiplayerBattleState && !multiplayerIsMyTurn) return undefined
     const timer = window.setInterval(() => {
@@ -441,21 +482,12 @@ export function BattlePage() {
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [battle.state.phase, battle.state.round, multiplayerBattleState, multiplayerIsMyTurn])
+  }, [battle.state.phase, battle.state.round, multiplayerBattleState, multiplayerIsMyTurn, timelineLocked])
 
   useEffect(() => {
     if (turnSecondsLeft > 0) return
     onTurnTimeout()
   }, [turnSecondsLeft])
-
-  useEffect(() => {
-    if (!roundTransition) return undefined
-    const timer = window.setTimeout(() => {
-      setRoundTransition(null)
-    }, 2400)
-
-    return () => window.clearTimeout(timer)
-  }, [roundTransition])
 
   // ── Opponent disconnect detection ─────────────────────────────────────────
   // If it's opponent's turn in an online match and we haven't received a
@@ -527,7 +559,7 @@ export function BattlePage() {
         setRecordedResult(result)
 
         // Persist to server-side match history (fire-and-forget)
-        if (user?.id) {
+        if (currentUserId) {
           const historyEntry = result.id
             ? {
                 id: result.id,
@@ -547,7 +579,7 @@ export function BattlePage() {
               }
             : null
           if (historyEntry) {
-            void saveMatchHistory(user.id, historyEntry)
+            void saveMatchHistory(currentUserId, historyEntry)
           }
         }
       })
@@ -564,7 +596,7 @@ export function BattlePage() {
     })
 
     setRecordedResult(result)
-  }, [battle.state, stagedSession, lastRecordedResultId, multiplayer, matchId])
+  }, [battle.state, stagedSession, lastRecordedResultId, multiplayer, matchId, currentUserId])
 
   function clearPendingSelection() {
     setSelectedAbilityId(null)
@@ -578,6 +610,7 @@ export function BattlePage() {
   }
 
   function clearQueuedAction(actorId: string) {
+    if (timelineLocked) return
     const nextQueued = { ...battle.queued }
     delete nextQueued[actorId]
 
@@ -590,6 +623,7 @@ export function BattlePage() {
   }
 
   function handleSelectActor(actorId: string) {
+    if (timelineLocked) return
     const existing = battle.queued[actorId]
     if (hasCommittedPlayerAction(existing)) {
       clearQueuedAction(actorId)
@@ -632,6 +666,7 @@ export function BattlePage() {
   }
 
   function handleSelectAbility(actorId: string, abilityId: string) {
+    if (timelineLocked) return
     const actor = getFighterById(battle.state, actorId)
     if (!actor) return
     const ability = getAbilityById(actor, abilityId)
@@ -654,11 +689,16 @@ export function BattlePage() {
     setSelectedTargetId(targets[0] ?? null)
   }
 
-  function handleSelectFocus(type: BattleEnergyType) {
+  function handleExchangeEnergy(type: BattleEnergyType) {
+    if (timelineLocked) return
     setBattle((current) => {
+      if (!canExchangeEnergy(current.state.playerEnergy)) {
+        return current
+      }
+
       const nextState = {
         ...current.state,
-        playerEnergy: setEnergyFocus(current.state.playerEnergy, type),
+        playerEnergy: exchangeEnergy(current.state.playerEnergy, type),
       }
 
       const nextQueued = Object.values(current.queued).reduce<Record<string, QueuedBattleAction>>((acc, command) => {
@@ -694,10 +734,7 @@ export function BattlePage() {
 
     // ── Online path ───────────────────────────────────────────────────────
     if (multiplayer) {
-      const { events } = await multiplayer.submitCommands(queuedActions, preludeEvents, playerActionOrder)
-      // State arrives via the useEffect above (Realtime + optimistic update).
-      // We only need to append events to the log here.
-      setBattleLog((current) => [...current, ...preludeEvents, ...events].slice(-36))
+      await multiplayer.submitCommands(queuedActions, preludeEvents, playerActionOrder)
       clearPendingSelection()
       setHoveredAbility(null)
       return
@@ -706,54 +743,54 @@ export function BattlePage() {
     // ── Local / AI path ───────────────────────────────────────────────────
     const previousState = battle.state
     let currentState = battle.state
-    const playerEvents: BattleEvent[] = [...preludeEvents]
-    const enemyEvents: BattleEvent[] = []
+    const timelineSteps: BattleTimelineStep[] = []
 
     // Phase 1: player turn — respects player-chosen action order
-    {
-      const playerResult = resolveTeamTurn(currentState, queuedActions, 'player', playerActionOrder)
-      currentState = playerResult.state
-      playerEvents.push(...playerResult.events)
+    if (preludeEvents.length > 0) {
+      setBattleLog((current) => [...current, ...preludeEvents].slice(-36))
     }
 
-    // Flush player events to log so they appear before enemy fires
+    const playerTimeline = resolveTeamTurnTimeline(currentState, queuedActions, 'player', playerActionOrder)
+    currentState = playerTimeline.state
+    timelineSteps.push(...playerTimeline.steps)
+
     clearPendingSelection()
     setHoveredAbility(null)
-    setBattleLog((current) => [...current, ...playerEvents].slice(-36))
-
-    // Brief pause so the player can read what just happened
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 420))
 
     // Phase 2: enemy turn + round end
     if (currentState.phase !== 'finished' && previousState.firstPlayer === 'player') {
       currentState = transitionToSecondPlayer(currentState)
       const enemyCommands = buildEnemyCommands(currentState)
-      const enemyResult = resolveTeamTurn(currentState, enemyCommands, 'enemy')
-      currentState = enemyResult.state
-      enemyEvents.push(...enemyResult.events)
+      const enemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
+      currentState = enemyTimeline.state
+      timelineSteps.push(...enemyTimeline.steps)
     }
 
     if (currentState.phase !== 'finished') {
-      const roundEnd = endRound(currentState)
-      currentState = roundEnd.state
-      enemyEvents.push(...roundEnd.events)
+      const roundTimeline = endRoundTimeline(currentState)
+      currentState = roundTimeline.state
+      timelineSteps.push(...roundTimeline.steps)
     }
 
     if (currentState.phase !== 'finished' && currentState.firstPlayer === 'enemy') {
       const enemyCommands = buildEnemyCommands(currentState)
-      const enemyResult = resolveTeamTurn(currentState, enemyCommands, 'enemy')
-      currentState = enemyResult.state
-      enemyEvents.push(...enemyResult.events)
+      const openingEnemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
+      currentState = openingEnemyTimeline.state
+      timelineSteps.push(...openingEnemyTimeline.steps)
 
       if (currentState.phase !== 'finished') {
         currentState = transitionToSecondPlayer(currentState)
       }
     }
 
-    const allEvents = [...playerEvents, ...enemyEvents]
+    const finishedTimeline = await playTimelineSteps(timelineSteps)
+    if (!finishedTimeline) {
+      setTimelineLocked(false)
+      return
+    }
+
     const nextQueued = createAutoCommands(currentState)
     const nextActorId = getNextActorId(currentState, nextQueued)
-    const nextTransition = buildRoundTransition(previousState, currentState, allEvents)
 
     setBattle({
       state: currentState,
@@ -761,8 +798,8 @@ export function BattlePage() {
       actionOrder: getCommandablePlayerUnits(currentState).map((f) => f.instanceId),
       selectedActorId: nextActorId,
     })
-    setBattleLog((current) => [...current, ...enemyEvents].slice(-36))
-    setRoundTransition(nextTransition)
+    setTimelineLocked(false)
+    setTimelineFocus(null)
   }
 
   function handleTurnTimeout() {
@@ -771,15 +808,16 @@ export function BattlePage() {
     // In online mode only time out if it's actually our turn
     if (multiplayer && !multiplayer.isMyTurn) return
 
-    const queuedActions = multiplayer
-      ? buildTimeoutCommands(battle.state)
-      : buildTimedOutQueuedActions(battle.state, battle.queued)
+    const hadQueuedActions =
+      queueDialogOpen ||
+      hasPendingTargetSelection ||
+      Object.values(battle.queued).some((command) => hasCommittedPlayerAction(command))
 
-    const autoPassedCount = getCommandablePlayerUnits(battle.state).filter(
-      (fighter) => !battle.queued[fighter.instanceId],
-    ).length
-
-    resolveQueuedRound(queuedActions, [createTimeoutEvent(battle.state.round, autoPassedCount)])
+    setQueueDialogOpen(false)
+    resolveQueuedRound(
+      buildTimeoutCommands(battle.state),
+      [createTimeoutEvent(battle.state.round, hadQueuedActions)],
+    )
   }
 
   function resolveCommittedRound() {
@@ -793,22 +831,26 @@ export function BattlePage() {
   }
 
   function handleTargetFighterClick(fighter: { instanceId: string }) {
+    if (timelineLocked) return
     if (!selectedActor || !selectedAbilityId) return
     if (!validTargetIds.includes(fighter.instanceId)) return
     queuePlayerAbility(selectedActor.instanceId, selectedAbilityId, fighter.instanceId)
   }
 
   function handleSurrender() {
+    timelineRunRef.current += 1
+    lastPlayedMultiplayerResolutionRef.current = null
     const { viewState, initialEvents } = createNewBattle()
     setBattle(viewState)
     setSelectedAbilityId(null)
     setSelectedTargetId(null)
     setHoveredAbility(null)
     setBattleLog(initialEvents)
-    setTurnSecondsLeft(30)
-    setRoundTransition(null)
+    setTurnSecondsLeft(60)
     setRecordedResult(null)
     setLastRecordedResultId(null)
+    setTimelineLocked(false)
+    setTimelineFocus(null)
   }
 
   return (
@@ -825,9 +867,9 @@ export function BattlePage() {
             boardPrompt={topBarPrompt}
             turnSecondsLeft={turnSecondsLeft}
             commitReady={commitReady}
-            battleFinished={battle.state.phase === 'finished'}
+            battleFinished={battle.state.phase === 'finished' || timelineLocked}
             onReady={resolveCommittedRound}
-            onSelectFocus={handleSelectFocus}
+            onExchangeEnergy={handleExchangeEnergy}
           />
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -840,8 +882,6 @@ export function BattlePage() {
               validTargetIds={validTargetIds}
               targetingAllies={targetingAllies}
               targetingEnemies={targetingEnemies}
-              enemyIntentSummaries={enemyIntentSummaries}
-              roundTransition={roundTransition}
               onSelectActor={handleSelectActor}
               onSelectAbility={handleSelectAbility}
               onTargetFighter={handleTargetFighterClick}
@@ -849,6 +889,8 @@ export function BattlePage() {
               onLeaveAbility={() => setHoveredAbility(null)}
               onDequeue={clearQueuedAction}
               canUsePlayerAbility={(fighter, abilityId) => canQueueAbility(battle.state, battle.queued, fighter, abilityId)}
+              interactionLocked={timelineLocked}
+              timelineFocus={timelineFocus}
             />
 
             <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
@@ -861,10 +903,6 @@ export function BattlePage() {
             </div>
           </div>
         </div>
-
-        {multiplayer && multiplayer.status === 'opponent_turn' ? (
-          <OpponentTurnOverlay opponentName={multiplayer.opponentDisplayName} />
-        ) : null}
 
         {multiplayer && multiplayer.status === 'waiting_for_opponent' ? (
           <WaitingForOpponentOverlay />
@@ -886,12 +924,13 @@ export function BattlePage() {
         ) : null}
 
         {queueDialogOpen ? (
-          <SkillQueueModal
+          <SkillQueueCommitModal
             round={battle.state.round}
-            playerTeam={battle.state.playerTeam}
+            state={battle.state}
             queued={battle.queued}
             initialOrder={battle.actionOrder}
             energy={battle.state.playerEnergy}
+            turnSecondsLeft={turnSecondsLeft}
             onConfirm={handleQueueConfirm}
             onBack={() => setQueueDialogOpen(false)}
           />
@@ -1007,19 +1046,6 @@ function DisconnectOverlay({
   )
 }
 
-function OpponentTurnOverlay({ opponentName }: { opponentName: string }) {
-  return (
-    <div className="absolute inset-0 z-10 flex items-end justify-center pb-6 pointer-events-none">
-      <div className="rounded-[0.35rem] border border-white/10 bg-[rgba(8,8,14,0.82)] px-5 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-sm">
-        <p className="ca-mono-label text-[0.52rem] text-ca-text-3 mb-1">WAITING</p>
-        <p className="ca-display text-sm text-ca-text">
-          {opponentName.toUpperCase()} IS CHOOSING ACTIONS
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function WaitingForOpponentOverlay() {
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.8)] backdrop-blur-sm">
@@ -1110,32 +1136,34 @@ function buildDefaultRandomAllocation(
 }
 
 
-function SkillQueueModal({
+export function SkillQueueModal({
   round,
-  playerTeam,
+  state,
   queued,
   initialOrder,
   energy,
+  turnSecondsLeft,
   onConfirm,
   onBack,
 }: {
   round: number
-  playerTeam: BattleFighterState[]
+  state: BattleState
   queued: Record<string, QueuedBattleAction>
   initialOrder: string[]
   energy: BattleEnergyPool
+  turnSecondsLeft: number
   onConfirm: (actionOrder: string[]) => void
   onBack: () => void
 }) {
   const [order, setOrder] = useState<string[]>(() => {
-    const aliveIds = new Set(playerTeam.filter((f) => f.hp > 0).map((f) => f.instanceId))
+    const aliveIds = new Set(state.playerTeam.filter((f) => f.hp > 0).map((f) => f.instanceId))
     const filtered = initialOrder.filter((id) => aliveIds.has(id))
     const rest = [...aliveIds].filter((id) => !filtered.includes(id))
     return [...filtered, ...rest]
   })
 
   const rowMap = new Map(
-    playerTeam.map((fighter) => {
+    state.playerTeam.map((fighter) => {
       const action = queued[fighter.instanceId]
       const ability = action ? getAbilityById(fighter, action.abilityId) : null
       const cost = ability ? getAbilityEnergyCost(ability) : null
@@ -1148,8 +1176,8 @@ function SkillQueueModal({
     .map((id) => rowMap.get(id))
     .filter((r): r is NonNullable<typeof r> => r !== undefined)
 
-  // Only non-pass fighters appear in the drag tiles
   const activeRows = rows.filter((r) => !r.isPass)
+  const passRows = rows.filter((r) => r.isPass)
 
   // Total random energy pips needed across all queued skills
   const randomRows = rows.filter(({ cost, isPass }) => !isPass && (cost?.random ?? 0) > 0)
@@ -1211,6 +1239,9 @@ function SkillQueueModal({
     ),
   )
   const canAfford = canPayEnergy(energy, aggregateCost)
+  const orderedActionIds = activeRows.map((row) => row.fighter.instanceId)
+  void passRows
+  void orderedActionIds
 
   // ── Drag / touch state ────────────────────────────────────────────────────
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -1255,11 +1286,18 @@ function SkillQueueModal({
 
         {/* ── Header ── */}
         <div className="border-b border-white/8 px-5 py-4 text-center">
-          <p className="ca-mono-label text-[0.46rem] text-ca-text-3">ROUND {round}</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="ca-mono-label text-[0.46rem] text-ca-text-3">ROUND {round}</p>
+            <p className={['ca-mono-label text-[0.46rem]', turnSecondsLeft <= 10 ? 'text-ca-red' : 'text-ca-text-2'].join(' ')}>
+              TIMER {String(turnSecondsLeft).padStart(2, '0')}S
+            </p>
+          </div>
           {totalRandomNeeded > 0 ? (
             <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">
               CHOOSE {totalRandomNeeded} RANDOM ENERGY
             </p>
+          ) : activeRows.length === 0 ? (
+            <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">CONFIRM PASS TURN</p>
           ) : (
             <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">CONFIRM ACTIONS</p>
           )}
@@ -1384,6 +1422,8 @@ function SkillQueueModal({
           <div className="mt-3">
             {hasUnallocated ? (
               <p className="ca-mono-label text-[0.44rem] text-amber-300">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
+            ) : activeRows.length === 0 ? (
+              <p className="ca-mono-label text-[0.44rem] text-ca-text-2">NO TECHNIQUES QUEUED. ALL FIGHTERS WILL PASS.</p>
             ) : !canAfford ? (
               <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
             ) : (

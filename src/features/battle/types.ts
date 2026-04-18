@@ -335,6 +335,26 @@ export type BattleResolutionResult = {
   runtimeEvents: BattleRuntimeEvent[]
 }
 
+export type BattleTimelineStepKind = 'action' | 'roundEnd' | 'roundStart' | 'system'
+
+export type BattleTimelineStep = {
+  id: string
+  kind: BattleTimelineStepKind
+  round: number
+  state: BattleState
+  events: BattleEvent[]
+  runtimeEvents: BattleRuntimeEvent[]
+  actorId?: string
+  targetId?: string
+  team?: BattleTeamId
+  abilityId?: string
+}
+
+export type BattleTimelineResult = {
+  state: BattleState
+  steps: BattleTimelineStep[]
+}
+
 export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies'
 
 export type SkillEffect =

@@ -76,7 +76,7 @@ function QueuedSlot({
       type="button"
       onClick={hasQueued ? onDequeue : undefined}
       disabled={!hasQueued}
-      title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'No technique queued'}
+      title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
         'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
         hasQueued
@@ -95,6 +95,7 @@ function QueuedSlot({
         ) : (
           <div className="flex flex-col items-center gap-1">
             <div className="h-[2px] w-4 rounded-full bg-white/12" />
+            <span className="ca-mono-label text-[0.38rem] text-ca-text-3">PASS</span>
           </div>
         )}
       </div>
@@ -119,6 +120,9 @@ export function BattleAbilityStrip({
   queuedAction,
   validAbility,
   carryoverLabels = [],
+  interactionLocked = false,
+  timelineRole = null,
+  timelineTone = null,
   onActorClick,
   onAbilityClick,
   onHoverAbility,
@@ -134,6 +138,9 @@ export function BattleAbilityStrip({
   queuedAction?: QueuedBattleAction
   validAbility?: (abilityId: string) => boolean
   carryoverLabels?: string[]
+  interactionLocked?: boolean
+  timelineRole?: 'actor' | 'target' | null
+  timelineTone?: 'red' | 'teal' | 'gold' | 'frost' | null
   onActorClick?: () => void
   onAbilityClick?: (abilityId: string) => void
   onHoverAbility?: (abilityId: string) => void
@@ -157,6 +164,9 @@ export function BattleAbilityStrip({
         selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
         actorTargetable && 'ring-2 ring-amber-300/30',
         actorMuted && 'opacity-50 saturate-75',
+        timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
+        timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
+        timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
       )}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
@@ -184,7 +194,9 @@ export function BattleAbilityStrip({
             muted={Boolean(actorMuted)}
             hideHp
             carryoverLabels={carryoverLabels}
-            onClick={onActorClick}
+            timelineRole={timelineRole}
+            timelineTone={timelineTone}
+            onClick={!interactionLocked ? onActorClick : undefined}
           />
         </div>
 
@@ -200,10 +212,10 @@ export function BattleAbilityStrip({
                 ability={ability}
                 active={pendingAbilityId === ability.id}
                 queued={queuedAction?.abilityId === ability.id}
-                locked={!(validAbility?.(ability.id) ?? true)}
-                onSelect={onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-                onHover={onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-                onLeave={onLeaveAbility}
+                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+                onLeave={!interactionLocked ? onLeaveAbility : undefined}
               />
             ))}
           </div>

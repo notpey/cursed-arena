@@ -14,6 +14,28 @@ export type BattleEnergyPool = {
 
 export type BattleEnergyCost = Partial<Record<BattleEnergyType, number>> & { random?: number }
 
+export type BattleEnergyRefreshRuleId = 'focus_bonus_random' | 'fully_random'
+
+export type BattleEnergyRefreshRule = {
+  id: BattleEnergyRefreshRuleId
+  guaranteeFocusPip: boolean
+}
+
+export const battleEnergyRefreshRules: Record<BattleEnergyRefreshRuleId, BattleEnergyRefreshRule> = {
+  focus_bonus_random: {
+    id: 'focus_bonus_random',
+    guaranteeFocusPip: true,
+  },
+  fully_random: {
+    id: 'fully_random',
+    guaranteeFocusPip: false,
+  },
+}
+
+export const defaultBattleEnergyRefreshRule = battleEnergyRefreshRules.fully_random
+
+export const battleEnergyExchangeCost = 5
+
 export const randomEnergyMeta = {
   label: 'Random',
   short: 'RND',
@@ -98,11 +120,12 @@ function generateRefreshAmounts(
   livingCount: number,
   focus: BattleEnergyType | null,
   seed: string,
+  rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyAmounts {
   const next = createEnergyAmounts()
   let remaining = Math.max(0, livingCount)
 
-  if (focus && remaining > 0) {
+  if (rule.guaranteeFocusPip && focus && remaining > 0) {
     next[focus] += 1
     remaining -= 1
   }
@@ -118,11 +141,12 @@ function generateRefreshAmounts(
 
 export function createRoundEnergyPool(
   livingCount = 3,
-  focus: BattleEnergyType | null = 'technique',
+  focus: BattleEnergyType | null = null,
   seed = 'default-energy-seed',
+  rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyPool {
   return {
-    amounts: generateRefreshAmounts(livingCount, focus, seed),
+    amounts: generateRefreshAmounts(livingCount, focus, seed, rule),
     focus,
   }
 }
@@ -132,9 +156,10 @@ export function refreshRoundEnergy(
   livingCount: number,
   seed = 'default-energy-seed',
   nextFocus?: BattleEnergyType | null,
+  rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyPool {
   const focus = nextFocus === undefined ? pool.focus : nextFocus
-  const refresh = generateRefreshAmounts(livingCount, focus, seed)
+  const refresh = generateRefreshAmounts(livingCount, focus, seed, rule)
 
   return {
     amounts: addEnergyAmounts(pool.amounts, refresh),
@@ -146,18 +171,9 @@ export function getRefreshGain(
   livingCount: number,
   focus: BattleEnergyType | null,
   seed = 'default-energy-seed',
+  rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ) {
-  return generateRefreshAmounts(livingCount, focus, seed)
-}
-
-export function setEnergyFocus(
-  pool: BattleEnergyPool,
-  focus: BattleEnergyType | null,
-): BattleEnergyPool {
-  return {
-    ...pool,
-    focus,
-  }
+  return generateRefreshAmounts(livingCount, focus, seed, rule)
 }
 
 export function countEnergyCost(cost: BattleEnergyCost) {
@@ -275,8 +291,57 @@ export function getSpentEnergyAmounts(pool: BattleEnergyPool, cost: BattleEnergy
   return getSpentEnergyAmountsInternal(pool, cost)
 }
 
+function buildExchangeSpendAmounts(pool: BattleEnergyPool, targetType: BattleEnergyType, exchangeCost: number) {
+  const spend = createEnergyAmounts()
+  let remaining = sanitizeCount(exchangeCost)
+  const sources = [...battleEnergyOrder].sort((left, right) => {
+    const leftPenalty = left === targetType ? 1 : 0
+    const rightPenalty = right === targetType ? 1 : 0
+    if (leftPenalty !== rightPenalty) return leftPenalty - rightPenalty
+
+    const delta = pool.amounts[right] - pool.amounts[left]
+    if (delta !== 0) return delta
+    return battleEnergyOrder.indexOf(left) - battleEnergyOrder.indexOf(right)
+  })
+
+  for (const type of sources) {
+    if (remaining <= 0) break
+    const take = Math.min(pool.amounts[type], remaining)
+    if (take <= 0) continue
+    spend[type] = take
+    remaining -= take
+  }
+
+  if (remaining > 0) {
+    return null
+  }
+
+  return spend
+}
+
 export function canPayEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost) {
   return getSpentEnergyAmountsInternal(pool, cost) !== null
+}
+
+export function canExchangeEnergy(pool: BattleEnergyPool, exchangeCost = battleEnergyExchangeCost) {
+  return totalEnergyInPool(pool) >= sanitizeCount(exchangeCost)
+}
+
+export function exchangeEnergy(
+  pool: BattleEnergyPool,
+  targetType: BattleEnergyType,
+  exchangeCost = battleEnergyExchangeCost,
+): BattleEnergyPool {
+  const normalizedCost = sanitizeCount(exchangeCost)
+  if (normalizedCost <= 0) return pool
+
+  const spend = buildExchangeSpendAmounts(pool, targetType, normalizedCost)
+  if (!spend) return pool
+
+  return {
+    amounts: addEnergyAmounts(subtractEnergyAmounts(pool.amounts, spend), { [targetType]: 1 }),
+    focus: pool.focus,
+  }
 }
 
 export function spendEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost): BattleEnergyPool {

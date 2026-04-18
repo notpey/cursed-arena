@@ -15,16 +15,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  resolveTeamTurn,
+  endRoundTimeline,
   transitionToSecondPlayer,
-  endRound,
   getCommandablePlayerUnits,
   createAutoCommands,
+  resolveTeamTurnTimeline,
 } from '@/features/battle/engine'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import type {
   BattleState,
   BattleTeamId,
+  BattleTimelineStep,
   QueuedBattleAction,
   BattleEvent,
 } from '@/features/battle/types'
@@ -36,7 +37,7 @@ import {
   subscribeToMatch,
   claimVictoryDueToDisconnect,
 } from '@/features/multiplayer/client'
-import type { MatchRow, MultiplayerRole, MultiplayerStatus } from '@/features/multiplayer/types'
+import type { MatchRow, MultiplayerResolutionReplay, MultiplayerRole, MultiplayerStatus } from '@/features/multiplayer/types'
 import { roleToTeam } from '@/features/multiplayer/types'
 
 // ── Perspective helpers ───────────────────────────────────────────────────────
@@ -62,6 +63,10 @@ function swapPerspective(state: BattleState): BattleState {
   }
 }
 
+function flipTeam(team: BattleTeamId): BattleTeamId {
+  return team === 'player' ? 'enemy' : 'player'
+}
+
 /**
  * Swap command team fields from local ('player') perspective back to canonical.
  * Instance IDs stay the same — only the 'team' tag on each action is flipped.
@@ -80,6 +85,16 @@ function swapCommandPerspective(
 /** Convert a canonical MatchRow into the local-perspective BattleState. */
 function localState(canonical: BattleState, role: MultiplayerRole): BattleState {
   return role === 'b' ? swapPerspective(canonical) : canonical
+}
+
+function localizeTimelineSteps(steps: BattleTimelineStep[], role: MultiplayerRole): BattleTimelineStep[] {
+  if (role !== 'b') return steps
+
+  return steps.map((step) => ({
+    ...step,
+    state: swapPerspective(step.state),
+    team: step.team ? flipTeam(step.team) : undefined,
+  }))
 }
 
 /** True when the calling player's command phase is active. */
@@ -119,6 +134,7 @@ export type MultiplayerMatchHandle = {
   error: string | null
   /** Raw match row — useful for reading mode, team lists, etc. on match end. */
   matchRow: MatchRow | null
+  latestResolution: MultiplayerResolutionReplay | null
   /**
    * Unix timestamp (ms) of the last incoming Realtime update from the opponent.
    * Used to detect disconnects: if this is >90s old and it's opponent's turn,
@@ -151,7 +167,9 @@ export function useMultiplayerMatch(
   const roleRef                 = useRef<MultiplayerRole | null>(null)
   const matchRowRef             = useRef<MatchRow | null>(null)
   // Tracks when we last received an incoming Realtime update (not our own commit)
-  const lastOpponentActionAtRef = useRef<number>(Date.now())
+  const lastOpponentActionAtRef = useRef<number>(0)
+  const lastSeenResolutionIdRef = useRef<string | null>(null)
+  const lastLocalResolutionIdRef = useRef<string | null>(null)
 
   const [canonical, setCanonical]             = useState<BattleState | null>(null)
   const [matchRow, setMatchRow]               = useState<MatchRow | null>(null)
@@ -159,7 +177,8 @@ export function useMultiplayerMatch(
   const [opponentName, setOpponentName]       = useState('')
   const [status, setStatus]                   = useState<MultiplayerStatus>('loading')
   const [error, setError]                     = useState<string | null>(null)
-  const [lastOpponentActionAt, setLastOpponentActionAt] = useState<number>(Date.now())
+  const [lastOpponentActionAt, setLastOpponentActionAt] = useState<number>(0)
+  const [latestResolution, setLatestResolution] = useState<MultiplayerResolutionReplay | null>(null)
 
   // Keep refs in sync so callbacks don't close over stale state
   useEffect(() => { canonicalRef.current = canonical },  [canonical])
@@ -189,6 +208,9 @@ export function useMultiplayerMatch(
       matchRowRef.current = data
       setMatchRow(data)
       roleRef.current     = myRole
+      lastSeenResolutionIdRef.current = data.resolution_id ?? null
+      lastOpponentActionAtRef.current = Date.now()
+      setLastOpponentActionAt(lastOpponentActionAtRef.current)
 
       const opponent = myRole === 'a' ? data.player_b_display_name : data.player_a_display_name
       setOpponentName(opponent || 'Opponent')
@@ -238,6 +260,19 @@ export function useMultiplayerMatch(
       canonicalRef.current = canon
       setCanonical(canon)
 
+      if (
+        updatedRow.resolution_id &&
+        updatedRow.resolution_steps &&
+        updatedRow.resolution_id !== lastSeenResolutionIdRef.current
+      ) {
+        lastSeenResolutionIdRef.current = updatedRow.resolution_id
+        setLatestResolution({
+          id: updatedRow.resolution_id,
+          steps: localizeTimelineSteps(updatedRow.resolution_steps, myRole),
+          source: updatedRow.resolution_id === lastLocalResolutionIdRef.current ? 'local' : 'remote',
+        })
+      }
+
       if (canon.phase === 'finished') {
         setStatus('finished')
         return
@@ -266,13 +301,14 @@ export function useMultiplayerMatch(
 
       const myTeam: BattleTeamId = roleToTeam(myRole)
       const isFirstPhase = canon.phase === 'firstPlayerCommand'
+      const commandPhase = isFirstPhase ? 'firstPlayerCommand' : 'secondPlayerCommand'
+      const resolutionId = `${matchId}:${canon.round}:${commandPhase}:${Date.now()}`
 
       // Re-map local ('player') commands to canonical perspective for Player B
       const canonicalCommands =
         myRole === 'b' ? swapCommandPerspective(localCommands) : localCommands
 
       // Persist raw commands (audit trail / desync detection)
-      const commandPhase = isFirstPhase ? 'firstPlayerCommand' : 'secondPlayerCommand'
       await submitCommandRecord({
         matchId,
         playerId: currentUserId,
@@ -283,15 +319,42 @@ export function useMultiplayerMatch(
 
       // ── Engine resolution ─────────────────────────────────────────────────
       const allEvents: BattleEvent[] = []
+      const resolutionSteps: BattleTimelineStep[] = []
+
+      if (_preludeEvents && _preludeEvents.length > 0) {
+        allEvents.push(..._preludeEvents)
+        resolutionSteps.push({
+          id: `timeline-system-${resolutionId}`,
+          kind: 'system',
+          round: canon.round,
+          state: canon,
+          events: _preludeEvents,
+          runtimeEvents: [],
+          team: myTeam,
+        })
+      }
 
       // 1. Resolve this player's turn, respecting player-chosen action order
-      const turnResult = resolveTeamTurn(canon, canonicalCommands, myTeam, actionOrder)
-      allEvents.push(...turnResult.events)
-      let nextState = turnResult.state
+      const turnTimeline = resolveTeamTurnTimeline(canon, canonicalCommands, myTeam, actionOrder)
+      allEvents.push(...turnTimeline.steps.flatMap((step) => step.events))
+      resolutionSteps.push(...turnTimeline.steps)
+      let nextState = turnTimeline.state
 
       if (nextState.phase === 'finished') {
-        await commitMatchState({ matchId, newState: nextState })
+        await commitMatchState({
+          matchId,
+          newState: nextState,
+          resolutionId,
+          resolutionSteps,
+        })
+        lastLocalResolutionIdRef.current = resolutionId
+        lastSeenResolutionIdRef.current = resolutionId
         setCanonical(nextState)
+        setLatestResolution({
+          id: resolutionId,
+          steps: localizeTimelineSteps(resolutionSteps, myRole),
+          source: 'local',
+        })
         setStatus('finished')
         return { events: allEvents }
       }
@@ -301,17 +364,30 @@ export function useMultiplayerMatch(
         nextState = transitionToSecondPlayer(nextState)
       } else {
         // Second player done → close the round (ticks statuses, fatigue, begins new round)
-        const roundResult = endRound(nextState)
-        allEvents.push(...roundResult.events)
-        nextState = roundResult.state
+        const roundTimeline = endRoundTimeline(nextState)
+        allEvents.push(...roundTimeline.steps.flatMap((step) => step.events))
+        resolutionSteps.push(...roundTimeline.steps)
+        nextState = roundTimeline.state
       }
 
       // ── Commit to DB (Realtime broadcasts to opponent) ────────────────────
-      await commitMatchState({ matchId, newState: nextState })
+      await commitMatchState({
+        matchId,
+        newState: nextState,
+        resolutionId,
+        resolutionSteps,
+      })
+      lastLocalResolutionIdRef.current = resolutionId
+      lastSeenResolutionIdRef.current = resolutionId
 
       // Optimistic local update so this client doesn't wait for its own Realtime echo
       canonicalRef.current = nextState
       setCanonical(nextState)
+      setLatestResolution({
+        id: resolutionId,
+        steps: localizeTimelineSteps(resolutionSteps, myRole),
+        source: 'local',
+      })
 
       if (nextState.phase === 'finished') {
         setStatus('finished')
@@ -351,6 +427,7 @@ export function useMultiplayerMatch(
     status,
     error,
     matchRow,
+    latestResolution,
     lastOpponentActionAt,
     claimVictory,
     submitCommands,
