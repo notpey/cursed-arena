@@ -843,7 +843,8 @@ function getPassiveModifiers(actor: BattleFighterState, context: ReactionContext
     .flatMap((entry) => entry.effects.map((effect) => ({ passive: entry.passive, effect })))
     .flatMap(({ passive, effect }) => {
       if (effect.type === 'damageBoost' || effect.type === 'cooldownReduction') {
-        return [createPassiveModifier(actor, passive.id, effect)]
+        const passiveId = passive.id ?? passive.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+        return [createPassiveModifier(actor, passiveId, effect)]
       }
       return []
     })
