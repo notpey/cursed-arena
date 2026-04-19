@@ -171,19 +171,8 @@ export function BattleAbilityStrip({
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
 
-      <div className="relative border-b border-white/6 bg-black/40">
-        <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
-        <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
-          {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
-        </span>
-        {disabledLabel ? (
-          <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
-            {disabledLabel}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="relative flex items-center gap-1.5 px-2 pb-2.5 pt-2 sm:gap-2 sm:px-2.5 sm:pb-3">
+      {/* Portrait spans full card height on the left; right column stacks pips → hp → skills */}
+      <div className="relative flex">
         <div className="shrink-0">
           <BattlePortraitSlot
             fighter={fighter}
@@ -201,26 +190,42 @@ export function BattleAbilityStrip({
           />
         </div>
 
-        {/* Pip column — fixed width, sits between portrait and skill tiles */}
-        <div className="w-[2.4rem] shrink-0 self-stretch">
-          <ActiveEffectPips fighter={fighter} tooltipDown column className="h-full justify-center" />
-        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Pip row — horizontal, above the hp bar */}
+          <div className="flex min-h-[2.4rem] items-center gap-1 px-2 pt-1.5 sm:px-2.5">
+            <ActiveEffectPips fighter={fighter} tooltipDown />
+          </div>
 
-        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
-          <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+          {/* HP bar */}
+          <div className="relative border-y border-white/6 bg-black/40">
+            <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
+            <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+              {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
+            </span>
+            {disabledLabel ? (
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
+                {disabledLabel}
+              </span>
+            ) : null}
+          </div>
 
-          {abilities.map((ability) => (
-            <SkillTile
-              key={ability.id}
-              ability={ability}
-              active={pendingAbilityId === ability.id}
-              queued={queuedAction?.abilityId === ability.id}
-              locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
-              onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-              onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-              onLeave={!interactionLocked ? onLeaveAbility : undefined}
-            />
-          ))}
+          {/* Skill tiles */}
+          <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-2 sm:gap-2 sm:px-2.5">
+            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+
+            {abilities.map((ability) => (
+              <SkillTile
+                key={ability.id}
+                ability={ability}
+                active={pendingAbilityId === ability.id}
+                queued={queuedAction?.abilityId === ability.id}
+                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+                onLeave={!interactionLocked ? onLeaveAbility : undefined}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
