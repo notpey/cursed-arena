@@ -142,10 +142,6 @@ export function BattleBoard({
                     <div className="flex items-end gap-2">
                       <div className="flex flex-col items-end gap-2">
                         <ActiveEffectPips fighter={enemy} mirrored className="h-[2.2rem] items-start" />
-                        <div className="hidden max-w-[8rem] text-right xl:block">
-                          <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ROLE</p>
-                          <p className="mt-1 ca-display text-[0.68rem] leading-none text-ca-text">{enemy.role.toUpperCase()}</p>
-                        </div>
                       </div>
 
                       <BattlePortraitSlot

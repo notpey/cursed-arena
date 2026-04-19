@@ -141,7 +141,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
       {/* Tooltip — opens downward for player strips, upward for enemies */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute z-50 w-48',
+          'pointer-events-none absolute z-[100] w-48',
           tooltipDown
             ? 'top-[calc(100%+5px)]'
             : 'bottom-[calc(100%+5px)]',

@@ -42,7 +42,7 @@ export function BattleInfoPanel({
       <div className="flex items-stretch">
         <div className="flex w-[7.5rem] shrink-0 flex-col items-center justify-center border-r border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
           {actor ? (
-            <BattlePortraitSlot fighter={actor} accent="teal" showName />
+            <BattlePortraitSlot fighter={actor} accent="teal" compact showName />
           ) : (
             <div className="rounded-[0.15rem] border border-white/10 bg-white/5 p-4 text-[0.65rem] text-white/40">Select a unit.</div>
           )}
