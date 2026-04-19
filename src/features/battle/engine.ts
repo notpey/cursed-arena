@@ -755,6 +755,8 @@ function matchesReactionCondition(
       return (actor.stateFlags[condition.key] ?? false) === condition.value
     case 'counterAtLeast':
       return (actor.stateCounters[condition.key] ?? 0) >= condition.value
+    case 'targetCounterAtLeast':
+      return Boolean(context.target && (context.target.stateCounters[condition.key] ?? 0) >= condition.value)
     case 'usedAbilityLastTurn':
       return actor.lastUsedAbilityId === condition.abilityId
     case 'shieldActive':

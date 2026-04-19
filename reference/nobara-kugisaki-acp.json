@@ -17,7 +17,7 @@
       "label": "Straw Doll Technique",
       "trigger": "onBeingTargeted",
       "conditions": [
-        { "type": "targetHasStatus", "status": "cursedNails" }
+        { "type": "targetHasStatus", "status": "mark" }
       ],
       "effects": [
         {
@@ -41,7 +41,7 @@
       "label": "Straw Doll Resonance Trigger",
       "trigger": "onBeingTargeted",
       "conditions": [
-        { "type": "counterAtLeast", "key": "cursed_nails_attacker", "value": 3 }
+        { "type": "targetCounterAtLeast", "key": "cursed_nails", "value": 3 }
       ],
       "effects": [
         {

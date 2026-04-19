@@ -35,7 +35,7 @@
                 "description": "Megumi opens his incomplete domain for 3 turns. All allies gain 10 shield each turn at round start. Megumi becomes immune to affliction damage during this time.",
                 "kind": "utility",
                 "targetRule": "self",
-                "classes": ["Unique", "Mental", "Instant"],
+                "classes": ["Unique", "Mental", "Instant", "Ultimate"],
                 "icon": { "label": "CS", "tone": "gold" },
                 "cooldown": 0,
                 "energyCost": { "random": 1 },
@@ -224,61 +224,31 @@
         }
       ]
     },
-    {
-      "id": "megumi-toad-rescue",
-      "name": "Toad: Rescue",
-      "description": "Makes Megumi or an ally invulnerable for 1 turn. If used on an ally, Megumi also ignores stun effects for 1 turn.",
-      "kind": "defend",
-      "targetRule": "ally-single",
-      "classes": ["Unique", "Mental", "Instant"],
-      "icon": { "label": "TR", "tone": "teal" },
-      "cooldown": 0,
-      "energyCost": { "vow": 1 },
-      "effects": [
-        { "type": "invulnerable", "duration": 1, "target": "inherit" },
-        {
-          "type": "addModifier",
-          "target": "self",
-          "modifier": {
-            "label": "Toad: Rescue Stun Ward",
-            "stat": "canAct",
-            "mode": "set",
-            "value": true,
-            "duration": { "kind": "rounds", "rounds": 1 },
-            "tags": ["toad-rescue-ward"],
-            "visible": true,
-            "stacking": "replace"
-          }
-        }
-      ]
-    }
   ],
   "ultimate": {
-    "id": "megumi-domain-expansion",
-    "name": "Chimera Shadow Garden",
-    "description": "Megumi opens his incomplete domain. For 3 turns all allies gain 10 shield at each round start, Megumi ignores affliction damage, and any enemy that attacks Megumi has their costs raised by 1 random energy for 1 turn.",
-    "kind": "utility",
-    "targetRule": "self",
+    "id": "megumi-toad-rescue",
+    "name": "Toad: Rescue",
+    "description": "Makes Megumi or an ally invulnerable for 1 turn. If used on an ally, Megumi also ignores stun effects for 1 turn.",
+    "kind": "defend",
+    "targetRule": "ally-single",
     "classes": ["Unique", "Mental", "Instant", "Ultimate"],
-    "icon": { "label": "CS", "tone": "gold" },
+    "icon": { "label": "TR", "tone": "teal" },
     "cooldown": 4,
     "effects": [
-      { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
+      { "type": "invulnerable", "duration": 1, "target": "inherit" },
       {
-        "type": "shield",
-        "amount": 10,
-        "label": "Great Flood",
-        "tags": ["great-flood"],
-        "target": "all-allies"
-      },
-      {
-        "type": "schedule",
-        "delay": 3,
-        "phase": "roundEnd",
+        "type": "addModifier",
         "target": "self",
-        "effects": [
-          { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
-        ]
+        "modifier": {
+          "label": "Toad: Rescue Stun Ward",
+          "stat": "canAct",
+          "mode": "set",
+          "value": true,
+          "duration": { "kind": "rounds", "rounds": 1 },
+          "tags": ["toad-rescue-ward"],
+          "visible": true,
+          "stacking": "replace"
+        }
       }
     ]
   }

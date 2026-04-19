@@ -122,6 +122,8 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `${condition.key} is ${condition.value ? 'true' : 'false'}`
     case 'counterAtLeast':
       return `${condition.key} at least ${condition.value}`
+    case 'targetCounterAtLeast':
+      return `target ${condition.key} at least ${condition.value}`
     case 'usedAbilityLastTurn':
       return `last used ${condition.abilityId}`
     case 'shieldActive':

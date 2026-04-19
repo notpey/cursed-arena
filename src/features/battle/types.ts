@@ -251,6 +251,7 @@ export type BattleReactionCondition =
   | { type: 'abilityClass'; class: BattleSkillClass }
   | { type: 'fighterFlag'; key: string; value: boolean }
   | { type: 'counterAtLeast'; key: string; value: number }
+  | { type: 'targetCounterAtLeast'; key: string; value: number }
   | { type: 'usedAbilityLastTurn'; abilityId: string }
   | { type: 'shieldActive'; tag?: string }
   | { type: 'brokenShieldTag'; tag: string }

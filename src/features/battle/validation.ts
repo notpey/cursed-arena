@@ -26,7 +26,7 @@ type EffectValidationContext =
 
 const supportedPassiveTriggers: PassiveEffect['trigger'][] = [...passiveTriggerOrder]
 const supportedStatuses = ['stun', 'invincible', 'mark', 'burn', 'attackUp']
-const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
+const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable', 'canGainInvulnerable', 'canReduceDamageTaken']
 const supportedModifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const supportedModifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
 
@@ -61,6 +61,10 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
     case 'counterAtLeast':
       if (!condition.key.trim()) pushIssue(issues, scope, 'counterAtLeast key is required')
       if (!Number.isFinite(condition.value)) pushIssue(issues, scope, 'counterAtLeast value must be finite')
+      return
+    case 'targetCounterAtLeast':
+      if (!condition.key.trim()) pushIssue(issues, scope, 'targetCounterAtLeast key is required')
+      if (!Number.isFinite(condition.value)) pushIssue(issues, scope, 'targetCounterAtLeast value must be finite')
       return
     case 'usedAbilityLastTurn':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityLastTurn abilityId is required')
@@ -139,8 +143,8 @@ function validateSkillEffect(
       if (effect.modifier.duration <= 0) pushIssue(issues, scope, 'modifyAbilityCost duration must be positive')
       if (effect.modifier.uses != null && effect.modifier.uses <= 0) pushIssue(issues, scope, 'modifyAbilityCost uses must be positive when authored')
       if (effect.modifier.mode === 'set' && !effect.modifier.cost) pushIssue(issues, scope, 'modifyAbilityCost set mode requires a cost payload')
-      if ((effect.modifier.mode === 'reduceTyped' || effect.modifier.mode === 'reduceRandom') && (effect.modifier.amount ?? 0) <= 0) {
-        pushIssue(issues, scope, 'modifyAbilityCost reduction modes require a positive amount')
+      if (['reduceTyped', 'reduceRandom', 'increaseRandom', 'increaseTyped'].includes(effect.modifier.mode) && (effect.modifier.amount ?? 0) <= 0) {
+        pushIssue(issues, scope, 'modifyAbilityCost amount-based modes require a positive amount')
       }
       return
     case 'effectImmunity':
@@ -186,6 +190,22 @@ function validateSkillEffect(
       if (effect.duration <= 0) pushIssue(issues, scope, 'replaceAbility duration must be positive')
       if (!effect.slotAbilityId.trim()) pushIssue(issues, scope, 'replaceAbility slotAbilityId is required')
       validateEmbeddedAbility(`${scope} replacement`, effect.ability, issues)
+      return
+    case 'damageScaledByCounter':
+      if (!effect.counterKey.trim()) pushIssue(issues, scope, 'damageScaledByCounter counterKey is required')
+      if (effect.powerPerStack <= 0) pushIssue(issues, scope, 'damageScaledByCounter powerPerStack must be positive')
+      return
+    case 'classStun':
+      if (effect.duration <= 0) pushIssue(issues, scope, 'classStun duration must be positive')
+      if (effect.blockedClasses.length === 0) pushIssue(issues, scope, 'classStun requires at least one blocked class')
+      return
+    case 'replaceAbilities':
+      if (effect.replacements.length === 0) pushIssue(issues, scope, 'replaceAbilities requires at least one replacement entry')
+      effect.replacements.forEach((r, index) => {
+        if (!r.slotAbilityId.trim()) pushIssue(issues, scope, `replaceAbilities entry ${index + 1}: slotAbilityId is required`)
+        if (r.duration <= 0) pushIssue(issues, scope, `replaceAbilities entry ${index + 1}: duration must be positive`)
+        validateEmbeddedAbility(`${scope} replacement ${index + 1}`, r.ability, issues)
+      })
       return
   }
 }
@@ -259,7 +279,7 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     pushIssue(issues, scope, 'Ultimate class may only appear on the dedicated fourth slot')
   }
 
-  if (ability.kind === 'attack' && !effects.some((effect) => effect.type === 'damage')) {
+  if (ability.kind === 'attack' && !effects.some((effect) => effect.type === 'damage' || effect.type === 'damageScaledByCounter')) {
     pushIssue(issues, scope, 'attack abilities require at least one damage effect')
   }
   if (ability.kind === 'heal' && !effects.some((effect) => effect.type === 'heal')) {
