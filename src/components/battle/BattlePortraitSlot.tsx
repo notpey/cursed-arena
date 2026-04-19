@@ -259,6 +259,7 @@ export function BattlePortraitSlot({
   mirrored = false,
   showName = false,
   hideHp = false,
+  sizeClass: sizeClassOverride,
   carryoverLabels = [],
   timelineRole = null,
   timelineTone = null,
@@ -274,6 +275,7 @@ export function BattlePortraitSlot({
   mirrored?: boolean
   showName?: boolean
   hideHp?: boolean
+  sizeClass?: string
   carryoverLabels?: string[]
   timelineRole?: 'actor' | 'target' | null
   timelineTone?: 'red' | 'teal' | 'gold' | 'frost' | null
@@ -281,10 +283,9 @@ export function BattlePortraitSlot({
 }) {
   const accentStyles = getAccentStyles(accent)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
-  // Responsive portrait sizes: smaller on narrow viewports, grow at sm+
-  const portraitSizeClass = compact
+  const portraitSizeClass = sizeClassOverride ?? (compact
     ? 'w-[3.2rem] sm:w-[3.8rem]'
-    : 'w-[4.5rem] sm:w-[6rem]'
+    : 'w-[4.5rem] sm:w-[6rem]')
   const statusTag = fighter.hp <= 0
     ? 'KO'
     : hasStatus(fighter.statuses, 'stun')

@@ -193,6 +193,7 @@ export function BattleAbilityStrip({
             selectedTarget={Boolean(actorSelectedTarget)}
             muted={Boolean(actorMuted)}
             hideHp
+            sizeClass="w-[6.4rem] sm:w-[7.4rem] xl:w-[9rem]"
             carryoverLabels={carryoverLabels}
             timelineRole={timelineRole}
             timelineTone={timelineTone}
