@@ -158,9 +158,9 @@ export function BattleAbilityStrip({
         : null
 
   return (
-    <div className="relative flex items-end">
-      {/* Portrait — sibling of the card, sized to be taller than the full card */}
-      <div className="relative z-10 shrink-0 self-end">
+    <div className="relative flex">
+      {/* Portrait — extends above the card via negative top margin on the wrapper */}
+      <div className="relative z-10 -mt-4 shrink-0">
         <BattlePortraitSlot
           fighter={fighter}
           accent="teal"
@@ -177,10 +177,10 @@ export function BattleAbilityStrip({
         />
       </div>
 
-      {/* Card — tucks under portrait left edge */}
+      {/* Card — tucks under portrait, no reserved pip space */}
       <div
         className={cn(
-          'relative min-w-0 flex-1 -ml-3 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+          'relative min-w-0 flex-1 -ml-3 self-end overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
           selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
           actorTargetable && 'ring-2 ring-amber-300/30',
           actorMuted && 'opacity-50 saturate-75',
@@ -191,13 +191,13 @@ export function BattleAbilityStrip({
       >
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
 
-        {/* Pip row — fixed height, sits above HP bar */}
-        <div className="relative flex h-[2.4rem] items-center gap-1 pl-4 pr-2 sm:pl-5 sm:pr-2.5">
+        {/* Pips — absolute overlay at top of card, only take space when present */}
+        <div className="absolute left-0 right-0 top-0 z-20 flex items-center gap-1 px-3 -translate-y-full pb-1">
           <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
-        {/* HP bar */}
-        <div className="relative border-y border-white/6 bg-black/40">
+        {/* HP bar — flush at top of card */}
+        <div className="relative border-b border-white/6 bg-black/40">
           <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
           <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
             {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
