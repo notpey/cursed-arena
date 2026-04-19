@@ -507,7 +507,7 @@ export type PassiveTrigger =
   | 'onBeingTargeted'
 
 export type PassiveEffect = {
-  id: string
+  id?: string
   trigger: PassiveTrigger
   threshold?: number
   conditions?: BattleReactionCondition[]

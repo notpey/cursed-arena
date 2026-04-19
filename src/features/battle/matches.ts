@@ -551,7 +551,7 @@ export function recordCompletedBattle({
   writeLocalStorage(battleMatchHistoryKey, history)
   writeLocalStorage(lastBattleResultKey, lastResult)
 
-  trackBattleCompleted(activeSession.mode, won)
+  if (activeSession.mode !== 'practice') trackBattleCompleted(activeSession.mode, won)
 
   return lastResult
 }
@@ -643,7 +643,7 @@ export function recordOnlineCompletedBattle({
   writeLocalStorage(battleMatchHistoryKey, history)
   writeLocalStorage(lastBattleResultKey, lastResult)
 
-  trackBattleCompleted(mode, won)
+  if (mode !== 'practice') trackBattleCompleted(mode, won)
 
   return lastResult
 }
