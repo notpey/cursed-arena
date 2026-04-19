@@ -157,75 +157,78 @@ export function BattleAbilityStrip({
         ? 'VOID'
         : null
 
-  return (
-    <div
-      className={cn(
-        'relative rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
-        selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
-        actorTargetable && 'ring-2 ring-amber-300/30',
-        actorMuted && 'opacity-50 saturate-75',
-        timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
-        timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
-        timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
-      )}
-    >
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
+  // Portrait width at each breakpoint — used to offset the card so the portrait overlaps its left edge
+  const portraitW = 'w-[5rem] sm:w-[6rem] xl:w-[7rem]'
 
-      <div className="relative flex items-end">
-        {/* Portrait — oversized so it hangs above the card top edge */}
-        <div className="relative z-10 -mt-3 shrink-0 self-end">
-          <BattlePortraitSlot
-            fighter={fighter}
-            accent="teal"
-            active={Boolean(selected)}
-            targetable={Boolean(actorTargetable)}
-            selectedTarget={Boolean(actorSelectedTarget)}
-            muted={Boolean(actorMuted)}
-            hideHp
-            sizeClass="w-[5rem] sm:w-[6rem] xl:w-[7rem]"
-            carryoverLabels={carryoverLabels}
-            timelineRole={timelineRole}
-            timelineTone={timelineTone}
-            onClick={!interactionLocked ? onActorClick : undefined}
-          />
+  return (
+    // Outer wrapper: portrait + card are siblings, portrait overlaps card left edge
+    <div className="relative flex items-end">
+      {/* Portrait — sits outside the card, taller so it overhangs the card top */}
+      <div className="relative z-10 shrink-0 self-end">
+        <BattlePortraitSlot
+          fighter={fighter}
+          accent="teal"
+          active={Boolean(selected)}
+          targetable={Boolean(actorTargetable)}
+          selectedTarget={Boolean(actorSelectedTarget)}
+          muted={Boolean(actorMuted)}
+          hideHp
+          sizeClass={portraitW}
+          carryoverLabels={carryoverLabels}
+          timelineRole={timelineRole}
+          timelineTone={timelineTone}
+          onClick={!interactionLocked ? onActorClick : undefined}
+        />
+      </div>
+
+      {/* Card — negative left margin so portrait overlaps it slightly */}
+      <div
+        className={cn(
+          'relative min-w-0 flex-1 -ml-2 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+          selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
+          actorTargetable && 'ring-2 ring-amber-300/30',
+          actorMuted && 'opacity-50 saturate-75',
+          timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
+          timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
+          timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
+        )}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
+
+        {/* Pip row — top of card, to the right of where the portrait overlaps */}
+        <div className="relative flex min-h-[2.4rem] items-center gap-1 pl-3 pr-2 pt-1.5 sm:pl-4 sm:pr-2.5">
+          <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Pip row — above the hp bar, adjacent to portrait top */}
-          <div className="flex min-h-[2.4rem] items-center gap-1 px-2 pt-1 sm:px-2.5">
-            <ActiveEffectPips fighter={fighter} tooltipDown />
-          </div>
-
-          {/* HP bar */}
-          <div className="relative border-y border-white/6 bg-black/40">
-            <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
-            <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
-              {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
+        {/* HP bar */}
+        <div className="relative border-y border-white/6 bg-black/40">
+          <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
+          <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+            {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
+          </span>
+          {disabledLabel ? (
+            <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
+              {disabledLabel}
             </span>
-            {disabledLabel ? (
-              <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
-                {disabledLabel}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
+        </div>
 
-          {/* Skill tiles */}
-          <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-2 sm:gap-2 sm:px-2.5">
-            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+        {/* Skill tiles */}
+        <div className="relative flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-2 sm:gap-2 sm:px-2.5">
+          <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
-            {abilities.map((ability) => (
-              <SkillTile
-                key={ability.id}
-                ability={ability}
-                active={pendingAbilityId === ability.id}
-                queued={queuedAction?.abilityId === ability.id}
-                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
-                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-                onLeave={!interactionLocked ? onLeaveAbility : undefined}
-              />
-            ))}
-          </div>
+          {abilities.map((ability) => (
+            <SkillTile
+              key={ability.id}
+              ability={ability}
+              active={pendingAbilityId === ability.id}
+              queued={queuedAction?.abilityId === ability.id}
+              locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+              onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+              onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+              onLeave={!interactionLocked ? onLeaveAbility : undefined}
+            />
+          ))}
         </div>
       </div>
     </div>
