@@ -202,7 +202,7 @@ export function BattleAbilityStrip({
         </div>
 
         <div className="flex min-w-0 flex-col justify-end gap-2 overflow-x-auto pb-1">
-          <ActiveEffectPips fighter={fighter} className="min-h-[2.2rem]" />
+          <ActiveEffectPips fighter={fighter} tooltipDown className="min-h-[2.2rem]" />
 
           <div className="flex items-end gap-1.5 sm:gap-2">
             <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />

@@ -162,7 +162,7 @@
     {
       "id": "megumi-nue-flank",
       "name": "Nue: Flank",
-      "description": "Deals 20 damage. If the target has Divine Dogs: Hunt active, their non-Mental skills are stunned for 1 turn. During Max Elephant: Great Flood, also permanently reduces the target's non-affliction damage by 5 (stacks).",
+      "description": "Deals 20 damage and seals the target's non-Mental techniques for 1 turn.",
       "kind": "attack",
       "targetRule": "enemy-single",
       "classes": ["Ranged", "Physical", "Instant"],
@@ -176,21 +176,6 @@
           "duration": 1,
           "blockedClasses": ["Physical", "Energy", "Affliction", "Melee", "Ranged", "Unique"],
           "target": "inherit"
-        },
-        {
-          "type": "addModifier",
-          "target": "inherit",
-          "modifier": {
-            "label": "Nue: Flank Wound",
-            "stat": "damageDealt",
-            "mode": "flat",
-            "value": -5,
-            "duration": { "kind": "permanent" },
-            "tags": ["nue-flank-wound"],
-            "visible": true,
-            "stacking": "stack",
-            "damageClass": "Physical"
-          }
         }
       ]
     },

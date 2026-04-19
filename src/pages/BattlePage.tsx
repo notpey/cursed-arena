@@ -430,29 +430,37 @@ export function BattlePage() {
     setTimelineFocus(null)
     clearPendingSelection()
     setHoveredAbility(null)
-    setBattle((current) => ({
-      ...current,
-      queued: {},
-      selectedActorId: null,
-    }))
 
+    // Apply the final board state immediately so the layout never shifts mid-playback.
+    const finalStep = steps[steps.length - 1]
+    if (finalStep) {
+      setBattle((current) => ({
+        ...current,
+        state: finalStep.state,
+        queued: {},
+        selectedActorId: null,
+      }))
+    } else {
+      setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
+    }
+
+    // Dump all events into the log at once.
+    const allEvents = steps.flatMap((s) => s.events)
+    if (allEvents.length > 0) {
+      setBattleLog((current) => [...current, ...allEvents].slice(-36))
+    }
+
+    // Cycle the focus label through each action step for visual feedback.
     for (const step of steps) {
       if (timelineRunRef.current !== runId) {
         return false
       }
 
-      setTimelineFocus(createTimelineFocus(step))
-      setBattle((current) => ({
-        ...current,
-        state: step.state,
-        queued: {},
-        selectedActorId: null,
-      }))
-      if (step.events.length > 0) {
-        setBattleLog((current) => [...current, ...step.events].slice(-36))
+      const focus = createTimelineFocus(step)
+      if (focus) {
+        setTimelineFocus(focus)
+        await wait(step.kind === 'action' ? timelineStepDelayMs : timelineStepDelayMs - 60)
       }
-
-      await wait(step.kind === 'action' ? timelineStepDelayMs : timelineStepDelayMs - 60)
     }
 
     if (timelineRunRef.current !== runId) {

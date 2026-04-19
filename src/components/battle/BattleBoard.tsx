@@ -98,7 +98,7 @@ export function BattleBoard({
               : null
 
           return (
-            <div key={fighter.instanceId} className="flex items-center justify-between gap-4 sm:gap-6">
+            <div key={fighter.instanceId} className="flex items-center justify-between gap-4 sm:gap-6 min-h-[7rem] sm:min-h-[8rem]">
               <div className="w-full max-w-[36rem] md:max-w-[42rem] xl:max-w-[48rem] 2xl:max-w-[54rem]">
                 <BattleAbilityStrip
                   fighter={fighter}
@@ -141,7 +141,7 @@ export function BattleBoard({
                   >
                     <div className="flex items-end gap-2">
                       <div className="flex flex-col items-end gap-2">
-                        <ActiveEffectPips fighter={enemy} mirrored className="min-h-[2.2rem]" />
+                        <ActiveEffectPips fighter={enemy} mirrored className="h-[2.2rem] items-start" />
                         <div className="hidden max-w-[8rem] text-right xl:block">
                           <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ROLE</p>
                           <p className="mt-1 ca-display text-[0.68rem] leading-none text-ca-text">{enemy.role.toUpperCase()}</p>

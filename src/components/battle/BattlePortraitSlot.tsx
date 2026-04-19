@@ -50,7 +50,7 @@ function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardA
   return 'bg-[rgba(200,210,230,0.10)]'
 }
 
-function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
+function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; tooltipDown?: boolean }) {
   const border = pipToneBorder(pip.tone)
   return (
     <div className={cn(
@@ -71,8 +71,12 @@ function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
           <li key={i} className="text-[0.6rem] leading-snug text-ca-text-2 before:mr-1 before:content-['-']">{line}</li>
         ))}
       </ul>
+      {/* Caret arrow — top when opening downward, bottom when opening upward */}
       <div className={cn(
-        'absolute -bottom-[5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r',
+        'absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2',
+        tooltipDown
+          ? '-top-[5px] rotate-[225deg] border-b border-r'
+          : '-bottom-[5px] rotate-45 border-b border-r',
         border,
         'bg-[rgba(10,9,18,0.97)]',
       )} />
@@ -80,7 +84,7 @@ function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
   )
 }
 
-function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?: boolean }) {
+function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: ActiveEffectPip; mirrored?: boolean; tooltipDown?: boolean }) {
   const [hovered, setHovered] = useState(false)
   const border = pipToneBorder(pip.tone)
   const glow = pipToneGlow(pip.tone)
@@ -134,13 +138,16 @@ function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?:
         ) : null}
       </div>
 
-      {/* Tooltip — flips side when mirrored */}
+      {/* Tooltip — opens downward for player strips, upward for enemies */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute bottom-[calc(100%+5px)] z-50 w-48',
+          'pointer-events-none absolute z-50 w-48',
+          tooltipDown
+            ? 'top-[calc(100%+5px)]'
+            : 'bottom-[calc(100%+5px)]',
           mirrored ? 'right-0' : 'left-1/2 -translate-x-1/2',
         )}>
-          <PipTooltip pip={pip} />
+          <PipTooltip pip={pip} tooltipDown={tooltipDown} />
         </div>
       ) : null}
     </div>
@@ -150,10 +157,12 @@ function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?:
 export function ActiveEffectPips({
   fighter,
   mirrored = false,
+  tooltipDown = false,
   className,
 }: {
   fighter: BattleFighterState
   mirrored?: boolean
+  tooltipDown?: boolean
   className?: string
 }) {
   const pips = getActivePips(fighter)
@@ -162,7 +171,7 @@ export function ActiveEffectPips({
   return (
     <div className={cn('flex flex-wrap gap-1', mirrored ? 'justify-end' : 'justify-start', className)}>
       {pips.map((pip) => (
-        <ActivePip key={pip.key} pip={pip} mirrored={mirrored} />
+        <ActivePip key={pip.key} pip={pip} mirrored={mirrored} tooltipDown={tooltipDown} />
       ))}
     </div>
   )
