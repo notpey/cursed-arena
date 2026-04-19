@@ -72,6 +72,9 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   modifyAbilityState: { label: 'Ability State', hint: 'Grant, lock, or replace abilities using the generalized runtime model.' },
   schedule: { label: 'Delayed Effect', hint: 'Queue nested effects for a future round start or end.' },
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
+  damageScaledByCounter: { label: 'Counter-Scaled Damage', hint: 'Deal damage multiplied by a named counter value, optionally consuming stacks.' },
+  classStun: { label: 'Class Stun', hint: 'Seal abilities of specific skill classes for a duration.' },
+  replaceAbilities: { label: 'Replace Abilities (Batch)', hint: 'Swap multiple ability slots at once from a single effect.' },
 }
 
 type PassiveBlueprintId = 'round-heal' | 'damage-aura' | 'execute-drive' | 'tempo-engine'
@@ -88,6 +91,7 @@ const passiveTriggerMeta: Record<PassiveTrigger, { label: string; hint: string }
   onDefeatEnemy: { label: 'On Defeat Enemy', hint: 'Fires after this fighter defeats an enemy.' },
   whileAlive: { label: 'While Alive Aura', hint: 'Always active while the fighter remains alive.' },
   onTargetBelow: { label: 'Execute Window', hint: 'Legacy shorthand for target HP threshold reactions.' },
+  onBeingTargeted: { label: 'On Being Targeted', hint: 'Fires after an enemy ability resolves against this fighter.' },
 }
 
 const passiveBlueprintOptions: Array<{ id: PassiveBlueprintId; label: string; hint: string }> = [
@@ -287,6 +291,16 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
         slotAbilityId: 'replace-this-skill',
         target: 'self',
         ability: createTemporaryAbility(),
+      }
+    case 'damageScaledByCounter':
+      return { type: 'damageScaledByCounter', counterKey: 'stack-counter', powerPerStack: 10, consumeStacks: true, target: 'inherit' }
+    case 'classStun':
+      return { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Melee'], target: 'inherit' }
+    case 'replaceAbilities':
+      return {
+        type: 'replaceAbilities',
+        target: 'self',
+        replacements: [{ slotAbilityId: 'replace-this-skill', duration: 2, ability: createTemporaryAbility() }],
       }
   }
 }
