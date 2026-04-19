@@ -1,5 +1,5 @@
 import { BattleAbilityStrip } from '@/components/battle/BattleAbilityStrip'
-import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
+import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
 
 type TimelineFocus = {
@@ -139,10 +139,13 @@ export function BattleBoard({
                           : 'border-[rgba(250,39,66,0.2)]',
                     ].join(' ')}
                   >
-                    <div className="flex flex-col items-end gap-2 xl:flex-row xl:items-center xl:gap-3">
-                      <div className="hidden max-w-[8rem] text-right xl:block">
-                        <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ROLE</p>
-                        <p className="mt-1 ca-display text-[0.68rem] leading-none text-ca-text">{enemy.role.toUpperCase()}</p>
+                    <div className="flex items-end gap-2">
+                      <div className="flex flex-col items-end gap-2">
+                        <ActiveEffectPips fighter={enemy} mirrored className="min-h-[2.2rem]" />
+                        <div className="hidden max-w-[8rem] text-right xl:block">
+                          <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ROLE</p>
+                          <p className="mt-1 ca-display text-[0.68rem] leading-none text-ca-text">{enemy.role.toUpperCase()}</p>
+                        </div>
                       </div>
 
                       <BattlePortraitSlot

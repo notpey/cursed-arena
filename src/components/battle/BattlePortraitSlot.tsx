@@ -353,8 +353,6 @@ export function BattlePortraitSlot({
           </div>
         </div>
       ) : null}
-
-      <ActiveEffectPips fighter={fighter} mirrored={mirrored} className="mt-0.5" />
     </button>
   )
 }
