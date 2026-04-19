@@ -37,7 +37,7 @@ function SkillTile({
       disabled={locked}
       title={ability.name}
       className={cn(
-        'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
         queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
         locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
@@ -78,7 +78,7 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
-        'group relative h-[3.5rem] w-[3.5rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[4.35rem] sm:w-[4.35rem] xl:h-[5.5rem] xl:w-[5.5rem]',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         hasQueued
           ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
           : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
@@ -157,13 +157,9 @@ export function BattleAbilityStrip({
         ? 'VOID'
         : null
 
-  // Portrait width at each breakpoint — used to offset the card so the portrait overlaps its left edge
-  const portraitW = 'w-[5rem] sm:w-[6rem] xl:w-[7rem]'
-
   return (
-    // Outer wrapper: portrait + card are siblings, portrait overlaps card left edge
     <div className="relative flex items-end">
-      {/* Portrait — sits outside the card, taller so it overhangs the card top */}
+      {/* Portrait — sibling of the card, sized to be taller than the full card */}
       <div className="relative z-10 shrink-0 self-end">
         <BattlePortraitSlot
           fighter={fighter}
@@ -173,7 +169,7 @@ export function BattleAbilityStrip({
           selectedTarget={Boolean(actorSelectedTarget)}
           muted={Boolean(actorMuted)}
           hideHp
-          sizeClass={portraitW}
+          sizeClass="w-[7rem] sm:w-[8.5rem] xl:w-[10rem]"
           carryoverLabels={carryoverLabels}
           timelineRole={timelineRole}
           timelineTone={timelineTone}
@@ -181,10 +177,10 @@ export function BattleAbilityStrip({
         />
       </div>
 
-      {/* Card — negative left margin so portrait overlaps it slightly */}
+      {/* Card — tucks under portrait left edge */}
       <div
         className={cn(
-          'relative min-w-0 flex-1 -ml-2 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+          'relative min-w-0 flex-1 -ml-3 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
           selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
           actorTargetable && 'ring-2 ring-amber-300/30',
           actorMuted && 'opacity-50 saturate-75',
@@ -195,8 +191,8 @@ export function BattleAbilityStrip({
       >
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
 
-        {/* Pip row — top of card, to the right of where the portrait overlaps */}
-        <div className="relative flex min-h-[2.4rem] items-center gap-1 pl-3 pr-2 pt-1.5 sm:pl-4 sm:pr-2.5">
+        {/* Pip row — fixed height, sits above HP bar */}
+        <div className="relative flex h-[2.4rem] items-center gap-1 pl-4 pr-2 sm:pl-5 sm:pr-2.5">
           <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
@@ -214,7 +210,7 @@ export function BattleAbilityStrip({
         </div>
 
         {/* Skill tiles */}
-        <div className="relative flex min-w-0 items-center gap-1.5 overflow-x-auto px-2 py-2 sm:gap-2 sm:px-2.5">
+        <div className="relative flex min-w-0 items-center gap-2 overflow-x-auto px-2 py-2 sm:gap-2.5 sm:px-2.5">
           <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
           {abilities.map((ability) => (
