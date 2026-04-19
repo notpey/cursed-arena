@@ -183,7 +183,7 @@ export function BattleAbilityStrip({
         ) : null}
       </div>
 
-      <div className="relative flex items-end gap-2 px-2 pb-2.5 pt-2 sm:gap-3 sm:px-2.5 sm:pb-3">
+      <div className="relative flex items-center gap-1.5 px-2 pb-2.5 pt-2 sm:gap-2 sm:px-2.5 sm:pb-3">
         <div className="shrink-0">
           <BattlePortraitSlot
             fighter={fighter}
@@ -201,25 +201,26 @@ export function BattleAbilityStrip({
           />
         </div>
 
-        <div className="flex min-w-0 flex-col justify-end gap-2 overflow-x-auto pb-1">
-          <ActiveEffectPips fighter={fighter} tooltipDown className="min-h-[2.2rem]" />
+        {/* Pip column — fixed width, sits between portrait and skill tiles */}
+        <div className="w-[2.4rem] shrink-0 self-stretch">
+          <ActiveEffectPips fighter={fighter} tooltipDown column className="h-full justify-center" />
+        </div>
 
-          <div className="flex items-end gap-1.5 sm:gap-2">
-            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
+          <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
-            {abilities.map((ability) => (
-              <SkillTile
-                key={ability.id}
-                ability={ability}
-                active={pendingAbilityId === ability.id}
-                queued={queuedAction?.abilityId === ability.id}
-                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
-                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-                onLeave={!interactionLocked ? onLeaveAbility : undefined}
-              />
-            ))}
-          </div>
+          {abilities.map((ability) => (
+            <SkillTile
+              key={ability.id}
+              ability={ability}
+              active={pendingAbilityId === ability.id}
+              queued={queuedAction?.abilityId === ability.id}
+              locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+              onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+              onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+              onLeave={!interactionLocked ? onLeaveAbility : undefined}
+            />
+          ))}
         </div>
       </div>
     </div>

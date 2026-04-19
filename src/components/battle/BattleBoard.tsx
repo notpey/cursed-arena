@@ -139,9 +139,10 @@ export function BattleBoard({
                           : 'border-[rgba(250,39,66,0.2)]',
                     ].join(' ')}
                   >
-                    <div className="flex items-end gap-2">
-                      <div className="flex flex-col items-end gap-2">
-                        <ActiveEffectPips fighter={enemy} mirrored className="h-[2.2rem] items-start" />
+                    <div className="flex items-center gap-1.5">
+                      {/* Pip column to the left of the enemy portrait */}
+                      <div className="w-[2.4rem] shrink-0 self-stretch">
+                        <ActiveEffectPips fighter={enemy} mirrored column className="h-full justify-center items-end" />
                       </div>
 
                       <BattlePortraitSlot

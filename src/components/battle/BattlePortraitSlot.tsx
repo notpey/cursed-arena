@@ -158,14 +158,28 @@ export function ActiveEffectPips({
   fighter,
   mirrored = false,
   tooltipDown = false,
+  column = false,
   className,
 }: {
   fighter: BattleFighterState
   mirrored?: boolean
   tooltipDown?: boolean
+  /** Stack pips vertically instead of wrapping horizontally */
+  column?: boolean
   className?: string
 }) {
   const pips = getActivePips(fighter)
+
+  if (column) {
+    return (
+      <div className={cn('flex flex-col gap-1', mirrored ? 'items-end' : 'items-start', className)}>
+        {pips.map((pip) => (
+          <ActivePip key={pip.key} pip={pip} mirrored={mirrored} tooltipDown={tooltipDown} />
+        ))}
+      </div>
+    )
+  }
+
   if (pips.length === 0) return null
 
   return (
