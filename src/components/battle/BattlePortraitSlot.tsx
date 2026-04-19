@@ -5,82 +5,75 @@ import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
 import { cn, getAccentStyles, getActivePips, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
 
-// ── Tone → accent color mapping ──────────────────────────────────────────────
-function pipToneStyles(tone: ActivePipTone): { border: string; glow: string; overlay: string; badge: string } {
+// ── Tone → border/glow ───────────────────────────────────────────────────────
+function pipToneBorder(tone: ActivePipTone): string {
   switch (tone) {
-    case 'burn':
-      return {
-        border: 'border-ca-red/55',
-        glow: 'shadow-[0_0_6px_rgba(250,39,66,0.45)]',
-        overlay: 'bg-[rgba(250,39,66,0.18)]',
-        badge: 'bg-ca-red/85 text-white',
-      }
-    case 'stun':
-      return {
-        border: 'border-amber-300/55',
-        glow: 'shadow-[0_0_6px_rgba(252,211,77,0.4)]',
-        overlay: 'bg-[rgba(252,211,77,0.14)]',
-        badge: 'bg-amber-400/85 text-black',
-      }
-    case 'heal':
-      return {
-        border: 'border-emerald-400/55',
-        glow: 'shadow-[0_0_6px_rgba(52,211,153,0.4)]',
-        overlay: 'bg-[rgba(52,211,153,0.14)]',
-        badge: 'bg-emerald-500/85 text-white',
-      }
-    case 'buff':
-      return {
-        border: 'border-ca-teal/55',
-        glow: 'shadow-[0_0_6px_rgba(5,216,189,0.4)]',
-        overlay: 'bg-[rgba(5,216,189,0.12)]',
-        badge: 'bg-ca-teal/85 text-black',
-      }
-    case 'debuff':
-      return {
-        border: 'border-purple-400/55',
-        glow: 'shadow-[0_0_6px_rgba(192,132,252,0.4)]',
-        overlay: 'bg-[rgba(192,132,252,0.12)]',
-        badge: 'bg-purple-500/85 text-white',
-      }
-    case 'void':
-      return {
-        border: 'border-sky-300/55',
-        glow: 'shadow-[0_0_6px_rgba(125,211,252,0.4)]',
-        overlay: 'bg-[rgba(125,211,252,0.12)]',
-        badge: 'bg-sky-400/85 text-black',
-      }
-    default:
-      return {
-        border: 'border-white/20',
-        glow: '',
-        overlay: 'bg-[rgba(255,255,255,0.06)]',
-        badge: 'bg-white/20 text-white',
-      }
+    case 'burn':    return 'border-ca-red/60'
+    case 'stun':    return 'border-amber-300/60'
+    case 'heal':    return 'border-emerald-400/60'
+    case 'buff':    return 'border-ca-teal/60'
+    case 'debuff':  return 'border-purple-400/60'
+    case 'void':    return 'border-sky-300/60'
+    default:        return 'border-white/25'
   }
 }
 
+function pipToneGlow(tone: ActivePipTone): string {
+  switch (tone) {
+    case 'burn':    return 'shadow-[0_0_7px_rgba(250,39,66,0.55)]'
+    case 'stun':    return 'shadow-[0_0_7px_rgba(252,211,77,0.5)]'
+    case 'heal':    return 'shadow-[0_0_7px_rgba(52,211,153,0.5)]'
+    case 'buff':    return 'shadow-[0_0_7px_rgba(5,216,189,0.5)]'
+    case 'debuff':  return 'shadow-[0_0_7px_rgba(192,132,252,0.5)]'
+    case 'void':    return 'shadow-[0_0_7px_rgba(125,211,252,0.5)]'
+    default:        return 'shadow-[0_0_7px_rgba(255,255,255,0.15)]'
+  }
+}
+
+function pipToneBadge(tone: ActivePipTone): string {
+  switch (tone) {
+    case 'burn':    return 'bg-ca-red text-white'
+    case 'stun':    return 'bg-amber-400 text-black'
+    case 'heal':    return 'bg-emerald-500 text-white'
+    case 'buff':    return 'bg-ca-teal text-black'
+    case 'debuff':  return 'bg-purple-500 text-white'
+    case 'void':    return 'bg-sky-400 text-black'
+    default:        return 'bg-white/30 text-white'
+  }
+}
+
+// ── Icon tone → fallback bg ───────────────────────────────────────────────────
+function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardAccent): string {
+  if (tone === 'teal')  return 'bg-[rgba(5,216,189,0.18)]'
+  if (tone === 'red')   return 'bg-[rgba(250,39,66,0.18)]'
+  if (tone === 'gold')  return 'bg-[rgba(252,211,77,0.18)]'
+  return 'bg-[rgba(200,210,230,0.10)]'
+}
+
 function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
-  const styles = pipToneStyles(pip.tone)
+  const border = pipToneBorder(pip.tone)
   return (
     <div className={cn(
-      'pointer-events-none rounded-[0.3rem] border p-2 shadow-[0_8px_24px_rgba(0,0,0,0.55)] backdrop-blur-sm',
-      styles.border,
+      'pointer-events-none rounded-[0.3rem] border p-2 shadow-[0_8px_24px_rgba(0,0,0,0.65)] backdrop-blur-sm',
+      border,
       'bg-[rgba(10,9,18,0.97)]',
     )}>
-      <div className="flex items-start justify-between gap-1">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <p className="ca-display text-[0.72rem] leading-tight text-ca-text">{pip.label}</p>
         {pip.turnsLeft !== null ? (
-          <span className={cn('shrink-0 rounded px-1 py-0.5 ca-mono-label text-[0.38rem]', styles.badge)}>
+          <span className={cn('shrink-0 rounded px-1 py-0.5 ca-mono-label text-[0.42rem] leading-none', pipToneBadge(pip.tone))}>
             {pip.turnsLeft}T
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-[0.58rem] leading-relaxed text-ca-text-2">{pip.detail}</p>
-      {/* Tooltip arrow */}
+      <ul className="space-y-0.5">
+        {pip.lines.map((line, i) => (
+          <li key={i} className="text-[0.6rem] leading-snug text-ca-text-2 before:mr-1 before:content-['-']">{line}</li>
+        ))}
+      </ul>
       <div className={cn(
         'absolute -bottom-[5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r',
-        styles.border,
+        border,
         'bg-[rgba(10,9,18,0.97)]',
       )} />
     </div>
@@ -89,7 +82,9 @@ function PipTooltip({ pip }: { pip: ActiveEffectPip }) {
 
 function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?: boolean }) {
   const [hovered, setHovered] = useState(false)
-  const styles = pipToneStyles(pip.tone)
+  const border = pipToneBorder(pip.tone)
+  const glow = pipToneGlow(pip.tone)
+  const badgeCls = pipToneBadge(pip.tone)
 
   return (
     <div
@@ -97,40 +92,52 @@ function ActivePip({ pip, mirrored = false }: { pip: ActiveEffectPip; mirrored?:
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {/* Main pip square — full-bleed icon */}
       <div className={cn(
-        'grid h-[1.35rem] w-[1.35rem] shrink-0 cursor-default overflow-hidden rounded-[0.18rem] border-2 transition sm:h-[1.6rem] sm:w-[1.6rem]',
-        styles.border,
-        hovered ? styles.glow : '',
+        'relative h-[2.2rem] w-[2.2rem] shrink-0 cursor-default overflow-hidden rounded-[0.22rem] border-2 transition',
+        border,
+        hovered ? glow : '',
       )}>
-        {/* Base icon or fallback */}
         {pip.iconSrc ? (
           <img
             src={pip.iconSrc}
             alt={pip.label}
-            className="h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover"
             draggable={false}
           />
         ) : (
-          <div className={cn('h-full w-full', styles.overlay)} />
+          <div className={cn('absolute inset-0 grid place-items-center', iconToneFallbackBg(pip.iconTone))}>
+            <span className="ca-mono-label text-[0.48rem] font-bold text-white/80 leading-none">{pip.iconLabel}</span>
+          </div>
         )}
-        {/* Tone color overlay (subtle tint on top of icon) */}
-        <div className={cn('pointer-events-none absolute inset-0 opacity-40', styles.overlay)} />
+
+        {/* Bottom gradient scrim so badges are readable */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[0.75rem] bg-[linear-gradient(transparent,rgba(0,0,0,0.72))]" />
+
+        {/* Turn badge — bottom-right */}
+        {pip.turnsLeft !== null ? (
+          <span className={cn(
+            'pointer-events-none absolute bottom-[2px] right-[2px] z-10 rounded-[0.1rem] px-[3px] py-[1px] ca-mono-label text-[0.34rem] leading-none',
+            badgeCls,
+          )}>
+            {pip.turnsLeft}
+          </span>
+        ) : null}
+
+        {/* Stack count — center overlay */}
+        {pip.stackCount !== null && pip.stackCount > 0 ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="ca-display text-[0.9rem] font-black leading-none text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              {pip.stackCount}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      {/* Turn badge in corner */}
-      {pip.turnsLeft !== null ? (
-        <span className={cn(
-          'pointer-events-none absolute -bottom-[3px] -right-[3px] z-10 rounded-[0.1rem] px-[3px] py-[1px] ca-mono-label text-[0.3rem] leading-none',
-          styles.badge,
-        )}>
-          {pip.turnsLeft}
-        </span>
-      ) : null}
-
-      {/* Tooltip — flips side when mirrored so it doesn't clip */}
+      {/* Tooltip — flips side when mirrored */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute bottom-[calc(100%+5px)] z-50 w-44',
+          'pointer-events-none absolute bottom-[calc(100%+5px)] z-50 w-48',
           mirrored ? 'right-0' : 'left-1/2 -translate-x-1/2',
         )}>
           <PipTooltip pip={pip} />
@@ -153,7 +160,7 @@ export function ActiveEffectPips({
   if (pips.length === 0) return null
 
   return (
-    <div className={cn('flex flex-wrap gap-0.5', mirrored ? 'justify-end' : 'justify-start', className)}>
+    <div className={cn('flex flex-wrap gap-1', mirrored ? 'justify-end' : 'justify-start', className)}>
       {pips.map((pip) => (
         <ActivePip key={pip.key} pip={pip} mirrored={mirrored} />
       ))}

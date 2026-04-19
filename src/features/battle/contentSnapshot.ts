@@ -100,8 +100,23 @@ function normalizePassive(rawPassive: unknown) {
         .filter((condition) => condition != null)
     : undefined
 
+  const label = typeof passive.label === 'string' && passive.label.trim() ? passive.label : 'Passive'
+  const id = typeof passive.id === 'string' && passive.id.trim()
+    ? passive.id
+    : label.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+  const rawIcon = passive.icon && typeof passive.icon === 'object' ? passive.icon as Record<string, unknown> : {}
+  const icon = {
+    src: typeof rawIcon.src === 'string' ? rawIcon.src : undefined,
+    label: typeof rawIcon.label === 'string' && rawIcon.label.trim() ? rawIcon.label : deriveAbilityLabel(label),
+    tone: 'teal',
+  }
+
   return {
     ...passive,
+    id,
+    label,
+    icon,
     effects: Array.isArray(passive.effects) ? passive.effects : [],
     conditions,
   }

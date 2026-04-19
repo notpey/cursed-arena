@@ -507,11 +507,13 @@ export type PassiveTrigger =
   | 'onBeingTargeted'
 
 export type PassiveEffect = {
+  id: string
   trigger: PassiveTrigger
   threshold?: number
   conditions?: BattleReactionCondition[]
   effects: SkillEffect[]
   label: string
+  icon?: BattleAbilityIcon
 }
 
 export type TurnPhase =

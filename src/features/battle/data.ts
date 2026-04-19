@@ -125,6 +125,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     portraitFrame: { scale: 2.24, y: '-18%' },
     maxHp: 112,
     passiveEffects: [definePassive({
+      id: 'gojo-six-eyes',
       trigger: 'whileAlive',
       effects: [{ type: 'cooldownReduction', amount: 1, target: 'self' }],
       label: 'Six Eyes',
@@ -185,6 +186,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     portraitFrame: { scale: 2.14, y: '-14%' },
     maxHp: 96,
     passiveEffects: [definePassive({
+      id: 'megumi-ten-shadows',
       trigger: 'whileAlive',
       effects: [{ type: 'damageBoost', amount: 0.08, target: 'self' }],
       label: 'Ten Shadows',
@@ -250,9 +252,11 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     portraitFrame: { scale: 2.02, y: '-6%' },
     maxHp: 88,
     passiveEffects: [definePassive({
+      id: 'jogo-volcanic-core',
       trigger: 'onDealDamage',
       effects: [{ type: 'burn', damage: 7, duration: 2, target: 'inherit' }],
       label: 'Volcanic Core',
+      icon: { label: 'VC', tone: 'red' },
     })],
     abilities: [
       skill({
@@ -310,6 +314,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     portraitFrame: { scale: 2.06, y: '-10%' },
     maxHp: 104,
     passiveEffects: [definePassive({
+      id: 'yuji-vessel-body',
       trigger: 'onRoundStart',
       effects: [{ type: 'heal', power: 6, target: 'self' }],
       label: 'Vessel Body',
@@ -424,6 +429,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     portraitFrame: { scale: 1.98, y: '-12%' },
     maxHp: 108,
     passiveEffects: [definePassive({
+      id: 'nanami-ratio-technique',
       trigger: 'onTargetBelow',
       threshold: 0.45,
       effects: [{ type: 'damageBoost', amount: 0.22, target: 'self' }],

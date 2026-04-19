@@ -59,8 +59,13 @@ function resolveInheritedTarget(rule: BattleAbilityTemplate['targetRule']): Skil
   return 'inherit'
 }
 
-export function definePassive(passive: PassiveEffect): PassiveEffect {
-  return passive
+export function definePassive(passive: Omit<PassiveEffect, 'id'> & { id?: string }): PassiveEffect {
+  const id = passive.id ?? passive.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  const icon: BattleAbilityIcon = passive.icon ?? {
+    label: deriveAbilityLabel(passive.label),
+    tone: 'teal',
+  }
+  return { ...passive, id, icon }
 }
 
 export function defineAbility(template: BattleAbilityDraft): BattleAbilityTemplate {

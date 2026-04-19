@@ -188,8 +188,9 @@ function getNextActorId(
 function createNewBattle(): { viewState: BattleViewState; initialEvents: BattleEvent[] } {
   let state = createInitialBattleState(readStagedBattleLaunch())
   const initialEvents: BattleEvent[] = []
+  const sessionAiEnabled = readStagedBattleSession()?.practiceOptions?.aiEnabled ?? true
 
-  if (state.firstPlayer === 'enemy') {
+  if (state.firstPlayer === 'enemy' && sessionAiEnabled) {
     const enemyCommands = buildEnemyCommands(state)
     const result = resolveTeamTurn(state, enemyCommands, 'enemy')
     state = result.state
@@ -198,6 +199,8 @@ function createNewBattle(): { viewState: BattleViewState; initialEvents: BattleE
     if (state.phase !== 'finished') {
       state = transitionToSecondPlayer(state)
     }
+  } else if (state.firstPlayer === 'enemy') {
+    state = transitionToSecondPlayer(state)
   }
 
   const queued = createAutoCommands(state)
@@ -299,6 +302,8 @@ export function BattlePage() {
   const multiplayer = useMultiplayerMatch(matchId ?? null, currentUserId)
 
   const [stagedSession] = useState(() => readStagedBattleSession())
+  const practiceOptions = stagedSession?.practiceOptions ?? null
+  const aiEnabled = practiceOptions ? practiceOptions.aiEnabled : true
   const [initialBattle] = useState(createNewBattle)
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
@@ -783,10 +788,12 @@ export function BattlePage() {
     // Phase 2: enemy turn + round end
     if (currentState.phase !== 'finished' && previousState.firstPlayer === 'player') {
       currentState = transitionToSecondPlayer(currentState)
-      const enemyCommands = buildEnemyCommands(currentState)
-      const enemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
-      currentState = enemyTimeline.state
-      timelineSteps.push(...enemyTimeline.steps)
+      if (aiEnabled) {
+        const enemyCommands = buildEnemyCommands(currentState)
+        const enemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
+        currentState = enemyTimeline.state
+        timelineSteps.push(...enemyTimeline.steps)
+      }
     }
 
     if (currentState.phase !== 'finished') {
@@ -795,7 +802,7 @@ export function BattlePage() {
       timelineSteps.push(...roundTimeline.steps)
     }
 
-    if (currentState.phase !== 'finished' && currentState.firstPlayer === 'enemy') {
+    if (currentState.phase !== 'finished' && currentState.firstPlayer === 'enemy' && aiEnabled) {
       const enemyCommands = buildEnemyCommands(currentState)
       const openingEnemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
       currentState = openingEnemyTimeline.state
@@ -804,6 +811,8 @@ export function BattlePage() {
       if (currentState.phase !== 'finished') {
         currentState = transitionToSecondPlayer(currentState)
       }
+    } else if (currentState.phase !== 'finished' && currentState.firstPlayer === 'enemy') {
+      currentState = transitionToSecondPlayer(currentState)
     }
 
     const finishedTimeline = await playTimelineSteps(timelineSteps)

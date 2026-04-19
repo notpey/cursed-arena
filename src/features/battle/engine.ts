@@ -801,12 +801,12 @@ function firePassives(
     ...extraContext,
   }
 
-  getTriggeredPassiveEffects(actor, trigger, context).forEach(({ effects }) => {
-    resolveEffects(state, ctx, actor, target, effects, ability?.id, ability?.classes)
+  getTriggeredPassiveEffects(actor, trigger, context).forEach(({ passive, effects }) => {
+    resolveEffects(state, ctx, actor, target, effects, passive.id, ability?.classes)
   })
 }
 
-function createPassiveModifier(actor: BattleFighterState, effect: Extract<SkillEffect, { type: 'damageBoost' | 'cooldownReduction' }>): BattleModifierInstance {
+function createPassiveModifier(actor: BattleFighterState, passiveId: string, effect: Extract<SkillEffect, { type: 'damageBoost' | 'cooldownReduction' }>): BattleModifierInstance {
   return createModifierInstance(
     effect.type === 'damageBoost'
       ? {
@@ -833,16 +833,17 @@ function createPassiveModifier(actor: BattleFighterState, effect: Extract<SkillE
       scope: 'fighter',
       targetId: actor.instanceId,
       sourceActorId: actor.instanceId,
+      sourceAbilityId: passiveId,
     },
   )
 }
 
 function getPassiveModifiers(actor: BattleFighterState, context: ReactionContext) {
   return getTriggeredPassiveEffects(actor, 'whileAlive', context)
-    .flatMap((entry) => entry.effects)
-    .flatMap((effect) => {
+    .flatMap((entry) => entry.effects.map((effect) => ({ passive: entry.passive, effect })))
+    .flatMap(({ passive, effect }) => {
       if (effect.type === 'damageBoost' || effect.type === 'cooldownReduction') {
-        return [createPassiveModifier(actor, effect)]
+        return [createPassiveModifier(actor, passive.id, effect)]
       }
       return []
     })

@@ -9,8 +9,13 @@ const battleProfileStatsKey = 'ca-battle-profile-stats-v1'
 const battleMatchHistoryKey = 'ca-battle-history-v1'
 const lastBattleResultKey = 'ca-battle-last-result-v1'
 
-export const battleMatchModes = ['ranked', 'quick', 'private'] as const
+export const battleMatchModes = ['ranked', 'quick', 'private', 'practice'] as const
 export type BattleMatchMode = (typeof battleMatchModes)[number]
+
+export type PracticeOptions = {
+  aiEnabled: boolean
+  enemyTeamIds: string[]
+}
 export type BattleMatchResult = 'WIN' | 'LOSS'
 export type BattleRankShift = 'promoted' | 'demoted' | 'steady'
 
@@ -57,6 +62,7 @@ export type StagedBattleSession = {
   opponentTitle: string
   opponentRankLabel?: string | null
   roomCode?: string | null
+  practiceOptions?: PracticeOptions | null
 }
 
 export type LastBattleResult = {
@@ -345,6 +351,7 @@ function normalizeStagedBattleSession(session: StagedBattleSession | null) {
     enemyTeamIds: session.enemyTeamIds.slice(),
     opponentRankLabel: session.opponentRankLabel ?? null,
     roomCode: session.roomCode ?? null,
+    practiceOptions: session.practiceOptions ?? null,
   }
 }
 
@@ -371,6 +378,22 @@ export function createStagedBattleSession(mode: BattleMatchMode, playerTeamIds: 
     opponentTitle: picked.opponentTitle,
     opponentRankLabel: picked.opponentRankLabel ?? null,
     roomCode: picked.roomCode ?? null,
+    practiceOptions: null,
+  }
+}
+
+export function createPracticeSession(playerTeamIds: string[], options: PracticeOptions): StagedBattleSession {
+  const battleSeed = createBattleSeed('practice', playerTeamIds)
+  return {
+    mode: 'practice',
+    battleSeed,
+    playerTeamIds: playerTeamIds.slice(),
+    enemyTeamIds: options.enemyTeamIds.slice(),
+    opponentName: 'TRAINING_DUMMY',
+    opponentTitle: 'Practice Match',
+    opponentRankLabel: null,
+    roomCode: null,
+    practiceOptions: { ...options },
   }
 }
 
@@ -415,6 +438,7 @@ export function formatMatchTimestamp(timestamp: number) {
 export function getModeLabel(mode: BattleMatchMode) {
   if (mode === 'ranked') return 'LADDER'
   if (mode === 'quick') return 'QUICK'
+  if (mode === 'practice') return 'PRACTICE'
   return 'PRIVATE'
 }
 
@@ -427,6 +451,7 @@ export function getModeDescription(mode: BattleMatchMode) {
 export function getModeButtonLabel(mode: BattleMatchMode) {
   if (mode === 'ranked') return 'Start Ladder Game'
   if (mode === 'quick') return 'Start Quick Game'
+  if (mode === 'practice') return 'Start Practice'
   return 'Start Private Game'
 }
 

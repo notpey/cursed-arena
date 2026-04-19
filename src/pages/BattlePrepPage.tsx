@@ -15,9 +15,11 @@ import {
 import type { BattleAbilityTemplate } from '@/features/battle/types'
 import {
   battleMatchModes,
+  createPracticeSession,
   getModeButtonLabel,
   getModeLabel,
   persistSelectedMatchMode,
+  persistStagedBattleSession,
   readBattleProfileStats,
   readSelectedMatchMode,
   type BattleMatchMode,
@@ -179,6 +181,13 @@ export function BattlePrepPage() {
   const [matchMode, setMatchMode] = useState<BattleMatchMode>(() => readSelectedMatchMode())
   const [profileStats] = useState(() => readBattleProfileStats())
 
+  // ── Practice mode state ──────────────────────────────────────────────────
+  const [practiceAiEnabled, setPracticeAiEnabled] = useState(true)
+  const [practiceEnemyIds, setPracticeEnemyIds] = useState<Array<string | null>>(() => {
+    const defaults = battlePrepRoster.slice(3, 6).map((e) => e.id)
+    return [defaults[0] ?? null, defaults[1] ?? null, defaults[2] ?? null]
+  })
+
   // ── Multiplayer private match state ─────────────────────────────────────
   const [privateOpen, setPrivateOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -315,6 +324,15 @@ export function BattlePrepPage() {
 
   async function handleEnterArena() {
     if (!isReady) return
+
+    if (matchMode === 'practice') {
+      const sanitized = sanitizePrepTeamIds(teamIds)
+      const enemyIds = sanitizePrepTeamIds(practiceEnemyIds)
+      const session = createPracticeSession(sanitized, { aiEnabled: practiceAiEnabled, enemyTeamIds: enemyIds })
+      persistStagedBattleSession(session)
+      navigate('/battle')
+      return
+    }
 
     if (matchMode === 'private') {
       setPrivateOpen(true)
@@ -511,7 +529,7 @@ export function BattlePrepPage() {
                     {getModeLabel(matchMode)}
                   </span>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                <div className="mt-3 grid grid-cols-4 gap-1.5">
                   {battleMatchModes.map((mode) => (
                     <button
                       key={mode}
@@ -520,7 +538,9 @@ export function BattlePrepPage() {
                       className={[
                         'ca-display rounded-md border px-1.5 py-2.5 text-[0.82rem] leading-none transition',
                         matchMode === mode
-                          ? 'border-ca-red/35 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
+                          ? mode === 'practice'
+                            ? 'border-ca-teal/35 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
+                            : 'border-ca-red/35 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
                           : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2 hover:border-white/18',
                       ].join(' ')}
                     >
@@ -529,7 +549,16 @@ export function BattlePrepPage() {
                   ))}
                 </div>
 
-                {searching ? (
+                {matchMode === 'practice' ? (
+                  <PracticePanel
+                    aiEnabled={practiceAiEnabled}
+                    enemyIds={practiceEnemyIds}
+                    isReady={isReady}
+                    onToggleAi={() => setPracticeAiEnabled((v) => !v)}
+                    onSetEnemyIds={setPracticeEnemyIds}
+                    onStart={handleEnterArena}
+                  />
+                ) : searching ? (
                   <SearchingPanel
                     mode={matchMode}
                     error={queueError}
@@ -675,6 +704,98 @@ export function BattlePrepPage() {
         </section>
       </div>
     </section>
+  )
+}
+
+// ── Practice panel ────────────────────────────────────────────────────────────
+
+function PracticePanel({
+  aiEnabled,
+  enemyIds,
+  isReady,
+  onToggleAi,
+  onSetEnemyIds,
+  onStart,
+}: {
+  aiEnabled: boolean
+  enemyIds: Array<string | null>
+  isReady: boolean
+  onToggleAi: () => void
+  onSetEnemyIds: (ids: Array<string | null>) => void
+  onStart: () => void
+}) {
+  return (
+    <div className="mt-3 space-y-2">
+      {/* AI toggle */}
+      <div className="flex items-center justify-between rounded-[0.3rem] border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-2">
+        <div>
+          <p className="ca-display text-[0.78rem] leading-none text-ca-text">Enemy AI</p>
+          <p className="mt-0.5 ca-mono-label text-[0.42rem] text-ca-text-3">
+            {aiEnabled ? 'AI will play skills normally' : 'Enemy passes every turn — freeze-frame mode'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onToggleAi}
+          className={[
+            'relative h-5 w-9 shrink-0 rounded-full border transition',
+            aiEnabled
+              ? 'border-ca-teal/50 bg-ca-teal/20'
+              : 'border-white/15 bg-[rgba(255,255,255,0.05)]',
+          ].join(' ')}
+        >
+          <span
+            className={[
+              'absolute top-0.5 h-4 w-4 rounded-full transition-all',
+              aiEnabled ? 'left-[calc(100%-1.1rem)] bg-ca-teal' : 'left-0.5 bg-white/30',
+            ].join(' ')}
+          />
+        </button>
+      </div>
+
+      {/* Enemy team picker */}
+      <div className="rounded-[0.3rem] border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-2">
+        <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Enemy Team</p>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          {([0, 1, 2] as const).map((slot) => {
+            const id = enemyIds[slot] ?? null
+            const entry = id ? battlePrepRosterById[id] ?? null : null
+            return (
+              <div key={slot} className="relative">
+                <select
+                  value={id ?? ''}
+                  onChange={(e) => {
+                    const next = [...enemyIds]
+                    next[slot] = e.target.value || null
+                    onSetEnemyIds(next)
+                  }}
+                  className="w-full rounded-[0.25rem] border border-white/12 bg-[rgba(14,14,20,0.9)] px-2 py-1.5 ca-mono-label text-[0.48rem] text-ca-text-2 outline-none transition focus:border-ca-teal/40"
+                >
+                  <option value="">— Empty —</option>
+                  {battlePrepRoster.map((r) => (
+                    <option key={r.id} value={r.id}>{r.battleTemplate.shortName}</option>
+                  ))}
+                </select>
+                {entry ? (
+                  <p className="mt-0.5 truncate ca-mono-label text-[0.38rem] text-ca-text-3">{entry.role}</p>
+                ) : (
+                  <p className="mt-0.5 ca-mono-label text-[0.38rem] text-ca-text-3/50">Slot {slot + 1}</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={!isReady}
+        className="ca-display w-full rounded-xl border border-ca-teal/40 bg-[linear-gradient(180deg,rgba(5,216,189,0.22),rgba(5,216,189,0.1))] px-3 py-3 text-[1.18rem] text-ca-teal shadow-[0_8px_20px_rgba(5,216,189,0.1)] transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+      >
+        Start Practice
+      </button>
+    </div>
   )
 }
 

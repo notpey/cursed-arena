@@ -2,9 +2,11 @@ import { PASS_ABILITY_ID } from '@/features/battle/data'
 import { getAttackUpAmount, getBurnDamage, getMarkBonus, hasStatus } from '@/features/battle/statuses'
 import { getAbilityById, getFighterById } from '@/features/battle/engine'
 import type {
+  BattleAbilityIcon,
   BattleAbilityTemplate,
   BattleBoardAccent,
   BattleFighterState,
+  BattleModifierInstance,
   BattleState,
   QueuedBattleAction,
 } from '@/features/battle/types'
@@ -14,145 +16,228 @@ export type ActivePipTone = 'default' | 'burn' | 'stun' | 'heal' | 'buff' | 'deb
 export type ActiveEffectPip = {
   key: string
   iconSrc?: string
+  iconLabel: string
+  iconTone: BattleBoardAccent
   label: string
-  detail: string
-  turnsLeft: number | null  // null = permanent/untilRemoved
+  lines: string[]       // bullet lines shown in tooltip
+  turnsLeft: number | null
+  stackCount: number | null  // shown as center overlay when > 0
   tone: ActivePipTone
 }
 
-function pipDuration(duration: { kind: string; remaining?: number } | undefined): number | null {
-  if (!duration) return null
-  if (duration.kind === 'rounds') return duration.remaining ?? 0
+// ── Duration helpers ──────────────────────────────────────────────────────────
+
+function modDuration(mod: BattleModifierInstance): number | null {
+  if (mod.duration.kind === 'rounds') return mod.duration.remaining
   return null
 }
 
-export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
-  const pips: ActiveEffectPip[] = []
+function turnsText(turns: number | null): string {
+  if (turns === null) return ''
+  return ` ${turns} turn${turns !== 1 ? 's' : ''} remaining.`
+}
 
-  // ── Statuses ─────────────────────────────────────────────────────────────
-  for (const status of fighter.statuses) {
-    if (status.kind === 'stun') {
-      pips.push({
-        key: 'status-stun',
-        label: 'Stunned',
-        detail: `Cannot use abilities for ${status.duration} more turn${status.duration !== 1 ? 's' : ''}.`,
-        turnsLeft: status.duration,
-        tone: 'stun',
-      })
-    } else if (status.kind === 'invincible') {
-      pips.push({
-        key: 'status-invincible',
-        label: 'Invincible',
-        detail: `Cannot be targeted by enemy skills for ${status.duration} more turn${status.duration !== 1 ? 's' : ''}.`,
-        turnsLeft: status.duration,
-        tone: 'void',
-      })
-    } else if (status.kind === 'burn') {
-      pips.push({
-        key: 'status-burn',
-        label: `Burn ${status.damage}`,
-        detail: `Takes ${status.damage} affliction damage per turn. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
-        turnsLeft: status.duration,
-        tone: 'burn',
-      })
-    } else if (status.kind === 'mark') {
-      pips.push({
-        key: 'status-mark',
-        label: `Marked +${status.bonus}`,
-        detail: `Next hit deals +${status.bonus} bonus damage. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
-        turnsLeft: status.duration,
-        tone: 'debuff',
-      })
-    } else if (status.kind === 'attackUp') {
-      pips.push({
-        key: 'status-attackUp',
-        label: `DMG +${status.amount}`,
-        detail: `Attack increased by ${status.amount}. ${status.duration} turn${status.duration !== 1 ? 's' : ''} remaining.`,
-        turnsLeft: status.duration,
-        tone: 'buff',
-      })
+// ── Per-modifier effect line ──────────────────────────────────────────────────
+
+function modEffectLine(mod: BattleModifierInstance): { line: string; tone: ActivePipTone } {
+  const dur = turnsText(modDuration(mod))
+  if (mod.statusKind === 'stun') return { line: `Cannot use abilities.${dur}`, tone: 'stun' }
+  if (mod.statusKind === 'invincible') return { line: `Invulnerable to enemy skills.${dur}`, tone: 'void' }
+  if (mod.statusKind === 'burn' && typeof mod.value === 'number') return { line: `Taking ${mod.value} affliction damage per turn.${dur}`, tone: 'burn' }
+  if (mod.statusKind === 'mark' && typeof mod.value === 'number') return { line: `Next hit deals +${mod.value} bonus damage.${dur}`, tone: 'debuff' }
+  if (mod.statusKind === 'attackUp' && typeof mod.value === 'number') return { line: `Damage increased by ${mod.value}.${dur}`, tone: 'buff' }
+
+  if (mod.stat === 'damageTaken' && typeof mod.value === 'number') {
+    if (mod.mode === 'flat') {
+      const line = mod.value < 0
+        ? `Damage taken reduced by ${Math.abs(mod.value)}.${dur}`
+        : `Damage taken increased by ${mod.value}.${dur}`
+      return { line, tone: mod.value < 0 ? 'buff' : 'debuff' }
+    }
+    if (mod.mode === 'percentAdd') {
+      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%.${dur}`, tone: mod.value < 0 ? 'buff' : 'debuff' }
     }
   }
+  if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
+    return { line: `Damage dealt ${mod.value > 0 ? '+' : ''}${mod.value}.${dur}`, tone: mod.value > 0 ? 'buff' : 'debuff' }
+  }
+  if (mod.stat === 'isInvulnerable') return { line: `Invulnerable to enemy skills.${dur}`, tone: 'void' }
+  if (mod.stat === 'canAct' && mod.value === false) return { line: `Cannot use abilities.${dur}`, tone: 'stun' }
+  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: `${mod.label}.${dur}`, tone: 'heal' }
+  return { line: `${mod.label}.${dur}`, tone: 'default' }
+}
 
-  // ── Visible modifiers ─────────────────────────────────────────────────────
+// ── Icon resolution ───────────────────────────────────────────────────────────
+
+function resolveSourceIcon(fighter: BattleFighterState, sourceAbilityId: string): BattleAbilityIcon | null {
+  const allAbilities = [...fighter.abilities, fighter.ultimate]
+  const ability = allAbilities.find((a) => a.id === sourceAbilityId)
+  if (ability) return ability.icon
+
+  for (const delta of fighter.abilityState) {
+    if (delta.mode === 'replace' && delta.replacement.id === sourceAbilityId) return delta.replacement.icon
+    if (delta.mode === 'grant' && delta.grantedAbility.id === sourceAbilityId) return delta.grantedAbility.icon
+  }
+
+  const passive = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
+  if (passive?.icon) return passive.icon
+
+  return null
+}
+
+function resolveSourceName(fighter: BattleFighterState, sourceAbilityId: string): string {
+  const allAbilities = [...fighter.abilities, fighter.ultimate]
+  const ability = allAbilities.find((a) => a.id === sourceAbilityId)
+  if (ability) return ability.name
+
+  for (const delta of fighter.abilityState) {
+    if (delta.mode === 'replace' && delta.replacement.id === sourceAbilityId) return delta.replacement.name
+    if (delta.mode === 'grant' && delta.grantedAbility.id === sourceAbilityId) return delta.grantedAbility.name
+  }
+
+  const passive = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
+  if (passive) return passive.label
+
+  return sourceAbilityId
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
+export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
+  // Groups: sourceAbilityId → { lines, minTurns, tone, icon, stackCount }
+  type Group = {
+    key: string
+    label: string
+    lines: string[]
+    turnsLeft: number | null
+    tone: ActivePipTone
+    iconSrc?: string
+    iconLabel: string
+    iconTone: BattleBoardAccent
+    stackCount: number | null
+  }
+
+  const groups = new Map<string, Group>()
+
+  function ensureGroup(sourceId: string): Group {
+    if (groups.has(sourceId)) return groups.get(sourceId)!
+    const icon = resolveSourceIcon(fighter, sourceId)
+    const name = resolveSourceName(fighter, sourceId)
+    const group: Group = {
+      key: `pip-${sourceId}`,
+      label: name,
+      lines: [],
+      turnsLeft: null,
+      tone: 'default',
+      iconSrc: icon?.src,
+      iconLabel: icon?.label ?? name.slice(0, 2).toUpperCase(),
+      iconTone: icon?.tone ?? 'teal',
+      stackCount: null,
+    }
+    groups.set(sourceId, group)
+    return group
+  }
+
+  function mergeTurns(group: Group, turns: number | null) {
+    if (turns === null) return
+    if (group.turnsLeft === null) group.turnsLeft = turns
+    else group.turnsLeft = Math.max(group.turnsLeft, turns)
+  }
+
+  function mergeTone(group: Group, tone: ActivePipTone) {
+    if (group.tone === 'default') group.tone = tone
+  }
+
+  // ── Visible modifiers grouped by sourceAbilityId ─────────────────────────
   for (const mod of fighter.modifiers) {
     if (!mod.visible) continue
-    const dur = pipDuration(mod.duration as { kind: string; remaining?: number })
-    const durText = dur !== null ? ` ${dur} turn${dur !== 1 ? 's' : ''} remaining.` : ''
-
-    let detail = mod.label
-    let tone: ActivePipTone = 'default'
-
-    if (mod.stat === 'damageTaken' && typeof mod.value === 'number') {
-      if (mod.mode === 'flat') {
-        detail = mod.value < 0
-          ? `Damage taken reduced by ${Math.abs(mod.value)}.${durText}`
-          : `Damage taken increased by ${mod.value}.${durText}`
-        tone = mod.value < 0 ? 'buff' : 'debuff'
-      } else if (mod.mode === 'percentAdd') {
-        detail = `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%.${durText}`
-        tone = mod.value < 0 ? 'buff' : 'debuff'
-      }
-    } else if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
-      detail = `Damage dealt ${mod.value > 0 ? '+' : ''}${mod.value}.${durText}`
-      tone = mod.value > 0 ? 'buff' : 'debuff'
-    } else if (mod.stat === 'isInvulnerable') {
-      detail = `Invulnerable to enemy skills.${durText}`
-      tone = 'void'
-    } else if (mod.stat === 'canAct' && mod.value === false) {
-      detail = `Cannot use abilities.${durText}`
-      tone = 'stun'
-    } else if (mod.stat === 'healDone' || mod.stat === 'healTaken') {
-      detail = `${mod.label}.${durText}`
-      tone = 'heal'
-    } else {
-      detail = `${mod.label}.${durText}`
-    }
-
-    pips.push({
-      key: `mod-${mod.id}`,
-      iconSrc: undefined,
-      label: mod.label,
-      detail,
-      turnsLeft: dur,
-      tone,
-    })
+    const sourceId = mod.sourceAbilityId ?? '__engine__'
+    const group = ensureGroup(sourceId)
+    const { line, tone } = modEffectLine(mod)
+    group.lines.push(line)
+    mergeTurns(group, modDuration(mod))
+    mergeTone(group, tone)
   }
 
-  // ── Ability state changes (locked/replaced skills) ────────────────────────
+  // ── abilityState: replace / grant / lock ──────────────────────────────────
   for (const delta of fighter.abilityState) {
-    if (delta.mode === 'lock') {
-      pips.push({
-        key: `abilitystate-lock-${delta.slotAbilityId}`,
-        label: 'Ability Locked',
-        detail: `A skill is locked for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
-        turnsLeft: delta.duration,
-        tone: 'stun',
-      })
-    } else if (delta.mode === 'replace') {
-      const replaced = delta.replacement
-      pips.push({
-        key: `abilitystate-replace-${delta.slotAbilityId}`,
-        iconSrc: replaced.icon.src,
-        label: replaced.name,
-        detail: `${replaced.name} is active for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
-        turnsLeft: delta.duration,
-        tone: 'default',
-      })
+    if (delta.mode === 'replace') {
+      const sourceId = `replace-${delta.slotAbilityId}`
+      const group = ensureGroup(sourceId)
+      // Override icon/label with the replacement ability itself
+      group.iconSrc = delta.replacement.icon.src
+      group.iconLabel = delta.replacement.icon.label
+      group.iconTone = delta.replacement.icon.tone
+      group.label = delta.replacement.name
+      group.lines.push(`Active for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      mergeTurns(group, delta.duration)
     } else if (delta.mode === 'grant') {
-      const granted = delta.grantedAbility
-      pips.push({
-        key: `abilitystate-grant-${granted.id}`,
-        iconSrc: granted.icon.src,
-        label: granted.name,
-        detail: `${granted.name} granted for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`,
-        turnsLeft: delta.duration,
-        tone: 'buff',
-      })
+      const sourceId = `grant-${delta.grantedAbility.id}`
+      const group = ensureGroup(sourceId)
+      group.iconSrc = delta.grantedAbility.icon.src
+      group.iconLabel = delta.grantedAbility.icon.label
+      group.iconTone = delta.grantedAbility.icon.tone
+      group.label = delta.grantedAbility.name
+      group.lines.push(`Granted for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      mergeTurns(group, delta.duration)
+      mergeTone(group, 'buff')
+    } else if (delta.mode === 'lock') {
+      const sourceId = `lock-${delta.slotAbilityId}`
+      const group = ensureGroup(sourceId)
+      group.label = 'Ability Locked'
+      group.lines.push(`Locked for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      mergeTurns(group, delta.duration)
+      mergeTone(group, 'stun')
     }
   }
 
-  return pips
+  // ── Shield ────────────────────────────────────────────────────────────────
+  if (fighter.shield && fighter.shield.amount > 0) {
+    const sourceId = fighter.shield.sourceAbilityId ?? '__shield__'
+    const group = ensureGroup(sourceId)
+    group.lines.push(`${fighter.shield.label}: ${fighter.shield.amount} shield remaining.`)
+    mergeTone(group, 'buff')
+  }
+
+  // ── Effect immunities ─────────────────────────────────────────────────────
+  for (const immunity of fighter.effectImmunities) {
+    const sourceId = immunity.sourceAbilityId ?? '__immunity__'
+    const group = ensureGroup(sourceId)
+    group.lines.push(`${immunity.label} (${immunity.remainingRounds} turn${immunity.remainingRounds !== 1 ? 's' : ''} remaining).`)
+    mergeTurns(group, immunity.remainingRounds)
+    mergeTone(group, 'void')
+  }
+
+  // ── Class stuns ───────────────────────────────────────────────────────────
+  for (const cs of fighter.classStuns) {
+    const sourceId = cs.sourceAbilityId ?? '__classstun__'
+    const group = ensureGroup(sourceId)
+    group.lines.push(`${cs.blockedClasses.join('/')} techniques sealed for ${cs.remainingRounds} turn${cs.remainingRounds !== 1 ? 's' : ''}.`)
+    mergeTurns(group, cs.remainingRounds)
+    mergeTone(group, 'stun')
+  }
+
+  // ── Counters: attach to their source ability group if one exists ──────────
+  for (const [key, value] of Object.entries(fighter.stateCounters)) {
+    if (value <= 0) continue
+    // Find which ability/passive "owns" this counter by convention: counter key starts with abilityId
+    const ownerGroup = [...groups.values()].find((g) => g.key.includes(key.split('-')[0] ?? ''))
+    if (ownerGroup) {
+      ownerGroup.stackCount = value
+    }
+  }
+
+  return [...groups.values()].map((g) => ({
+    key: g.key,
+    iconSrc: g.iconSrc,
+    iconLabel: g.iconLabel,
+    iconTone: g.iconTone,
+    label: g.label,
+    lines: g.lines,
+    turnsLeft: g.turnsLeft,
+    stackCount: g.stackCount,
+    tone: g.tone,
+  }))
 }
 
 export function cn(...tokens: Array<string | false | null | undefined>) {
