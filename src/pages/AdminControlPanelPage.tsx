@@ -12,6 +12,7 @@ import {
   createContentSnapshot,
   publishBattleContent,
   readDraftBattleContent,
+  resetPublishedBattleContent,
   saveDraftBattleContent,
   type BattleContentSnapshot,
 } from '@/features/battle/contentStore'
@@ -1014,9 +1015,8 @@ export function AdminControlPanelPage() {
     }
   }
 
-  function handleRevertPublished() {
-    clearPublishedBattleContent()
-    clearDraftBattleContent()
+  async function handleRevertPublished() {
+    await resetPublishedBattleContent(liveContent)
     window.location.reload()
   }
 

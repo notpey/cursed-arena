@@ -85,6 +85,23 @@ export async function publishBattleContent(snapshot: BattleContentSnapshot): Pro
 }
 
 /**
+ * Overwrite the Supabase row (and localStorage) with the given snapshot.
+ * Used by "Revert Live" to ensure the remote copy is replaced, not just local storage.
+ */
+export async function resetPublishedBattleContent(snapshot: BattleContentSnapshot): Promise<void> {
+  clearDraftBattleContent()
+  clearPublishedBattleContent()
+
+  const client = getSupabaseClient()
+  if (!client) return
+
+  const published = clonePublishedSnapshot(snapshot)
+  await client
+    .from('game_content')
+    .upsert({ key: supabaseContentKey, content: published, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+}
+
+/**
  * Fetch the latest published content from Supabase and update localStorage.
  * Returns true if the local content was stale and got replaced (caller should
  * reload the page so data.ts picks up the fresh snapshot).
