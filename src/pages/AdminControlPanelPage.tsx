@@ -121,7 +121,7 @@ type AdminSelection = {
   passiveIndex: number
 }
 
-type EditorTabId = 'identity' | 'skills' | 'passives' | 'advanced' | 'reference'
+type EditorTabId = 'identity' | 'skills' | 'passives' | 'advanced' | 'livePreview'
 
 function readAdminSelection(): AdminSelection | null {
   if (typeof window === 'undefined') return null
@@ -721,25 +721,6 @@ export function AdminControlPanelPage() {
     () => validateBattleContent(draft.roster, draft.defaultSetup),
     [draft],
   )
-  const abilityCount = useMemo(
-    () => draft.roster.reduce((total, fighter) => total + fighter.abilities.length + 1, 0),
-    [draft.roster],
-  )
-  const passiveCount = useMemo(
-    () => draft.roster.reduce((total, fighter) => total + (fighter.passiveEffects?.length ?? 0), 0),
-    [draft.roster],
-  )
-  const effectTypeCounts = useMemo(
-    () =>
-      countEffectTypes(
-        draft.roster.flatMap((fighter) => fighter.abilities.concat(fighter.ultimate).flatMap((ability) => ability.effects ?? [])),
-      ),
-    [draft.roster],
-  )
-  const passiveTriggerCounts = useMemo(
-    () => countPassiveTriggers(draft.roster.flatMap((fighter) => fighter.passiveEffects ?? [])),
-    [draft.roster],
-  )
   const liveMatchesDraft = JSON.stringify(liveContent) === JSON.stringify(draft)
   const visibleRoster = useMemo(() => {
     const query = fighterSearch.trim().toLowerCase()
@@ -1090,7 +1071,7 @@ export function AdminControlPanelPage() {
     { id: 'skills', label: 'Skills', hint: 'Author active techniques and ultimates.' },
     { id: 'passives', label: 'Passives', hint: 'Configure reactions and conditions.' },
     { id: 'advanced', label: 'Advanced', hint: 'Import, export, and raw JSON edits.' },
-    { id: 'reference', label: 'Reference', hint: 'Authoring rules and inventory counts.' },
+    { id: 'livePreview', label: 'Live Preview', hint: 'Read this fighter exactly like players will.' },
   ]
 
   return (
@@ -1171,7 +1152,7 @@ export function AdminControlPanelPage() {
           </div>
         </section>
 
-        <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)_21rem]">
+        <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5 xl:sticky xl:top-4 self-start">
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Fighters</p>
             <p className="ca-display mt-2 text-3xl text-ca-text">Registry</p>
@@ -1229,8 +1210,8 @@ export function AdminControlPanelPage() {
             {selectedFighter ? (
               <>
                 <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
-                  <div className="grid gap-4 md:grid-cols-[8rem_minmax(0,1fr)]">
-                    <div className="rounded-[12px] border border-white/10 bg-[rgba(8,9,14,0.8)] p-2">
+                  <div className="grid items-start gap-4 md:grid-cols-[8rem_minmax(0,1fr)]">
+                    <div className="self-start rounded-[12px] border border-white/10 bg-[rgba(8,9,14,0.8)] p-2">
                       <PortraitPreview fighter={selectedFighter} />
                     </div>
                     <div className="min-w-0 space-y-3">
@@ -1488,19 +1469,9 @@ export function AdminControlPanelPage() {
                   </section>
                 ) : null}
 
-                {editorTab === 'reference' ? (
+                {editorTab === 'livePreview' ? (
                   <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-3 text-sm leading-6 text-ca-text-2">
-                        <GuideRow label="Portrait" copy="Recommended 512x512. Preferred master 1024x1024. Square crop with face or upper torso centered." />
-                        <GuideRow label="Skill Icon" copy="Recommended 256x256. Preferred master 512x512. Keep the subject centered." />
-                        <GuideRow label="Skill Cost" copy="Manual cost overrides automatic cost rules when non-empty." />
-                      </div>
-                      <div className="space-y-4">
-                        <InventoryBlock title="Skill Effects" items={effectTypeCounts} />
-                        <InventoryBlock title="Passive Triggers" items={passiveTriggerCounts} />
-                      </div>
-                    </div>
+                    <FighterProfilePreview fighter={selectedFighter} />
                   </section>
                 ) : null}
               </>
@@ -1510,66 +1481,9 @@ export function AdminControlPanelPage() {
               </section>
             )}
           </section>
-
-          <aside className="space-y-4 xl:sticky xl:top-4 self-start">
-            <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
-              <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Live Preview</p>
-              <p className="ca-display mt-1 text-2xl text-ca-text">In-Game Card</p>
-              <div className="mt-4">
-                {selectedFighter ? (
-                  <FighterProfilePreview fighter={selectedFighter} />
-                ) : (
-                  <p className="text-sm text-ca-text-3">No fighter selected.</p>
-                )}
-              </div>
-            </section>
-
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <MetricCard label="Fighters" value={`${draft.roster.length}`} tone="teal" />
-              <MetricCard label="Abilities" value={`${abilityCount}`} tone="frost" />
-              <MetricCard label="Passives" value={`${passiveCount}`} tone="gold" />
-              <MetricCard label="Validation Issues" value={`${validationReport.errors.length}`} tone={validationReport.errors.length > 0 ? 'red' : 'teal'} />
-            </section>
-
-            {validationReport.errors.length > 0 ? (
-              <section className="rounded-[10px] border border-ca-red/25 bg-ca-red-wash px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="ca-mono-label text-[0.5rem] text-ca-red">Validation | {validationReport.errors.length} issue{validationReport.errors.length === 1 ? '' : 's'}</p>
-                  <span className="ca-mono-label text-[0.42rem] text-ca-text-3">Fix before publish</span>
-                </div>
-                <ul className="mt-2 space-y-1 text-sm text-ca-text-2">
-                  {validationReport.errors.slice(0, 6).map((error) => (
-                    <li key={error}>- {error}</li>
-                  ))}
-                  {validationReport.errors.length > 6 ? (
-                    <li className="text-ca-text-3">- ...and {validationReport.errors.length - 6} more</li>
-                  ) : null}
-                </ul>
-              </section>
-            ) : null}
-          </aside>
         </div>
       </div>
     </section>
-  )
-}
-
-function MetricCard({ label, value, tone }: { label: string; value: string; tone: 'teal' | 'red' | 'gold' | 'frost' }) {
-  const toneClass =
-    tone === 'teal'
-      ? 'border-ca-teal/18 bg-ca-teal-wash text-ca-teal'
-      : tone === 'red'
-        ? 'border-ca-red/18 bg-ca-red-wash text-ca-red'
-        : tone === 'gold'
-          ? 'border-amber-400/18 bg-amber-400/10 text-amber-300'
-          : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text'
-
-  return (
-    <div className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4">
-      <p className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</p>
-      <p className="ca-display mt-2 text-4xl text-ca-text">{value}</p>
-      <span className={`mt-3 inline-flex rounded-md border px-2 py-1 ca-mono-label text-[0.4rem] ${toneClass}`}>{label.toUpperCase()}</span>
-    </div>
   )
 }
 
@@ -1690,24 +1604,6 @@ function StatusPill({ label, tone }: { label: string; tone: 'teal' | 'red' | 'go
           : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2'
 
   return <span className={`ca-mono-label rounded-md border px-2 py-1 text-[0.42rem] ${className}`}>{label}</span>
-}
-
-function InventoryBlock({ title, items }: { title: string; items: Array<{ label: string; count: number }> }) {
-  return (
-    <div>
-      <p className="ca-mono-label text-[0.44rem] text-ca-text-3">{title}</p>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {items.map((item) => (
-          <span
-            key={item.label}
-            className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.4rem] text-ca-text-2"
-          >
-            {item.label} x{item.count}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 function AssetField({
@@ -2510,31 +2406,3 @@ function EffectRowEditor({
   )
 }
 
-function GuideRow({ label, copy }: { label: string; copy: string }) {
-  return (
-    <div className="rounded-[8px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-2.5">
-      <p className="ca-mono-label text-[0.38rem] text-ca-text-3">{label}</p>
-      <p className="mt-1 text-sm leading-6 text-ca-text-2">{copy}</p>
-    </div>
-  )
-}
-
-function countEffectTypes(effects: SkillEffect[]) {
-  const counts = new Map<string, number>()
-  effects.forEach((effect) => {
-    counts.set(effect.type, (counts.get(effect.type) ?? 0) + 1)
-  })
-  return Array.from(counts.entries())
-    .map(([label, count]) => ({ label: label.toUpperCase(), count }))
-    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
-}
-
-function countPassiveTriggers(passives: PassiveEffect[]) {
-  const counts = new Map<string, number>()
-  passives.forEach((passive) => {
-    counts.set(passive.trigger, (counts.get(passive.trigger) ?? 0) + 1)
-  })
-  return Array.from(counts.entries())
-    .map(([label, count]) => ({ label: label.toUpperCase(), count }))
-    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
-}
