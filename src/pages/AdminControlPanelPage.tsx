@@ -309,6 +309,7 @@ function formatEffectTarget(target: SkillEffect['target']) {
   if (target === 'inherit') return 'the skill target'
   if (target === 'self') return 'self'
   if (target === 'all-allies') return 'all allies'
+  if (target === 'attacker') return 'the attacker'
   return 'all enemies'
 }
 
@@ -342,6 +343,8 @@ function createReactionCondition(type: BattleReactionCondition['type']): BattleR
       return { type: 'fighterFlag', key: 'state-flag', value: true }
     case 'counterAtLeast':
       return { type: 'counterAtLeast', key: 'state-counter', value: 1 }
+    case 'targetCounterAtLeast':
+      return { type: 'targetCounterAtLeast', key: 'state-counter', value: 1 }
     case 'usedAbilityLastTurn':
       return { type: 'usedAbilityLastTurn', abilityId: 'ability-id' }
     case 'shieldActive':
@@ -371,6 +374,8 @@ function describeCondition(condition: BattleReactionCondition) {
       return `${condition.key} is ${condition.value ? 'true' : 'false'}`
     case 'counterAtLeast':
       return `${condition.key} >= ${condition.value}`
+    case 'targetCounterAtLeast':
+      return `target ${condition.key} >= ${condition.value}`
     case 'usedAbilityLastTurn':
       return `last ability was ${condition.abilityId}`
     case 'shieldActive':
@@ -426,6 +431,12 @@ function describeEffect(effect: SkillEffect) {
       return `After ${effect.delay} round ${effect.phase === 'roundStart' ? 'start' : 'end'} trigger${effect.delay === 1 ? '' : 's'}, resolve ${effect.effects.length} nested effect row${effect.effects.length === 1 ? '' : 's'}.`
     case 'replaceAbility':
       return `Replace ${effect.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`
+    case 'damageScaledByCounter':
+      return `Deals ${effect.powerPerStack} damage per stack of ${effect.counterKey} to ${formatEffectTarget(effect.target)}${effect.consumeStacks ? ', consuming all stacks.' : '.'}`
+    case 'classStun':
+      return `Seals ${effect.blockedClasses.join('/')} techniques on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`
+    case 'replaceAbilities':
+      return `Replaces ${effect.replacements.length} ability slot${effect.replacements.length === 1 ? '' : 's'} on ${formatEffectTarget(effect.target)}.`
   }
 }
 
