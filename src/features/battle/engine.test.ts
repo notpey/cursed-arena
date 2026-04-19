@@ -13,6 +13,7 @@ import {
   resolveTeamTurnTimeline,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
+import { getActivePips } from '@/components/battle/battleDisplay'
 import { getBurnDamage, getStatusDuration } from '@/features/battle/statuses'
 import type { BattleState, QueuedBattleAction } from '@/features/battle/types'
 import { validateBattleContent } from '@/features/battle/validation'
@@ -131,6 +132,75 @@ describe('battle engine scenarios', () => {
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
 
     expect(updatedYuji.hp).toBe(86)
+  })
+
+  test('Hairpin applies a visible pending Cursed Nails marker', () => {
+    const state = createChargedBattleState()
+    const nobara = getFighter(state, 'enemy', 'nobara')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    const result = resolveTeamTurn(
+      state,
+      queue('enemy', nobara.instanceId, 'nobara-hairpin', gojo.instanceId),
+      'enemy',
+    )
+
+    const updatedGojo = getFighter(result.state, 'player', 'gojo')
+    const pending = updatedGojo.modifiers.find((modifier) => modifier.tags.includes('nobara-cursed-nails-pending'))
+
+    expect(pending).toBeTruthy()
+    expect(pending?.duration.kind).toBe('rounds')
+    if (pending?.duration.kind === 'rounds') {
+      expect(pending.duration.remaining).toBe(2)
+    }
+
+    const pips = getActivePips(updatedGojo)
+    expect(
+      pips.some((pip) =>
+        pip.lines.some((line) => line.includes('uses a harmful skill') && line.includes('Cursed Nails')),
+      ),
+    ).toBe(true)
+  })
+
+  test('pending Cursed Nails triggers on harmful skill use and updates the pip text', () => {
+    const state = createChargedBattleState()
+    const nobara = getFighter(state, 'enemy', 'nobara')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    const primed = resolveTeamTurn(
+      state,
+      queue('enemy', nobara.instanceId, 'nobara-hairpin', gojo.instanceId),
+      'enemy',
+    )
+
+    const primedGojo = getFighter(primed.state, 'player', 'gojo')
+    const primedNobara = getFighter(primed.state, 'enemy', 'nobara')
+    const triggered = resolveTeamTurn(
+      primed.state,
+      queue('player', primedGojo.instanceId, 'gojo-red', primedNobara.instanceId),
+      'player',
+    )
+
+    const updatedGojo = getFighter(triggered.state, 'player', 'gojo')
+    expect(updatedGojo.modifiers.some((modifier) => modifier.tags.includes('nobara-cursed-nails-pending'))).toBe(false)
+    const applied = updatedGojo.modifiers.find((modifier) => modifier.tags.includes('nobara-cursed-nails-applied'))
+    expect(applied).toBeTruthy()
+    expect(applied?.duration.kind).toBe('rounds')
+    if (applied?.duration.kind === 'rounds') {
+      expect(applied.duration.remaining).toBe(1)
+    }
+
+    const pips = getActivePips(updatedGojo)
+    expect(
+      pips.some((pip) =>
+        pip.lines.some((line) => line.includes('Cursed Nails was applied to this character for 1 turn')),
+      ),
+    ).toBe(true)
+    expect(
+      pips.some((pip) =>
+        pip.lines.some((line) => line.includes('uses a harmful skill') && line.includes('Cursed Nails')),
+      ),
+    ).toBe(false)
   })
 
   test('resolveTeamTurn emits runtime events and packets for a damaging ability', () => {
@@ -577,6 +647,452 @@ describe('battle engine scenarios', () => {
     expect(broken.runtimeEvents.some((event) => event.type === 'shield_broken' && event.targetId === yuji.instanceId)).toBe(true)
   })
 
+  test('breakShield effects can shatter shields and trigger onShieldBroken passives', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'shield', amount: 18, label: 'Soul Shell', tags: ['soul-shell'], target: 'self' }]
+    yuji.passiveEffects = [{
+      label: 'Shield Break Counter',
+      trigger: 'onShieldBroken',
+      effects: [{ type: 'setFlag', key: 'shieldBrokenByShatter', value: true, target: 'self' }],
+    }]
+
+    gojo.abilities[0].kind = 'utility'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'breakShield', tag: 'soul-shell', target: 'inherit' }]
+
+    const shielded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    expect(getFighter(shielded.state, 'enemy', 'yuji').shield?.amount).toBe(18)
+
+    const shattered = resolveTeamTurn(
+      shielded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedYuji = getFighter(shattered.state, 'enemy', 'yuji')
+
+    expect(updatedYuji.shield).toBeNull()
+    expect(updatedYuji.stateFlags.shieldBrokenByShatter).toBe(true)
+    expect(shattered.runtimeEvents.some((event) => event.type === 'shield_broken' && event.targetId === yuji.instanceId)).toBe(true)
+  })
+
+  test('piercing damage ignores normal damage reduction but respects unpierceable reduction', () => {
+    const nonPiercingState = createChargedBattleState()
+    const piercingState = createChargedBattleState()
+
+    const gojoNonPiercing = getFighter(nonPiercingState, 'player', 'gojo')
+    const yujiNonPiercing = getFighter(nonPiercingState, 'enemy', 'yuji')
+    const gojoPiercing = getFighter(piercingState, 'player', 'gojo')
+    const yujiPiercing = getFighter(piercingState, 'enemy', 'yuji')
+
+    const defenseMods = [
+      {
+        id: `def-${yujiNonPiercing.instanceId}-1`,
+        label: 'Guard',
+        sourceActorId: yujiNonPiercing.instanceId,
+        scope: 'fighter' as const,
+        targetId: yujiNonPiercing.instanceId,
+        stat: 'damageTaken' as const,
+        mode: 'flat' as const,
+        value: -20,
+        duration: { kind: 'rounds' as const, remaining: 2 },
+        tags: ['guard'],
+        visible: true,
+        stacking: 'stack' as const,
+      },
+      {
+        id: `def-${yujiNonPiercing.instanceId}-2`,
+        label: 'Unpierceable Guard',
+        sourceActorId: yujiNonPiercing.instanceId,
+        scope: 'fighter' as const,
+        targetId: yujiNonPiercing.instanceId,
+        stat: 'damageTaken' as const,
+        mode: 'flat' as const,
+        value: -10,
+        duration: { kind: 'rounds' as const, remaining: 2 },
+        tags: ['guard', 'unpierceable'],
+        visible: true,
+        stacking: 'stack' as const,
+      },
+    ]
+    yujiNonPiercing.modifiers = defenseMods.map((mod) => ({ ...mod }))
+    yujiPiercing.modifiers = defenseMods.map((mod) => ({
+      ...mod,
+      id: mod.id.replace(yujiNonPiercing.instanceId, yujiPiercing.instanceId),
+      targetId: yujiPiercing.instanceId,
+    }))
+
+    gojoNonPiercing.abilities[0].kind = 'attack'
+    gojoNonPiercing.abilities[0].targetRule = 'enemy-single'
+    gojoNonPiercing.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojoNonPiercing.abilities[0].energyCost = {}
+    gojoNonPiercing.abilities[0].effects = [{ type: 'damage', power: 50, target: 'inherit' }]
+
+    gojoPiercing.abilities[0].kind = 'attack'
+    gojoPiercing.abilities[0].targetRule = 'enemy-single'
+    gojoPiercing.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojoPiercing.abilities[0].energyCost = {}
+    gojoPiercing.abilities[0].effects = [{ type: 'damage', power: 50, target: 'inherit', piercing: true }]
+
+    const nonPiercingResult = resolveTeamTurn(
+      nonPiercingState,
+      queue('player', gojoNonPiercing.instanceId, gojoNonPiercing.abilities[0].id, yujiNonPiercing.instanceId),
+      'player',
+    )
+    const piercingResult = resolveTeamTurn(
+      piercingState,
+      queue('player', gojoPiercing.instanceId, gojoPiercing.abilities[0].id, yujiPiercing.instanceId),
+      'player',
+    )
+
+    const nonPiercingDamage = yujiNonPiercing.hp - getFighter(nonPiercingResult.state, 'enemy', 'yuji').hp
+    const piercingDamage = yujiPiercing.hp - getFighter(piercingResult.state, 'enemy', 'yuji').hp
+
+    expect(nonPiercingDamage).toBe(20)
+    expect(piercingDamage).toBe(40)
+  })
+
+  test('counter guard triggers before damage, damages attacker, and cancels the harmful action', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'counter', duration: 1, counterDamage: 18, target: 'self' }]
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    const guarded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    expect(getFighter(guarded.state, 'enemy', 'yuji').reactionGuards.some((guard) => guard.kind === 'counter')).toBe(true)
+
+    const resolved = resolveTeamTurn(
+      guarded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedGojo.hp).toBe(gojo.hp - 18)
+    expect(updatedYuji.hp).toBe(yuji.hp)
+    expect(updatedYuji.reactionGuards.some((guard) => guard.kind === 'counter')).toBe(false)
+  })
+
+  test('reflect guard redirects harmful damage back to the attacker', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'reflect', duration: 1, target: 'self' }]
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    const guarded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const resolved = resolveTeamTurn(
+      guarded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedGojo.hp).toBe(gojo.hp - 30)
+    expect(updatedYuji.hp).toBe(yuji.hp)
+    expect(updatedYuji.reactionGuards.some((guard) => guard.kind === 'reflect')).toBe(false)
+  })
+
+  test('reflect guard redirects harmful non-damage effects back to the attacker', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'reflect', duration: 1, target: 'self' }]
+
+    gojo.abilities[0].kind = 'debuff'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'stun', duration: 1, target: 'inherit' }]
+
+    const guarded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const resolved = resolveTeamTurn(
+      guarded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(getStatusDuration(updatedGojo.statuses, 'stun')).toBe(1)
+    expect(getStatusDuration(updatedYuji.statuses, 'stun')).toBe(0)
+    expect(updatedYuji.reactionGuards.some((guard) => guard.kind === 'reflect')).toBe(false)
+  })
+
+  test('reflect guard with consumeOnTrigger=false can reflect multiple skills in its duration window', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+    const megumi = getFighter(state, 'player', 'megumi')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'reflect', duration: 1, consumeOnTrigger: false, target: 'self' }]
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    megumi.abilities[0].kind = 'attack'
+    megumi.abilities[0].targetRule = 'enemy-single'
+    megumi.abilities[0].classes = ['Melee', 'Physical', 'Action']
+    megumi.abilities[0].energyCost = {}
+    megumi.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    const guarded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const resolved = resolveTeamTurn(
+      guarded.state,
+      {
+        [gojo.instanceId]: { actorId: gojo.instanceId, team: 'player', abilityId: gojo.abilities[0].id, targetId: yuji.instanceId },
+        [megumi.instanceId]: { actorId: megumi.instanceId, team: 'player', abilityId: megumi.abilities[0].id, targetId: yuji.instanceId },
+      },
+      'player',
+      [gojo.instanceId, megumi.instanceId],
+    )
+
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedMegumi = getFighter(resolved.state, 'player', 'megumi')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedGojo.hp).toBe(gojo.hp - 30)
+    expect(updatedMegumi.hp).toBe(megumi.hp - 20)
+    expect(updatedYuji.hp).toBe(yuji.hp)
+    expect(updatedYuji.reactionGuards.some((guard) => guard.kind === 'reflect')).toBe(true)
+  })
+
+  test('class-filtered reflect guard only triggers on matching harmful skill classes', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.reactionGuards = [{
+      id: 'guard-reflect-physical',
+      kind: 'reflect',
+      label: 'Reflect',
+      remainingRounds: 1,
+      abilityClasses: ['Physical'],
+      consumeOnTrigger: true,
+      sourceActorId: yuji.instanceId,
+    }]
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    const resolved = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedGojo.hp).toBe(gojo.hp)
+    expect(updatedYuji.hp).toBe(yuji.hp - 30)
+    expect(updatedYuji.reactionGuards.some((guard) => guard.kind === 'reflect')).toBe(true)
+  })
+
+  test('cannotBeCountered and cannotBeReflected flags bypass reaction guards', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.reactionGuards = [
+      {
+        id: 'guard-counter',
+        kind: 'counter',
+        label: 'Counter',
+        remainingRounds: 1,
+        counterDamage: 20,
+        consumeOnTrigger: true,
+        sourceActorId: yuji.instanceId,
+      },
+      {
+        id: 'guard-reflect',
+        kind: 'reflect',
+        label: 'Reflect',
+        remainingRounds: 1,
+        consumeOnTrigger: true,
+        sourceActorId: yuji.instanceId,
+      },
+    ]
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].cannotBeCountered = true
+    gojo.abilities[0].cannotBeReflected = true
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit', cannotBeCountered: true, cannotBeReflected: true }]
+
+    const resolved = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedGojo.hp).toBe(gojo.hp)
+    expect(updatedYuji.hp).toBe(yuji.hp - 30)
+    expect(updatedYuji.reactionGuards).toHaveLength(2)
+  })
+
+  test('reflected damage still interacts with attacker shield', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.reactionGuards = [{
+      id: 'guard-reflect',
+      kind: 'reflect',
+      label: 'Reflect',
+      remainingRounds: 1,
+      consumeOnTrigger: true,
+      sourceActorId: yuji.instanceId,
+    }]
+    gojo.shield = {
+      amount: 20,
+      label: 'Test Shield',
+      tags: ['test'],
+      sourceActorId: gojo.instanceId,
+    }
+
+    gojo.abilities[0].kind = 'attack'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit', piercing: true }]
+
+    const resolved = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, yuji.instanceId),
+      'player',
+    )
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    const updatedYuji = getFighter(resolved.state, 'enemy', 'yuji')
+
+    expect(updatedYuji.hp).toBe(yuji.hp)
+    expect(updatedGojo.shield).toBeNull()
+    expect(updatedGojo.hp).toBe(gojo.hp - 10)
+    expect(resolved.runtimeEvents.some((event) => event.type === 'shield_broken' && event.targetId === gojo.instanceId)).toBe(true)
+  })
+
+  test('shieldDamage chips shield and can shatter it when amount is high enough', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    yuji.abilities[0].kind = 'utility'
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].classes = ['Instant', 'Mental']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'shield', amount: 18, label: 'Soul Shell', tags: ['soul-shell'], target: 'self' }]
+    yuji.passiveEffects = [{
+      label: 'Shard Witness',
+      trigger: 'onShieldBroken',
+      effects: [{ type: 'setFlag', key: 'shieldBrokenByDamage', value: true, target: 'self' }],
+    }]
+
+    gojo.abilities[0].kind = 'debuff'
+    gojo.abilities[0].targetRule = 'enemy-single'
+    gojo.abilities[0].classes = ['Ranged', 'Energy', 'Control']
+    gojo.abilities[0].cooldown = 0
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'shieldDamage', amount: 8, tag: 'soul-shell', target: 'inherit' }]
+
+    const shielded = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId),
+      'enemy',
+    )
+    const chipped = resolveTeamTurn(
+      shielded.state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, getFighter(shielded.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(chipped.state, 'enemy', 'yuji').shield?.amount).toBe(10)
+    expect(getFighter(chipped.state, 'enemy', 'yuji').stateFlags.shieldBrokenByDamage).toBeUndefined()
+
+    const chippedGojo = getFighter(chipped.state, 'player', 'gojo')
+    chippedGojo.abilities[0].effects = [{ type: 'shieldDamage', amount: 12, tag: 'soul-shell', target: 'inherit' }]
+    const shattered = resolveTeamTurn(
+      chipped.state,
+      queue('player', chippedGojo.instanceId, chippedGojo.abilities[0].id, getFighter(chipped.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+
+    const updatedYuji = getFighter(shattered.state, 'enemy', 'yuji')
+    expect(updatedYuji.shield).toBeNull()
+    expect(updatedYuji.stateFlags.shieldBrokenByDamage).toBe(true)
+    expect(shattered.runtimeEvents.some((event) => event.type === 'shield_damaged' && event.targetId === yuji.instanceId)).toBe(true)
+    expect(shattered.runtimeEvents.some((event) => event.type === 'shield_broken' && event.targetId === yuji.instanceId)).toBe(true)
+  })
+
   test('modifyAbilityCost effects can temporarily rewrite a specific skill cost', () => {
     const state = createChargedBattleState()
     const yuji = getFighter(state, 'enemy', 'yuji')
@@ -620,6 +1136,155 @@ describe('battle engine scenarios', () => {
 
     expect(usedYuji.costModifiers).toHaveLength(0)
     expect(canUseAbility(used.state, usedYuji, yuji.abilities[1].id)).toBe(false)
+  })
+
+  test('energyDrain removes typed and random energy from the target team', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    state.playerEnergy.amounts = createEnergyAmounts({ physical: 1, technique: 2, vow: 0, mental: 0 })
+    state.enemyEnergy.amounts = createEnergyAmounts()
+
+    yuji.abilities[0].kind = 'debuff'
+    yuji.abilities[0].targetRule = 'enemy-single'
+    yuji.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'energyDrain', amount: { technique: 2, random: 1 }, target: 'inherit' }]
+
+    const drained = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, gojo.instanceId),
+      'enemy',
+    )
+
+    expect(totalEnergyInPool(drained.state.playerEnergy)).toBe(0)
+    const drainEvent = drained.runtimeEvents
+      .find((event) =>
+        event.type === 'resource_changed'
+        && event.packet?.kind === 'resource'
+        && event.packet.mode === 'spend'
+        && event.packet.targetTeam === 'player'
+      )
+    expect(drainEvent?.packet?.kind).toBe('resource')
+    if (drainEvent?.packet?.kind === 'resource') {
+      expect(drainEvent.packet.targetTeam).toBe('player')
+      expect(drainEvent.packet.amounts.reserve).toBe(-3)
+    }
+  })
+
+  test('energySteal transfers drained energy to the caster team', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    state.playerEnergy.amounts = createEnergyAmounts({ physical: 2, technique: 1, vow: 0, mental: 0 })
+    state.enemyEnergy.amounts = createEnergyAmounts({ physical: 0, technique: 0, vow: 0, mental: 0 })
+
+    yuji.abilities[0].kind = 'debuff'
+    yuji.abilities[0].targetRule = 'enemy-single'
+    yuji.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'energySteal', amount: { physical: 1, random: 2 }, target: 'inherit' }]
+
+    const stolen = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, gojo.instanceId),
+      'enemy',
+    )
+
+    expect(totalEnergyInPool(stolen.state.playerEnergy)).toBe(0)
+    expect(stolen.state.enemyEnergy.amounts.physical).toBe(2)
+    expect(stolen.state.enemyEnergy.amounts.technique).toBe(1)
+    const gainEvent = stolen.runtimeEvents.find((event) =>
+      event.type === 'resource_changed'
+      && event.packet?.kind === 'resource'
+      && event.packet.mode === 'gain'
+      && event.packet.targetTeam === 'enemy',
+    )
+    expect(gainEvent?.packet?.kind).toBe('resource')
+    if (gainEvent?.packet?.kind === 'resource') {
+      expect(gainEvent.packet.amounts.reserve).toBe(3)
+    }
+  })
+
+  test('energyGain adds energy pips to the target team', () => {
+    const state = createChargedBattleState()
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    state.playerEnergy.amounts = createEnergyAmounts()
+
+    gojo.abilities[0].kind = 'utility'
+    gojo.abilities[0].targetRule = 'self'
+    gojo.abilities[0].classes = ['Instant', 'Mental']
+    gojo.abilities[0].energyCost = {}
+    gojo.abilities[0].effects = [{ type: 'energyGain', amount: { mental: 1, random: 2 }, target: 'self' }]
+
+    const gained = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, gojo.abilities[0].id, gojo.instanceId),
+      'player',
+    )
+
+    expect(totalEnergyInPool(gained.state.playerEnergy)).toBe(3)
+    expect(gained.state.playerEnergy.amounts.mental).toBeGreaterThanOrEqual(1)
+    const gainEvent = gained.runtimeEvents
+      .find((event) => event.type === 'resource_changed' && event.packet?.kind === 'resource' && event.packet.mode === 'gain')
+    expect(gainEvent?.packet?.kind).toBe('resource')
+    if (gainEvent?.packet?.kind === 'resource') {
+      expect(gainEvent.packet.targetTeam).toBe('player')
+      expect(gainEvent.packet.amounts.reserve).toBe(3)
+    }
+  })
+
+  test('cooldownAdjust can increase ready skills and target a specific ability id', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    gojo.cooldowns['gojo-red'] = 0
+    gojo.cooldowns['gojo-blue'] = 0
+
+    yuji.abilities[0].kind = 'debuff'
+    yuji.abilities[0].targetRule = 'enemy-single'
+    yuji.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'cooldownAdjust', amount: 2, abilityId: 'gojo-red', includeReady: true, target: 'inherit' }]
+
+    const adjusted = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, gojo.instanceId),
+      'enemy',
+    )
+    const updatedGojo = getFighter(adjusted.state, 'player', 'gojo')
+
+    expect(updatedGojo.cooldowns['gojo-red']).toBe(2)
+    expect(updatedGojo.cooldowns['gojo-blue']).toBe(0)
+  })
+
+  test('cooldownAdjust can reduce only active cooldowns when includeReady is false', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    gojo.cooldowns['gojo-red'] = 2
+    gojo.cooldowns['gojo-blue'] = 0
+
+    yuji.abilities[0].kind = 'debuff'
+    yuji.abilities[0].targetRule = 'enemy-single'
+    yuji.abilities[0].classes = ['Ranged', 'Mental', 'Control']
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'cooldownAdjust', amount: -1, includeReady: false, target: 'inherit' }]
+
+    const adjusted = resolveTeamTurn(
+      state,
+      queue('enemy', yuji.instanceId, yuji.abilities[0].id, gojo.instanceId),
+      'enemy',
+    )
+    const updatedGojo = getFighter(adjusted.state, 'player', 'gojo')
+
+    expect(updatedGojo.cooldowns['gojo-red']).toBe(1)
+    expect(updatedGojo.cooldowns['gojo-blue']).toBe(0)
   })
 
   test('effect immunity blocks non-damage status effects', () => {

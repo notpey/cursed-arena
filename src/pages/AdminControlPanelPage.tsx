@@ -42,7 +42,7 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'damageBoost', 'shield', 'modifyAbilityCost', 'effectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
+const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
 const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
@@ -61,8 +61,16 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   mark: { label: 'Mark', hint: 'Increase follow-up damage taken.' },
   burn: { label: 'Burn', hint: 'Damage over time each round.' },
   cooldownReduction: { label: 'Cooldown Reduction', hint: 'Accelerate ability cycling.' },
+  cooldownAdjust: { label: 'Cooldown Adjust', hint: 'Increase or decrease cooldown values with optional scope.' },
+  energyGain: { label: 'Energy Gain', hint: 'Grant typed or random cursed energy to a team.' },
+  energyDrain: { label: 'Energy Drain', hint: 'Drain typed or random cursed energy from a team.' },
+  energySteal: { label: 'Energy Steal', hint: 'Drain enemy cursed energy and transfer it to the caster team.' },
   damageBoost: { label: 'Damage Boost', hint: 'Percent-based damage multiplier.' },
   shield: { label: 'Shield', hint: 'Add destructible defense before HP is touched.' },
+  shieldDamage: { label: 'Shield Damage', hint: 'Directly chip destructible defense by amount, optionally by tag.' },
+  breakShield: { label: 'Break Shield', hint: 'Instantly shatter a target shield, optionally by tag.' },
+  counter: { label: 'Counter Guard', hint: 'Sets a pre-damage counter reaction against harmful skills.' },
+  reflect: { label: 'Reflect Guard', hint: 'Sets a pre-damage reflect reaction against harmful skills.' },
   modifyAbilityCost: { label: 'Cost Modifier', hint: 'Temporarily rewrite or reduce a technique cost.' },
   effectImmunity: { label: 'Effect Immunity', hint: 'Ignore selected non-damage effect types for a duration.' },
   setFlag: { label: 'Set Flag', hint: 'Flip a named fighter state flag on or off.' },
@@ -217,7 +225,7 @@ function createTemporaryAbility(name = 'Temporary Technique'): BattleAbilityTemp
 function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
   switch (type) {
     case 'damage':
-      return { type: 'damage', power: 20, target: 'inherit' }
+      return { type: 'damage', power: 20, target: 'inherit', piercing: false, cannotBeCountered: false, cannotBeReflected: false }
     case 'heal':
       return { type: 'heal', power: 18, target: 'inherit' }
     case 'invulnerable':
@@ -232,10 +240,26 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'burn', damage: 8, duration: 2, target: 'inherit' }
     case 'cooldownReduction':
       return { type: 'cooldownReduction', amount: 1, target: 'inherit' }
+    case 'cooldownAdjust':
+      return { type: 'cooldownAdjust', amount: 1, includeReady: false, target: 'inherit' }
+    case 'energyGain':
+      return { type: 'energyGain', amount: { technique: 1 }, target: 'self' }
+    case 'energyDrain':
+      return { type: 'energyDrain', amount: { technique: 1 }, target: 'inherit' }
+    case 'energySteal':
+      return { type: 'energySteal', amount: { technique: 1 }, target: 'inherit' }
     case 'damageBoost':
       return { type: 'damageBoost', amount: 0.2, target: 'inherit' }
     case 'shield':
       return { type: 'shield', amount: 20, label: 'Barrier', tags: [], target: 'inherit' }
+    case 'shieldDamage':
+      return { type: 'shieldDamage', amount: 20, target: 'inherit' }
+    case 'breakShield':
+      return { type: 'breakShield', target: 'inherit' }
+    case 'counter':
+      return { type: 'counter', duration: 1, counterDamage: 20, consumeOnTrigger: true, target: 'self' }
+    case 'reflect':
+      return { type: 'reflect', duration: 1, consumeOnTrigger: true, target: 'self' }
     case 'modifyAbilityCost':
       return {
         type: 'modifyAbilityCost',
@@ -293,7 +317,16 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
         ability: createTemporaryAbility(),
       }
     case 'damageScaledByCounter':
-      return { type: 'damageScaledByCounter', counterKey: 'stack-counter', powerPerStack: 10, consumeStacks: true, target: 'inherit' }
+      return {
+        type: 'damageScaledByCounter',
+        counterKey: 'stack-counter',
+        powerPerStack: 10,
+        consumeStacks: true,
+        target: 'inherit',
+        piercing: false,
+        cannotBeCountered: false,
+        cannotBeReflected: false,
+      }
     case 'classStun':
       return { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Melee'], target: 'inherit' }
     case 'replaceAbilities':
@@ -390,7 +423,7 @@ function describeCondition(condition: BattleReactionCondition) {
 function describeEffect(effect: SkillEffect) {
   switch (effect.type) {
     case 'damage':
-      return `Deals ${effect.power} damage to ${formatEffectTarget(effect.target)}.`
+      return `Deals ${effect.power} damage to ${formatEffectTarget(effect.target)}${effect.piercing ? ' (piercing)' : ''}${effect.cannotBeCountered ? ', cannot be countered' : ''}${effect.cannotBeReflected ? ', cannot be reflected' : ''}.`
     case 'heal':
       return `Restores ${effect.power} HP to ${formatEffectTarget(effect.target)}.`
     case 'invulnerable':
@@ -405,10 +438,30 @@ function describeEffect(effect: SkillEffect) {
       return `Burns ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}; each tick deals ${effect.damage} damage.`
     case 'cooldownReduction':
       return `Reduces cooldowns by ${effect.amount} for ${formatEffectTarget(effect.target)}.`
+    case 'cooldownAdjust':
+      return `${effect.amount < 0 ? 'Reduces' : 'Increases'} cooldowns by ${Math.abs(effect.amount)} for ${formatEffectTarget(effect.target)}${effect.abilityId ? ` on ${effect.abilityId}` : ''}${effect.includeReady ? ' (including ready skills)' : ''}.`
+    case 'energyGain':
+      return `Gains energy for ${formatEffectTarget(effect.target)} with payload ${JSON.stringify(effect.amount)}.`
+    case 'energyDrain':
+      return `Drains energy from ${formatEffectTarget(effect.target)} with payload ${JSON.stringify(effect.amount)}.`
+    case 'energySteal':
+      return `Steals energy from ${formatEffectTarget(effect.target)} with payload ${JSON.stringify(effect.amount)}.`
     case 'damageBoost':
       return `Boosts outgoing damage for ${formatEffectTarget(effect.target)} by ${Math.round(effect.amount * 100)}%.`
     case 'shield':
       return `Adds ${effect.amount} shield to ${formatEffectTarget(effect.target)}.`
+    case 'shieldDamage':
+      return effect.tag
+        ? `Deals ${effect.amount} shield damage to ${formatEffectTarget(effect.target)} shield tagged "${effect.tag}".`
+        : `Deals ${effect.amount} shield damage to ${formatEffectTarget(effect.target)}.`
+    case 'breakShield':
+      return effect.tag
+        ? `Breaks ${formatEffectTarget(effect.target)} shield matching tag "${effect.tag}".`
+        : `Breaks ${formatEffectTarget(effect.target)} shield.`
+    case 'counter':
+      return `Sets a counter guard on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'} (counter damage ${effect.counterDamage}${effect.abilityClasses?.length ? `, classes: ${effect.abilityClasses.join('/')}` : ''}${effect.consumeOnTrigger === false ? ', triggers repeatedly' : ', first trigger only'}).`
+    case 'reflect':
+      return `Sets a reflect guard on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}${effect.abilityClasses?.length ? ` for ${effect.abilityClasses.join('/')}` : ''}${effect.consumeOnTrigger === false ? ', triggers repeatedly' : ', first trigger only'}.`
     case 'modifyAbilityCost':
       return `${effect.modifier.label} changes costs for ${formatEffectTarget(effect.target)} using ${effect.modifier.mode}.`
     case 'effectImmunity':
@@ -432,7 +485,7 @@ function describeEffect(effect: SkillEffect) {
     case 'replaceAbility':
       return `Replace ${effect.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`
     case 'damageScaledByCounter':
-      return `Deals ${effect.powerPerStack} damage per stack of ${effect.counterKey} to ${formatEffectTarget(effect.target)}${effect.consumeStacks ? ', consuming all stacks.' : '.'}`
+      return `Deals ${effect.powerPerStack} damage per stack of ${effect.counterKey} to ${formatEffectTarget(effect.target)}${effect.consumeStacks ? ', consuming all stacks' : ''}${effect.piercing ? ', piercing' : ''}${effect.cannotBeCountered ? ', cannot be countered' : ''}${effect.cannotBeReflected ? ', cannot be reflected' : ''}.`
     case 'classStun':
       return `Seals ${effect.blockedClasses.join('/')} techniques on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`
     case 'replaceAbilities':
@@ -2268,11 +2321,38 @@ function EffectRowEditor({
         {effect.type === 'mark' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
         {effect.type === 'burn' ? <NumberField label="Tick Damage" value={effect.damage} onChange={(value) => onChange({ ...effect, damage: value })} /> : null}
         {effect.type === 'burn' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
+        {effect.type === 'counter' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
+        {effect.type === 'counter' ? <NumberField label="Counter Damage" value={effect.counterDamage} onChange={(value) => onChange({ ...effect, counterDamage: value })} /> : null}
+        {effect.type === 'counter' ? <InputField label="Class Filter CSV" value={formatCsvList(effect.abilityClasses)} onChange={(value) => { const parsed = parseCsvList(value) as BattleSkillClass[]; onChange({ ...effect, abilityClasses: parsed.length > 0 ? parsed : undefined }) }} /> : null}
+        {effect.type === 'counter' ? <SelectField label="Consume On Trigger" value={effect.consumeOnTrigger === false ? 'false' : 'true'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, consumeOnTrigger: value === 'true' })} /> : null}
+        {effect.type === 'reflect' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
+        {effect.type === 'reflect' ? <InputField label="Class Filter CSV" value={formatCsvList(effect.abilityClasses)} onChange={(value) => { const parsed = parseCsvList(value) as BattleSkillClass[]; onChange({ ...effect, abilityClasses: parsed.length > 0 ? parsed : undefined }) }} /> : null}
+        {effect.type === 'reflect' ? <SelectField label="Consume On Trigger" value={effect.consumeOnTrigger === false ? 'false' : 'true'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, consumeOnTrigger: value === 'true' })} /> : null}
         {effect.type === 'cooldownReduction' ? <NumberField label="Cooldowns Reduced" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
+        {effect.type === 'cooldownAdjust' ? <NumberField label="Cooldown Delta" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
+        {effect.type === 'cooldownAdjust' ? <InputField label="Ability ID (Optional)" value={effect.abilityId ?? ''} onChange={(value) => onChange({ ...effect, abilityId: value || undefined })} /> : null}
+        {effect.type === 'cooldownAdjust' ? <SelectField label="Include Ready" value={effect.includeReady ? 'true' : 'false'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, includeReady: value === 'true' })} /> : null}
+        {(effect.type === 'energyGain' || effect.type === 'energyDrain' || effect.type === 'energySteal') ? battleEnergyOrder.map((type) => (
+          <NumberField
+            key={`${effect.type}-${type}`}
+            label={`${battleEnergyMeta[type].short} Amount`}
+            value={effect.amount[type] ?? 0}
+            onChange={(value) => onChange({ ...effect, amount: { ...effect.amount, [type]: Math.max(0, value) } })}
+          />
+        )) : null}
+        {(effect.type === 'energyGain' || effect.type === 'energyDrain' || effect.type === 'energySteal') ? (
+          <NumberField
+            label="Random Amount"
+            value={effect.amount.random ?? 0}
+            onChange={(value) => onChange({ ...effect, amount: { ...effect.amount, random: Math.max(0, value) } })}
+          />
+        ) : null}
         {effect.type === 'damageBoost' ? <NumberField label="Boost %" value={Math.round(effect.amount * 100)} onChange={(value) => onChange({ ...effect, amount: value / 100 })} /> : null}
         {effect.type === 'shield' ? <NumberField label="Shield" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
         {effect.type === 'shield' ? <InputField label="Label" value={effect.label ?? ''} onChange={(value) => onChange({ ...effect, label: value || undefined })} /> : null}
         {effect.type === 'shield' ? <InputField label="Tags CSV" value={formatCsvList(effect.tags)} onChange={(value) => onChange({ ...effect, tags: parseCsvList(value) })} /> : null}
+        {effect.type === 'shieldDamage' ? <NumberField label="Shield Damage" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
+        {effect.type === 'shieldDamage' ? <InputField label="Required Tag (Optional)" value={effect.tag ?? ''} onChange={(value) => onChange({ ...effect, tag: value || undefined })} /> : null}
         {effect.type === 'modifyAbilityCost' ? (
           <InputField label="Label" value={effect.modifier.label} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, label: value } })} />
         ) : null}

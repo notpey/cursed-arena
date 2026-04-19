@@ -38,6 +38,22 @@ function isUnique(values: string[]) {
   return new Set(values).size === values.length
 }
 
+function validateEnergyAmountPayload(scope: string, amount: BattleAbilityTemplate['energyCost'], issues: string[]) {
+  if (!amount) {
+    pushIssue(issues, scope, 'energy amount payload is required')
+    return
+  }
+
+  if (countEnergyCost(amount) <= 0) {
+    pushIssue(issues, scope, 'energy amount payload must include at least one positive pip')
+  }
+
+  Object.entries(amount).forEach(([type, value]) => {
+    if (!Number.isFinite(value) || value < 0) pushIssue(issues, scope, `${type} amount must be zero or higher`)
+    if (!Number.isInteger(value)) pushIssue(issues, scope, `${type} amount must be a whole number`)
+  })
+}
+
 function validateCondition(scope: string, condition: BattleReactionCondition, issues: string[]) {
   switch (condition.type) {
     case 'selfHpBelow':
@@ -107,9 +123,27 @@ function validateSkillEffect(
     case 'heal':
       if (effect.power <= 0) pushIssue(issues, scope, `${effect.type} power must be positive`)
       return
+    case 'energyGain':
+    case 'energyDrain':
+    case 'energySteal':
+      validateEnergyAmountPayload(scope, effect.amount, issues)
+      return
+    case 'cooldownAdjust':
+      if (effect.amount === 0) pushIssue(issues, scope, 'cooldownAdjust amount cannot be zero')
+      if (effect.abilityId != null && !effect.abilityId.trim()) pushIssue(issues, scope, 'cooldownAdjust abilityId cannot be empty')
+      return
     case 'invulnerable':
     case 'stun':
       if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
+      return
+    case 'reflect':
+      if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
+      if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'reflect abilityClasses cannot be an empty list')
+      return
+    case 'counter':
+      if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
+      if (effect.counterDamage < 0) pushIssue(issues, scope, 'counterDamage cannot be negative')
+      if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'counter abilityClasses cannot be an empty list')
       return
     case 'attackUp':
       if (effect.amount <= 0) pushIssue(issues, scope, 'damage bonus amount must be positive')
@@ -137,6 +171,10 @@ function validateSkillEffect(
       return
     case 'shield':
       if (effect.amount <= 0) pushIssue(issues, scope, 'shield amount must be positive')
+      return
+    case 'shieldDamage':
+      if (effect.amount <= 0) pushIssue(issues, scope, 'shieldDamage amount must be positive')
+      if (effect.tag != null && !effect.tag.trim()) pushIssue(issues, scope, 'shieldDamage tag cannot be empty when provided')
       return
     case 'modifyAbilityCost':
       if (!effect.modifier.label.trim()) pushIssue(issues, scope, 'modifyAbilityCost label is required')
@@ -206,6 +244,11 @@ function validateSkillEffect(
         if (r.duration <= 0) pushIssue(issues, scope, `replaceAbilities entry ${index + 1}: duration must be positive`)
         validateEmbeddedAbility(`${scope} replacement ${index + 1}`, r.ability, issues)
       })
+      return
+    case 'breakShield':
+      if (effect.tag != null && !effect.tag.trim()) {
+        pushIssue(issues, scope, 'breakShield tag cannot be empty when provided')
+      }
       return
   }
 }

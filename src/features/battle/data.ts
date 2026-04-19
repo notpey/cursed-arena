@@ -388,13 +388,29 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'nobara-hairpin',
         name: 'Hairpin',
-        description: 'A heavier burst into one enemy.',
+        description: 'A heavier burst that primes the target for Cursed Nails.',
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Ranged', 'Physical', 'Action'],
         cooldown: 2,
         power: 54,
-        effects: [{ type: 'damage', power: 54, target: 'inherit' }],
+        effects: [
+          { type: 'damage', power: 54, target: 'inherit' },
+          {
+            type: 'addModifier',
+            target: 'inherit',
+            modifier: {
+              label: 'If this character uses a harmful skill, Cursed Nails is applied for 1 turn.',
+              stat: 'cooldownTick',
+              mode: 'flat',
+              value: 0,
+              duration: { kind: 'rounds', rounds: 2 },
+              tags: ['nobara-cursed-nails-pending'],
+              visible: true,
+              stacking: 'replace',
+            },
+          },
+        ],
       }),
       debuffSkill({
         id: 'nobara-resonance',

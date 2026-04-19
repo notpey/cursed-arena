@@ -50,6 +50,8 @@ export type BattleAbilityTemplate = {
   classes: BattleSkillClass[]
   icon: BattleAbilityIcon
   cooldown: number
+  cannotBeCountered?: boolean
+  cannotBeReflected?: boolean
   energyCost?: BattleEnergyCost
   effects?: SkillEffect[]
   power?: number
@@ -83,6 +85,12 @@ export type BattleCostModifierState = BattleCostModifierTemplate & {
 export type BattleEffectImmunityBlock =
   | 'damage'
   | 'damageScaledByCounter'
+  | 'shieldDamage'
+  | 'energyGain'
+  | 'energyDrain'
+  | 'energySteal'
+  | 'cooldownAdjust'
+  | 'breakShield'
   | 'heal'
   | 'invulnerable'
   | 'attackUp'
@@ -103,6 +111,8 @@ export type BattleEffectImmunityBlock =
   | 'effectImmunity'
   | 'setFlag'
   | 'adjustCounter'
+  | 'counter'
+  | 'reflect'
   | 'nonDamage'
 
 export type BattleEffectImmunityState = {
@@ -242,6 +252,20 @@ export type BattleClassStunState = {
   sourceAbilityId?: string
 }
 
+export type BattleReactionGuardKind = 'counter' | 'reflect'
+
+export type BattleReactionGuardState = {
+  id: string
+  kind: BattleReactionGuardKind
+  label: string
+  remainingRounds: number
+  counterDamage?: number
+  abilityClasses?: BattleSkillClass[]
+  consumeOnTrigger: boolean
+  sourceActorId?: string
+  sourceAbilityId?: string
+}
+
 export type BattleReactionCondition =
   | { type: 'selfHpBelow'; threshold: number }
   | { type: 'targetHpBelow'; threshold: number }
@@ -305,6 +329,7 @@ export type BattleFighterState = {
   stateCounters: Record<string, number>
   lastUsedAbilityId: string | null
   classStuns: BattleClassStunState[]
+  reactionGuards: BattleReactionGuardState[]
   lastAttackerId: string | null
 }
 
@@ -371,6 +396,9 @@ export type BattleDamagePacket = {
     isUltimate?: boolean
     isStatusTick?: boolean
     ignoresInvulnerability?: boolean
+    isPiercing?: boolean
+    cannotBeCountered?: boolean
+    cannotBeReflected?: boolean
   }
 }
 
@@ -469,8 +497,13 @@ export type BattleTimelineResult = {
 export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'attacker'
 
 export type SkillEffect =
-  | { type: 'damage'; power: number; target: EffectTarget }
-  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget }
+  | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'shieldDamage'; amount: number; tag?: string; target: EffectTarget }
+  | { type: 'energyGain'; amount: BattleEnergyCost; target: EffectTarget }
+  | { type: 'energyDrain'; amount: BattleEnergyCost; target: EffectTarget }
+  | { type: 'energySteal'; amount: BattleEnergyCost; target: EffectTarget }
+  | { type: 'cooldownAdjust'; amount: number; abilityId?: string; includeReady?: boolean; target: EffectTarget }
   | { type: 'heal'; power: number; target: EffectTarget }
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
@@ -491,6 +524,9 @@ export type SkillEffect =
   | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
   | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
+  | { type: 'breakShield'; tag?: string; target: EffectTarget }
+  | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
+  | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
 
 export type PassiveTrigger =
   | 'onDealDamage'

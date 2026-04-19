@@ -222,6 +222,25 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     mergeTone(group, 'stun')
   }
 
+  for (const guard of fighter.reactionGuards) {
+    const sourceId = guard.sourceAbilityId ?? `__reaction-${guard.kind}__`
+    const group = ensureGroup(sourceId)
+    const classScope = guard.abilityClasses && guard.abilityClasses.length > 0
+      ? `${guard.abilityClasses.join('/')} harmful skill`
+      : 'harmful skill'
+    const triggerScope = guard.consumeOnTrigger ? 'the first' : 'any'
+    if (guard.kind === 'counter') {
+      group.lines.push(
+        `If this character uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage.`,
+      )
+      mergeTone(group, 'stun')
+    } else {
+      group.lines.push(`If this character uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected.`)
+      mergeTone(group, 'buff')
+    }
+    mergeTurns(group, guard.remainingRounds)
+  }
+
   // ── Counters: attach to their source ability group if one exists ──────────
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue

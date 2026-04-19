@@ -9,6 +9,7 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "validate:content": "vitest run src/features/battle/content.test.ts",
+    "na:baseline:sync": "node scripts/na-baseline-report.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"

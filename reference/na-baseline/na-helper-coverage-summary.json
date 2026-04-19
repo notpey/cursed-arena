@@ -1,0 +1,416 @@
+{
+  "sourceUrl": "https://cc-maker.na-helper.ninja/default%20characters",
+  "generatedAt": "2026-04-19T21:57:43.719Z",
+  "characterCount": 184,
+  "skillCount": 822,
+  "charactersWithUnlockRequirement": 0,
+  "distributions": {
+    "skillCountPerCharacter": {
+      "4": 123,
+      "5": 44,
+      "6": 11,
+      "7": 4,
+      "8": 2
+    },
+    "cooldownRaw": {
+      "0": 3,
+      "1": 167,
+      "2": 101,
+      "3": 64,
+      "4": 217,
+      "5": 21,
+      "6": 3,
+      "9": 3,
+      "None": 243
+    },
+    "cooldownKind": {
+      "none": 243,
+      "turns": 579
+    },
+    "classes": {
+      "Action": 67,
+      "Affliction": 122,
+      "Chakra": 303,
+      "Control": 12,
+      "Instant": 763,
+      "Melee": 201,
+      "Mental": 132,
+      "Physical": 382,
+      "Ranged": 287,
+      "Unique": 336
+    },
+    "classArtifacts": {
+      "*Affliction": 5,
+      "*Instant": 4,
+      "Affliction*": 27,
+      "Instant*": 16,
+      "Melee*": 3,
+      "Ranged*": 3
+    }
+  },
+  "engine": {
+    "skillEffects": [
+      "damage",
+      "damageScaledByCounter",
+      "shieldDamage",
+      "energyGain",
+      "energyDrain",
+      "energySteal",
+      "cooldownAdjust",
+      "heal",
+      "invulnerable",
+      "attackUp",
+      "stun",
+      "classStun",
+      "mark",
+      "burn",
+      "cooldownReduction",
+      "damageBoost",
+      "shield",
+      "modifyAbilityCost",
+      "effectImmunity",
+      "setFlag",
+      "adjustCounter",
+      "addModifier",
+      "removeModifier",
+      "modifyAbilityState",
+      "replaceAbilities",
+      "schedule",
+      "replaceAbility",
+      "breakShield",
+      "counter",
+      "reflect"
+    ],
+    "reactionConditions": [
+      "selfHpBelow",
+      "targetHpBelow",
+      "actorHasStatus",
+      "targetHasStatus",
+      "abilityId",
+      "abilityClass",
+      "fighterFlag",
+      "counterAtLeast",
+      "targetCounterAtLeast",
+      "usedAbilityLastTurn",
+      "shieldActive",
+      "brokenShieldTag",
+      "isUltimate"
+    ],
+    "skillClasses": [
+      "Action",
+      "Affliction",
+      "Control",
+      "Energy",
+      "Instant",
+      "Melee",
+      "Mental",
+      "Physical",
+      "Ranged",
+      "Ultimate",
+      "Unique"
+    ],
+    "naClassesMissingInEngine": [],
+    "engineClassesMissingInNa": [
+      "Ultimate"
+    ],
+    "unknownNaClassTokens": [],
+    "classAliases": {
+      "Chakra": "Energy"
+    }
+  },
+  "mechanics": [
+    {
+      "id": "counter",
+      "label": "Counter mechanics",
+      "pattern": "\\bcounter\\b",
+      "support": "native",
+      "rationale": "Engine has first-class counter guards with class filtering and optional multi-trigger behavior.",
+      "count": 7,
+      "examples": [
+        {
+          "character": "Maito Gai",
+          "skill": "Counter Punch"
+        },
+        {
+          "character": "Nara Shikamaru (S)",
+          "skill": "Expert Analysis"
+        },
+        {
+          "character": "Aburame Shino (S)",
+          "skill": "Insect Barricade"
+        },
+        {
+          "character": "Yamashiro Aoba (S)",
+          "skill": "Chakra Imbued Kunai"
+        },
+        {
+          "character": "Killer Bee (S)",
+          "skill": "Chakra Stream"
+        }
+      ]
+    },
+    {
+      "id": "reflect",
+      "label": "Reflect mechanics",
+      "pattern": "\\breflect(?:ed|ion)?\\b",
+      "support": "partial",
+      "rationale": "Engine reflect guards now reroute core harmful effects with class filters and optional multi-trigger behavior, but not every skill-level pattern.",
+      "count": 41,
+      "examples": [
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Passive: Cursed Seal Awakening"
+        },
+        {
+          "character": "Nara Shikamaru",
+          "skill": "Meditate"
+        },
+        {
+          "character": "Kimimaro",
+          "skill": "Dance of the Camellia"
+        },
+        {
+          "character": "Kimimaro",
+          "skill": "Dance of the Clematis"
+        },
+        {
+          "character": "Kimimaro",
+          "skill": "Dance of the Seedling Fern"
+        }
+      ]
+    },
+    {
+      "id": "piercing",
+      "label": "Piercing and unpierceable DR",
+      "pattern": "\\bpiercing|unpierceable\\b",
+      "support": "native",
+      "rationale": "Damage effects expose piercing flags and the mitigation lane supports unpierceable-tagged reductions.",
+      "count": 172,
+      "examples": [
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Passive: Kyuubis Chakra Awakening"
+        },
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Chidori"
+        },
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Passive: Cursed Seal Awakening"
+        },
+        {
+          "character": "Inuzuka Kiba",
+          "skill": "Double Headed Wolf"
+        },
+        {
+          "character": "Hyuuga Hinata",
+          "skill": "Eight Trigrams 64 Palms Protection"
+        }
+      ]
+    },
+    {
+      "id": "destructible_defense",
+      "label": "Destructible defense",
+      "pattern": "\\bdestructible defense|destroy destructible defense\\b",
+      "support": "partial",
+      "rationale": "Shield has first-class chip (`shieldDamage`) and shatter (`breakShield`) effects, but broader NA defense interactions remain partial.",
+      "count": 91,
+      "examples": [
+        {
+          "character": "Aburame Shino",
+          "skill": "Bug Wall"
+        },
+        {
+          "character": "Gaara of the Desert",
+          "skill": "Third Eye"
+        },
+        {
+          "character": "Kankuro",
+          "skill": "Puppet Preparation"
+        },
+        {
+          "character": "Haku",
+          "skill": "Demonic Ice Mirrors"
+        },
+        {
+          "character": "Demon Brothers",
+          "skill": "Bladed Gauntlet"
+        }
+      ]
+    },
+    {
+      "id": "chakra_economy",
+      "label": "Chakra drain/steal/generation/cost pressure",
+      "pattern": "\\bdrain|steal|chakra generation|chakra cost\\b",
+      "support": "native",
+      "rationale": "Engine now has explicit energyGain, energyDrain, energySteal, plus ability cost modifiers.",
+      "count": 29,
+      "examples": [
+        {
+          "character": "Aburame Shino",
+          "skill": "Chakra Leach"
+        },
+        {
+          "character": "Young Kakashi",
+          "skill": "Implanted Sharingan"
+        },
+        {
+          "character": "Jiroubou",
+          "skill": "Dungeon Chamber of Nothingness"
+        },
+        {
+          "character": "Akadou Yoroi",
+          "skill": "Chakra and Life Absorption"
+        },
+        {
+          "character": "Akadou Yoroi",
+          "skill": "Draining Assault"
+        }
+      ]
+    },
+    {
+      "id": "cooldown_manip",
+      "label": "Cooldown increase/decrease",
+      "pattern": "\\bcooldown\\b",
+      "support": "native",
+      "rationale": "Engine now supports cooldownAdjust for positive/negative deltas and keeps cooldownReduction for passive tempo.",
+      "count": 15,
+      "examples": [
+        {
+          "character": "Uchiha Obito",
+          "skill": "Obito Goukakyuu no Jutsu"
+        },
+        {
+          "character": "Shodai Hokage",
+          "skill": "Branch Manipulation"
+        },
+        {
+          "character": "Yamanaka Inoichi (S)",
+          "skill": "Telepathy"
+        },
+        {
+          "character": "Darui (S)",
+          "skill": "Black Panther Lightning"
+        },
+        {
+          "character": "Susanoo Sasuke (S)",
+          "skill": "Spreading Amaterasu"
+        }
+      ]
+    },
+    {
+      "id": "transform_replace",
+      "label": "Transformation / skill replacement",
+      "pattern": "\\breplace|transformed?|awakening|during\\b",
+      "support": "native",
+      "rationale": "Engine has replaceAbility/replaceAbilities/modifyAbilityState and passive trigger hooks.",
+      "count": 186,
+      "examples": [
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Uzumaki Naruto Combo"
+        },
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Shadow Clones"
+        },
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Sexy Technique"
+        },
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Passive: Kyuubis Chakra Awakening"
+        },
+        {
+          "character": "Haruno Sakura",
+          "skill": "KO Punch"
+        }
+      ]
+    },
+    {
+      "id": "invulnerable",
+      "label": "Invulnerability and anti-invuln clauses",
+      "pattern": "\\binvulnerable|invulnerability|cannot become invulnerable\\b",
+      "support": "native",
+      "rationale": "Engine models invulnerability plus canGainInvulnerable gate and boolean modifier checks.",
+      "count": 310,
+      "examples": [
+        {
+          "character": "Uzumaki Naruto",
+          "skill": "Sexy Technique"
+        },
+        {
+          "character": "Haruno Sakura",
+          "skill": "Sakura Replacement Technique"
+        },
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Swift Block"
+        },
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Passive: Cursed Seal Awakening"
+        },
+        {
+          "character": "Inuzuka Kiba",
+          "skill": "Dynamic Air Marking"
+        }
+      ]
+    },
+    {
+      "id": "counter_reflect_immunity",
+      "label": "Cannot be countered/reflected clauses",
+      "pattern": "\\bcannot be countered|cannot be reflected\\b",
+      "support": "partial",
+      "rationale": "Ability/effect/packet flags exist for anti-counter and anti-reflect clauses.",
+      "count": 43,
+      "examples": [
+        {
+          "character": "Uchiha Sasuke",
+          "skill": "Passive: Cursed Seal Awakening"
+        },
+        {
+          "character": "Hyuuga Hinata",
+          "skill": "Byakugan"
+        },
+        {
+          "character": "Nara Shikamaru",
+          "skill": "Meditate"
+        },
+        {
+          "character": "Rock Lee",
+          "skill": "Final Lotus"
+        },
+        {
+          "character": "Gaara of the Desert",
+          "skill": "Desert Graveyard"
+        }
+      ]
+    }
+  ],
+  "prioritizedGaps": [
+    {
+      "id": "destructible_defense",
+      "label": "Destructible defense",
+      "support": "partial",
+      "mentions": 91,
+      "priorityScore": 182
+    },
+    {
+      "id": "counter_reflect_immunity",
+      "label": "Cannot be countered/reflected clauses",
+      "support": "partial",
+      "mentions": 43,
+      "priorityScore": 86
+    },
+    {
+      "id": "reflect",
+      "label": "Reflect mechanics",
+      "support": "partial",
+      "mentions": 41,
+      "priorityScore": 82
+    }
+  ]
+}
