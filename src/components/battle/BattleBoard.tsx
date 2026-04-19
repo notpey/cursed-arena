@@ -98,7 +98,7 @@ export function BattleBoard({
               : null
 
           return (
-            <div key={fighter.instanceId} className="flex items-center justify-between gap-4 sm:gap-6 min-h-[7rem] sm:min-h-[8rem]">
+            <div key={fighter.instanceId} className="flex items-center justify-between gap-4 sm:gap-6 pt-3">
               <div className="w-full max-w-[36rem] md:max-w-[42rem] xl:max-w-[48rem] 2xl:max-w-[54rem]">
                 <BattleAbilityStrip
                   fighter={fighter}

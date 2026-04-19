@@ -160,7 +160,7 @@ export function BattleAbilityStrip({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+        'relative rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
         selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
         actorTargetable && 'ring-2 ring-amber-300/30',
         actorMuted && 'opacity-50 saturate-75',
@@ -171,9 +171,9 @@ export function BattleAbilityStrip({
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
 
-      {/* Portrait spans full card height on the left; right column stacks pips → hp → skills */}
-      <div className="relative flex">
-        <div className="shrink-0">
+      <div className="relative flex items-end">
+        {/* Portrait — oversized so it hangs above the card top edge */}
+        <div className="relative z-10 -mt-3 shrink-0 self-end">
           <BattlePortraitSlot
             fighter={fighter}
             accent="teal"
@@ -182,7 +182,7 @@ export function BattleAbilityStrip({
             selectedTarget={Boolean(actorSelectedTarget)}
             muted={Boolean(actorMuted)}
             hideHp
-            sizeClass="w-[3.5rem] sm:w-[4.35rem] xl:w-[5.5rem]"
+            sizeClass="w-[5rem] sm:w-[6rem] xl:w-[7rem]"
             carryoverLabels={carryoverLabels}
             timelineRole={timelineRole}
             timelineTone={timelineTone}
@@ -191,8 +191,8 @@ export function BattleAbilityStrip({
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Pip row — horizontal, above the hp bar */}
-          <div className="flex min-h-[2.4rem] items-center gap-1 px-2 pt-1.5 sm:px-2.5">
+          {/* Pip row — above the hp bar, adjacent to portrait top */}
+          <div className="flex min-h-[2.4rem] items-center gap-1 px-2 pt-1 sm:px-2.5">
             <ActiveEffectPips fighter={fighter} tooltipDown />
           </div>
 
