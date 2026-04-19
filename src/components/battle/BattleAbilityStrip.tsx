@@ -149,18 +149,18 @@ export function BattleAbilityStrip({
 }) {
   const abilities = fighter.abilities.concat(fighter.ultimate)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
-  const disabledLabel = fighter.hp <= 0
-    ? 'KO'
-    : hasStatus(fighter.statuses, 'stun')
-      ? 'STUNNED'
-      : hasStatus(fighter.statuses, 'invincible')
-        ? 'VOID'
-        : null
+  const disabledLabel =
+    fighter.hp <= 0
+      ? 'KO'
+      : hasStatus(fighter.statuses, 'stun')
+        ? 'STUNNED'
+        : hasStatus(fighter.statuses, 'invincible')
+          ? 'VOID'
+          : null
 
   return (
-    <div className="relative flex">
-      {/* Portrait — extends above the card via negative top margin on the wrapper */}
-      <div className="relative z-10 -mt-4 shrink-0">
+    <div className="relative flex items-start gap-2.5 sm:gap-3">
+      <div className="relative z-10 shrink-0 pt-0.5">
         <BattlePortraitSlot
           fighter={fighter}
           accent="teal"
@@ -177,54 +177,52 @@ export function BattleAbilityStrip({
         />
       </div>
 
-      {/* Card — tucks under portrait, no reserved pip space */}
-      <div
-        className={cn(
-          'relative min-w-0 flex-1 -ml-3 self-end overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
-          selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
-          actorTargetable && 'ring-2 ring-amber-300/30',
-          actorMuted && 'opacity-50 saturate-75',
-          timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
-          timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
-          timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
-        )}
-      >
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
-
-        {/* Pips — absolute overlay at top of card, only take space when present */}
-        <div className="absolute left-0 right-0 top-0 z-20 flex items-center gap-1 px-3 -translate-y-full pb-1">
+      <div className="flex min-w-0 flex-1 flex-col justify-end gap-1 pb-0.5">
+        <div className="flex min-h-[2.4rem] items-end px-1.5 sm:px-2">
           <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
-        {/* HP bar — flush at top of card */}
-        <div className="relative border-b border-white/6 bg-black/40">
-          <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
-          <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
-            {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
-          </span>
-          {disabledLabel ? (
-            <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
-              {disabledLabel}
+        <div
+          className={cn(
+            'relative min-w-0 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+            selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
+            actorTargetable && 'ring-2 ring-amber-300/30',
+            actorMuted && 'opacity-50 saturate-75',
+            timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
+            timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
+            timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
+          )}
+        >
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
+
+          <div className="relative border-b border-white/6 bg-black/40">
+            <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
+            <span className="absolute inset-0 flex items-center justify-center ca-mono-label text-[0.55rem] text-white tabular-nums drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]">
+              {fighter.shortName.toUpperCase()} - {fighter.hp}/{fighter.maxHp}
             </span>
-          ) : null}
-        </div>
+            {disabledLabel ? (
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-black/55 px-1.5 py-0.5 ca-mono-label text-[0.45rem] text-amber-200">
+                {disabledLabel}
+              </span>
+            ) : null}
+          </div>
 
-        {/* Skill tiles */}
-        <div className="relative flex min-w-0 items-center gap-2 overflow-x-auto px-2 py-2 sm:gap-2.5 sm:px-2.5">
-          <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+          <div className="relative flex min-w-0 items-center gap-2 overflow-x-auto px-2 py-2 sm:gap-2.5 sm:px-2.5">
+            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
-          {abilities.map((ability) => (
-            <SkillTile
-              key={ability.id}
-              ability={ability}
-              active={pendingAbilityId === ability.id}
-              queued={queuedAction?.abilityId === ability.id}
-              locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
-              onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-              onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-              onLeave={!interactionLocked ? onLeaveAbility : undefined}
-            />
-          ))}
+            {abilities.map((ability) => (
+              <SkillTile
+                key={ability.id}
+                ability={ability}
+                active={pendingAbilityId === ability.id}
+                queued={queuedAction?.abilityId === ability.id}
+                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+                onLeave={!interactionLocked ? onLeaveAbility : undefined}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
