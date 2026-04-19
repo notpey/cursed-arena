@@ -1015,7 +1015,8 @@ export function AdminControlPanelPage() {
   }
 
   async function handleRevertPublished() {
-    await resetPublishedBattleContent(liveContent)
+    await resetPublishedBattleContent(authoredBattleContent)
+    setDraft(cloneSnapshot(authoredBattleContent))
     window.location.reload()
   }
 

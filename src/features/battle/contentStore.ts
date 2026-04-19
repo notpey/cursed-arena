@@ -95,7 +95,7 @@ export async function resetPublishedBattleContent(snapshot: BattleContentSnapsho
   const client = getSupabaseClient()
   if (!client) return
 
-  const published = clonePublishedSnapshot(snapshot)
+  const published = { ...clonePublishedSnapshot(snapshot), updatedAt: Date.now() }
   await client
     .from('game_content')
     .upsert({ key: supabaseContentKey, content: published, updated_at: new Date().toISOString() }, { onConflict: 'key' })
