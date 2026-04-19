@@ -4,7 +4,6 @@ import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, e
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
-import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
 import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
@@ -242,15 +241,11 @@ function getInitials(value: string) {
 
 function UtilityRail({
   onSurrender,
-  events,
 }: {
   onSurrender: () => void
-  events: BattleEvent[]
 }) {
-  const latest = [...events].reverse().slice(0, 3)
-
   return (
-    <aside className="flex flex-col gap-1.5 rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,12,26,0.96),rgba(10,8,18,0.98))] p-2 shadow-[0_12px_22px_rgba(0,0,0,0.3)]">
+    <aside className="flex w-[10rem] shrink-0 flex-col gap-1.5 rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,12,26,0.96),rgba(10,8,18,0.98))] p-2 shadow-[0_12px_22px_rgba(0,0,0,0.3)]">
       <button
         type="button"
         onClick={onSurrender}
@@ -274,20 +269,6 @@ function UtilityRail({
           </div>
         </div>
       </div>
-
-      <div className="flex-1 rounded-[0.15rem] border border-white/8 bg-black/25 p-2">
-        {latest.length > 0 ? (
-          <div className="space-y-1">
-            {latest.map((event) => (
-              <p key={event.id} className="text-[0.6rem] leading-4 text-ca-text-2">
-                R{event.round} {event.message}
-              </p>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[0.6rem] leading-4 text-ca-text-3">Resolve a round to populate the quick battle log.</p>
-        )}
-      </div>
     </aside>
   )
 }
@@ -308,8 +289,8 @@ export function BattlePage() {
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
-  const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
-  const [battleLog, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
+  const [, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
+  const [, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
@@ -355,11 +336,6 @@ export function BattlePage() {
   const commitReady = commandableUnits.length > 0 && !hasPendingTargetSelection && !timelineLocked
   const targetingAllies = selectedAbility?.targetRule === 'ally-single'
   const targetingEnemies = selectedAbility?.targetRule === 'enemy-single'
-  const hoveredActor = hoveredAbility ? getFighterById(battle.state, hoveredAbility.actorId) : null
-  const fallbackActor = battle.state.playerTeam.find(isAlive) ?? battle.state.playerTeam[0] ?? null
-  const inspectedActor = hoveredActor ?? selectedActor ?? fallbackActor
-  const inspectedAbility =
-    hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
   const multiplayerBattleState = multiplayer?.battleState
   const multiplayerAutoCommands = multiplayer?.autoCommands
@@ -933,9 +909,8 @@ export function BattlePage() {
               timelineFocus={timelineFocus}
             />
 
-            <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
-              <UtilityRail onSurrender={handleSurrender} events={battleLog} />
-              <BattleInfoPanel actor={inspectedActor} ability={inspectedAbility} />
+            <div className="flex justify-start gap-2">
+              <UtilityRail onSurrender={handleSurrender} />
             </div>
           </div>
         </div>

@@ -131,7 +131,7 @@ export function BattleBoard({
                 {enemy ? (
                   <div
                     className={[
-                      'rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition sm:p-2.5',
+                      'rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition sm:p-2',
                       enemyTimelineRole === 'actor'
                         ? 'border-ca-red/50 shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_0_22px_rgba(250,39,66,0.18)]'
                         : enemyTimelineRole === 'target'
@@ -152,7 +152,7 @@ export function BattleBoard({
                         targetable={enemyTargetable}
                         selectedTarget={selectedTargetId === enemy.instanceId}
                         muted={Boolean(targetingEnemies && !enemyTargetable && selectedAbility)}
-                        sizeClass="w-[7rem] sm:w-[8.5rem] xl:w-[10rem]"
+                        sizeClass="w-[5rem] sm:w-[5.75rem] xl:w-[6.5rem]"
                         timelineRole={enemyTimelineRole}
                         timelineTone={timelineFocus?.tone ?? null}
                         onClick={enemyTargetable && !interactionLocked ? () => onTargetFighter(enemy) : undefined}
