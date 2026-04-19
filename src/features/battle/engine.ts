@@ -2186,13 +2186,6 @@ function applyRoundEnergyGeneration(state: BattleState, ctx: ResolutionContext) 
     const enemySeed = `${state.battleSeed}:round:${state.round}:enemy`
     const enemyGain = getRefreshGain(enemyAliveCount, null, enemySeed)
     state.enemyEnergy = refreshRoundEnergy(state.enemyEnergy, enemyAliveCount, enemySeed, null)
-    makeEvent(
-      ctx,
-      state.round,
-      'system',
-      'red',
-      `Enemy cursed energy refreshed: ${formatEnergyAmounts(enemyGain)}.`,
-    )
     emitResourceChange(ctx, state.round, {
       kind: 'resource',
       targetTeam: 'enemy',

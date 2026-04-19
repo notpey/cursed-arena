@@ -26,13 +26,11 @@ function formatSkillClasses(ability: BattleAbilityTemplate): string {
 export function BattleInfoPanel({
   actor,
   ability,
-  battlefieldName,
 }: {
   actor: BattleFighterState | null
   ability: BattleAbilityTemplate | null
-  battlefieldName: string
 }) {
-  const description = ability ? ability.description : battlefieldName
+  const description = ability?.description ?? null
   const cooldown = ability && actor ? getCooldown(actor, ability.id) : null
   const cost = ability ? getAbilityEnergyCost(ability) : null
   const totalCost = cost ? countEnergyCost(cost) : 0
@@ -55,8 +53,14 @@ export function BattleInfoPanel({
             </p>
           </div>
 
-          <div className="flex-1 px-5 py-3">
-            <p className="text-[0.82rem] leading-relaxed text-white/65">{description}</p>
+          <div className="flex-1 px-5 py-2.5">
+            {description ? (
+              <p className="text-[0.82rem] leading-relaxed text-white/65">{description}</p>
+            ) : (
+              <p className="ca-mono-label text-[0.58rem] uppercase tracking-[0.12em] text-white/35">
+                Select a technique to inspect details.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-white/6 px-5 py-2.5">

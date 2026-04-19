@@ -152,6 +152,7 @@ export function BattleBoard({
                         targetable={enemyTargetable}
                         selectedTarget={selectedTargetId === enemy.instanceId}
                         muted={Boolean(targetingEnemies && !enemyTargetable && selectedAbility)}
+                        sizeClass="w-[7rem] sm:w-[8.5rem] xl:w-[10rem]"
                         timelineRole={enemyTimelineRole}
                         timelineTone={timelineFocus?.tone ?? null}
                         onClick={enemyTargetable && !interactionLocked ? () => onTargetFighter(enemy) : undefined}

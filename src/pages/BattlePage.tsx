@@ -935,11 +935,7 @@ export function BattlePage() {
 
             <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
               <UtilityRail onSurrender={handleSurrender} events={battleLog} />
-              <BattleInfoPanel
-                actor={inspectedActor}
-                ability={inspectedAbility}
-                battlefieldName={battle.state.battlefield.description}
-              />
+              <BattleInfoPanel actor={inspectedActor} ability={inspectedAbility} />
             </div>
           </div>
         </div>
@@ -1494,4 +1490,3 @@ export function SkillQueueModal({
     </div>
   )
 }
-
