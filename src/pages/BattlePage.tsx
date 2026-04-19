@@ -4,6 +4,7 @@ import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, e
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
+import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
 import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
@@ -289,7 +290,7 @@ export function BattlePage() {
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
-  const [, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
+  const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
   const [, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
@@ -336,6 +337,11 @@ export function BattlePage() {
   const commitReady = commandableUnits.length > 0 && !hasPendingTargetSelection && !timelineLocked
   const targetingAllies = selectedAbility?.targetRule === 'ally-single'
   const targetingEnemies = selectedAbility?.targetRule === 'enemy-single'
+  const hoveredActor = hoveredAbility ? getFighterById(battle.state, hoveredAbility.actorId) : null
+  const fallbackActor = battle.state.playerTeam.find(isAlive) ?? battle.state.playerTeam[0] ?? null
+  const inspectedActor = hoveredActor ?? selectedActor ?? fallbackActor
+  const inspectedAbility =
+    hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
   const multiplayerBattleState = multiplayer?.battleState
   const multiplayerAutoCommands = multiplayer?.autoCommands
@@ -909,8 +915,9 @@ export function BattlePage() {
               timelineFocus={timelineFocus}
             />
 
-            <div className="flex justify-start gap-2">
+            <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
               <UtilityRail onSurrender={handleSurrender} />
+              <BattleInfoPanel actor={inspectedActor} ability={inspectedAbility} />
             </div>
           </div>
         </div>
