@@ -279,6 +279,7 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     onDefeat: 'On Defeat',
     onDefeatEnemy: 'On Defeat Enemy',
     onTargetBelow: 'Execute Window',
+    onBeingTargeted: 'On Being Targeted',
   }
 
   const prefixMap: Record<PassiveEffect['trigger'], string> = {
@@ -293,6 +294,7 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     onDefeat: 'On defeat, ',
     onDefeatEnemy: 'After defeating an enemy, ',
     onTargetBelow: '',
+    onBeingTargeted: 'When targeted by an enemy, ',
   }
 
   const thresholdPrefix =

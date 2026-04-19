@@ -406,7 +406,6 @@ function applyCostModifier(cost: BattleEnergyCost, modifier: BattleCostModifierS
   if (modifier.mode === 'increaseTyped') {
     const next = { ...cost }
     battleEnergyOrder.forEach((type) => {
-      if (type === 'random') return
       if ((next[type] ?? 0) > 0) {
         next[type] = (next[type] ?? 0) + Math.max(0, modifier.amount ?? 0)
       }

@@ -82,10 +82,12 @@ export type BattleCostModifierState = BattleCostModifierTemplate & {
 
 export type BattleEffectImmunityBlock =
   | 'damage'
+  | 'damageScaledByCounter'
   | 'heal'
   | 'invulnerable'
   | 'attackUp'
   | 'stun'
+  | 'classStun'
   | 'mark'
   | 'burn'
   | 'cooldownReduction'
@@ -93,6 +95,7 @@ export type BattleEffectImmunityBlock =
   | 'addModifier'
   | 'removeModifier'
   | 'modifyAbilityState'
+  | 'replaceAbilities'
   | 'schedule'
   | 'replaceAbility'
   | 'shield'
