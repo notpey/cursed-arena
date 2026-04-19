@@ -36,12 +36,15 @@ import {
   createModifiers,
   getFighterModifierPool,
   getNumericModifierMultiplier,
+  getNumericModifierMultiplierForClass,
   getTeamModifierBucket,
   hasBooleanModifierValue,
+  hasBooleanModifierForStat,
   hasModifierStatus,
   removeModifiers,
   setTeamModifierBucket,
   sumNumericModifierValues,
+  sumNumericModifierValuesForClass,
   syncFighterStatusesFromModifiers,
   tickModifiers,
   upsertModifier,
@@ -53,6 +56,7 @@ import {
 import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
+  BattleClassStunState,
   BattleCostModifierState,
   BattleCostModifierTemplate,
   BattleDamagePacket,
@@ -73,6 +77,8 @@ import type {
   BattleRuntimeEvent,
   BattleRuntimeEventType,
   BattleScheduledPhase,
+  BattleSkillClass,
+  BattleSkillDamageType,
   BattleState,
   BattleStatusKind,
   BattleTeamId,
@@ -143,6 +149,8 @@ function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     stateFlags: { ...fighter.stateFlags },
     stateCounters: { ...fighter.stateCounters },
     lastUsedAbilityId: fighter.lastUsedAbilityId,
+    classStuns: fighter.classStuns.map((cs) => ({ ...cs, blockedClasses: [...cs.blockedClasses] })),
+    lastAttackerId: fighter.lastAttackerId,
   }
 }
 
@@ -244,6 +252,8 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         stateFlags: {},
         stateCounters: {},
         lastUsedAbilityId: null,
+        classStuns: [],
+        lastAttackerId: null,
       }
     })
     .filter(Boolean) as BattleFighterState[]
@@ -325,6 +335,33 @@ function tickEffectImmunities(fighter: BattleFighterState) {
     .filter((immunity) => immunity.remainingRounds > 0)
 }
 
+function tickClassStuns(fighter: BattleFighterState) {
+  fighter.classStuns = fighter.classStuns
+    .map((cs) => ({ ...cs, remainingRounds: Math.max(0, cs.remainingRounds - 1) }))
+    .filter((cs) => cs.remainingRounds > 0)
+}
+
+function createClassStunState(
+  actor: BattleFighterState,
+  abilityId: string | undefined,
+  effect: Extract<SkillEffect, { type: 'classStun' }>,
+): BattleClassStunState {
+  return {
+    id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
+    label: `Class Stun (${effect.blockedClasses.join(', ')})`,
+    blockedClasses: [...effect.blockedClasses],
+    remainingRounds: effect.duration,
+    sourceActorId: actor.instanceId,
+    sourceAbilityId: abilityId,
+  }
+}
+
+function isAbilityClassStunned(fighter: BattleFighterState, ability: BattleAbilityTemplate): boolean {
+  return fighter.classStuns.some((cs) =>
+    cs.remainingRounds > 0 && ability.classes.some((cls) => cs.blockedClasses.includes(cls)),
+  )
+}
+
 function createCostModifierState(
   actor: BattleFighterState,
   abilityId: string | undefined,
@@ -357,6 +394,24 @@ function applyCostModifier(cost: BattleEnergyCost, modifier: BattleCostModifierS
       ...cost,
       random: Math.max(0, (cost.random ?? 0) - Math.max(0, modifier.amount ?? 0)),
     }
+  }
+
+  if (modifier.mode === 'increaseRandom') {
+    return {
+      ...cost,
+      random: (cost.random ?? 0) + Math.max(0, modifier.amount ?? 0),
+    }
+  }
+
+  if (modifier.mode === 'increaseTyped') {
+    const next = { ...cost }
+    battleEnergyOrder.forEach((type) => {
+      if (type === 'random') return
+      if ((next[type] ?? 0) > 0) {
+        next[type] = (next[type] ?? 0) + Math.max(0, modifier.amount ?? 0)
+      }
+    })
+    return next
   }
 
   const next = { ...cost }
@@ -846,6 +901,7 @@ function resolveEffectTargets(
   selectedTarget: BattleFighterState | null,
   allies: BattleFighterState[],
   enemies: BattleFighterState[],
+  state?: BattleState,
 ): BattleFighterState[] {
   switch (targetMode) {
     case 'self':
@@ -856,6 +912,13 @@ function resolveEffectTargets(
       return allies
     case 'all-enemies':
       return enemies
+    case 'attacker': {
+      if (!state) return []
+      const attackerId = actor.lastAttackerId
+      if (!attackerId) return []
+      const attacker = getFighterById(state, attackerId)
+      return attacker && isAlive(attacker) ? [attacker] : []
+    }
     default:
       return selectedTarget ? [selectedTarget] : []
   }
@@ -1454,6 +1517,7 @@ function applyDamagePacket(
 
   if (actor) {
     const ability = packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
+    target.lastAttackerId = actor.instanceId
     firePassives(state, ctx, actor, target, 'onDealDamage', ability, effect, remainingDamage)
     firePassives(state, ctx, target, actor, 'onTakeDamage', ability, effect, remainingDamage)
     if (target.hp <= 0) {
@@ -1514,11 +1578,15 @@ function calculateDamage(
   basePower: number,
   isUltimate: boolean,
   abilityId?: string,
+  abilityClasses?: BattleSkillClass[],
 ) {
   let amount = basePower
   const ability = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
   const actorContext: ReactionContext = { target, ability, isUltimate }
   const targetContext: ReactionContext = { target: actor, ability, isUltimate }
+  const damageClass = (abilityClasses ?? ability?.classes ?? []).find(
+    (cls): cls is BattleSkillDamageType => ['Physical', 'Energy', 'Affliction', 'Mental'].includes(cls),
+  )
 
   amount += getNumericModifierTotal(state, actor, 'damageDealt', 'flat', actorContext)
 
@@ -1529,9 +1597,20 @@ function calculateDamage(
     amount = Math.round(amount * (1 + state.battlefield.ultimateDamageBoost))
   }
 
-  amount += getNumericModifierTotal(state, target, 'damageTaken', 'flat', targetContext)
-  amount = Math.round(amount * (1 + getNumericModifierTotal(state, target, 'damageTaken', 'percentAdd', targetContext)))
-  amount = Math.round(amount * getModifierMultiplier(state, target, 'damageTaken', targetContext))
+  const targetModifierPool = getModifierPool(state, target, targetContext)
+  const canReduceDamage = !hasBooleanModifierForStat(targetModifierPool, 'canReduceDamageTaken', false)
+  const effectiveTargetPool = canReduceDamage
+    ? targetModifierPool
+    : targetModifierPool.filter((m) => {
+        if (m.stat !== 'damageTaken') return true
+        if (m.mode === 'flat' && typeof m.value === 'number' && m.value < 0) return false
+        if (m.mode === 'percentAdd' && typeof m.value === 'number' && m.value < 0) return false
+        if (m.mode === 'multiplier' && typeof m.value === 'number' && m.value < 1) return false
+        return true
+      })
+  amount += sumNumericModifierValuesForClass(effectiveTargetPool, 'damageTaken', 'flat', damageClass)
+  amount = Math.round(amount * (1 + sumNumericModifierValuesForClass(effectiveTargetPool, 'damageTaken', 'percentAdd', damageClass)))
+  amount = Math.round(amount * getNumericModifierMultiplierForClass(effectiveTargetPool, 'damageTaken', damageClass))
 
   return Math.max(0, amount)
 }
@@ -1573,7 +1652,7 @@ function resolveEffects(
   const isUlt = abilityClasses?.includes('Ultimate') ?? false
 
   for (const effect of effects) {
-    const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies)
+    const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies, state)
 
     if (effect.type === 'schedule') {
       if (targets.length === 0) continue
@@ -1631,7 +1710,7 @@ function resolveEffects(
 
       switch (effect.type) {
         case 'damage': {
-          const amount = calculateDamage(state, actor, t, effect.power, isUlt, abilityId)
+          const amount = calculateDamage(state, actor, t, effect.power, isUlt, abilityId, abilityClasses)
           const packet: BattleDamagePacket = {
             kind: 'damage',
             sourceActorId: actor.instanceId,
@@ -1644,6 +1723,32 @@ function resolveEffects(
             flags: { isUltimate: isUlt },
           }
           applyDamagePacket(state, ctx, actor, t, packet, effect)
+          break
+        }
+        case 'damageScaledByCounter': {
+          const stackCount = t.stateCounters[effect.counterKey] ?? 0
+          if (stackCount <= 0) break
+          const basePower = stackCount * effect.powerPerStack
+          const amount = calculateDamage(state, actor, t, basePower, isUlt, abilityId, abilityClasses)
+          const packet: BattleDamagePacket = {
+            kind: 'damage',
+            sourceActorId: actor.instanceId,
+            targetId: t.instanceId,
+            abilityId,
+            baseAmount: basePower,
+            amount,
+            damageType: 'normal',
+            tags: abilityClasses ?? [],
+            flags: { isUltimate: isUlt },
+          }
+          applyDamagePacket(state, ctx, actor, t, packet, effect)
+          if (effect.consumeStacks) {
+            t.stateCounters[effect.counterKey] = 0
+            emitCounterChange(ctx, state.round, t, effect.counterKey, 0, actor.instanceId, abilityId)
+            if (effect.modifierTag) {
+              removeModifiersFromFighter(state, ctx, t, { tags: [effect.modifierTag] }, actor.instanceId, abilityId)
+            }
+          }
           break
         }
         case 'heal': {
@@ -1675,7 +1780,24 @@ function resolveEffects(
           }, actor.instanceId, abilityId)
           makeEvent(ctx, state.round, 'status', 'gold', `${t.shortName} is stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.duration, abilityId)
           break
-        case 'invulnerable':
+        case 'classStun': {
+          t.classStuns.push(createClassStunState(actor, abilityId, effect))
+          makeEvent(ctx, state.round, 'status', 'gold', `${t.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.duration, abilityId)
+          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
+            actorId: actor.instanceId,
+            targetId: t.instanceId,
+            team: t.team,
+            abilityId,
+            meta: { label: 'Class Stun', stat: 'classStun', mode: 'set', scope: 'fighter', status: null },
+          })
+          break
+        }
+        case 'invulnerable': {
+          const canGain = !hasBooleanModifierForStat(getFighterModifierPool(state, t), 'canGainInvulnerable', false)
+          if (!canGain) {
+            makeEvent(ctx, state.round, 'system', 'frost', `${t.shortName} cannot become invulnerable.`, actor.instanceId, t.instanceId, undefined, abilityId)
+            break
+          }
           applyModifierToFighter(state, ctx, t, {
             label: 'Invulnerable',
             stat: 'isInvulnerable',
@@ -1689,6 +1811,7 @@ function resolveEffects(
           }, actor.instanceId, abilityId)
           makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} became untouchable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
+        }
         case 'attackUp':
           applyModifierToFighter(state, ctx, t, {
             label: 'Attack Up',
@@ -1776,6 +1899,23 @@ function resolveEffects(
           }, actor.instanceId, abilityId)
           makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} replaced ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
+        case 'replaceAbilities': {
+          const applied: string[] = []
+          for (const r of effect.replacements) {
+            if (!hasBaseAbility(t, r.slotAbilityId)) continue
+            applyAbilityStateDeltaToFighter(state, ctx, t, {
+              mode: 'replace',
+              slotAbilityId: r.slotAbilityId,
+              replacement: r.ability,
+              duration: r.duration,
+            }, actor.instanceId, abilityId)
+            applied.push(r.ability.name)
+          }
+          if (applied.length > 0) {
+            makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} transformed: ${applied.join(', ')}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          }
+          break
+        }
         case 'shield':
           applyShieldToFighter(state, ctx, actor, t, effect, abilityId)
           makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.amount} shield.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
@@ -1829,6 +1969,7 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     tickAbilityState(fighter)
     tickCostModifiers(fighter)
     tickEffectImmunities(fighter)
+    tickClassStuns(fighter)
   })
 
   ;(['player', 'enemy'] as BattleTeamId[]).forEach((team) => {
@@ -1855,6 +1996,11 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   if (hasModifierBoolean(state, actor, 'canAct', false, { statusKind: 'stun' })) {
     makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName} is stunned and passed the turn.`, actor.instanceId)
     removeModifiersFromFighter(state, ctx, actor, { statusKind: 'stun' }, actor.instanceId, ability.id)
+    return
+  }
+
+  if (ability.id !== PASS_ABILITY_ID && isAbilityClassStunned(actor, ability)) {
+    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s ${ability.name} is sealed and cannot be used.`, actor.instanceId, undefined, undefined, ability.id)
     return
   }
 
@@ -1930,6 +2076,16 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
   resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.classes)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityResolve', ability)
+
+  const allTargeted = ability.targetRule === 'enemy-all'
+    ? getOpposingTeam(state, actor.team).filter(isAlive)
+    : ability.targetRule === 'ally-all'
+      ? getTeam(state, actor.team).filter(isAlive)
+      : singleTarget && isAlive(singleTarget) ? [singleTarget] : []
+  for (const tgt of allTargeted) {
+    firePassives(state, ctx, tgt, actor, 'onBeingTargeted', ability)
+  }
+
   actor.lastUsedAbilityId = ability.id
   makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
     actorId: actor.instanceId,

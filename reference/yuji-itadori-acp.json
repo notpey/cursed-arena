@@ -46,7 +46,7 @@
       "effects": [
         {
           "type": "effectImmunity",
-          "label": "Ignore Non-Damage",
+          "label": "Sukuna Surge: Ignore Non-Damage",
           "blocks": ["nonDamage"],
           "duration": 1,
           "target": "self"
@@ -71,8 +71,21 @@
             "value": 10,
             "duration": { "kind": "rounds", "rounds": 1 },
             "tags": ["black-flash-chain"],
-            "visible": false,
-            "stacking": "replace"
+            "visible": true,
+            "stacking": "replace",
+            "statusKind": "attackUp"
+          }
+        },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Black Flash Chain Surcharge",
+            "abilityId": "yuji-black-flash",
+            "mode": "increaseRandom",
+            "amount": 1,
+            "duration": 1,
+            "uses": 1
           }
         }
       ]
@@ -92,7 +105,7 @@
     {
       "id": "yuji-divergent-fist",
       "name": "Divergent Fist",
-      "description": "Deals 15 damage, permanently raises Yuji's damage by 5, and makes the next Black Flash cheaper.",
+      "description": "Deals 15 damage, permanently raises Yuji's damage by 5, and makes the next Black Flash cost 1 less random energy.",
       "kind": "attack",
       "targetRule": "enemy-single",
       "classes": ["Melee", "Physical", "Instant"],
@@ -133,7 +146,7 @@
     {
       "id": "yuji-black-flash",
       "name": "Black Flash",
-      "description": "Deals 20 damage. Repeated Black Flash uses gain a temporary damage bonus through the chain passive.",
+      "description": "Deals 20 damage. If used in succession, gains +10 damage but costs 1 additional random energy. This effect ends if Black Flash is not used.",
       "kind": "attack",
       "targetRule": "enemy-single",
       "classes": ["Melee", "Physical", "Instant"],
@@ -141,14 +154,13 @@
       "cooldown": 0,
       "energyCost": { "random": 1 },
       "effects": [
-        { "type": "damage", "power": 20, "target": "inherit" },
-        { "type": "adjustCounter", "key": "black_flash_chain", "amount": 1, "target": "self" }
+        { "type": "damage", "power": 20, "target": "inherit" }
       ]
     },
     {
       "id": "yuji-soul-perception",
       "name": "Soul Perception",
-      "description": "Yuji gains a 25-point shield. While active, the next Black Flash becomes free. If the shield is broken, the breaker takes 15 damage.",
+      "description": "Yuji gains a 25-point shield tagged 'soul-perception'. While this shield is active the next Black Flash costs only random energy. If the shield is broken, the breaker takes 15 damage.",
       "kind": "utility",
       "targetRule": "self",
       "classes": ["Unique", "Mental", "Instant"],
@@ -156,17 +168,23 @@
       "cooldown": 3,
       "energyCost": { "vow": 1 },
       "effects": [
-        { "type": "shield", "amount": 25, "label": "Soul Perception", "tags": ["soul-perception"], "target": "self" },
+        {
+          "type": "shield",
+          "amount": 25,
+          "label": "Soul Perception",
+          "tags": ["soul-perception"],
+          "target": "self"
+        },
         {
           "type": "modifyAbilityCost",
           "target": "self",
           "modifier": {
-            "label": "Soul Perception Flash Discount",
+            "label": "Soul Perception Flash Cost",
             "abilityId": "yuji-black-flash",
             "mode": "set",
-            "cost": {},
-            "duration": 2,
-            "uses": 1
+            "cost": { "random": 1 },
+            "duration": 99,
+            "uses": null
           }
         }
       ]
@@ -178,7 +196,7 @@
     "description": "Yuji becomes invulnerable for 1 turn.",
     "kind": "defend",
     "targetRule": "self",
-    "classes": ["Mental", "Instant"],
+    "classes": ["Mental", "Instant", "Ultimate"],
     "icon": { "label": "TA", "tone": "teal" },
     "cooldown": 4,
     "effects": [

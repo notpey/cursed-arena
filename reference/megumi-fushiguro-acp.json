@@ -1,0 +1,285 @@
+{
+  "id": "megumi",
+  "name": "Megumi Fushiguro",
+  "shortName": "Megumi",
+  "rarity": "SSR",
+  "role": "Controller / Support",
+  "affiliationLabel": "Tokyo Campus",
+  "battleTitle": "Ten Shadows Technique",
+  "bio": "A versatile tactician who layers persistent debuffs, team-wide shields, and unlocks a transformed kit when his domain awakens.",
+  "portraitFrame": {
+    "scale": 2.1,
+    "y": "-12%"
+  },
+  "maxHp": 100,
+  "passiveEffects": [
+    {
+      "label": "Incomplete Domain",
+      "trigger": "whileAlive",
+      "conditions": [
+        { "type": "selfHpBelow", "threshold": 0.4 },
+        { "type": "fighterFlag", "key": "domain_awakened", "value": false }
+      ],
+      "effects": [
+        { "type": "setFlag", "key": "domain_awakened", "value": true, "target": "self" },
+        {
+          "type": "replaceAbilities",
+          "target": "self",
+          "replacements": [
+            {
+              "slotAbilityId": "megumi-toad-rescue",
+              "duration": 9999,
+              "ability": {
+                "id": "megumi-chimera-shadow-garden",
+                "name": "Chimera Shadow Garden",
+                "description": "Megumi opens his incomplete domain for 3 turns. All allies gain 10 shield each turn at round start. Megumi becomes immune to affliction damage during this time.",
+                "kind": "utility",
+                "targetRule": "self",
+                "classes": ["Unique", "Mental", "Instant"],
+                "icon": { "label": "CS", "tone": "gold" },
+                "cooldown": 0,
+                "energyCost": { "random": 1 },
+                "effects": [
+                  { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
+                  {
+                    "type": "schedule",
+                    "delay": 3,
+                    "phase": "roundEnd",
+                    "target": "self",
+                    "effects": [
+                      { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Great Flood Shield",
+      "trigger": "onRoundStart",
+      "conditions": [
+        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
+      ],
+      "effects": [
+        {
+          "type": "shield",
+          "amount": 10,
+          "label": "Great Flood",
+          "tags": ["great-flood"],
+          "target": "all-allies"
+        }
+      ]
+    },
+    {
+      "label": "Great Flood Affliction Ward",
+      "trigger": "onRoundStart",
+      "conditions": [
+        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
+      ],
+      "effects": [
+        {
+          "type": "effectImmunity",
+          "label": "Affliction Ward",
+          "blocks": ["damage"],
+          "duration": 1,
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "label": "Great Flood Cost Trap",
+      "trigger": "onBeingTargeted",
+      "conditions": [
+        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
+      ],
+      "effects": [
+        {
+          "type": "modifyAbilityCost",
+          "target": "inherit",
+          "modifier": {
+            "label": "Great Flood Surcharge",
+            "mode": "increaseRandom",
+            "amount": 1,
+            "duration": 1,
+            "uses": 1
+          }
+        }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "megumi-divine-dogs-hunt",
+      "name": "Divine Dogs: Hunt",
+      "description": "For 2 turns, deal 10 damage to one enemy and they cannot reduce damage or become invulnerable. During Max Elephant: Great Flood, also permanently increases all damage dealt to that target by 5 (stacks).",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Instant"],
+      "icon": { "label": "DD", "tone": "red" },
+      "cooldown": 1,
+      "energyCost": { "random": 1 },
+      "effects": [
+        { "type": "damage", "power": 10, "target": "inherit" },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Divine Dogs: Hunt",
+            "stat": "canReduceDamageTaken",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 2 },
+            "tags": ["divine-dogs-hunt"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Divine Dogs: Hunt",
+            "stat": "canGainInvulnerable",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 2 },
+            "tags": ["divine-dogs-hunt"],
+            "visible": false,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "setFlag",
+          "key": "divine_dogs_hunt_target",
+          "value": true,
+          "target": "inherit"
+        }
+      ]
+    },
+    {
+      "id": "megumi-nue-flank",
+      "name": "Nue: Flank",
+      "description": "Deals 20 damage. If the target has Divine Dogs: Hunt active, their non-Mental skills are stunned for 1 turn. During Max Elephant: Great Flood, also permanently reduces the target's non-affliction damage by 5 (stacks).",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Ranged", "Physical", "Instant"],
+      "icon": { "label": "NF", "tone": "red" },
+      "cooldown": 0,
+      "energyCost": { "random": 2 },
+      "effects": [
+        { "type": "damage", "power": 20, "target": "inherit" },
+        {
+          "type": "classStun",
+          "duration": 1,
+          "blockedClasses": ["Physical", "Energy", "Affliction", "Melee", "Ranged", "Unique"],
+          "target": "inherit"
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Nue: Flank Wound",
+            "stat": "damageDealt",
+            "mode": "flat",
+            "value": -5,
+            "duration": { "kind": "permanent" },
+            "tags": ["nue-flank-wound"],
+            "visible": true,
+            "stacking": "stack",
+            "damageClass": "Physical"
+          }
+        }
+      ]
+    },
+    {
+      "id": "megumi-max-elephant-great-flood",
+      "name": "Max Elephant: Great Flood",
+      "description": "For the next 3 turns, Megumi and allies gain 10 destructible defense each round and Megumi ignores affliction damage. Any enemy that uses a damaging skill against Megumi has their costs increased by 1 random for 1 turn.",
+      "kind": "utility",
+      "targetRule": "self",
+      "classes": ["Unique", "Mental", "Instant"],
+      "icon": { "label": "ME", "tone": "teal" },
+      "cooldown": 0,
+      "energyCost": { "random": 2 },
+      "effects": [
+        { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
+        {
+          "type": "shield",
+          "amount": 10,
+          "label": "Great Flood",
+          "tags": ["great-flood"],
+          "target": "all-allies"
+        },
+        {
+          "type": "schedule",
+          "delay": 3,
+          "phase": "roundEnd",
+          "target": "self",
+          "effects": [
+            { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "megumi-toad-rescue",
+      "name": "Toad: Rescue",
+      "description": "Makes Megumi or an ally invulnerable for 1 turn. If used on an ally, Megumi also ignores stun effects for 1 turn.",
+      "kind": "defend",
+      "targetRule": "ally-single",
+      "classes": ["Unique", "Mental", "Instant"],
+      "icon": { "label": "TR", "tone": "teal" },
+      "cooldown": 0,
+      "energyCost": { "vow": 1 },
+      "effects": [
+        { "type": "invulnerable", "duration": 1, "target": "inherit" },
+        {
+          "type": "addModifier",
+          "target": "self",
+          "modifier": {
+            "label": "Toad: Rescue Stun Ward",
+            "stat": "canAct",
+            "mode": "set",
+            "value": true,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["toad-rescue-ward"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "megumi-domain-expansion",
+    "name": "Chimera Shadow Garden",
+    "description": "Megumi opens his incomplete domain. For 3 turns all allies gain 10 shield at each round start, Megumi ignores affliction damage, and any enemy that attacks Megumi has their costs raised by 1 random energy for 1 turn.",
+    "kind": "utility",
+    "targetRule": "self",
+    "classes": ["Unique", "Mental", "Instant", "Ultimate"],
+    "icon": { "label": "CS", "tone": "gold" },
+    "cooldown": 4,
+    "effects": [
+      { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
+      {
+        "type": "shield",
+        "amount": 10,
+        "label": "Great Flood",
+        "tags": ["great-flood"],
+        "target": "all-allies"
+      },
+      {
+        "type": "schedule",
+        "delay": 3,
+        "phase": "roundEnd",
+        "target": "self",
+        "effects": [
+          { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
+        ]
+      }
+    ]
+  }
+}

@@ -20,6 +20,7 @@ export const passiveTriggerOrder: PassiveTrigger[] = [
   'onDefeat',
   'onDefeatEnemy',
   'onTargetBelow',
+  'onBeingTargeted',
 ]
 
 export function cloneAbilityTemplate(ability: BattleAbilityTemplate): BattleAbilityTemplate {
@@ -53,6 +54,11 @@ export function cloneSkillEffect(effect: SkillEffect): SkillEffect {
       return {
         ...effect,
         ability: cloneAbilityTemplate(effect.ability),
+      }
+    case 'replaceAbilities':
+      return {
+        ...effect,
+        replacements: effect.replacements.map((r) => ({ ...r, ability: cloneAbilityTemplate(r.ability) })),
       }
     case 'modifyAbilityState':
       return {

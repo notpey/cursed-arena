@@ -8,6 +8,7 @@ import type {
   BattleModifierStat,
   BattleModifierTemplate,
   BattleModifierValue,
+  BattleSkillDamageType,
   BattleState,
   BattleStatuses,
   BattleStatus,
@@ -59,7 +60,7 @@ function mergeValue(current: BattleModifierValue, next: BattleModifierValue) {
   return next
 }
 
-function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'targetId' | 'label' | 'stat' | 'mode' | 'statusKind' | 'tags'>) {
+function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'targetId' | 'label' | 'stat' | 'mode' | 'statusKind' | 'tags' | 'damageClass'>) {
   return [
     modifier.scope,
     modifier.targetId ?? 'global',
@@ -67,6 +68,7 @@ function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'target
     modifier.stat,
     modifier.mode,
     modifier.statusKind ?? 'none',
+    modifier.damageClass ?? 'any',
     [...modifier.tags].sort().join('|'),
   ].join('::')
 }
@@ -114,6 +116,7 @@ export function cloneModifiers(modifiers: BattleModifierInstance[]): BattleModif
     ...modifier,
     duration: cloneModifierDuration(modifier.duration),
     tags: [...modifier.tags],
+    damageClass: modifier.damageClass,
   }))
 }
 
@@ -146,6 +149,7 @@ export function createModifierInstance(
     visible: template.visible ?? Boolean(template.statusKind),
     stacking: template.stacking ?? 'max',
     statusKind: template.statusKind,
+    damageClass: template.damageClass,
   }
 }
 
@@ -187,6 +191,48 @@ export function modifierMatchesFilter(modifier: BattleModifierInstance, filter: 
   if (filter.statusKind && modifier.statusKind !== filter.statusKind) return false
   if ((filter.tags ?? []).some((tag) => !modifier.tags.includes(tag))) return false
   return true
+}
+
+export function sumNumericModifierValuesForClass(
+  modifiers: BattleModifierInstance[],
+  stat: BattleModifierStat,
+  mode: Exclude<BattleModifierMode, 'set'>,
+  incomingClass: BattleSkillDamageType | undefined,
+  filter: { tags?: string[]; statusKind?: BattleStatusKind } = {},
+) {
+  return modifiers.reduce((total, modifier) => {
+    if (modifier.stat !== stat || modifier.mode !== mode || typeof modifier.value !== 'number') return total
+    if (modifier.damageClass && modifier.damageClass !== incomingClass) return total
+    if (filter.statusKind && modifier.statusKind !== filter.statusKind) return total
+    if ((filter.tags ?? []).some((tag) => !modifier.tags.includes(tag))) return total
+    return total + modifier.value
+  }, 0)
+}
+
+export function getNumericModifierMultiplierForClass(
+  modifiers: BattleModifierInstance[],
+  stat: BattleModifierStat,
+  incomingClass: BattleSkillDamageType | undefined,
+  filter: { tags?: string[]; statusKind?: BattleStatusKind } = {},
+) {
+  return modifiers.reduce((total, modifier) => {
+    if (modifier.stat !== stat || modifier.mode !== 'multiplier' || typeof modifier.value !== 'number') return total
+    if (modifier.damageClass && modifier.damageClass !== incomingClass) return total
+    if (filter.statusKind && modifier.statusKind !== filter.statusKind) return total
+    if ((filter.tags ?? []).some((tag) => !modifier.tags.includes(tag))) return total
+    return total * modifier.value
+  }, 1)
+}
+
+export function hasBooleanModifierForStat(
+  modifiers: BattleModifierInstance[],
+  stat: BattleModifierStat,
+  expected: boolean,
+) {
+  return modifiers.some((modifier) => {
+    if (modifier.stat !== stat || modifier.mode !== 'set' || typeof modifier.value !== 'boolean') return false
+    return modifier.value === expected
+  })
 }
 
 export function removeModifiers(modifiers: BattleModifierInstance[], filter: BattleModifierFilter) {

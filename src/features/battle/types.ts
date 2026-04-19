@@ -59,7 +59,7 @@ export type BattleAbilityTemplate = {
   statusPower?: number
 }
 
-export type BattleCostModifierMode = 'set' | 'reduceTyped' | 'reduceRandom'
+export type BattleCostModifierMode = 'set' | 'reduceTyped' | 'reduceRandom' | 'increaseRandom' | 'increaseTyped'
 
 export type BattleCostModifierTemplate = {
   label: string
@@ -167,6 +167,8 @@ export type BattleModifierStat =
   | 'dotDamage'
   | 'canAct'
   | 'isInvulnerable'
+  | 'canGainInvulnerable'
+  | 'canReduceDamageTaken'
 
 export type BattleModifierMode = 'flat' | 'percentAdd' | 'multiplier' | 'set'
 
@@ -195,6 +197,8 @@ export type BattleModifierTemplate = {
   visible?: boolean
   stacking?: BattleModifierStacking
   statusKind?: BattleStatusKind
+  /** When set on damageTaken modifiers, only applies to damage from abilities with this class */
+  damageClass?: BattleSkillDamageType
 }
 
 export type BattleModifierFilter = {
@@ -222,6 +226,17 @@ export type BattleModifierInstance = {
   visible: boolean
   stacking: BattleModifierStacking
   statusKind?: BattleStatusKind
+  /** When set on damageTaken modifiers, only applies to damage from abilities with this class */
+  damageClass?: BattleSkillDamageType
+}
+
+export type BattleClassStunState = {
+  id: string
+  label: string
+  blockedClasses: BattleSkillClass[]
+  remainingRounds: number
+  sourceActorId?: string
+  sourceAbilityId?: string
 }
 
 export type BattleReactionCondition =
@@ -285,6 +300,8 @@ export type BattleFighterState = {
   stateFlags: Record<string, boolean>
   stateCounters: Record<string, number>
   lastUsedAbilityId: string | null
+  classStuns: BattleClassStunState[]
+  lastAttackerId: string | null
 }
 
 export type BattlefieldEffect = {
@@ -445,14 +462,16 @@ export type BattleTimelineResult = {
   steps: BattleTimelineStep[]
 }
 
-export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies'
+export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'attacker'
 
 export type SkillEffect =
   | { type: 'damage'; power: number; target: EffectTarget }
+  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget }
   | { type: 'heal'; power: number; target: EffectTarget }
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
   | { type: 'stun'; duration: number; target: EffectTarget }
+  | { type: 'classStun'; duration: number; blockedClasses: BattleSkillClass[]; target: EffectTarget }
   | { type: 'mark'; bonus: number; duration: number; target: EffectTarget }
   | { type: 'burn'; damage: number; duration: number; target: EffectTarget }
   | { type: 'cooldownReduction'; amount: number; target: EffectTarget }
@@ -465,6 +484,7 @@ export type SkillEffect =
   | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
   | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget }
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
+  | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
   | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
 
@@ -480,6 +500,7 @@ export type PassiveTrigger =
   | 'onDefeatEnemy'
   | 'whileAlive'
   | 'onTargetBelow'
+  | 'onBeingTargeted'
 
 export type PassiveEffect = {
   trigger: PassiveTrigger

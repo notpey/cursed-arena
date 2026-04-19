@@ -1,0 +1,227 @@
+{
+  "id": "nobara",
+  "name": "Nobara Kugisaki",
+  "shortName": "Nobara",
+  "rarity": "SR",
+  "role": "Debuffer / Punisher",
+  "affiliationLabel": "Tokyo Campus",
+  "battleTitle": "Straw Doll Technique",
+  "bio": "A ranged debuffer who stacks Cursed Nails on enemies and detonates them with Resonance for scaling burst damage.",
+  "portraitFrame": {
+    "scale": 2.0,
+    "y": "-8%"
+  },
+  "maxHp": 100,
+  "passiveEffects": [
+    {
+      "label": "Straw Doll Technique",
+      "trigger": "onBeingTargeted",
+      "conditions": [
+        { "type": "targetHasStatus", "status": "cursedNails" }
+      ],
+      "effects": [
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Cursed Nail Penalty",
+            "stat": "damageDealt",
+            "mode": "flat",
+            "value": -5,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["cursed-nail-penalty"],
+            "visible": false,
+            "stacking": "replace",
+            "damageClass": "Physical"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Straw Doll Resonance Trigger",
+      "trigger": "onBeingTargeted",
+      "conditions": [
+        { "type": "counterAtLeast", "key": "cursed_nails_attacker", "value": 3 }
+      ],
+      "effects": [
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Resonance",
+            "stat": "damageTaken",
+            "mode": "flat",
+            "value": 5,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["resonance-debuff"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Hairpin Reactive Nail",
+      "trigger": "onBeingTargeted",
+      "conditions": [
+        { "type": "fighterFlag", "key": "hairpin_active", "value": true }
+      ],
+      "effects": [
+        {
+          "type": "adjustCounter",
+          "key": "cursed_nails",
+          "amount": 1,
+          "target": "inherit"
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Cursed Nails",
+            "stat": "damageTaken",
+            "mode": "flat",
+            "value": 0,
+            "duration": { "kind": "permanent" },
+            "tags": ["cursed-nails"],
+            "visible": true,
+            "stacking": "stack",
+            "statusKind": "mark"
+          }
+        }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "nobara-cursed-nails",
+      "name": "Cursed Nails",
+      "description": "Deals 5 damage and marks the target with a Cursed Nails stack permanently. Hairpin Technique lasts an additional turn. Resonance deals +5 damage per stack on the target.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Ranged", "Physical", "Instant"],
+      "icon": { "label": "CN", "tone": "red" },
+      "cooldown": 0,
+      "energyCost": { "physical": 1 },
+      "effects": [
+        { "type": "damage", "power": 5, "target": "inherit" },
+        {
+          "type": "adjustCounter",
+          "key": "cursed_nails",
+          "amount": 1,
+          "target": "inherit"
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Cursed Nails",
+            "stat": "damageTaken",
+            "mode": "flat",
+            "value": 0,
+            "duration": { "kind": "permanent" },
+            "tags": ["cursed-nails"],
+            "visible": true,
+            "stacking": "stack",
+            "statusKind": "mark"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nobara-hairpin-technique",
+      "name": "Hairpin Technique",
+      "description": "For 1 turn, any enemy that uses a harmful skill will have Cursed Nails applied to them. Enemies hit by this technique cannot reduce damage or become invulnerable for 1 turn.",
+      "kind": "debuff",
+      "targetRule": "enemy-all",
+      "classes": ["Ranged", "Physical", "Action"],
+      "icon": { "label": "HP", "tone": "red" },
+      "cooldown": 2,
+      "energyCost": { "random": 1 },
+      "effects": [
+        {
+          "type": "setFlag",
+          "key": "hairpin_active",
+          "value": true,
+          "target": "self"
+        },
+        {
+          "type": "addModifier",
+          "target": "all-enemies",
+          "modifier": {
+            "label": "Cannot Reduce Damage",
+            "stat": "canReduceDamageTaken",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["hairpin-lock"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "addModifier",
+          "target": "all-enemies",
+          "modifier": {
+            "label": "Cannot Become Invulnerable",
+            "stat": "canGainInvulnerable",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 1 },
+            "tags": ["hairpin-lock"],
+            "visible": false,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "schedule",
+          "delay": 1,
+          "phase": "roundEnd",
+          "target": "self",
+          "effects": [
+            { "type": "setFlag", "key": "hairpin_active", "value": false, "target": "self" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nobara-resonance",
+      "name": "Resonance",
+      "description": "Deals 10 damage per Cursed Nails stack on the target and removes all stacks. If the target had 2 or more stacks, their non-Strategic skills are stunned for 1 turn.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Instant"],
+      "icon": { "label": "RE", "tone": "red" },
+      "cooldown": 2,
+      "energyCost": { "random": 1, "physical": 1 },
+      "effects": [
+        {
+          "type": "damageScaledByCounter",
+          "counterKey": "cursed_nails",
+          "powerPerStack": 10,
+          "consumeStacks": true,
+          "modifierTag": "cursed-nails",
+          "target": "inherit"
+        },
+        {
+          "type": "classStun",
+          "duration": 1,
+          "blockedClasses": ["Physical", "Energy", "Mental", "Affliction", "Melee", "Ranged"],
+          "target": "inherit"
+        }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "nobara-straw-doll-decoy",
+    "name": "Straw Doll Decoy",
+    "description": "Nobara becomes invulnerable for 1 turn.",
+    "kind": "defend",
+    "targetRule": "self",
+    "classes": ["Mental", "Instant", "Ultimate"],
+    "icon": { "label": "SD", "tone": "teal" },
+    "cooldown": 4,
+    "effects": [
+      { "type": "invulnerable", "duration": 1, "target": "self" }
+    ]
+  }
+}
