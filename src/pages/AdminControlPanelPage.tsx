@@ -8,7 +8,6 @@ import {
 } from '@/features/battle/data'
 import {
   clearDraftBattleContent,
-  clearPublishedBattleContent,
   createContentSnapshot,
   publishBattleContent,
   readDraftBattleContent,
