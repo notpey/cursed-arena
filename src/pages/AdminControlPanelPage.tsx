@@ -1117,6 +1117,15 @@ export function AdminControlPanelPage() {
                 <StatusPill label={validationReport.errors.length > 0 ? 'VALIDATION BLOCKED' : 'READY TO PUBLISH'} tone={validationReport.errors.length > 0 ? 'red' : 'teal'} />
                 {statusFlash ? <StatusPill label={statusFlash} tone="frost" /> : null}
               </div>
+              {validationReport.errors.length > 0 ? (
+                <ul className="mt-2 space-y-1">
+                  {validationReport.errors.map((err, i) => (
+                    <li key={i} className="ca-mono-label text-[0.48rem] text-ca-red">
+                      {'› '}{err}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
