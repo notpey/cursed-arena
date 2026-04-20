@@ -1,0 +1,208 @@
+{
+  "id": "inumaki",
+  "name": "Toge Inumaki",
+  "shortName": "Inumaki",
+  "rarity": "R",
+  "role": "Specialist / Controller",
+  "affiliationLabel": "Tokyo Campus",
+  "battleTitle": "Cursed Speech User",
+  "bio": "A specialist who curses enemies into vulnerability and punishes them with amplified Invocations, at the cost of self-inflicted affliction damage.",
+  "portraitFrame": {
+    "scale": 2.0,
+    "y": "-10%"
+  },
+  "maxHp": 100,
+  "passiveEffects": [
+    {
+      "label": "Cursed Speech",
+      "description": "Each turn while alive, Inumaki applies a Cursed Speech mark to a random enemy (stacks). Invocation: Blast Away and Invocation: Sleep last 1 additional turn on marked targets per stack. Each time Inumaki uses an Invocation skill, he takes 5 affliction damage at the start of his next 2 turns (stacks independently).",
+      "icon": { "label": "CS", "tone": "teal" },
+      "trigger": "onRoundStart",
+      "effects": [
+        {
+          "type": "adjustCounter",
+          "key": "cursed_speech",
+          "amount": 1,
+          "target": "random-enemy"
+        },
+        {
+          "type": "addModifier",
+          "target": "random-enemy",
+          "modifier": {
+            "label": "Cursed Speech",
+            "stat": "damageTaken",
+            "mode": "flat",
+            "value": 0,
+            "duration": { "kind": "permanent" },
+            "tags": ["cursed-speech"],
+            "visible": true,
+            "stacking": "stack",
+            "statusKind": "mark"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Cursed Speech: Invocation Toll",
+      "trigger": "onAbilityUse",
+      "conditions": [
+        { "type": "abilityClass", "class": "Invocation" }
+      ],
+      "effects": [
+        {
+          "type": "schedule",
+          "delay": 1,
+          "phase": "roundStart",
+          "target": "self",
+          "effects": [
+            { "type": "damage", "power": 5, "target": "self" }
+          ]
+        },
+        {
+          "type": "schedule",
+          "delay": 2,
+          "phase": "roundStart",
+          "target": "self",
+          "effects": [
+            { "type": "damage", "power": 5, "target": "self" }
+          ]
+        }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "inumaki-blast-away",
+      "name": "Invocation: Blast Away",
+      "description": "Deals 15 damage to all enemies affected by Cursed Speech. They cannot reduce damage or become invulnerable for 1 turn. The following turn, this skill may be used again to deal 15 damage to all Cursed Speech targets for 1 turn.",
+      "kind": "attack",
+      "targetRule": "enemy-all",
+      "classes": ["Energy", "Ranged", "Action", "Invocation"],
+      "icon": { "label": "BA", "tone": "red" },
+      "cooldown": 0,
+      "energyCost": { "random": 1 },
+      "effects": [
+        {
+          "type": "damageFiltered",
+          "power": 15,
+          "requiresModifierTag": "cursed-speech",
+          "target": "all-enemies"
+        },
+        {
+          "type": "addModifier",
+          "target": "all-enemies",
+          "modifier": {
+            "label": "Blast Away: Exposed",
+            "stat": "canReduceDamageTaken",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 2 },
+            "tags": ["blast-away-exposed"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "addModifier",
+          "target": "all-enemies",
+          "modifier": {
+            "label": "Blast Away: Exposed",
+            "stat": "canGainInvulnerable",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 2 },
+            "tags": ["blast-away-exposed"],
+            "visible": false,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Blast Away: Follow-Up",
+            "abilityId": "inumaki-blast-away",
+            "mode": "set",
+            "cost": { "random": 1 },
+            "duration": 1,
+            "uses": 1
+          }
+        },
+        {
+          "type": "cooldownAdjust",
+          "abilityId": "inumaki-blast-away",
+          "amount": 0,
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "id": "inumaki-sleep",
+      "name": "Invocation: Sleep",
+      "description": "Stuns all enemies affected by Cursed Speech, sealing their non-Strategic skills for 1 turn plus 1 additional turn per Cursed Speech stack on that target. Consumes all Cursed Speech stacks from each affected target.",
+      "kind": "debuff",
+      "targetRule": "enemy-all",
+      "classes": ["Energy", "Ranged", "Control", "Invocation"],
+      "icon": { "label": "SL", "tone": "red" },
+      "cooldown": 3,
+      "energyCost": { "random": 1, "physical": 1 },
+      "effects": [
+        {
+          "type": "classStunScaledByCounter",
+          "counterKey": "cursed_speech",
+          "baseDuration": 1,
+          "durationPerStack": 1,
+          "consumeStacks": true,
+          "modifierTag": "cursed-speech",
+          "blockedClasses": ["Physical", "Energy", "Affliction", "Melee", "Ranged", "Action", "Invocation"],
+          "target": "all-enemies"
+        }
+      ]
+    },
+    {
+      "id": "inumaki-throat-spray",
+      "name": "Throat Spray",
+      "description": "Inumaki heals 10 HP and becomes immune to affliction damage for 2 turns. This effect ends early if Inumaki uses Invocation: Blast Away or Invocation: Sleep.",
+      "kind": "defend",
+      "targetRule": "self",
+      "classes": ["Strategic", "Instant"],
+      "icon": { "label": "TS", "tone": "teal" },
+      "cooldown": 3,
+      "energyCost": { "random": 1 },
+      "effects": [
+        { "type": "heal", "power": 10, "target": "self" },
+        { "type": "setFlag", "key": "throat_spray_active", "value": true, "target": "self" },
+        {
+          "type": "effectImmunity",
+          "label": "Throat Spray",
+          "blocks": ["damage"],
+          "duration": 2,
+          "target": "self"
+        },
+        {
+          "type": "schedule",
+          "delay": 2,
+          "phase": "roundEnd",
+          "target": "self",
+          "effects": [
+            { "type": "setFlag", "key": "throat_spray_active", "value": false, "target": "self" }
+          ]
+        }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "inumaki-salmon-flakes",
+    "name": "Salmon Flakes",
+    "description": "Makes Toge Inumaki invulnerable for 1 turn.",
+    "kind": "defend",
+    "targetRule": "self",
+    "classes": ["Strategic", "Instant", "Ultimate"],
+    "icon": { "label": "SF", "tone": "teal" },
+    "cooldown": 4,
+    "energyCost": { "random": 1 },
+    "effects": [
+      { "type": "invulnerable", "duration": 1, "target": "self" }
+    ]
+  }
+}
