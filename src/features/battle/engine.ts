@@ -491,10 +491,12 @@ function createEffectImmunityState(
   }
 }
 
+const damageEffectTypes = new Set(['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield'])
+
 function isEffectBlocked(target: BattleFighterState, effect: SkillEffect) {
   return target.effectImmunities.some((immunity) =>
-    immunity.blocks.includes(effect.type)
-    || (effect.type !== 'damage' && effect.type !== 'damageScaledByCounter' && immunity.blocks.includes('nonDamage')),
+    (immunity.blocks as string[]).includes(effect.type)
+    || (!damageEffectTypes.has(effect.type) && immunity.blocks.includes('nonDamage')),
   )
 }
 
