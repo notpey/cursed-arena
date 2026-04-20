@@ -1307,6 +1307,14 @@ function resolveEffectTargets(
       const attacker = getFighterById(state, attackerId)
       return attacker && isAlive(attacker) ? [attacker] : []
     }
+    case 'random-enemy': {
+      const alive = enemies.filter(isAlive)
+      if (alive.length === 0) return []
+      const seed = state ? `${state.battleSeed}:random-enemy:${state.round}` : String(Math.random())
+      const rng = createSeededRandom(seed)
+      const index = Math.floor(rng() * alive.length)
+      return [alive[index]]
+    }
     default:
       return selectedTarget ? [selectedTarget] : []
   }
@@ -2145,6 +2153,30 @@ function resolveEffects(
           applyDamagePacket(state, ctx, packetActor, packetTarget, packet, effect)
           break
         }
+        case 'damageFiltered': {
+          const hasTag = getFighterModifierPool(state, effectTarget).some((m) => m.tags.includes(effect.requiresTag))
+          if (!hasTag) break
+          const isPiercing = effect.piercing ?? false
+          const amount = calculateDamage(state, effectActor, effectTarget, effect.power, isUlt, isPiercing, abilityId, abilityClasses)
+          const packet: BattleDamagePacket = {
+            kind: 'damage',
+            sourceActorId: effectActor.instanceId,
+            targetId: effectTarget.instanceId,
+            abilityId,
+            baseAmount: effect.power,
+            amount,
+            damageType: 'normal',
+            tags: abilityClasses ?? [],
+            flags: {
+              isUltimate: isUlt,
+              isPiercing,
+              cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
+              cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
+            },
+          }
+          applyDamagePacket(state, ctx, effectActor, effectTarget, packet, effect)
+          break
+        }
         case 'energyGain': {
           const currentPool = getEnergyPool(state, effectTarget.team)
           const { pool: nextPool, gained } = gainEnergyPool(
@@ -2324,6 +2356,27 @@ function resolveEffects(
             abilityId,
             meta: { label: 'Class Stun', stat: 'classStun', mode: 'set', scope: 'fighter', status: null },
           })
+          break
+        }
+        case 'classStunScaledByCounter': {
+          const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
+          const duration = effect.baseDuration + stackCount * effect.durationPerStack
+          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, target: effect.target }))
+          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${duration} turn${duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, duration, abilityId)
+          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
+            actorId: effectActor.instanceId,
+            targetId: effectTarget.instanceId,
+            team: effectTarget.team,
+            abilityId,
+            meta: { label: 'Class Stun', stat: 'classStun', mode: 'set', scope: 'fighter', status: null },
+          })
+          if (effect.consumeStacks) {
+            effectTarget.stateCounters[effect.counterKey] = 0
+            emitCounterChange(ctx, state.round, effectTarget, effect.counterKey, 0, effectActor.instanceId, abilityId)
+            if (effect.modifierTag) {
+              removeModifiersFromFighter(state, ctx, effectTarget, { tags: [effect.modifierTag] }, effectActor.instanceId, abilityId)
+            }
+          }
           break
         }
         case 'invulnerable': {

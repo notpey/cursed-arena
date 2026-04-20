@@ -121,7 +121,9 @@ function validateSkillEffect(
   switch (effect.type) {
     case 'damage':
     case 'heal':
+    case 'damageFiltered':
       if (effect.power <= 0) pushIssue(issues, scope, `${effect.type} power must be positive`)
+      if (effect.type === 'damageFiltered' && !effect.requiresTag.trim()) pushIssue(issues, scope, 'damageFiltered requiresTag is required')
       return
     case 'energyGain':
     case 'energyDrain':
@@ -236,6 +238,12 @@ function validateSkillEffect(
     case 'classStun':
       if (effect.duration <= 0) pushIssue(issues, scope, 'classStun duration must be positive')
       if (effect.blockedClasses.length === 0) pushIssue(issues, scope, 'classStun requires at least one blocked class')
+      return
+    case 'classStunScaledByCounter':
+      if (!effect.counterKey.trim()) pushIssue(issues, scope, 'classStunScaledByCounter counterKey is required')
+      if (effect.baseDuration < 0) pushIssue(issues, scope, 'classStunScaledByCounter baseDuration cannot be negative')
+      if (effect.durationPerStack <= 0) pushIssue(issues, scope, 'classStunScaledByCounter durationPerStack must be positive')
+      if (effect.blockedClasses.length === 0) pushIssue(issues, scope, 'classStunScaledByCounter requires at least one blocked class')
       return
     case 'replaceAbilities':
       if (effect.replacements.length === 0) pushIssue(issues, scope, 'replaceAbilities requires at least one replacement entry')

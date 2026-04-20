@@ -42,9 +42,9 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'heal', 'invulnerable', 'attackUp', 'stun', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility']
+const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'heal', 'invulnerable', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
 const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
-const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies']
+const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'random-enemy']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const modifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
@@ -54,6 +54,7 @@ const costModifierModes = ['set', 'reduceTyped', 'reduceRandom'] as const
 
 const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string }> = {
   damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
+  damageFiltered: { label: 'Filtered Damage', hint: 'Deals damage only to targets that carry a specific modifier tag.' },
   heal: { label: 'Heal', hint: 'Restore HP to allies or self.' },
   invulnerable: { label: 'Invulnerable', hint: 'Ignore incoming damage for a duration.' },
   attackUp: { label: 'Attack Up', hint: 'Flat outgoing damage increase.' },
@@ -82,6 +83,7 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
   damageScaledByCounter: { label: 'Counter-Scaled Damage', hint: 'Deal damage multiplied by a named counter value, optionally consuming stacks.' },
   classStun: { label: 'Class Stun', hint: 'Seal abilities of specific skill classes for a duration.' },
+  classStunScaledByCounter: { label: 'Counter-Scaled Class Stun', hint: 'Seal ability classes for a duration scaled by a named counter, optionally consuming stacks.' },
   replaceAbilities: { label: 'Replace Abilities (Batch)', hint: 'Swap multiple ability slots at once from a single effect.' },
 }
 
@@ -331,6 +333,10 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       }
     case 'classStun':
       return { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Melee'], target: 'inherit' }
+    case 'damageFiltered':
+      return { type: 'damageFiltered', power: 15, requiresTag: 'modifier-tag', target: 'inherit', piercing: false, cannotBeCountered: false, cannotBeReflected: false }
+    case 'classStunScaledByCounter':
+      return { type: 'classStunScaledByCounter', counterKey: 'state-counter', baseDuration: 1, durationPerStack: 1, consumeStacks: true, blockedClasses: ['Physical', 'Melee'], target: 'inherit' }
     case 'replaceAbilities':
       return {
         type: 'replaceAbilities',
@@ -490,6 +496,10 @@ function describeEffect(effect: SkillEffect) {
       return `Deals ${effect.powerPerStack} damage per stack of ${effect.counterKey} to ${formatEffectTarget(effect.target)}${effect.consumeStacks ? ', consuming all stacks' : ''}${effect.piercing ? ', piercing' : ''}${effect.cannotBeCountered ? ', cannot be countered' : ''}${effect.cannotBeReflected ? ', cannot be reflected' : ''}.`
     case 'classStun':
       return `Seals ${effect.blockedClasses.join('/')} techniques on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`
+    case 'damageFiltered':
+      return `Deals ${effect.power} damage to ${formatEffectTarget(effect.target)} only if they carry the modifier tag "${effect.requiresTag}"${effect.piercing ? ' (piercing)' : ''}${effect.cannotBeCountered ? ', cannot be countered' : ''}${effect.cannotBeReflected ? ', cannot be reflected' : ''}.`
+    case 'classStunScaledByCounter':
+      return `Seals ${effect.blockedClasses.join('/')} on ${formatEffectTarget(effect.target)} for ${effect.baseDuration} + (${effect.durationPerStack} × ${effect.counterKey}) turns${effect.consumeStacks ? ', consuming all stacks' : ''}${effect.modifierTag ? `, removes "${effect.modifierTag}" modifiers` : ''}.`
     case 'replaceAbilities':
       return `Replaces ${effect.replacements.length} ability slot${effect.replacements.length === 1 ? '' : 's'} on ${formatEffectTarget(effect.target)}.`
   }
@@ -2403,6 +2413,16 @@ function EffectRowEditor({
         ) : null}
         {effect.type === 'replaceAbility' ? <InputField label="Slot Ability ID" value={effect.slotAbilityId} onChange={(value) => onChange({ ...effect, slotAbilityId: value })} /> : null}
         {effect.type === 'replaceAbility' ? <NumberField label="Duration (rounds)" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
+        {effect.type === 'damageFiltered' ? <NumberField label="Damage" value={effect.power} onChange={(value) => onChange({ ...effect, power: value })} /> : null}
+        {effect.type === 'damageFiltered' ? <InputField label="Requires Modifier Tag" value={effect.requiresTag} onChange={(value) => onChange({ ...effect, requiresTag: value })} /> : null}
+        {effect.type === 'damageFiltered' ? <SelectField label="Piercing" value={effect.piercing ? 'true' : 'false'} options={[{ value: 'false', label: 'FALSE' }, { value: 'true', label: 'TRUE' }]} onChange={(value) => onChange({ ...effect, piercing: value === 'true' })} /> : null}
+        {effect.type === 'damageFiltered' ? <SelectField label="Cannot Be Countered" value={effect.cannotBeCountered ? 'true' : 'false'} options={[{ value: 'false', label: 'FALSE' }, { value: 'true', label: 'TRUE' }]} onChange={(value) => onChange({ ...effect, cannotBeCountered: value === 'true' })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <InputField label="Counter Key" value={effect.counterKey} onChange={(value) => onChange({ ...effect, counterKey: value })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <NumberField label="Base Duration" value={effect.baseDuration} onChange={(value) => onChange({ ...effect, baseDuration: value })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <NumberField label="Duration Per Stack" value={effect.durationPerStack} onChange={(value) => onChange({ ...effect, durationPerStack: value })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <SelectField label="Consume Stacks" value={effect.consumeStacks ? 'true' : 'false'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, consumeStacks: value === 'true' })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <InputField label="Modifier Tag (Optional)" value={effect.modifierTag ?? ''} onChange={(value) => onChange({ ...effect, modifierTag: value || undefined })} /> : null}
+        {effect.type === 'classStunScaledByCounter' ? <InputField label="Blocked Classes CSV" value={formatCsvList(effect.blockedClasses)} onChange={(value) => onChange({ ...effect, blockedClasses: parseCsvList(value) as BattleSkillClass[] })} /> : null}
       </div>
       <p className="mt-3 text-sm leading-6 text-ca-text-2">{describeEffect(effect)}</p>
       {effect.type === 'modifyAbilityState' && effect.delta.mode === 'replace' ? (

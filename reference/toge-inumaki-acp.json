@@ -85,7 +85,7 @@
         {
           "type": "damageFiltered",
           "power": 15,
-          "requiresModifierTag": "cursed-speech",
+          "requiresTag": "cursed-speech",
           "target": "all-enemies"
         },
         {

@@ -494,10 +494,11 @@ export type BattleTimelineResult = {
   steps: BattleTimelineStep[]
 }
 
-export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'attacker'
+export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'attacker' | 'random-enemy'
 
 export type SkillEffect =
   | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'damageFiltered'; power: number; requiresTag: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
   | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
   | { type: 'shieldDamage'; amount: number; tag?: string; target: EffectTarget }
   | { type: 'energyGain'; amount: BattleEnergyCost; target: EffectTarget }
@@ -509,6 +510,7 @@ export type SkillEffect =
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
   | { type: 'stun'; duration: number; target: EffectTarget }
   | { type: 'classStun'; duration: number; blockedClasses: BattleSkillClass[]; target: EffectTarget }
+  | { type: 'classStunScaledByCounter'; counterKey: string; baseDuration: number; durationPerStack: number; consumeStacks: boolean; modifierTag?: string; blockedClasses: BattleSkillClass[]; target: EffectTarget }
   | { type: 'mark'; bonus: number; duration: number; target: EffectTarget }
   | { type: 'burn'; damage: number; duration: number; target: EffectTarget }
   | { type: 'cooldownReduction'; amount: number; target: EffectTarget }
