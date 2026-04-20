@@ -128,12 +128,6 @@
             "uses": 1
           }
         },
-        {
-          "type": "cooldownAdjust",
-          "abilityId": "inumaki-blast-away",
-          "amount": 0,
-          "target": "self"
-        }
       ]
     },
     {

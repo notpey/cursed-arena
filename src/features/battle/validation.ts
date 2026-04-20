@@ -342,10 +342,12 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     pushIssue(issues, scope, 'Ultimate class may only appear on the dedicated fourth slot')
   }
 
-  if (ability.kind === 'attack' && !effects.some((effect) => effect.type === 'damage' || effect.type === 'damageScaledByCounter')) {
+  const damageEffectTypes = ['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield'] as const
+  if (ability.kind === 'attack' && !effects.some((effect) => (damageEffectTypes as readonly string[]).includes(effect.type))) {
     pushIssue(issues, scope, 'attack abilities require at least one damage effect')
   }
-  if (ability.kind === 'heal' && !effects.some((effect) => effect.type === 'heal')) {
+  const healEffectTypes = ['heal', 'overhealToShield'] as const
+  if (ability.kind === 'heal' && !effects.some((effect) => (healEffectTypes as readonly string[]).includes(effect.type))) {
     pushIssue(issues, scope, 'heal abilities require at least one heal effect')
   }
   if (ability.kind !== 'pass' && effects.length === 0) {
