@@ -532,6 +532,18 @@ function applyPassiveBlueprint(passive: PassiveEffect, blueprintId: PassiveBluep
   }
 }
 
+function groupNamedPassives(passiveEffects: PassiveEffect[]): PassiveEffect[] {
+  const seen = new Set<string>()
+  const result: PassiveEffect[] = []
+  for (const p of passiveEffects) {
+    const root = p.label.split(':')[0].trim()
+    if (seen.has(root)) continue
+    seen.add(root)
+    result.push(passiveEffects.find((x) => x.label === root) ?? p)
+  }
+  return result
+}
+
 function describePassive(passive: PassiveEffect) {
   const thresholdText =
     passive.trigger === 'onTargetBelow' && typeof passive.threshold === 'number'
@@ -1724,10 +1736,24 @@ function FighterProfilePreview({ fighter }: { fighter: BattleFighterTemplate }) 
         </div>
       </div>
 
-      {(fighter.passiveEffects ?? []).map((passive, index) => (
-        <div key={`${passive.label}-${index}`} className="rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash px-3 py-3">
-          <p className="ca-mono-label text-[0.42rem] text-ca-teal">PASSIVE - {passive.label.toUpperCase()}</p>
-          <p className="mt-2 text-sm leading-6 text-ca-text-2">{describePassive(passive)}</p>
+      {groupNamedPassives(fighter.passiveEffects ?? []).map((passive) => (
+        <div key={passive.label} className="rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash px-3 py-3">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md border border-ca-teal/20 bg-[rgba(5,216,189,0.08)]">
+              {passive.icon?.src ? (
+                <img src={passive.icon.src} alt={passive.label} className="h-full w-full object-cover" />
+              ) : (
+                <span className="ca-mono-label text-[0.45rem] text-ca-teal">{passive.icon?.label ?? 'P'}</span>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="ca-mono-label text-[0.42rem] text-ca-teal">PASSIVE</p>
+              <p className="font-[var(--font-display-alt)] text-[0.92rem] font-bold text-ca-text">{passive.label}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-ca-text-2">
+            {passive.description ?? describePassive(passive)}
+          </p>
         </div>
       ))}
 
