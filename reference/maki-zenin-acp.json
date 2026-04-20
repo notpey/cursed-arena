@@ -22,6 +22,7 @@
         { "type": "abilityClass", "class": "Attack" }
       ],
       "effects": [
+        { "type": "setFlag", "key": "ironbody_active", "value": true, "target": "self" },
         {
           "type": "effectImmunity",
           "label": "Genetic Ironbody",
@@ -29,6 +30,15 @@
           "allowedEffects": ["stun"],
           "duration": 1,
           "target": "self"
+        },
+        {
+          "type": "schedule",
+          "delay": 1,
+          "phase": "roundEnd",
+          "target": "self",
+          "effects": [
+            { "type": "setFlag", "key": "ironbody_active", "value": false, "target": "self" }
+          ]
         }
       ]
     },
@@ -36,7 +46,7 @@
       "label": "Genetic Ironbody: Stun Detect",
       "trigger": "whileAlive",
       "conditions": [
-        { "type": "actorHasStatus", "status": "Genetic Ironbody" },
+        { "type": "fighterFlag", "key": "ironbody_active", "value": true },
         { "type": "actorHasStatus", "status": "stun" },
         { "type": "fighterFlag", "key": "ironbody_stun_seen", "value": false }
       ],
@@ -116,7 +126,7 @@
           "modifier": {
             "label": "Playful Cloud: Damage Reduction",
             "stat": "damageTaken",
-            "mode": "percent",
+            "mode": "percentAdd",
             "value": -0.5,
             "duration": { "kind": "rounds", "rounds": 3 },
             "tags": ["playful-cloud-reduction"],
