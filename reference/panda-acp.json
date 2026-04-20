@@ -1,0 +1,156 @@
+{
+  "id": "panda",
+  "name": "Panda",
+  "shortName": "Panda",
+  "rarity": "R",
+  "role": "Tank",
+  "affiliationLabel": "Tokyo High-School",
+  "battleTitle": "Cursed Corpse",
+  "bio": "A self-sustaining tank who builds toward Gorilla Mode through accumulated healing and shielding, then becomes immune to non-damage effects and punishes enemies with shield-scaled strikes.",
+  "maxHp": 120,
+  "passiveEffects": [
+    {
+      "label": "Gorilla Mode",
+      "description": "Whenever Panda has gained over 50 cumulative health or destructible defense, he enters Gorilla Mode, granting 50 destructible defense and becoming immune to non-damage harmful effects. Panda exits Gorilla Mode when his destructible defense reaches 0, and is then stunned for 1 turn. The 50 health/defense threshold must be fulfilled again to re-enter.",
+      "icon": { "label": "GM", "tone": "teal" },
+      "trigger": "whileAlive",
+      "conditions": [
+        { "type": "counterAtLeast", "key": "gorilla_mode_progress", "value": 50 },
+        { "type": "fighterFlag", "key": "gorilla_mode_active", "value": false }
+      ],
+      "effects": [
+        {
+          "type": "shield",
+          "amount": 50,
+          "label": "Gorilla Mode",
+          "tags": ["gorilla-mode"],
+          "target": "self"
+        },
+        {
+          "type": "effectImmunity",
+          "label": "Gorilla Mode",
+          "blocks": ["nonDamage"],
+          "duration": 99,
+          "tags": ["gorilla-mode"],
+          "target": "self"
+        },
+        { "type": "setFlag", "key": "gorilla_mode_active", "value": true, "target": "self" },
+        { "type": "resetCounter", "key": "gorilla_mode_progress", "target": "self" }
+      ]
+    },
+    {
+      "label": "Gorilla Mode: Track Heal",
+      "trigger": "onHeal",
+      "conditions": [
+        { "type": "fighterFlag", "key": "gorilla_mode_active", "value": false }
+      ],
+      "effects": [
+        { "type": "adjustCounterByTriggerAmount", "key": "gorilla_mode_progress", "target": "self" }
+      ]
+    },
+    {
+      "label": "Gorilla Mode: Track Shield",
+      "trigger": "onShieldGain",
+      "conditions": [
+        { "type": "fighterFlag", "key": "gorilla_mode_active", "value": false }
+      ],
+      "effects": [
+        { "type": "adjustCounterByTriggerAmount", "key": "gorilla_mode_progress", "target": "self" }
+      ]
+    },
+    {
+      "label": "Gorilla Mode: Exit",
+      "trigger": "onShieldBroken",
+      "conditions": [
+        { "type": "fighterFlag", "key": "gorilla_mode_active", "value": true }
+      ],
+      "effects": [
+        { "type": "stun", "duration": 1, "target": "self" },
+        { "type": "setFlag", "key": "gorilla_mode_active", "value": false, "target": "self" },
+        { "type": "removeEffectImmunity", "filter": { "tag": "gorilla-mode" }, "target": "self" }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "panda-panda-punch",
+      "name": "Panda Punch",
+      "description": "Deals 20 damage to one enemy and grants Panda 10 destructible defense. This destructible defense stacks.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Physical", "Melee", "Instant"],
+      "icon": { "label": "PP", "tone": "teal" },
+      "cooldown": 1,
+      "energyCost": { "physical": 1 },
+      "effects": [
+        { "type": "damage", "power": 20, "target": "inherit" },
+        {
+          "type": "shield",
+          "amount": 10,
+          "label": "Panda Punch",
+          "tags": ["panda-punch"],
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "id": "panda-cursed-energy-reinforcement",
+      "name": "Cursed Energy Reinforcement",
+      "description": "Restores 25 of Panda's health points. If this skill heals Panda past his maximum health, the overheal amount is converted into destructible defense.",
+      "kind": "heal",
+      "targetRule": "self",
+      "classes": ["Strategic", "Instant"],
+      "icon": { "label": "CE", "tone": "teal" },
+      "cooldown": 1,
+      "energyCost": { "random": 1 },
+      "effects": [
+        {
+          "type": "overhealToShield",
+          "power": 25,
+          "shieldLabel": "Reinforcement",
+          "shieldTags": ["reinforcement"],
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "id": "panda-unblockable-drumming-beat",
+      "name": "Unblockable Drumming Beat",
+      "description": "Deals damage to one enemy equal to Panda's current destructible defense. After this skill is used, Panda loses all destructible defense. If Gorilla Mode is active, it will end. This skill cannot be ignored.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Physical", "Melee", "Instant"],
+      "icon": { "label": "DB", "tone": "red" },
+      "cooldown": 4,
+      "energyCost": { "random": 1, "physical": 1 },
+      "cannotBeCountered": true,
+      "cannotBeReflected": true,
+      "effects": [
+        {
+          "type": "damageEqualToActorShield",
+          "target": "inherit",
+          "piercing": false,
+          "cannotBeCountered": true,
+          "cannotBeReflected": true
+        },
+        { "type": "breakShield", "target": "self" },
+        { "type": "setFlag", "key": "gorilla_mode_active", "value": false, "target": "self" },
+        { "type": "removeEffectImmunity", "filter": { "tag": "gorilla-mode" }, "target": "self" }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "panda-animal-instincts",
+    "name": "Animal Instincts",
+    "description": "Makes Panda invulnerable for 1 turn.",
+    "kind": "defend",
+    "targetRule": "self",
+    "classes": ["Strategic", "Instant", "Ultimate"],
+    "icon": { "label": "AI", "tone": "teal" },
+    "cooldown": 4,
+    "energyCost": { "random": 1 },
+    "effects": [
+      { "type": "invulnerable", "duration": 1, "target": "self" }
+    ]
+  }
+}

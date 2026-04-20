@@ -120,6 +120,7 @@ export type BattleEffectImmunityState = {
   label: string
   blocks: BattleEffectImmunityBlock[]
   remainingRounds: number
+  tags?: string[]
   sourceActorId?: string
   sourceAbilityId?: string
 }
@@ -517,9 +518,12 @@ export type SkillEffect =
   | { type: 'damageBoost'; amount: number; target: EffectTarget }
   | { type: 'shield'; amount: number; label?: string; tags?: string[]; target: EffectTarget }
   | { type: 'modifyAbilityCost'; modifier: BattleCostModifierTemplate; target: EffectTarget }
-  | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; target: EffectTarget }
+  | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
+  | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
   | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
   | { type: 'adjustCounter'; key: string; amount: number; target: EffectTarget }
+  | { type: 'adjustCounterByTriggerAmount'; key: string; target: EffectTarget }
+  | { type: 'resetCounter'; key: string; target: EffectTarget }
   | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
   | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget }
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
@@ -529,6 +533,8 @@ export type SkillEffect =
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
   | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
+  | { type: 'overhealToShield'; power: number; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
+  | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
 
 export type PassiveTrigger =
   | 'onDealDamage'
@@ -538,6 +544,8 @@ export type PassiveTrigger =
   | 'onAbilityResolve'
   | 'onTakeDamage'
   | 'onShieldBroken'
+  | 'onHeal'
+  | 'onShieldGain'
   | 'onDefeat'
   | 'onDefeatEnemy'
   | 'whileAlive'

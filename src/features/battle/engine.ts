@@ -485,6 +485,7 @@ function createEffectImmunityState(
     label: effect.label,
     blocks: [...effect.blocks],
     remainingRounds: effect.duration,
+    tags: effect.tags ? [...effect.tags] : undefined,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,
   }
@@ -1187,7 +1188,7 @@ function firePassives(
   }
 
   getTriggeredPassiveEffects(actor, trigger, context).forEach(({ passive, effects }) => {
-    resolveEffects(state, ctx, actor, target, effects, passive.id, ability?.classes)
+    resolveEffects(state, ctx, actor, target, effects, passive.id, ability?.classes, undefined, amount)
   })
 }
 
@@ -1739,6 +1740,8 @@ function applyShieldToFighter(
     label,
     tags,
   })
+  const shieldAbility = abilityId ? getAbilityById(target, abilityId) ?? undefined : undefined
+  firePassives(state, ctx, target, actor, 'onShieldGain', shieldAbility, undefined, effect.amount)
 }
 
 function applyCostModifierToFighter(
@@ -1959,6 +1962,8 @@ function applyHealPacket(
       tags: packet.tags,
       packet: { ...packet, amount: healed },
     })
+    const healAbility = packet.abilityId ? getAbilityById(target, packet.abilityId) ?? undefined : undefined
+    firePassives(state, ctx, target, actor, 'onHeal', healAbility, undefined, healed)
   }
   return healed
 }
@@ -2054,6 +2059,7 @@ function resolveEffects(
   abilityId?: string,
   abilityClasses?: BattleAbilityTemplate['classes'],
   reactionResult?: PreDamageReactionResult,
+  triggerAmount?: number,
 ) {
   const allies = getTeam(state, actor.team).filter(isAlive)
   const enemies = getOpposingTeam(state, actor.team).filter(isAlive)
@@ -2283,6 +2289,32 @@ function resolveEffects(
           )
           break
         }
+        case 'damageEqualToActorShield': {
+          const shieldAmount = effectActor.shield
+            ? (effect.shieldTag ? (effectActor.shield.tags.includes(effect.shieldTag) ? effectActor.shield.amount : 0) : effectActor.shield.amount)
+            : 0
+          if (shieldAmount <= 0) break
+          const isPiercing = effect.piercing ?? false
+          const deAmount = calculateDamage(state, effectActor, effectTarget, shieldAmount, isUlt, isPiercing, abilityId, abilityClasses)
+          const dePacket: BattleDamagePacket = {
+            kind: 'damage',
+            sourceActorId: effectActor.instanceId,
+            targetId: effectTarget.instanceId,
+            abilityId,
+            baseAmount: shieldAmount,
+            amount: deAmount,
+            damageType: 'normal',
+            tags: abilityClasses ?? [],
+            flags: {
+              isUltimate: isUlt,
+              isPiercing,
+              cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
+              cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
+            },
+          }
+          applyDamagePacket(state, ctx, effectActor, effectTarget, dePacket, effect)
+          break
+        }
         case 'damageScaledByCounter': {
           const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
           if (stackCount <= 0) break
@@ -2330,6 +2362,36 @@ function resolveEffects(
             flags: {},
           }
           applyHealPacket(state, ctx, effectActor, effectTarget, packet)
+          break
+        }
+        case 'overhealToShield': {
+          const overhealAmount = calculateHealing(state, effectActor, effectTarget, effect.power, abilityId)
+          const headroom = effectTarget.maxHp - effectTarget.hp
+          const healed = Math.min(headroom, overhealAmount)
+          const overflow = overhealAmount - healed
+          if (healed > 0) {
+            const overhealPacket: BattleHealPacket = {
+              kind: 'heal',
+              sourceActorId: effectActor.instanceId,
+              targetId: effectTarget.instanceId,
+              abilityId,
+              baseAmount: effect.power,
+              amount: healed,
+              tags: abilityClasses ?? [],
+              flags: {},
+            }
+            applyHealPacket(state, ctx, effectActor, effectTarget, overhealPacket)
+          }
+          if (overflow > 0) {
+            applyShieldToFighter(state, ctx, effectActor, effectTarget, {
+              type: 'shield',
+              amount: overflow,
+              label: effect.shieldLabel ?? 'Overheal',
+              tags: effect.shieldTags ?? [],
+              target: effect.target,
+            }, abilityId)
+            makeEvent(ctx, state.round, 'system', 'teal', `${effectTarget.shortName} gained ${overflow} shield from overheal.`, effectActor.instanceId, effectTarget.instanceId, overflow, abilityId)
+          }
           break
         }
         case 'stun':
@@ -2563,6 +2625,18 @@ function resolveEffects(
           applyEffectImmunityToFighter(state, ctx, actor, t, effect, abilityId)
           makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.label}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
+        case 'removeEffectImmunity': {
+          const before = t.effectImmunities.length
+          t.effectImmunities = t.effectImmunities.filter((immunity) => {
+            if (effect.filter.label && immunity.label === effect.filter.label) return false
+            if (effect.filter.tag && immunity.tags?.includes(effect.filter.tag)) return false
+            return true
+          })
+          if (t.effectImmunities.length < before) {
+            makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} lost an effect immunity.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          }
+          break
+        }
         case 'breakShield': {
           if (!effectTarget.shield) break
           if (effect.tag && !effectTarget.shield.tags.includes(effect.tag)) break
@@ -2654,6 +2728,18 @@ function resolveEffects(
         case 'adjustCounter':
           adjustFighterCounter(t, effect.key, effect.amount)
           emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          break
+        case 'adjustCounterByTriggerAmount': {
+          const delta = Math.floor(triggerAmount ?? 0)
+          if (delta > 0) {
+            adjustFighterCounter(t, effect.key, delta)
+            emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          }
+          break
+        }
+        case 'resetCounter':
+          t.stateCounters[effect.key] = 0
+          emitCounterChange(ctx, state.round, t, effect.key, 0, actor.instanceId, abilityId)
           break
         case 'cooldownReduction':
         case 'damageBoost':

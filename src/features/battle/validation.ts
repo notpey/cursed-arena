@@ -122,8 +122,11 @@ function validateSkillEffect(
     case 'damage':
     case 'heal':
     case 'damageFiltered':
+    case 'overhealToShield':
       if (effect.power <= 0) pushIssue(issues, scope, `${effect.type} power must be positive`)
       if (effect.type === 'damageFiltered' && !effect.requiresTag.trim()) pushIssue(issues, scope, 'damageFiltered requiresTag is required')
+      return
+    case 'damageEqualToActorShield':
       return
     case 'energyGain':
     case 'energyDrain':
@@ -192,12 +195,21 @@ function validateSkillEffect(
       if (effect.duration <= 0) pushIssue(issues, scope, 'effectImmunity duration must be positive')
       if (effect.blocks.length === 0) pushIssue(issues, scope, 'effectImmunity requires at least one block rule')
       return
+    case 'removeEffectImmunity':
+      if (!effect.filter.label && !effect.filter.tag) pushIssue(issues, scope, 'removeEffectImmunity requires at least one filter (label or tag)')
+      return
     case 'setFlag':
       if (!effect.key.trim()) pushIssue(issues, scope, 'setFlag key is required')
       return
     case 'adjustCounter':
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounter key is required')
       if (effect.amount === 0) pushIssue(issues, scope, 'adjustCounter amount cannot be zero')
+      return
+    case 'adjustCounterByTriggerAmount':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounterByTriggerAmount key is required')
+      return
+    case 'resetCounter':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'resetCounter key is required')
       return
     case 'addModifier':
       if (!effect.modifier.label.trim()) pushIssue(issues, scope, 'addModifier label is required')
