@@ -266,7 +266,7 @@ function describeSkillEffect(effect: SkillEffect) {
   }
 }
 
-function describePassive(passive: PassiveEffect): CharacterPassive {
+function describePassiveEntry(passive: PassiveEffect): CharacterPassive {
   const triggerLabelMap: Record<PassiveEffect['trigger'], string> = {
     whileAlive: 'While Alive',
     onRoundStart: 'Round Start',
@@ -297,6 +297,16 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     onBeingTargeted: 'When targeted by an enemy, ',
   }
 
+  if (passive.description) {
+    return {
+      label: passive.label,
+      description: passive.description,
+      triggerLabel: triggerLabelMap[passive.trigger],
+      iconSrc: passive.icon?.src,
+      iconLabel: passive.icon?.label,
+    }
+  }
+
   const thresholdPrefix =
     passive.trigger === 'onTargetBelow' && passive.threshold != null
       ? `Against targets below ${Math.round(passive.threshold * 100)}% HP, `
@@ -311,7 +321,28 @@ function describePassive(passive: PassiveEffect): CharacterPassive {
     label: passive.label,
     description: `${thresholdPrefix}${conditionPrefix}${effectText}.`.replace(/^./, (letter) => letter.toUpperCase()),
     triggerLabel: triggerLabelMap[passive.trigger],
+    iconSrc: passive.icon?.src,
+    iconLabel: passive.icon?.label,
   }
+}
+
+function rootPassiveName(label: string): string {
+  return label.split(':')[0].trim()
+}
+
+function groupPassives(passiveEffects: PassiveEffect[]): CharacterPassive[] {
+  const seen = new Set<string>()
+  const result: CharacterPassive[] = []
+  for (const passive of passiveEffects) {
+    const root = rootPassiveName(passive.label)
+    if (seen.has(root)) continue
+    seen.add(root)
+    // Use the root entry (exact name match) as the representative if it exists,
+    // otherwise fall back to the first entry in the group.
+    const representative = passiveEffects.find((p) => p.label === root) ?? passive
+    result.push(describePassiveEntry(representative))
+  }
+  return result
 }
 
 
@@ -436,7 +467,9 @@ export const characterProfiles: CharacterDetailProfile[] = baseOwnedCharacterSee
   const battleTemplate = battleRosterById[seed.id]
   const rarity = battleTemplate ? mapBattleRarity(battleTemplate.rarity) : seed.rarity
   const archetypes = deriveArchetypes(seed, battleTemplate)
-  const passive = battleTemplate?.passiveEffects?.[0] ? describePassive(battleTemplate.passiveEffects[0]) : createFallbackPassive()
+  const passives = battleTemplate?.passiveEffects?.length
+    ? groupPassives(battleTemplate.passiveEffects)
+    : [createFallbackPassive()]
   const skills = battleTemplate ? battleTemplate.abilities.map(mapBattleAbilityToSkill) : defaultSkills(seed)
   const ultimate = battleTemplate
     ? ({ ...mapBattleAbilityToSkill(battleTemplate.ultimate), tag: 'ULTIMATE' } satisfies CharacterUltimate)
@@ -456,8 +489,8 @@ export const characterProfiles: CharacterDetailProfile[] = baseOwnedCharacterSee
     role: battleTemplate?.role,
     skills,
     ultimate,
-    passive,
-    lore: profileLore(seed, battleTemplate, passive),
+    passives,
+    lore: profileLore(seed, battleTemplate, passives[0]),
   }
 })
 

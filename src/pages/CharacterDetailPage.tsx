@@ -155,7 +155,7 @@ function OverviewTab({ profile }: { profile: CharacterDetailProfile }) {
             </div>
           </div>
         </div>
-        <p className="mt-4 text-sm leading-6 text-ca-text-2">{profile.passive.description}</p>
+        <p className="mt-4 text-sm leading-6 text-ca-text-2">{profile.passives[0]?.description}</p>
       </section>
 
       <section className="grid gap-3 rounded-[10px] border border-white/8 bg-[rgba(18,18,24,0.2)] p-4 sm:grid-cols-2">
@@ -183,7 +183,9 @@ function OverviewTab({ profile }: { profile: CharacterDetailProfile }) {
 function SkillsTab({ profile }: { profile: CharacterDetailProfile }) {
   return (
     <div className="space-y-3">
-      <PassiveCard passive={profile.passive} />
+      {profile.passives.map((passive) => (
+        <PassiveCard key={passive.label} passive={passive} />
+      ))}
       {profile.skills.map((skill) => (
         <SkillCard key={skill.id} skill={skill} />
       ))}
@@ -409,8 +411,19 @@ function PassiveCard({ passive }: { passive: CharacterPassive }) {
         <span className="ca-mono-label rounded-md border border-ca-teal/20 bg-ca-teal-wash px-2 py-1 text-[0.45rem] text-ca-teal">PASSIVE</span>
         {passive.triggerLabel ? <span className="ca-mono-label text-[0.45rem] text-ca-text-3">{passive.triggerLabel}</span> : null}
       </div>
-      <p className="font-[var(--font-display-alt)] text-[0.92rem] font-bold text-ca-text">{passive.label}</p>
-      <p className="mt-2 text-xs leading-5 text-ca-text-2">{passive.description}</p>
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md border border-ca-teal/20 bg-[rgba(5,216,189,0.08)]">
+          {passive.iconSrc ? (
+            <img src={passive.iconSrc} alt={passive.label} className="h-full w-full object-cover" />
+          ) : (
+            <span className="ca-mono-label text-[0.45rem] text-ca-teal">{passive.iconLabel ?? 'P'}</span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="font-[var(--font-display-alt)] text-[0.92rem] font-bold text-ca-text">{passive.label}</p>
+          <p className="mt-1 text-xs leading-5 text-ca-text-2">{passive.description}</p>
+        </div>
+      </div>
     </section>
   )
 }

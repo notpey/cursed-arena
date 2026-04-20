@@ -549,6 +549,7 @@ export type PassiveEffect = {
   conditions?: BattleReactionCondition[]
   effects: SkillEffect[]
   label: string
+  description?: string
   icon?: BattleAbilityIcon
 }
 

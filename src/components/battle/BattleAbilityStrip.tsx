@@ -5,7 +5,7 @@ import { cn } from '@/components/battle/battleDisplay'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import { hasStatus } from '@/features/battle/statuses'
 import { getAbilityById } from '@/features/battle/engine'
-import type { BattleAbilityTemplate, BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleAbilityTemplate, BattleFighterState, PassiveEffect, QueuedBattleAction } from '@/features/battle/types'
 
 function SkillTile({
   ability,
@@ -107,6 +107,45 @@ function QueuedSlot({
         </div>
       ) : null}
     </button>
+  )
+}
+
+function rootPassiveName(label: string): string {
+  return label.split(':')[0].trim()
+}
+
+function uniqueNamedPassives(passiveEffects: PassiveEffect[]): PassiveEffect[] {
+  const seen = new Set<string>()
+  const result: PassiveEffect[] = []
+  for (const p of passiveEffects) {
+    const root = rootPassiveName(p.label)
+    if (seen.has(root)) continue
+    seen.add(root)
+    result.push(passiveEffects.find((x) => x.label === root) ?? p)
+  }
+  return result
+}
+
+function PassiveTile({ passive }: { passive: PassiveEffect }) {
+  return (
+    <div
+      title={passive.label}
+      className="group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 border-ca-teal/30 bg-[rgba(5,216,189,0.06)] sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]"
+    >
+      <div className="absolute inset-0 grid place-items-center">
+        {passive.icon?.src ? (
+          <img src={passive.icon.src} alt={passive.label} className="h-full w-full object-cover opacity-80" />
+        ) : (
+          <span className="ca-mono-label text-[0.9rem] font-black text-ca-teal/50">P</span>
+        )}
+      </div>
+      <div className="absolute bottom-0.5 left-0 right-0 flex justify-center">
+        <span className="ca-mono-label rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5 text-[0.38rem] text-ca-teal">PASSIVE</span>
+      </div>
+      <div className="pointer-events-none absolute inset-0 hidden flex-col justify-end bg-[rgba(5,10,18,0.92)] p-1.5 group-hover:flex">
+        <p className="ca-mono-label text-[0.4rem] font-bold leading-tight text-ca-teal">{passive.label}</p>
+      </div>
+    </div>
   )
 }
 
@@ -222,6 +261,15 @@ export function BattleAbilityStrip({
                 onLeave={!interactionLocked ? onLeaveAbility : undefined}
               />
             ))}
+
+            {(fighter.passiveEffects?.length ?? 0) > 0 ? (
+              <>
+                <div className="h-8 w-px shrink-0 bg-white/8" />
+                {uniqueNamedPassives(fighter.passiveEffects!).map((passive) => (
+                  <PassiveTile key={passive.label} passive={passive} />
+                ))}
+              </>
+            ) : null}
           </div>
         </div>
       </div>

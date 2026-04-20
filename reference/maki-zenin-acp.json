@@ -1,0 +1,260 @@
+{
+  "id": "maki",
+  "name": "Maki Zenin",
+  "shortName": "Maki",
+  "rarity": "R",
+  "role": "Duelist",
+  "affiliationLabel": "Tokyo Campus, Zenin Clan",
+  "battleTitle": "The Cursed Tool User",
+  "bio": "A relentless duelist who punishes enemies for trying to debuff her and escalates Duel's damage every time she fights through a stun.",
+  "portraitFrame": {
+    "scale": 2.0,
+    "y": "-10%"
+  },
+  "maxHp": 100,
+  "passiveEffects": [
+    {
+      "label": "Genetic Ironbody",
+      "description": "Each time Maki uses a damaging skill, she ignores all non-damage effects except stuns for 1 turn. If Maki is stunned while this effect is active, Duel permanently gains +5 damage (stacks).",
+      "icon": { "label": "GI", "tone": "teal" },
+      "trigger": "onAbilityUse",
+      "conditions": [
+        { "type": "abilityClass", "class": "Attack" }
+      ],
+      "effects": [
+        {
+          "type": "effectImmunity",
+          "label": "Genetic Ironbody",
+          "blocks": ["nonDamage"],
+          "allowedEffects": ["stun"],
+          "duration": 1,
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "label": "Genetic Ironbody: Stun Detect",
+      "trigger": "whileAlive",
+      "conditions": [
+        { "type": "actorHasStatus", "status": "Genetic Ironbody" },
+        { "type": "actorHasStatus", "status": "stun" },
+        { "type": "fighterFlag", "key": "ironbody_stun_seen", "value": false }
+      ],
+      "effects": [
+        { "type": "setFlag", "key": "ironbody_stun_seen", "value": true, "target": "self" },
+        {
+          "type": "addModifier",
+          "target": "self",
+          "modifier": {
+            "label": "Iron Fury",
+            "stat": "damageDealt",
+            "mode": "flat",
+            "value": 5,
+            "duration": { "kind": "permanent" },
+            "tags": ["iron-fury"],
+            "visible": true,
+            "stacking": "stack",
+            "statusKind": "attackUp",
+            "abilityId": "maki-duel"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Cursed Tool: Specs Lock",
+      "trigger": "onAbilityUse",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "maki-cursed-tool-specs" },
+        { "type": "fighterFlag", "key": "specs_target", "value": true }
+      ],
+      "effects": [
+        { "type": "cancelAbility" }
+      ]
+    },
+    {
+      "label": "Genetic Ironbody: Stun Clear",
+      "trigger": "whileAlive",
+      "conditions": [
+        { "type": "fighterFlag", "key": "ironbody_stun_seen", "value": true },
+        { "type": "actorHasStatus", "status": "stun", "negate": true }
+      ],
+      "effects": [
+        { "type": "setFlag", "key": "ironbody_stun_seen", "value": false, "target": "self" }
+      ]
+    }
+  ],
+  "abilities": [
+    {
+      "id": "maki-duel",
+      "name": "Duel",
+      "description": "Targets one enemy, dealing 30 damage. During 'Playful Cloud', this skill costs 1 less random energy.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Instant", "Attack"],
+      "icon": { "label": "DU", "tone": "red" },
+      "cooldown": 0,
+      "energyCost": { "physical": 1, "random": 1 },
+      "effects": [
+        { "type": "damage", "power": 30, "target": "inherit" }
+      ]
+    },
+    {
+      "id": "maki-playful-cloud",
+      "name": "Playful Cloud",
+      "description": "Deals 20 damage immediately and again at the start of the next 2 turns. For those 3 turns, Duel costs 1 less random energy and Maki gains 50% damage reduction.",
+      "kind": "attack",
+      "targetRule": "enemy-single",
+      "classes": ["Melee", "Physical", "Action", "Attack"],
+      "icon": { "label": "PC", "tone": "red" },
+      "cooldown": 2,
+      "energyCost": { "physical": 1, "random": 1 },
+      "effects": [
+        { "type": "damage", "power": 20, "target": "inherit" },
+        {
+          "type": "addModifier",
+          "target": "self",
+          "modifier": {
+            "label": "Playful Cloud: Damage Reduction",
+            "stat": "damageTaken",
+            "mode": "percent",
+            "value": -0.5,
+            "duration": { "kind": "rounds", "rounds": 3 },
+            "tags": ["playful-cloud-reduction"],
+            "visible": true,
+            "stacking": "replace",
+            "statusKind": "defenseUp"
+          }
+        },
+        {
+          "type": "modifyAbilityCost",
+          "target": "self",
+          "modifier": {
+            "label": "Playful Cloud: Duel Discount",
+            "abilityId": "maki-duel",
+            "mode": "reduceRandom",
+            "amount": 1,
+            "duration": 3,
+            "uses": null
+          }
+        },
+        {
+          "type": "setFlag",
+          "key": "playful_cloud_active",
+          "value": true,
+          "target": "self"
+        },
+        {
+          "type": "schedule",
+          "delay": 1,
+          "phase": "roundStart",
+          "target": "inherit",
+          "effects": [
+            { "type": "damage", "power": 20, "target": "inherit" }
+          ]
+        },
+        {
+          "type": "schedule",
+          "delay": 2,
+          "phase": "roundStart",
+          "target": "inherit",
+          "effects": [
+            { "type": "damage", "power": 20, "target": "inherit" }
+          ]
+        },
+        {
+          "type": "schedule",
+          "delay": 3,
+          "phase": "roundEnd",
+          "target": "self",
+          "effects": [
+            { "type": "setFlag", "key": "playful_cloud_active", "value": false, "target": "self" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "maki-cursed-tool-specs",
+      "name": "Cursed Tool: Specs",
+      "description": "Maki pays attention to one enemy who cannot reduce damage or become invulnerable for 3 turns. During this time, Playful Cloud and Duel deal 10 additional damage to them. Cannot be used on an enemy already affected by it.",
+      "kind": "debuff",
+      "targetRule": "enemy-single",
+      "classes": ["Strategic", "Instant"],
+      "icon": { "label": "CS", "tone": "gold" },
+      "cooldown": 0,
+      "energyCost": {},
+      "effects": [
+        {
+          "type": "setFlag",
+          "key": "specs_target",
+          "value": true,
+          "target": "inherit"
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Cursed Tool: Specs",
+            "stat": "canReduceDamageTaken",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 3 },
+            "tags": ["specs-lock"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Cursed Tool: Specs",
+            "stat": "canGainInvulnerable",
+            "mode": "set",
+            "value": false,
+            "duration": { "kind": "rounds", "rounds": 3 },
+            "tags": ["specs-lock"],
+            "visible": false,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "addModifier",
+          "target": "inherit",
+          "modifier": {
+            "label": "Specs: Bonus Damage",
+            "stat": "damageTaken",
+            "mode": "flat",
+            "value": 10,
+            "duration": { "kind": "rounds", "rounds": 3 },
+            "tags": ["specs-damage"],
+            "visible": true,
+            "stacking": "replace"
+          }
+        },
+        {
+          "type": "schedule",
+          "delay": 3,
+          "phase": "roundEnd",
+          "target": "inherit",
+          "effects": [
+            { "type": "setFlag", "key": "specs_target", "value": false, "target": "inherit" }
+          ]
+        }
+      ]
+    }
+  ],
+  "ultimate": {
+    "id": "maki-agile-reflexes",
+    "name": "Agile Reflexes",
+    "description": "Makes Maki Zenin invulnerable for 1 turn.",
+    "kind": "defend",
+    "targetRule": "self",
+    "classes": ["Strategic", "Instant", "Ultimate"],
+    "icon": { "label": "AR", "tone": "teal" },
+    "cooldown": 4,
+    "energyCost": { "random": 1 },
+    "effects": [
+      { "type": "invulnerable", "duration": 1, "target": "self" }
+    ]
+  }
+}

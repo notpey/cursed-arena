@@ -46,6 +46,8 @@ export type CharacterPassive = {
   label: string
   description: string
   triggerLabel?: string
+  iconSrc?: string
+  iconLabel?: string
 }
 
 export type CharacterDetailProfile = CharacterRosterCard & {
@@ -54,7 +56,7 @@ export type CharacterDetailProfile = CharacterRosterCard & {
   role?: string
   skills: CharacterSkill[]
   ultimate: CharacterUltimate
-  passive: CharacterPassive
+  passives: CharacterPassive[]
   lore: {
     backstory: string[]
     voiceLines: Array<{ id: string; title: string; text: string }>
