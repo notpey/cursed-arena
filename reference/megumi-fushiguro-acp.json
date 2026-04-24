@@ -3,174 +3,147 @@
   "name": "Megumi Fushiguro",
   "shortName": "Megumi",
   "rarity": "SSR",
-  "role": "Controller / Support",
+  "role": "Controller / Setup",
   "affiliationLabel": "Tokyo Campus",
-  "battleTitle": "Ten Shadows Technique",
-  "bio": "A versatile tactician who layers persistent debuffs, team-wide shields, and unlocks a transformed kit when his domain awakens.",
+  "battleTitle": "Ten Shadows Strategist",
+  "bio": "A tactical summoner who builds Shikigami pressure, then spends it for stronger control, sustain, and rescue plays.",
   "portraitFrame": {
     "scale": 2.1,
     "y": "-12%"
   },
-  "maxHp": 100,
+  "maxHp": 96,
   "passiveEffects": [
     {
-      "label": "Incomplete Domain",
-      "trigger": "whileAlive",
-      "conditions": [
-        { "type": "selfHpBelow", "threshold": 0.4 },
-        { "type": "fighterFlag", "key": "domain_awakened", "value": false }
-      ],
-      "effects": [
-        { "type": "setFlag", "key": "domain_awakened", "value": true, "target": "self" },
-        {
-          "type": "replaceAbilities",
-          "target": "self",
-          "replacements": [
-            {
-              "slotAbilityId": "megumi-toad-rescue",
-              "duration": 9999,
-              "ability": {
-                "id": "megumi-chimera-shadow-garden",
-                "name": "Chimera Shadow Garden",
-                "description": "Megumi opens his incomplete domain for 3 turns. All allies gain 10 shield each turn at round start. Megumi becomes immune to affliction damage during this time.",
-                "kind": "utility",
-                "targetRule": "self",
-                "classes": ["Unique", "Mental", "Instant", "Ultimate"],
-                "icon": { "label": "CS", "tone": "gold" },
-                "cooldown": 0,
-                "energyCost": { "random": 1 },
-                "effects": [
-                  { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
-                  {
-                    "type": "schedule",
-                    "delay": 3,
-                    "phase": "roundEnd",
-                    "target": "self",
-                    "effects": [
-                      { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
-                    ]
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "label": "Great Flood Shield",
+      "id": "megumi-ten-shadows-strategist",
+      "label": "Ten Shadows Strategist",
+      "description": "At the start of each turn, Megumi gains 1 Shikigami.",
       "trigger": "onRoundStart",
-      "conditions": [
-        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
-      ],
+      "icon": { "label": "TS", "tone": "teal" },
       "effects": [
-        {
-          "type": "shield",
-          "amount": 10,
-          "label": "Great Flood",
-          "tags": ["great-flood"],
-          "target": "all-allies"
-        }
+        { "type": "adjustCounter", "key": "shikigami", "amount": 1, "target": "self" }
       ]
     },
     {
-      "label": "Great Flood Affliction Ward",
-      "trigger": "onRoundStart",
+      "id": "megumi-shikigami-pressure-dogs",
+      "label": "Shikigami Pressure",
+      "description": "If Megumi has 3 or more Shikigami, Divine Dogs: Pursuit deals 5 additional damage.",
+      "trigger": "onAbilityResolve",
       "conditions": [
-        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
+        { "type": "abilityId", "abilityId": "megumi-dogs" },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
       ],
+      "icon": { "label": "SP", "tone": "red" },
       "effects": [
-        {
-          "type": "effectImmunity",
-          "label": "Affliction Ward",
-          "blocks": ["damage"],
-          "duration": 1,
-          "target": "self"
-        }
+        { "type": "damage", "power": 5, "target": "inherit" }
       ]
     },
     {
-      "label": "Great Flood Cost Trap",
-      "trigger": "onBeingTargeted",
+      "id": "megumi-shikigami-pressure-nue",
+      "label": "Shikigami Pressure",
+      "description": "If Megumi has 3 or more Shikigami, Nue: Electric Drop deals 5 additional damage.",
+      "trigger": "onAbilityResolve",
       "conditions": [
-        { "type": "fighterFlag", "key": "max_elephant_active", "value": true }
+        { "type": "abilityId", "abilityId": "megumi-nue" },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
       ],
+      "icon": { "label": "SP", "tone": "red" },
       "effects": [
-        {
-          "type": "modifyAbilityCost",
-          "target": "inherit",
-          "modifier": {
-            "label": "Great Flood Surcharge",
-            "mode": "increaseRandom",
-            "amount": 1,
-            "duration": 1,
-            "uses": 1
-          }
-        }
+        { "type": "damage", "power": 5, "target": "inherit" }
+      ]
+    },
+    {
+      "id": "megumi-divine-dogs-pack",
+      "label": "Divine Dogs Pack Hunt",
+      "description": "With more than 3 Shikigami, Divine Dogs: Pursuit deals 15 additional damage, seals Physical skills for 1 turn, and consumes 2 Shikigami.",
+      "trigger": "onAbilityResolve",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "megumi-dogs" },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 4 }
+      ],
+      "icon": { "label": "DD", "tone": "red" },
+      "effects": [
+        { "type": "damage", "power": 15, "target": "inherit" },
+        { "type": "classStun", "duration": 1, "blockedClasses": ["Physical"], "target": "inherit" },
+        { "type": "adjustCounter", "key": "shikigami", "amount": -2, "target": "self" }
+      ]
+    },
+    {
+      "id": "megumi-nue-overhead-drop",
+      "label": "Nue Overhead Drop",
+      "description": "With more than 3 Shikigami, Nue: Electric Drop deals 10 additional damage, fully stuns the target for 1 turn, and consumes 3 Shikigami.",
+      "trigger": "onAbilityResolve",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "megumi-nue" },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 4 }
+      ],
+      "icon": { "label": "NO", "tone": "gold" },
+      "effects": [
+        { "type": "damage", "power": 10, "target": "inherit" },
+        { "type": "stun", "duration": 1, "target": "inherit" },
+        { "type": "adjustCounter", "key": "shikigami", "amount": -3, "target": "self" }
+      ]
+    },
+    {
+      "id": "megumi-shadow-recall-surge",
+      "label": "Shadow Recall Surge",
+      "description": "If Megumi has 3 or more Shikigami, Shadow Recall heals 10 additional health and consumes 3 Shikigami.",
+      "trigger": "onAbilityResolve",
+      "conditions": [
+        { "type": "abilityId", "abilityId": "megumi-shadow-recall" },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
+      ],
+      "icon": { "label": "SR", "tone": "teal" },
+      "effects": [
+        { "type": "heal", "power": 10, "target": "self" },
+        { "type": "adjustCounter", "key": "shikigami", "amount": -3, "target": "self" }
+      ]
+    },
+    {
+      "id": "megumi-desperate-dismissal",
+      "label": "Desperate Dismissal",
+      "description": "The first time Megumi falls below 30 health, he loses 3 Shikigami.",
+      "trigger": "onTakeDamage",
+      "conditions": [
+        { "type": "selfHpBelow", "threshold": 0.3 },
+        { "type": "counterAtLeast", "key": "shikigami", "value": 3 },
+        { "type": "fighterFlag", "key": "desperate_dismissal_used", "value": false }
+      ],
+      "icon": { "label": "DD", "tone": "frost" },
+      "effects": [
+        { "type": "adjustCounter", "key": "shikigami", "amount": -3, "target": "self" },
+        { "type": "setFlag", "key": "desperate_dismissal_used", "value": true, "target": "self" }
       ]
     }
   ],
   "abilities": [
     {
-      "id": "megumi-divine-dogs-hunt",
-      "name": "Divine Dogs: Hunt",
-      "description": "For 2 turns, deal 10 damage to one enemy and they cannot reduce damage or become invulnerable. During Max Elephant: Great Flood, also permanently increases all damage dealt to that target by 5 (stacks).",
+      "id": "megumi-dogs",
+      "name": "Divine Dogs: Pursuit",
+      "description": "Deals 5 damage to one enemy. If Megumi has more than 3 Shikigami, this skill deals 15 additional damage, seals their Physical skills for 1 turn, and consumes 2 Shikigami.",
       "kind": "attack",
       "targetRule": "enemy-single",
       "classes": ["Melee", "Physical", "Instant"],
       "icon": { "label": "DD", "tone": "red" },
-      "cooldown": 1,
-      "energyCost": { "random": 1 },
+      "cooldown": 0,
+      "energyCost": { "physical": 1 },
+      "power": 5,
       "effects": [
-        { "type": "damage", "power": 10, "target": "inherit" },
-        {
-          "type": "addModifier",
-          "target": "inherit",
-          "modifier": {
-            "label": "Divine Dogs: Hunt",
-            "stat": "canReduceDamageTaken",
-            "mode": "set",
-            "value": false,
-            "duration": { "kind": "rounds", "rounds": 2 },
-            "tags": ["divine-dogs-hunt"],
-            "visible": true,
-            "stacking": "replace"
-          }
-        },
-        {
-          "type": "addModifier",
-          "target": "inherit",
-          "modifier": {
-            "label": "Divine Dogs: Hunt",
-            "stat": "canGainInvulnerable",
-            "mode": "set",
-            "value": false,
-            "duration": { "kind": "rounds", "rounds": 2 },
-            "tags": ["divine-dogs-hunt"],
-            "visible": false,
-            "stacking": "replace"
-          }
-        },
-        {
-          "type": "setFlag",
-          "key": "divine_dogs_hunt_target",
-          "value": true,
-          "target": "inherit"
-        }
+        { "type": "damage", "power": 5, "target": "inherit" }
       ]
     },
     {
-      "id": "megumi-nue-flank",
-      "name": "Nue: Flank",
-      "description": "Deals 20 damage and seals the target's non-Mental techniques for 1 turn.",
+      "id": "megumi-nue",
+      "name": "Nue: Electric Drop",
+      "description": "Deals 25 damage to one enemy and seals their non-Mental skills for 1 turn. If Megumi has more than 3 Shikigami, this skill deals 10 additional damage, fully stuns the target for 1 turn, and consumes 3 Shikigami.",
       "kind": "attack",
       "targetRule": "enemy-single",
-      "classes": ["Ranged", "Physical", "Instant"],
-      "icon": { "label": "NF", "tone": "red" },
-      "cooldown": 0,
-      "energyCost": { "random": 2 },
+      "classes": ["Ranged", "Energy", "Instant"],
+      "icon": { "label": "NE", "tone": "red" },
+      "cooldown": 2,
+      "energyCost": { "technique": 1, "random": 1 },
+      "power": 25,
       "effects": [
-        { "type": "damage", "power": 20, "target": "inherit" },
+        { "type": "damage", "power": 25, "target": "inherit" },
         {
           "type": "classStun",
           "duration": 1,
@@ -180,61 +153,34 @@
       ]
     },
     {
-      "id": "megumi-max-elephant-great-flood",
-      "name": "Max Elephant: Great Flood",
-      "description": "For the next 3 turns, Megumi and allies gain 10 destructible defense each round and Megumi ignores affliction damage. Any enemy that uses a damaging skill against Megumi has their costs increased by 1 random for 1 turn.",
-      "kind": "utility",
+      "id": "megumi-shadow-recall",
+      "name": "Shadow Recall",
+      "description": "Megumi dismisses nearby Shikigami to recover 15 health. If Megumi has 3 or more Shikigami, he heals 10 additional health and consumes 3 Shikigami.",
+      "kind": "heal",
       "targetRule": "self",
       "classes": ["Unique", "Mental", "Instant"],
-      "icon": { "label": "ME", "tone": "teal" },
+      "icon": { "label": "SR", "tone": "teal" },
       "cooldown": 0,
-      "energyCost": { "random": 2 },
+      "energyCost": { "random": 1 },
+      "healPower": 15,
       "effects": [
-        { "type": "setFlag", "key": "max_elephant_active", "value": true, "target": "self" },
-        {
-          "type": "shield",
-          "amount": 10,
-          "label": "Great Flood",
-          "tags": ["great-flood"],
-          "target": "all-allies"
-        },
-        {
-          "type": "schedule",
-          "delay": 3,
-          "phase": "roundEnd",
-          "target": "self",
-          "effects": [
-            { "type": "setFlag", "key": "max_elephant_active", "value": false, "target": "self" }
-          ]
-        }
+        { "type": "heal", "power": 15, "target": "self" }
       ]
     }
   ],
   "ultimate": {
-    "id": "megumi-toad-rescue",
-    "name": "Toad: Rescue",
-    "description": "Makes Megumi or an ally invulnerable for 1 turn. If used on an ally, Megumi also ignores stun effects for 1 turn.",
+    "id": "megumi-toad",
+    "name": "Toad: Shadow Rescue",
+    "description": "Makes Megumi or one ally invulnerable for 1 turn. Megumi gains 1 Shikigami.",
     "kind": "defend",
     "targetRule": "ally-single",
     "classes": ["Unique", "Mental", "Instant", "Ultimate"],
     "icon": { "label": "TR", "tone": "teal" },
     "cooldown": 4,
+    "energyCost": { "random": 1 },
     "effects": [
       { "type": "invulnerable", "duration": 1, "target": "inherit" },
-      {
-        "type": "addModifier",
-        "target": "self",
-        "modifier": {
-          "label": "Toad: Rescue Stun Ward",
-          "stat": "canAct",
-          "mode": "set",
-          "value": true,
-          "duration": { "kind": "rounds", "rounds": 1 },
-          "tags": ["toad-rescue-ward"],
-          "visible": true,
-          "stacking": "replace"
-        }
-      }
+      { "type": "adjustCounter", "key": "shikigami", "amount": 1, "target": "self" }
     ]
   }
 }

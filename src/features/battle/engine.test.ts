@@ -80,10 +80,11 @@ describe('battle engine scenarios', () => {
     expect(secondAdvance.state.phase).toBe('firstPlayerCommand')
   })
 
-  test('Megumi passive damage boost applies to standard attacks', () => {
+  test('Megumi spends Shikigami to empower Divine Dogs', () => {
     const state = createChargedBattleState()
     const megumi = getFighter(state, 'player', 'megumi')
     const yuji = getFighter(state, 'enemy', 'yuji')
+    megumi.stateCounters.shikigami = 4
 
     const result = resolveTeamTurn(
       state,
@@ -92,7 +93,10 @@ describe('battle engine scenarios', () => {
     )
 
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
-    expect(updatedYuji.hp).toBe(54)
+    const updatedMegumi = getFighter(result.state, 'player', 'megumi')
+    expect(updatedYuji.hp).toBe(79)
+    expect(updatedMegumi.stateCounters.shikigami).toBe(2)
+    expect(updatedYuji.classStuns.some((stun) => stun.blockedClasses.includes('Physical'))).toBe(true)
   })
 
   test('random CE allocation on queued commands is honored during spend', () => {
@@ -261,8 +265,8 @@ describe('battle engine scenarios', () => {
     const damageEvent = result.runtimeEvents.find((event) => event.type === 'damage_applied' && event.targetId === yuji.instanceId)
     expect(damageEvent?.packet?.kind).toBe('damage')
     if (damageEvent?.packet?.kind === 'damage') {
-      expect(damageEvent.packet.baseAmount).toBe(46)
-      expect(damageEvent.packet.amount).toBe(50)
+      expect(damageEvent.packet.baseAmount).toBe(5)
+      expect(damageEvent.packet.amount).toBe(5)
       expect(damageEvent.packet.damageType).toBe('normal')
     }
   })
@@ -346,7 +350,7 @@ describe('battle engine scenarios', () => {
       'player',
     )
 
-    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(73)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(75)
     expect(getStatusDuration(getFighter(result.state, 'player', 'megumi').statuses, 'attackUp')).toBe(2)
     expect(result.runtimeEvents.some((event) => event.type === 'modifier_applied' && event.targetId === megumi.instanceId)).toBe(true)
   })
