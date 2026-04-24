@@ -307,6 +307,22 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
   return [{ text: `${prefix}${conditionText}: no passive effects configured`, turnsLeft: null }]
 }
 
+function isBaselinePassiveVisible(passive: PassiveEffect): boolean {
+  // Keep the opening board readable: only always-on passive identity is shown by default.
+  return passive.trigger === 'whileAlive'
+}
+
+function normalizeCounterKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function counterKeyVariants(counterKey: string): string[] {
+  const variants = new Set<string>([counterKey])
+  variants.add(counterKey.replace(/-(stacks?|count|counter|charges?)$/i, ''))
+  variants.add(counterKey.replace(/_(stacks?|count|counter|charges?)$/i, ''))
+  return [...variants].filter(Boolean)
+}
+
   // ── Visible modifiers grouped by sourceAbilityId ─────────────────────────
   for (const mod of fighter.modifiers) {
     if (!mod.visible) continue
@@ -402,16 +418,45 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
   // ── Counters: attach to their source ability group if one exists ──────────
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue
-    // Find which ability/passive "owns" this counter by convention: counter key starts with abilityId
-    const ownerGroup = [...groups.values()].find((g) => g.key.includes(key.split('-')[0] ?? ''))
-    if (ownerGroup) {
-      ownerGroup.stackCount = value
+    const variants = counterKeyVariants(key)
+    let ownerGroup: Group | null = null
+    let ownerScore = 0
+
+    for (const group of groups.values()) {
+      const groupCandidates = [group.key, group.key.replace(/^pip-/, ''), group.label]
+      let score = 0
+
+      for (const variant of variants) {
+        const normalizedVariant = normalizeCounterKey(variant)
+        if (!normalizedVariant) continue
+
+        for (const candidate of groupCandidates) {
+          const normalizedCandidate = normalizeCounterKey(candidate)
+          if (!normalizedCandidate) continue
+
+          if (normalizedCandidate === normalizedVariant) {
+            score = Math.max(score, 4)
+          } else if (normalizedVariant.includes(normalizedCandidate) && normalizedCandidate.length >= 5) {
+            score = Math.max(score, 3)
+          } else if (normalizedCandidate.includes(normalizedVariant) && normalizedVariant.length >= 5) {
+            score = Math.max(score, 2)
+          }
+        }
+      }
+
+      if (score > ownerScore) {
+        ownerScore = score
+        ownerGroup = group
+      }
     }
+
+    if (ownerGroup) ownerGroup.stackCount = value
   }
 
   // ── Passive abilities ─────────────────────────────────────────────────────
   const seenPassiveRoots = new Set<string>()
   for (const passive of fighter.passiveEffects ?? []) {
+    if (!isBaselinePassiveVisible(passive)) continue
     const root = passive.label.split(':')[0].trim()
     if (seenPassiveRoots.has(root)) continue
     seenPassiveRoots.add(root)
