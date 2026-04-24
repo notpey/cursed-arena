@@ -1,6 +1,6 @@
 # Cursed Arena Battle Board Spec
 
-> Core gameplay target: [battle-parity-spec.md](./battle-parity-spec.md)
+> Core gameplay target: [battle-contract-v1.md](./battle-contract-v1.md)
 
 ## Goal
 Convert the current battle screen from a cinematic stage layout into a Naruto-Arena-style combat board while preserving Cursed Arena's visual language, battle engine, and design tokens.

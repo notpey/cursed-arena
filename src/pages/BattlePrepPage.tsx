@@ -87,12 +87,19 @@ function getPreferredAssignSlot(teamIds: Array<string | null>, focusedSlot: numb
 
 function getDefaultAbilityId(entry: BattlePrepRosterEntry | null) {
   if (!entry) return null
-  return entry.battleTemplate.abilities[0]?.id ?? entry.battleTemplate.ultimate.id
+  return getSelectableAbilities(entry)[0]?.id ?? null
 }
 
 function formatAbilityClasses(ability: BattleAbilityTemplate) {
   const classes = [ability.kind.toUpperCase(), ...ability.classes]
   return Array.from(new Set(classes)).join(', ')
+}
+
+function getSelectableAbilities(entry: BattlePrepRosterEntry | null): BattleAbilityTemplate[] {
+  if (!entry) return []
+  return entry.battleTemplate.abilities
+    .concat(entry.battleTemplate.ultimate)
+    .filter((ability) => ability.kind !== 'pass')
 }
 
 function PortraitThumb({
@@ -274,12 +281,19 @@ export function BattlePrepPage() {
   const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
   const selectedEntry =
     battlePrepRosterById[selectedRosterId] ?? teamEntries[focusedSlot] ?? battlePrepRoster[0] ?? null
+  useEffect(() => {
+    if (!selectedEntry) return
+    const abilityIds = getSelectableAbilities(selectedEntry)
+      .map((ability) => ability.id)
+    if (abilityIds.length === 0) return
+    if (selectedAbilityId && abilityIds.includes(selectedAbilityId)) return
+    setSelectedAbilityId(abilityIds[0])
+  }, [selectedEntry, selectedAbilityId])
+
   const selectedAbility = selectedEntry
-    ? selectedEntry.battleTemplate.abilities
-        .concat(selectedEntry.battleTemplate.ultimate)
-        .find((ability) => ability.id === selectedAbilityId) ??
-      selectedEntry.battleTemplate.abilities[0] ??
-      selectedEntry.battleTemplate.ultimate
+    ? getSelectableAbilities(selectedEntry).find((ability) => ability.id === selectedAbilityId) ??
+      getSelectableAbilities(selectedEntry)[0] ??
+      null
     : null
   const isReady = explicitTeamIds.length === 3
 
@@ -616,7 +630,7 @@ export function BattlePrepPage() {
         </section>
 
         <section className="min-h-0 flex-1 overflow-hidden rounded-[12px] border border-white/8 bg-[linear-gradient(135deg,rgba(18,18,26,0.9),rgba(12,12,18,0.84))] p-3 shadow-[0_16px_34px_rgba(0,0,0,0.16)] backdrop-blur-sm sm:p-4">
-          <div className="grid h-full min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_15.5rem]">
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3 xl:grid-cols-[minmax(0,1fr)_15.5rem] xl:grid-rows-1">
             <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -679,7 +693,7 @@ export function BattlePrepPage() {
               </div>
             </div>
 
-            <aside className="flex h-full min-h-0 flex-col rounded-[10px] border border-white/8 bg-[rgba(12,12,18,0.68)] p-3">
+            <aside className="flex min-h-0 shrink-0 flex-col rounded-[10px] border border-white/8 bg-[rgba(12,12,18,0.68)] p-3 xl:h-full">
               <div className="shrink-0">
                 <p className="ca-mono-label text-[0.48rem] text-ca-text-3">Your Team</p>
                 <h2 className="ca-display mt-1.5 text-[2rem] leading-none text-ca-text">3 Slots</h2>
@@ -1009,7 +1023,7 @@ function SelectedFighterPanel({
   selectedAbilityId: string | null
   onSelectAbility: (abilityId: string) => void
 }) {
-  const abilities = entry.battleTemplate.abilities.concat(entry.battleTemplate.ultimate)
+  const abilities = getSelectableAbilities(entry)
   const style = rarityStyles[entry.rarity]
 
   return (
@@ -1090,7 +1104,7 @@ function SelectedFighterPanel({
           </div>
         </div>
 
-        <div className="relative mt-4 overflow-hidden rounded-[16px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,13,19,0.9),rgba(9,9,14,0.78))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_28px_rgba(0,0,0,0.16)]">
+        <div className="relative mt-4 h-[18.5rem] overflow-hidden rounded-[16px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,13,19,0.9),rgba(9,9,14,0.78))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_28px_rgba(0,0,0,0.16)]">
           <div
             className="pointer-events-none absolute left-0 top-0 h-full w-1"
             style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
@@ -1099,7 +1113,7 @@ function SelectedFighterPanel({
             className="pointer-events-none absolute -left-12 top-0 h-40 w-40 rounded-full blur-3xl"
             style={{ background: `radial-gradient(circle, ${style.wash}, transparent 72%)` }}
           />
-          <div className="relative grid gap-4 md:grid-cols-[6.5rem_minmax(0,1fr)] md:items-start">
+          <div className="relative grid h-full min-h-0 gap-4 md:grid-cols-[6.5rem_minmax(0,1fr)] md:items-start">
             <div className="overflow-hidden rounded-[14px] border border-white/10 bg-[rgba(255,255,255,0.04)] shadow-[0_12px_22px_rgba(0,0,0,0.18)]">
               {selectedAbility.icon.src ? (
                 <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-[6.5rem] w-[6.5rem] object-cover" />
@@ -1110,12 +1124,14 @@ function SelectedFighterPanel({
               )}
             </div>
 
-            <div className="min-w-0">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="ca-mono-label text-[0.38rem] text-ca-text-3">Active Technique</p>
                   <p className="mt-2 font-[var(--font-display-alt)] text-[1.42rem] font-bold text-ca-text sm:text-[1.58rem]">{selectedAbility.name}</p>
-                  <p className="mt-2 max-w-3xl text-[0.98rem] leading-6 text-ca-text-2">{selectedAbility.description}</p>
+                  <p className="mt-2 max-h-[7.25rem] max-w-3xl overflow-y-auto pr-1 text-[0.98rem] leading-6 text-ca-text-2">
+                    {selectedAbility.description}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedAbility.classes.includes('Ultimate') ? (

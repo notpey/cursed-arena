@@ -156,6 +156,7 @@ export function ActiveEffectPips({
   mirrored = false,
   tooltipDown = false,
   column = false,
+  wrap = true,
   className,
 }: {
   fighter: BattleFighterState
@@ -163,6 +164,8 @@ export function ActiveEffectPips({
   tooltipDown?: boolean
   /** Stack pips vertically instead of wrapping horizontally */
   column?: boolean
+  /** Keep pips on a single row to avoid vertical layout shift */
+  wrap?: boolean
   className?: string
 }) {
   const pips = getActivePips(fighter)
@@ -180,7 +183,12 @@ export function ActiveEffectPips({
   if (pips.length === 0) return null
 
   return (
-    <div className={cn('flex flex-wrap gap-1', mirrored ? 'justify-end' : 'justify-start', className)}>
+    <div className={cn(
+      'flex gap-1',
+      wrap ? 'flex-wrap' : 'flex-nowrap overflow-hidden',
+      mirrored ? 'justify-end' : 'justify-start',
+      className,
+    )}>
       {pips.map((pip) => (
         <ActivePip key={pip.key} pip={pip} mirrored={mirrored} tooltipDown={tooltipDown} />
       ))}
