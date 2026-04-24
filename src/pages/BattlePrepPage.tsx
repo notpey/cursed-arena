@@ -501,16 +501,43 @@ export function BattlePrepPage() {
 
   return (
     <section className="relative h-[calc(100vh-6.75rem)] overflow-hidden py-2 sm:py-3">
-      <div className="pointer-events-none absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/7 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/7 blur-3xl" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.16),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,#17080e_0%,#0d0c11_42%,#181020_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
+      <div className="pointer-events-none absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/12 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/8 blur-3xl" />
 
       <div className="relative z-10 flex h-full min-h-0 flex-col gap-3 pt-2">
-        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(30,28,38,0.96),rgba(13,12,18,0.96))] p-2 shadow-[0_20px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:p-3">
+        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(30,28,38,0.82),rgba(13,12,18,0.86))] p-2 shadow-[0_20px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:p-3">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.45),rgba(228,230,239,0.12),rgba(5,216,189,0.35))]" />
           <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-ca-red/7 blur-3xl" />
           <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-ca-teal/7 blur-3xl" />
           <div className="relative">
-            <div className="rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,17,25,0.92),rgba(9,9,14,0.9))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3">
+            <PrepMatchButtons
+              isReady={isReady}
+              searching={searching}
+              matchMode={matchMode}
+              onSelectMode={(mode) => {
+                setMatchMode(mode)
+                if (mode === 'practice') {
+                  setPrivateOpen(false)
+                  setPracticeOpen(true)
+                  return
+                }
+                if (mode === 'private') {
+                  setPracticeOpen(false)
+                  setPrivateOpen(true)
+                  setMpError(null)
+                  setSearchQuery('')
+                  setSelectedOpponent(null)
+                  return
+                }
+                setPracticeOpen(false)
+                setPrivateOpen(false)
+                void handleEnterArena(mode)
+              }}
+            />
+
+            <div className="mt-2 rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,17,25,0.82),rgba(9,9,14,0.82))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3">
               {selectedEntry && selectedAbility ? (
                 <SelectedFighterPanel
                   key={selectedEntry.id}
@@ -524,71 +551,8 @@ export function BattlePrepPage() {
           </div>
         </section>
 
-        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(90deg,rgba(58,20,30,0.62),rgba(18,17,25,0.94)_28%,rgba(18,17,25,0.94)_72%,rgba(8,66,58,0.42))] px-3 py-2.5 shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_50%,rgba(250,39,66,0.12),transparent_30%),radial-gradient(circle_at_82%_50%,rgba(5,216,189,0.09),transparent_32%)]" />
-          <div className="relative grid gap-2 lg:grid-cols-[minmax(12rem,0.55fr)_minmax(22rem,1fr)_minmax(12rem,0.55fr)] lg:items-center">
-            <PlayerInfoPanel profileName={authProfile?.display_name ?? 'PLAYER'} stats={profileStats} winRate={winRate} />
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {battleMatchModes.map((mode) => {
-                const active = matchMode === mode
-                const launchesQueue = mode === 'ranked' || mode === 'quick'
-                const disabled = launchesQueue && (!isReady || searching)
-
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      setMatchMode(mode)
-                      if (mode === 'practice') {
-                        setPrivateOpen(false)
-                        setPracticeOpen(true)
-                        return
-                      }
-                      if (mode === 'private') {
-                        setPracticeOpen(false)
-                        setPrivateOpen(true)
-                        setMpError(null)
-                        setSearchQuery('')
-                        setSelectedOpponent(null)
-                        return
-                      }
-                      setPracticeOpen(false)
-                      setPrivateOpen(false)
-                      void handleEnterArena(mode)
-                    }}
-                    className={[
-                      'ca-display rounded-[5px] border px-3 py-3 text-[1rem] leading-none transition duration-300 active:scale-[0.98]',
-                      active
-                        ? mode === 'practice'
-                          ? 'border-ca-teal/45 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
-                          : 'border-ca-red/45 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
-                        : 'border-white/10 bg-[rgba(255,255,255,0.04)] text-ca-text-2 hover:border-white/20 hover:text-ca-text',
-                      disabled ? 'cursor-not-allowed opacity-45' : '',
-                    ].join(' ')}
-                  >
-                    {getModeButtonLabel(mode)}
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] px-3 py-2">
-              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Ready Check</p>
-              <p className={['ca-display mt-1 text-[1.35rem] leading-none', isReady ? 'text-ca-teal' : 'text-ca-text-disabled'].join(' ')}>
-                {explicitTeamIds.length}/3 Selected
-              </p>
-              <p className="mt-1 text-[0.72rem] leading-4 text-ca-text-3">
-                {isReady ? 'Choose a mode to enter matchmaking.' : 'Fill all team slots to begin.'}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="min-h-0 flex-1 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,17,25,0.92),rgba(10,10,16,0.88))] p-2.5 shadow-[0_16px_34px_rgba(0,0,0,0.2)] backdrop-blur-sm sm:p-3">
-          <div className="grid h-full min-h-0 gap-2.5 xl:grid-cols-[minmax(0,1fr)_15.25rem]">
+        <section className="min-h-0 flex-1 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,17,25,0.78),rgba(10,10,16,0.8))] p-2.5 shadow-[0_16px_34px_rgba(0,0,0,0.2)] backdrop-blur-sm sm:p-3">
+          <div className="grid h-full min-h-0 gap-2.5 xl:grid-cols-[minmax(0,1fr)_28rem]">
             <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -651,23 +615,33 @@ export function BattlePrepPage() {
               </div>
             </div>
 
-            <aside className="flex h-full min-h-0 flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.88),rgba(8,8,13,0.82))] p-2.5">
-              <div className="shrink-0">
-                <p className="ca-mono-label text-[0.48rem] text-ca-text-3">Your Team</p>
-                <h2 className="ca-display mt-1.5 text-[2rem] leading-none text-ca-text">3 Slots</h2>
-              </div>
+            <aside className="flex h-full min-h-0 flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.82),rgba(8,8,13,0.78))] p-2.5">
+              <PlayerInfoPanel profileName={authProfile?.display_name ?? 'PLAYER'} stats={profileStats} winRate={winRate} />
 
-              <div className="mt-3 space-y-2">
-                {teamEntries.map((entry, index) => (
-                  <TeamSlotCard
-                    key={`prep-slot-${index}`}
-                    slotIndex={index}
-                    entry={entry}
-                    focused={focusedSlot === index}
-                    onSelect={() => handleSelectSlot(index)}
-                    onClear={() => handleClearSlot(index)}
-                  />
-                ))}
+              <div className="mt-3 rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] p-2.5">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="ca-mono-label text-[0.48rem] text-ca-text-3">Your Team</p>
+                    <h2 className="ca-display mt-1 text-[1.55rem] leading-none text-ca-text">3 Slots</h2>
+                  </div>
+                  <p className={['ca-mono-label text-[0.48rem]', isReady ? 'text-ca-teal' : 'text-ca-text-3'].join(' ')}>
+                    {explicitTeamIds.length}/3 READY
+                  </p>
+                </div>
+
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {teamEntries.map((entry, index) => (
+                    <TeamSlotCard
+                      key={`prep-slot-${index}`}
+                      slotIndex={index}
+                      entry={entry}
+                      focused={focusedSlot === index}
+                      compact
+                      onSelect={() => handleSelectSlot(index)}
+                      onClear={() => handleClearSlot(index)}
+                    />
+                  ))}
+                </div>
               </div>
             </aside>
           </div>
@@ -785,6 +759,62 @@ function PlayerInfoPanel({
           <RecordStat label="Losses" value={String(stats.losses)} compact />
           <RecordStat label="Win %" value={`${winRate}%`} compact />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function PrepMatchButtons({
+  isReady,
+  searching,
+  matchMode,
+  onSelectMode,
+}: {
+  isReady: boolean
+  searching: boolean
+  matchMode: BattleMatchMode
+  onSelectMode: (mode: BattleMatchMode) => void
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(90deg,rgba(92,24,36,0.7),rgba(13,12,18,0.74)_35%,rgba(13,12,18,0.74)_65%,rgba(45,25,76,0.55))] px-3 py-2">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_50%,rgba(250,39,66,0.18),transparent_30%),radial-gradient(circle_at_88%_50%,rgba(5,216,189,0.08),transparent_34%)]" />
+      <div className="relative grid gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+        <div>
+          <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Start Match</p>
+          <p className="ca-display mt-1 text-[1rem] leading-none text-ca-text">Choose Mode</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {battleMatchModes.map((mode) => {
+            const active = matchMode === mode
+            const launchesQueue = mode === 'ranked' || mode === 'quick'
+            const disabled = launchesQueue && (!isReady || searching)
+
+            return (
+              <button
+                key={mode}
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelectMode(mode)}
+                className={[
+                  'ca-display rounded-[5px] border px-3 py-2.5 text-[0.95rem] leading-none transition duration-300 active:scale-[0.98]',
+                  active
+                    ? mode === 'practice'
+                      ? 'border-ca-teal/45 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
+                      : 'border-ca-red/45 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
+                    : 'border-white/10 bg-[rgba(255,255,255,0.04)] text-ca-text-2 hover:border-white/20 hover:text-ca-text',
+                  disabled ? 'cursor-not-allowed opacity-45' : '',
+                ].join(' ')}
+              >
+                {getModeButtonLabel(mode)}
+              </button>
+            )
+          })}
+        </div>
+
+        <p className={['ca-mono-label rounded-[5px] border px-2 py-2 text-[0.46rem]', isReady ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal' : 'border-white/10 bg-white/5 text-ca-text-3'].join(' ')}>
+          {isReady ? 'TEAM READY' : 'SELECT 3 FIGHTERS'}
+        </p>
       </div>
     </div>
   )
@@ -1272,12 +1302,14 @@ function TeamSlotCard({
   slotIndex,
   entry,
   focused,
+  compact = false,
   onSelect,
   onClear,
 }: {
   slotIndex: number
   entry: BattlePrepRosterEntry | null
   focused: boolean
+  compact?: boolean
   onSelect: () => void
   onClear: () => void
 }) {
@@ -1289,12 +1321,13 @@ function TeamSlotCard({
         type="button"
         onClick={onSelect}
         className={[
-          'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] px-3 py-3 text-left transition duration-150',
+          'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] text-left transition duration-150',
+          compact ? 'px-2 py-2' : 'px-3 py-3',
           focused ? 'border-ca-teal/35' : 'border-white/10 hover:border-white/18',
         ].join(' ')}
       >
         <p className="ca-mono-label text-[0.4rem] text-ca-text-3">{label}</p>
-        <p className="ca-display mt-1.5 text-[1.32rem] leading-none text-ca-text-disabled">Empty</p>
+        <p className={['ca-display mt-1.5 leading-none text-ca-text-disabled', compact ? 'text-[1rem]' : 'text-[1.32rem]'].join(' ')}>Empty</p>
       </button>
     )
   }
@@ -1304,15 +1337,19 @@ function TeamSlotCard({
       type="button"
       onClick={onSelect}
       className={[
-        'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] px-2.5 py-2.5 text-left transition duration-150',
+        'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] text-left transition duration-150',
+        compact ? 'px-2 py-2' : 'px-2.5 py-2.5',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >
-      <div className="grid grid-cols-[2.6rem_minmax(0,1fr)_auto] items-center gap-2.5">
-        <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
+      <div className={['grid items-center', compact ? 'grid-cols-[minmax(0,1fr)_auto] gap-1.5' : 'grid-cols-[2.6rem_minmax(0,1fr)_auto] gap-2.5'].join(' ')}>
+        {!compact ? (
+          <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
+        ) : null}
         <div className="min-w-0">
-          <p className="ca-mono-label text-[0.38rem] text-ca-text-3">{label}</p>
-          <p className="ca-display mt-1 text-[1.08rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
+          {compact ? <PortraitThumb entry={entry} sizeClass="mb-1 aspect-square w-full" labelClass="text-[0.28rem]" bordered={false} showLabel /> : null}
+          <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
+          <p className={['ca-display mt-1 truncate leading-none text-ca-text', compact ? 'text-[0.92rem]' : 'text-[1.08rem]'].join(' ')}>{entry.battleTemplate.shortName}</p>
         </div>
         <button
           type="button"
