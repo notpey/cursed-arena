@@ -125,15 +125,12 @@ function PortraitThumb({
 
       {entry.battleTemplate.boardPortraitSrc ? (
         <div className="absolute inset-0 overflow-hidden">
-                  <img
+          <img
             src={entry.battleTemplate.boardPortraitSrc}
             alt={entry.name}
-            className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
+            className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain object-center"
             style={{
-              transform: `translate(${entry.battleTemplate.boardPortraitFrame?.x ?? '0'}, ${entry.battleTemplate.boardPortraitFrame?.y ?? '0'}) scale(${entry.battleTemplate.boardPortraitFrame?.scale ?? 1})`,
-              opacity: entry.battleTemplate.boardPortraitFrame?.opacity,
-              maxWidth: entry.battleTemplate.boardPortraitFrame?.maxWidth,
-              margin: 'auto',
+              opacity: entry.battleTemplate.boardPortraitFrame?.opacity ?? 1,
             }}
             draggable={false}
           />

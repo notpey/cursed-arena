@@ -1089,6 +1089,11 @@ export function AdminControlPanelPage() {
       return
     }
 
+    if (!getSupabaseClient()) {
+      setStatusFlash('SUPABASE REQUIRED FOR LIVE PUBLISH')
+      return
+    }
+
     writeAdminSelection({
       fighterId: selectedFighterId,
       abilityId: selectedAbilityId,
@@ -1098,7 +1103,11 @@ export function AdminControlPanelPage() {
     setIsPublishing(true)
     try {
       const result = await publishBattleContent(draft)
-      setStatusFlash(result.mode === 'remote' ? 'PUBLISHED LIVE' : 'PUBLISHED LOCAL ONLY')
+      if (result.mode !== 'remote') {
+        setStatusFlash('SUPABASE REQUIRED FOR LIVE PUBLISH')
+        return
+      }
+      setStatusFlash('PUBLISHED LIVE')
       window.location.reload()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown publish error.'
