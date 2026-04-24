@@ -251,6 +251,27 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     }
   }
 
+  // ── Passive abilities ─────────────────────────────────────────────────────
+  const seenPassiveRoots = new Set<string>()
+  for (const passive of fighter.passiveEffects ?? []) {
+    const root = passive.label.split(':')[0].trim()
+    if (seenPassiveRoots.has(root)) continue
+    seenPassiveRoots.add(root)
+    const sourceId = `passive-${passive.id ?? root}`
+    if (groups.has(sourceId)) continue
+    groups.set(sourceId, {
+      key: sourceId,
+      label: passive.label,
+      lines: [passive.description ?? 'Passive ability.'],
+      turnsLeft: null,
+      tone: 'buff',
+      iconSrc: passive.icon?.src,
+      iconLabel: passive.icon?.label ?? root.slice(0, 2).toUpperCase(),
+      iconTone: passive.icon?.tone ?? 'teal',
+      stackCount: null,
+    })
+  }
+
   return [...groups.values()].map((g) => ({
     key: g.key,
     iconSrc: g.iconSrc,
