@@ -9,26 +9,19 @@ export type BattleEnergyAmounts = Record<BattleEnergyType, number>
 
 export type BattleEnergyPool = {
   amounts: BattleEnergyAmounts
-  focus: BattleEnergyType | null
 }
 
 export type BattleEnergyCost = Partial<Record<BattleEnergyType, number>> & { random?: number }
 
-export type BattleEnergyRefreshRuleId = 'focus_bonus_random' | 'fully_random'
+export type BattleEnergyRefreshRuleId = 'fully_random'
 
 export type BattleEnergyRefreshRule = {
   id: BattleEnergyRefreshRuleId
-  guaranteeFocusPip: boolean
 }
 
 export const battleEnergyRefreshRules: Record<BattleEnergyRefreshRuleId, BattleEnergyRefreshRule> = {
-  focus_bonus_random: {
-    id: 'focus_bonus_random',
-    guaranteeFocusPip: true,
-  },
   fully_random: {
     id: 'fully_random',
-    guaranteeFocusPip: false,
   },
 }
 
@@ -118,17 +111,12 @@ function subtractEnergyAmounts(left: BattleEnergyAmounts, right: Partial<Record<
 
 function generateRefreshAmounts(
   livingCount: number,
-  focus: BattleEnergyType | null,
   seed: string,
   rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyAmounts {
+  void rule
   const next = createEnergyAmounts()
   let remaining = Math.max(0, livingCount)
-
-  if (rule.guaranteeFocusPip && focus && remaining > 0) {
-    next[focus] += 1
-    remaining -= 1
-  }
 
   const random = createSeededRandom(seed)
   for (let index = 0; index < remaining; index += 1) {
@@ -141,13 +129,11 @@ function generateRefreshAmounts(
 
 export function createRoundEnergyPool(
   livingCount = 3,
-  focus: BattleEnergyType | null = null,
   seed = 'default-energy-seed',
   rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyPool {
   return {
-    amounts: generateRefreshAmounts(livingCount, focus, seed, rule),
-    focus,
+    amounts: generateRefreshAmounts(livingCount, seed, rule),
   }
 }
 
@@ -155,25 +141,21 @@ export function refreshRoundEnergy(
   pool: BattleEnergyPool,
   livingCount: number,
   seed = 'default-energy-seed',
-  nextFocus?: BattleEnergyType | null,
   rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ): BattleEnergyPool {
-  const focus = nextFocus === undefined ? pool.focus : nextFocus
-  const refresh = generateRefreshAmounts(livingCount, focus, seed, rule)
+  const refresh = generateRefreshAmounts(livingCount, seed, rule)
 
   return {
     amounts: addEnergyAmounts(pool.amounts, refresh),
-    focus,
   }
 }
 
 export function getRefreshGain(
   livingCount: number,
-  focus: BattleEnergyType | null,
   seed = 'default-energy-seed',
   rule: BattleEnergyRefreshRule = defaultBattleEnergyRefreshRule,
 ) {
-  return generateRefreshAmounts(livingCount, focus, seed, rule)
+  return generateRefreshAmounts(livingCount, seed, rule)
 }
 
 export function countEnergyCost(cost: BattleEnergyCost) {
@@ -336,7 +318,6 @@ export function exchangeEnergy(
 
   return {
     amounts: addEnergyAmounts(subtractEnergyAmounts(pool.amounts, spend), { [targetType]: 1 }),
-    focus: pool.focus,
   }
 }
 
@@ -346,6 +327,5 @@ export function spendEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost): Bat
 
   return {
     amounts: subtractEnergyAmounts(pool.amounts, spent),
-    focus: pool.focus,
   }
 }

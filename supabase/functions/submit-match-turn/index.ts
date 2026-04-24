@@ -1,6 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4'
-import { endRoundTimeline, resolveTeamTurnTimeline, transitionToSecondPlayer } from '@/features/battle/engine.ts'
-import type { BattleState, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types.ts'
+import { battleEnergyOrder, type BattleEnergyType } from '@/features/battle/energy.ts'
+import { PASS_ABILITY_ID } from '@/features/battle/data.ts'
+import { endRoundTimeline, getAbilityById, resolveTeamTurnTimeline, transitionToSecondPlayer } from '@/features/battle/engine.ts'
+import type { BattleFighterState, BattleState, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types.ts'
 
 type BattleTeamId = 'player' | 'enemy'
 type MatchStatus = 'waiting' | 'in_progress' | 'finished' | 'abandoned'
@@ -127,6 +129,77 @@ function getStatusFromState(state: BattleState): MatchStatus {
   return 'in_progress'
 }
 
+function sanitizeRandomAllocation(value: unknown): Partial<Record<BattleEnergyType, number>> | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const candidate = value as Record<string, unknown>
+  const normalized = Object.fromEntries(
+    battleEnergyOrder
+      .map((type) => {
+        const raw = candidate[type]
+        const amount = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
+        return [type, amount] as const
+      })
+      .filter((entry) => entry[1] > 0),
+  ) as Partial<Record<BattleEnergyType, number>>
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
+function sanitizeActionOrder(actionOrder: string[], commandableIds: Set<string>) {
+  const seen = new Set<string>()
+  return actionOrder.filter((actorId) => {
+    if (!commandableIds.has(actorId)) return false
+    if (seen.has(actorId)) return false
+    seen.add(actorId)
+    return true
+  })
+}
+
+function sanitizeCommandsForTeam(
+  state: BattleState,
+  team: BattleTeamId,
+  commands: Record<string, unknown>,
+) {
+  const teamUnits = (team === 'player' ? state.playerTeam : state.enemyTeam).filter((fighter) => fighter.hp > 0)
+  const fightersById = new Map<string, BattleFighterState>(teamUnits.map((fighter) => [fighter.instanceId, fighter]))
+  const commandableIds = new Set(fightersById.keys())
+  const sanitized: Record<string, QueuedBattleAction> = {}
+
+  for (const actorId of commandableIds) {
+    const raw = commands[actorId]
+    if (!raw || typeof raw !== 'object') continue
+    const candidate = raw as Record<string, unknown>
+    const fighter = fightersById.get(actorId)
+    if (!fighter) continue
+
+    const requestedAbilityId = typeof candidate.abilityId === 'string' ? candidate.abilityId : PASS_ABILITY_ID
+    const ability = requestedAbilityId === PASS_ABILITY_ID ? null : getAbilityById(fighter, requestedAbilityId)
+    const abilityId = ability ? requestedAbilityId : PASS_ABILITY_ID
+    const targetId = typeof candidate.targetId === 'string' ? candidate.targetId : null
+
+    const command: QueuedBattleAction = {
+      actorId,
+      team,
+      abilityId,
+      targetId,
+    }
+
+    if (abilityId !== PASS_ABILITY_ID) {
+      const allocation = sanitizeRandomAllocation(candidate.randomCostAllocation)
+      if (allocation) {
+        command.randomCostAllocation = allocation
+      }
+    }
+
+    sanitized[actorId] = command
+  }
+
+  return {
+    commands: sanitized,
+    commandableIds,
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -206,14 +279,6 @@ Deno.serve(async (req) => {
     return reject('NOT_YOUR_TURN', 'It is not the caller’s active command phase.')
   }
 
-  if (Object.keys(requestBody.commands).length === 0) {
-    return reject('INVALID_COMMANDS', 'At least one command entry is required.')
-  }
-
-  if (requestBody.actionOrder.length === 0) {
-    return reject('INVALID_COMMANDS', 'Action order must contain at least one actor id.')
-  }
-
   const { data: existingSubmission, error: submissionLookupError } = await adminClient
     .from('match_commands')
     .select('id')
@@ -263,7 +328,9 @@ Deno.serve(async (req) => {
     return reject('MATCH_NOT_ACTIVE', 'Match has no canonical battle state.')
   }
 
-  const canonicalCommands = requestBody.commands as Record<string, QueuedBattleAction>
+  const sanitizedPayload = sanitizeCommandsForTeam(canonicalState, callerTeam, requestBody.commands)
+  const canonicalCommands = sanitizedPayload.commands
+  const canonicalActionOrder = sanitizeActionOrder(requestBody.actionOrder, sanitizedPayload.commandableIds)
 
   const commandInsert = await adminClient
     .from('match_commands')
@@ -274,7 +341,7 @@ Deno.serve(async (req) => {
       round: requestBody.round,
       phase: requestBody.phase,
       commands: canonicalCommands,
-      action_order: requestBody.actionOrder,
+      action_order: canonicalActionOrder,
       command_source: 'server-authoritative',
     })
 
@@ -283,7 +350,7 @@ Deno.serve(async (req) => {
   }
 
   const resolutionSteps: BattleTimelineStep[] = []
-  const turnTimeline = resolveTeamTurnTimeline(canonicalState, canonicalCommands, callerTeam, requestBody.actionOrder)
+  const turnTimeline = resolveTeamTurnTimeline(canonicalState, canonicalCommands, callerTeam, canonicalActionOrder)
   resolutionSteps.push(...turnTimeline.steps)
 
   let nextState = turnTimeline.state

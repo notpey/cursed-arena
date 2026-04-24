@@ -10,17 +10,16 @@ import {
   type BattleEnergyPool,
 } from '@/features/battle/energy'
 
-function pool(amounts: Parameters<typeof createEnergyAmounts>[0], focus: BattleEnergyPool['focus'] = null): BattleEnergyPool {
+function pool(amounts: Parameters<typeof createEnergyAmounts>[0]): BattleEnergyPool {
   return {
     amounts: createEnergyAmounts(amounts),
-    focus,
   }
 }
 
 describe('battle energy model', () => {
   test('round generation is deterministic and fully random by default', () => {
-    const first = createRoundEnergyPool(3, null, 'alpha-seed')
-    const second = createRoundEnergyPool(3, null, 'alpha-seed')
+    const first = createRoundEnergyPool(3, 'alpha-seed')
+    const second = createRoundEnergyPool(3, 'alpha-seed')
 
     expect(first).toEqual(second)
     expect(totalEnergyInPool(first)).toBe(3)

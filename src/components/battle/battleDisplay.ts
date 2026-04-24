@@ -559,13 +559,13 @@ export function getStatusPills(fighter: BattleFighterState) {
 }
 
 export function getCommandSummary(state: BattleState, command?: QueuedBattleAction) {
-  if (!command) return 'Ready'
+  if (!command) return 'Pass'
   const actor = getFighterById(state, command.actorId)
-  if (!actor) return 'Ready'
+  if (!actor) return 'Pass'
   const ability = getAbilityById(actor, command.abilityId)
   const target = command.targetId ? getFighterById(state, command.targetId) : null
-  if (!ability) return 'Ready'
-  if (ability.id === PASS_ABILITY_ID) return 'Auto-pass'
+  if (!ability) return 'Pass'
+  if (ability.id === PASS_ABILITY_ID) return 'Pass'
   if (target) return `${ability.name} -> ${target.shortName}`
   return ability.name
 }

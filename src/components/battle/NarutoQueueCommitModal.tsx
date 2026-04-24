@@ -81,6 +81,11 @@ function resolveRandomCost(cost: BattleEnergyCost, allocation: Partial<Record<Ba
   return resolved
 }
 
+function sumRandomAllocation(allocation?: Partial<Record<BattleEnergyType, number>>) {
+  if (!allocation) return 0
+  return battleEnergyOrder.reduce((sum, type) => sum + (allocation[type] ?? 0), 0)
+}
+
 export function NarutoQueueCommitModal({
   round,
   state,
@@ -97,7 +102,7 @@ export function NarutoQueueCommitModal({
   initialOrder: string[]
   energy: BattleEnergyPool
   turnSecondsLeft: number
-  onConfirm: (actionOrder: string[]) => void
+  onConfirm: (actionOrder: string[], randomAlloc: RandomAllocation) => void
   onBack: () => void
 }) {
   const [order, setOrder] = useState<string[]>(() => {
@@ -134,46 +139,38 @@ export function NarutoQueueCommitModal({
     })
   }, [order, queued, state])
 
-  const activeRows = rows.filter((row) => !row.isPass)
+  const activeRows = useMemo(() => rows.filter((row) => !row.isPass), [rows])
+  const randomRows = useMemo(() => activeRows.filter((row) => (row.cost.random ?? 0) > 0), [activeRows])
   const totalRandomNeeded = activeRows.reduce((sum, row) => sum + (row.cost.random ?? 0), 0)
+  const [randomAlloc, setRandomAlloc] = useState<RandomAllocation>(() => buildDefaultRandomAllocation(rows, energy))
 
-  const [globalAlloc, setGlobalAlloc] = useState<Partial<Record<BattleEnergyType, number>>>(() => {
-    const defaults = buildDefaultRandomAllocation(rows, energy)
-    const aggregate: Partial<Record<BattleEnergyType, number>> = {}
-    for (const actorAlloc of Object.values(defaults)) {
-      for (const [type, count] of Object.entries(actorAlloc)) {
-        aggregate[type as BattleEnergyType] = (aggregate[type as BattleEnergyType] ?? 0) + (count as number)
-      }
-    }
-    return aggregate
-  })
+  const fixedSpendByType = useMemo(
+    () =>
+      Object.fromEntries(
+        battleEnergyOrder.map((type) => [
+          type,
+          activeRows.reduce((sum, row) => sum + (row.cost[type] ?? 0), 0),
+        ]),
+      ) as Record<BattleEnergyType, number>,
+    [activeRows],
+  )
 
-  function buildPerActorAlloc(): RandomAllocation {
-    const result: RandomAllocation = {}
-    const remaining = { ...globalAlloc } as Record<BattleEnergyType, number>
+  const randomSpendByType = useMemo(
+    () =>
+      Object.fromEntries(
+        battleEnergyOrder.map((type) => [
+          type,
+          activeRows.reduce((sum, row) => sum + (randomAlloc[row.fighter.instanceId]?.[type] ?? 0), 0),
+        ]),
+      ) as Record<BattleEnergyType, number>,
+    [activeRows, randomAlloc],
+  )
 
-    for (const row of activeRows) {
-      const needed = row.cost.random ?? 0
-      if (needed <= 0) continue
-
-      const actorAlloc: Partial<Record<BattleEnergyType, number>> = {}
-      let left = needed
-      for (const type of battleEnergyOrder) {
-        if (left <= 0) break
-        const take = Math.min(remaining[type] ?? 0, left)
-        if (take <= 0) continue
-        actorAlloc[type] = take
-        remaining[type] -= take
-        left -= take
-      }
-      result[row.fighter.instanceId] = actorAlloc
-    }
-
-    return result
-  }
-
-  const perActorAlloc = buildPerActorAlloc()
-  const totalAllocated = battleEnergyOrder.reduce((sum, type) => sum + (globalAlloc[type] ?? 0), 0)
+  const perActorAlloc = randomAlloc
+  const totalAllocated = activeRows.reduce(
+    (sum, row) => sum + sumRandomAllocation(perActorAlloc[row.fighter.instanceId]),
+    0,
+  )
   const hasUnallocated = totalRandomNeeded > 0 && totalAllocated < totalRandomNeeded
   const aggregateCost = sumEnergyCosts(
     activeRows.map((row) => resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {})),
@@ -233,11 +230,42 @@ export function NarutoQueueCommitModal({
     clearDrag()
   }
 
-  function adjustGlobalAlloc(type: BattleEnergyType, delta: number) {
-    setGlobalAlloc((current) => ({
-      ...current,
-      [type]: Math.max(0, (current[type] ?? 0) + delta),
-    }))
+  function adjustActorAlloc(actorId: string, type: BattleEnergyType, delta: number, actorRandomNeeded: number) {
+    setRandomAlloc((current) => {
+      const actorCurrent = current[actorId] ?? {}
+      const actorValue = actorCurrent[type] ?? 0
+
+      if (delta < 0) {
+        if (actorValue <= 0) return current
+        const nextActor = { ...actorCurrent }
+        if (actorValue === 1) {
+          delete nextActor[type]
+        } else {
+          nextActor[type] = actorValue - 1
+        }
+        if (sumRandomAllocation(nextActor) === 0) {
+          const next = { ...current }
+          delete next[actorId]
+          return next
+        }
+        return { ...current, [actorId]: nextActor }
+      }
+
+      const actorTotal = sumRandomAllocation(actorCurrent)
+      if (actorTotal >= actorRandomNeeded) return current
+
+      const spentForType = activeRows.reduce((sum, row) => sum + (current[row.fighter.instanceId]?.[type] ?? 0), 0)
+      const availableForType = Math.max(0, getEnergyCount(energy, type) - fixedSpendByType[type] - spentForType)
+      if (availableForType <= 0) return current
+
+      return {
+        ...current,
+        [actorId]: {
+          ...actorCurrent,
+          [type]: actorValue + 1,
+        },
+      }
+    })
   }
 
   const title =
@@ -246,6 +274,8 @@ export function NarutoQueueCommitModal({
       : activeRows.length === 0
         ? <>CONFIRM PASS TURN</>
         : <>CONFIRM ACTIONS</>
+  const timerCritical = turnSecondsLeft <= 10
+  const timerWarning = !timerCritical && turnSecondsLeft <= 20
 
   const statusToneClass =
     totalRandomNeeded > 0 && hasUnallocated
@@ -267,8 +297,10 @@ export function NarutoQueueCommitModal({
             <span
               className={[
                 'rounded-full border px-2 py-1 ca-mono-label text-[0.54rem] tracking-[0.14em]',
-                turnSecondsLeft <= 10
+                timerCritical
                   ? 'border-ca-red/35 bg-ca-red/10 text-ca-red'
+                  : timerWarning
+                    ? 'border-ca-gold/35 bg-ca-gold/10 text-ca-gold'
                   : 'border-ca-teal/25 bg-ca-teal/10 text-ca-teal',
               ].join(' ')}
             >
@@ -279,7 +311,7 @@ export function NarutoQueueCommitModal({
           <div className="px-4 py-4 text-ca-text sm:px-5">
             <div className="flex items-center justify-between gap-3">
               <p className="ca-mono-label text-[0.56rem] tracking-[0.14em] text-ca-text-3">ROUND {round}</p>
-              <p className={['ca-mono-label text-[0.56rem] tracking-[0.14em]', turnSecondsLeft <= 10 ? 'text-ca-red' : 'text-ca-text-2'].join(' ')}>
+              <p className={['ca-mono-label text-[0.56rem] tracking-[0.14em]', timerCritical ? 'text-ca-red' : timerWarning ? 'text-ca-gold' : 'text-ca-text-2'].join(' ')}>
                 TIMER {String(turnSecondsLeft).padStart(2, '0')}S
               </p>
             </div>
@@ -295,68 +327,101 @@ export function NarutoQueueCommitModal({
                 <span
                   className={[
                     'rounded-full border px-2 py-1 ca-mono-label text-[0.56rem] tracking-[0.14em]',
-                    statusToneClass === 'text-ca-teal'
+                    timerCritical
+                      ? 'border-ca-red/30 bg-ca-red/10 text-ca-red'
+                      : timerWarning
+                        ? 'border-ca-gold/35 bg-ca-gold/10 text-ca-gold'
+                        : statusToneClass === 'text-ca-teal'
                       ? 'border-ca-teal/25 bg-ca-teal/10 text-ca-teal'
                       : statusToneClass === 'text-ca-red'
                         ? 'border-ca-red/30 bg-ca-red/10 text-ca-red'
                         : 'border-white/10 bg-white/5 text-ca-text-2',
                   ].join(' ')}
                 >
-                  {activeRows.length === 0 ? 'PASS TURN' : `${activeRows.length} ACTIVE`}
+                  {timerCritical ? 'FINAL SECONDS' : timerWarning ? 'LOCK TURN' : activeRows.length === 0 ? 'PASS TURN' : `${activeRows.length} ACTIVE`}
                 </span>
               </div>
             </div>
 
             <div className="mt-5 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <div className="mb-3 grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)] gap-3">
-                <p className="ca-display text-[0.94rem] tracking-[0.05em] text-ca-text">ENERGY LEFT</p>
-                <div />
-                <p className="text-right ca-display text-[0.94rem] tracking-[0.05em] text-ca-text">RANDOM COST</p>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="ca-display text-[0.94rem] tracking-[0.05em] text-ca-text">RANDOM CE ASSIGNMENT</p>
+                <p className={['ca-mono-label text-[0.58rem] tracking-[0.12em]', hasUnallocated ? 'text-ca-red' : 'text-ca-teal'].join(' ')}>
+                  ASSIGNED {totalAllocated}/{totalRandomNeeded}
+                </p>
               </div>
-              <div className="grid grid-cols-[minmax(0,1fr)_3.4rem_minmax(0,1fr)] gap-x-3 gap-y-2.5">
-                {battleEnergyOrder.map((type) => {
-                  const meta = battleEnergyMeta[type]
-                  const poolCount = getEnergyCount(energy, type)
-                  const allocated = globalAlloc[type] ?? 0
-                  const atMax = totalAllocated >= totalRandomNeeded
-                  const interactive = totalRandomNeeded > 0
 
-                  return (
-                    <div key={type} className="contents">
-                      <div className="flex min-w-0 items-center gap-2 rounded-[6px] border border-white/6 bg-[rgba(255,255,255,0.025)] px-2 py-2">
-                        <span className="h-3 w-3 shrink-0 rounded-full border border-black/30" style={{ backgroundColor: meta.color }} />
-                        <span className="min-w-0 truncate ca-mono-label text-[0.62rem] tracking-[0.12em] text-ca-text-2">{getEnergyTypeLabel(type)}</span>
-                        <span className="ml-auto ca-display text-[0.98rem] leading-none text-ca-text">{poolCount}</span>
-                      </div>
+              {randomRows.length === 0 ? (
+                <div className="rounded-[8px] border border-white/8 bg-[rgba(13,12,17,0.38)] px-3 py-3 text-center">
+                  <p className="ca-mono-label text-[0.58rem] tracking-[0.1em] text-ca-text-2">NO RANDOM CE COSTS QUEUED</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {randomRows.map((row) => {
+                    const actorId = row.fighter.instanceId
+                    const actorAlloc = randomAlloc[actorId] ?? {}
+                    const actorNeeded = row.cost.random ?? 0
+                    const actorAssigned = sumRandomAllocation(actorAlloc)
+                    const actorComplete = actorAssigned >= actorNeeded
 
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => adjustGlobalAlloc(type, -1)}
-                          disabled={!interactive || allocated <= 0}
-                          className="ca-display h-7 w-7 rounded-[6px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[1rem] leading-none text-ca-text transition hover:border-ca-red/35 hover:bg-ca-red/10 disabled:opacity-40"
-                        >
-                          -
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => adjustGlobalAlloc(type, 1)}
-                          disabled={!interactive || poolCount <= allocated || atMax}
-                          className="ca-display h-7 w-7 rounded-[6px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[1rem] leading-none text-ca-text transition hover:border-ca-teal/35 hover:bg-ca-teal/10 disabled:opacity-40"
-                        >
-                          +
-                        </button>
-                      </div>
+                    return (
+                      <div key={actorId} className="rounded-[8px] border border-white/8 bg-[rgba(13,12,17,0.38)] px-3 py-2.5">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="ca-display text-[0.84rem] tracking-[0.04em] text-ca-text">
+                            {row.fighter.shortName.toUpperCase()} • {row.abilityName.toUpperCase()}
+                          </p>
+                          <p className={['ca-mono-label text-[0.52rem] tracking-[0.12em]', actorComplete ? 'text-ca-teal' : 'text-ca-gold'].join(' ')}>
+                            {actorAssigned}/{actorNeeded} RANDOM
+                          </p>
+                        </div>
 
-                      <div className="flex min-w-0 items-center justify-end gap-2 rounded-[6px] border border-white/6 bg-[rgba(255,255,255,0.025)] px-2 py-2">
-                        <span className="h-3 w-3 shrink-0 rounded-full border border-black/30" style={{ backgroundColor: meta.color }} />
-                        <span className="min-w-0 truncate text-right ca-mono-label text-[0.62rem] tracking-[0.12em] text-ca-text-2">{getEnergyTypeLabel(type)}</span>
-                        <span className="ca-display text-[0.98rem] leading-none text-ca-text">{allocated}</span>
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                          {battleEnergyOrder.map((type) => {
+                            const meta = battleEnergyMeta[type]
+                            const assigned = actorAlloc[type] ?? 0
+                            const spentForType = randomSpendByType[type]
+                            const availableForType = Math.max(0, getEnergyCount(energy, type) - fixedSpendByType[type] - spentForType)
+
+                            return (
+                              <div key={`${actorId}-${type}`} className="rounded-[6px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-2 py-1.5">
+                                <div className="mb-1 flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 rounded-full border border-black/30" style={{ backgroundColor: meta.color }} />
+                                    <span className="ca-mono-label text-[0.46rem] tracking-[0.12em] text-ca-text-2">{getEnergyTypeLabel(type)}</span>
+                                  </div>
+                                  <span className="ca-display text-[0.78rem] text-ca-text">{assigned}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustActorAlloc(actorId, type, -1, actorNeeded)}
+                                    disabled={assigned <= 0}
+                                    className="ca-display h-6 w-6 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.9rem] leading-none text-ca-text transition hover:border-ca-red/35 hover:bg-ca-red/10 disabled:opacity-40"
+                                  >
+                                    -
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustActorAlloc(actorId, type, 1, actorNeeded)}
+                                    disabled={actorAssigned >= actorNeeded || availableForType <= 0}
+                                    className="ca-display h-6 w-6 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.9rem] leading-none text-ca-text transition hover:border-ca-teal/35 hover:bg-ca-teal/10 disabled:opacity-40"
+                                  >
+                                    +
+                                  </button>
+                                  <span className="ca-mono-label text-[0.42rem] tracking-[0.12em] text-ca-text-3">
+                                    LEFT {availableForType}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="mt-5 rounded-[10px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-3">
@@ -451,7 +516,7 @@ export function NarutoQueueCommitModal({
               <button
                 type="button"
                 disabled={!canAfford || hasUnallocated}
-                onClick={() => onConfirm(orderedActionIds)}
+                onClick={() => onConfirm(orderedActionIds, randomAlloc)}
                 className="ca-display rounded-[8px] border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.22)] transition duration-150 hover:translate-y-[-1px] hover:bg-[#ff3d5a] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
               >
                 OK

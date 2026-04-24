@@ -1,4 +1,4 @@
-import type { BattleEnergyPool, BattleEnergyCost } from '@/features/battle/energy.ts'
+import type { BattleEnergyPool, BattleEnergyCost, BattleEnergyType } from '@/features/battle/energy.ts'
 
 export type BattleTeamId = 'player' | 'enemy'
 
@@ -356,6 +356,7 @@ export type QueuedBattleAction = {
   team: BattleTeamId
   abilityId: string
   targetId?: string | null
+  randomCostAllocation?: Partial<Record<BattleEnergyType, number>>
 }
 
 export type BattleEventKind =

@@ -71,6 +71,8 @@ type BattleTimelineFocus = {
 }
 
 const timelineStepDelayMs = 360
+const timelineSystemDelayMs = 240
+const timelineRoundDelayMs = 300
 const timelineEventPriority: BattleRuntimeEvent['type'][] = [
   'fighter_defeated',
   'damage_applied',
@@ -86,6 +88,12 @@ const timelineEventPriority: BattleRuntimeEvent['type'][] = [
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+}
+
+function getTimelineStepDelay(step: BattleTimelineStep) {
+  if (step.kind === 'action') return timelineStepDelayMs
+  if (step.kind === 'roundStart' || step.kind === 'roundEnd') return timelineRoundDelayMs
+  return timelineSystemDelayMs
 }
 
 function createTimelineFocus(step: BattleTimelineStep): BattleTimelineFocus | null {
@@ -220,15 +228,94 @@ function hasCommittedPlayerAction(command?: QueuedBattleAction) {
   return Boolean(command?.team === 'player' && command.abilityId !== PASS_ABILITY_ID)
 }
 
-function createTimeoutEvent(round: number, hadQueuedActions: boolean): BattleEvent {
+function countCommittedPlayerActions(queued: Record<string, QueuedBattleAction>) {
+  return Object.values(queued).filter((command) => hasCommittedPlayerAction(command)).length
+}
+
+function buildTimeoutQueuedActions(
+  state: BattleState,
+  queued: Record<string, QueuedBattleAction>,
+): Record<string, QueuedBattleAction> {
+  const timeoutCommands = buildTimeoutCommands(state)
+  for (const [actorId, command] of Object.entries(queued)) {
+    if (!hasCommittedPlayerAction(command)) continue
+    timeoutCommands[actorId] = command
+  }
+  return timeoutCommands
+}
+
+function buildCommittedActionOrder(
+  actionOrder: string[],
+  queued: Record<string, QueuedBattleAction>,
+): string[] | undefined {
+  const committedActorIds = new Set(
+    Object.values(queued)
+      .filter((command) => hasCommittedPlayerAction(command))
+      .map((command) => command.actorId),
+  )
+
+  if (committedActorIds.size === 0) return undefined
+
+  const ordered = actionOrder.filter((actorId) => committedActorIds.has(actorId))
+  for (const actorId of committedActorIds) {
+    if (!ordered.includes(actorId)) ordered.push(actorId)
+  }
+  return ordered
+}
+
+function applyRandomAllocationToQueuedActions(
+  queued: Record<string, QueuedBattleAction>,
+  randomAlloc: RandomAllocation,
+) {
+  return Object.fromEntries(
+    Object.entries(queued).map(([actorId, command]) => {
+      const { randomCostAllocation: _unused, ...baseCommand } = command
+      const allocation = randomAlloc[actorId]
+      if (!allocation) return [actorId, baseCommand]
+
+      const normalized = Object.fromEntries(
+        battleEnergyOrder
+          .map((type) => [type, Math.max(0, Math.floor(allocation[type] ?? 0))] as const)
+          .filter((entry) => entry[1] > 0),
+      ) as Partial<Record<BattleEnergyType, number>>
+
+      if (Object.keys(normalized).length === 0) {
+        return [actorId, baseCommand]
+      }
+
+      return [actorId, { ...baseCommand, randomCostAllocation: normalized }]
+    }),
+  )
+}
+
+function createTimeoutEvent(
+  round: number,
+  {
+    committedCount,
+    autoPassedCount,
+    hadUnconfirmedActions,
+  }: {
+    committedCount: number
+    autoPassedCount: number
+    hadUnconfirmedActions: boolean
+  },
+): BattleEvent {
+  let message = 'Turn timer expired. The turn was passed automatically.'
+
+  if (committedCount > 0 && autoPassedCount > 0) {
+    message = `Turn timer expired. ${committedCount} queued action${committedCount === 1 ? '' : 's'} locked in; ${autoPassedCount} fighter${autoPassedCount === 1 ? '' : 's'} auto-passed.`
+  } else if (committedCount > 0) {
+    message = `Turn timer expired. ${committedCount} queued action${committedCount === 1 ? '' : 's'} locked in.`
+  } else if (hadUnconfirmedActions) {
+    message = 'Turn timer expired. Unconfirmed actions were canceled and the turn was passed.'
+  }
+
   return {
     id: `timeout-${round}-${Date.now()}`,
     round,
     kind: 'system',
     tone: 'red',
-    message: hadQueuedActions
-      ? 'Turn timer expired. Unconfirmed actions were canceled and the turn was passed.'
-      : 'Turn timer expired. The turn was passed automatically.',
+    message,
   }
 }
 
@@ -344,6 +431,18 @@ export function BattlePage() {
   const inspectedAbility =
     hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
+  const committedActionCount = countCommittedPlayerActions(battle.queued)
+  const hasCommittedActions = committedActionCount > 0
+  const timerPressurePrompt =
+    turnSecondsLeft <= 10
+      ? hasCommittedActions
+        ? 'COMMIT TURN NOW'
+        : 'QUEUE ACTIONS OR PASS'
+      : turnSecondsLeft <= 20
+        ? hasCommittedActions
+          ? 'LOCK IN ACTION ORDER'
+          : 'PLAN YOUR TURN'
+        : null
   const multiplayerBattleState = multiplayer?.battleState
   const multiplayerAutoCommands = multiplayer?.autoCommands
   const multiplayerIsMyTurn = multiplayer?.isMyTurn ?? false
@@ -356,6 +455,8 @@ export function BattlePage() {
       ? `TARGET ALLY WITH ${selectedAbility?.name.toUpperCase() ?? 'TECHNIQUE'}`
       : selectedAbility
         ? `${selectedAbility.name.toUpperCase()} READY`
+        : timerPressurePrompt
+          ? timerPressurePrompt
         : battle.state.firstPlayer === 'enemy'
           ? `RESPONSE TURN (${turnOrderLabel})`
           : `OPENING TURN (${turnOrderLabel})`
@@ -414,36 +515,28 @@ export function BattlePage() {
     clearPendingSelection()
     setHoveredAbility(null)
 
-    // Apply the final board state immediately so the layout never shifts mid-playback.
-    const finalStep = steps[steps.length - 1]
-    if (finalStep) {
-      setBattle((current) => ({
-        ...current,
-        state: finalStep.state,
-        queued: {},
-        selectedActorId: null,
-      }))
-    } else {
-      setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
-    }
+    // Lock interactions immediately, then resolve board + focus in readable beats.
+    setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
 
-    // Dump all events into the log at once.
-    const allEvents = steps.flatMap((s) => s.events)
-    if (allEvents.length > 0) {
-      setBattleLog((current) => [...current, ...allEvents].slice(-36))
-    }
-
-    // Cycle the focus label through each action step for visual feedback.
     for (const step of steps) {
       if (timelineRunRef.current !== runId) {
         return false
       }
 
-      const focus = createTimelineFocus(step)
-      if (focus) {
-        setTimelineFocus(focus)
-        await wait(step.kind === 'action' ? timelineStepDelayMs : timelineStepDelayMs - 60)
+      setBattle((current) => ({
+        ...current,
+        state: step.state,
+        queued: {},
+        selectedActorId: null,
+      }))
+
+      if (step.events.length > 0) {
+        setBattleLog((current) => [...current, ...step.events].slice(-36))
       }
+
+      const focus = createTimelineFocus(step)
+      setTimelineFocus(focus)
+      await wait(getTimelineStepDelay(step))
     }
 
     if (timelineRunRef.current !== runId) {
@@ -831,15 +924,23 @@ export function BattlePage() {
     // In online mode only time out if it's actually our turn
     if (multiplayer && !multiplayer.isMyTurn) return
 
-    const hadQueuedActions =
-      queueDialogOpen ||
-      hasPendingTargetSelection ||
-      Object.values(battle.queued).some((command) => hasCommittedPlayerAction(command))
+    const hadUnconfirmedActions = queueDialogOpen || hasPendingTargetSelection
+    const timeoutQueued = buildTimeoutQueuedActions(battle.state, battle.queued)
+    const committedCount = countCommittedPlayerActions(timeoutQueued)
+    const autoPassedCount = Math.max(0, getCommandablePlayerUnits(battle.state).length - committedCount)
+    const committedOrder = buildCommittedActionOrder(battle.actionOrder, timeoutQueued)
 
     setQueueDialogOpen(false)
     resolveQueuedRound(
-      buildTimeoutCommands(battle.state),
-      [createTimeoutEvent(battle.state.round, hadQueuedActions)],
+      timeoutQueued,
+      [
+        createTimeoutEvent(battle.state.round, {
+          committedCount,
+          autoPassedCount,
+          hadUnconfirmedActions,
+        }),
+      ],
+      committedOrder,
     )
   }
 
@@ -848,9 +949,9 @@ export function BattlePage() {
     setQueueDialogOpen(true)
   }
 
-  function handleQueueConfirm(finalActionOrder: string[]) {
+  function handleQueueConfirm(finalActionOrder: string[], randomAlloc: RandomAllocation) {
     setQueueDialogOpen(false)
-    resolveQueuedRound(battle.queued, [], finalActionOrder)
+    resolveQueuedRound(applyRandomAllocationToQueuedActions(battle.queued, randomAlloc), [], finalActionOrder)
   }
 
   function handleTargetFighterClick(fighter: { instanceId: string }) {

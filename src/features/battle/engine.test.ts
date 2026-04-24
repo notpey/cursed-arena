@@ -36,7 +36,6 @@ function createChargedBattleState(overrides?: Parameters<typeof createInitialBat
   const state = createInitialBattleState(overrides)
   const chargedPool = {
     amounts: createEnergyAmounts({ physical: 6, technique: 6, vow: 6, mental: 6 }),
-    focus: null,
   }
   state.playerEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
   state.enemyEnergy = { ...chargedPool, amounts: { ...chargedPool.amounts } }
@@ -65,6 +64,22 @@ describe('battle engine scenarios', () => {
     expect(updatedGojo.cooldowns['gojo-red']).toBe(0)
   })
 
+  test('round initiative alternates each new round', () => {
+    const state = createChargedBattleState({ battleSeed: 'initiative-alternates' })
+    state.firstPlayer = 'player'
+    state.activePlayer = 'player'
+
+    const firstAdvance = beginNewRound(state)
+    expect(firstAdvance.state.firstPlayer).toBe('enemy')
+    expect(firstAdvance.state.activePlayer).toBe('enemy')
+    expect(firstAdvance.state.phase).toBe('firstPlayerCommand')
+
+    const secondAdvance = beginNewRound(firstAdvance.state)
+    expect(secondAdvance.state.firstPlayer).toBe('player')
+    expect(secondAdvance.state.activePlayer).toBe('player')
+    expect(secondAdvance.state.phase).toBe('firstPlayerCommand')
+  })
+
   test('Megumi passive damage boost applies to standard attacks', () => {
     const state = createChargedBattleState()
     const megumi = getFighter(state, 'player', 'megumi')
@@ -78,6 +93,32 @@ describe('battle engine scenarios', () => {
 
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
     expect(updatedYuji.hp).toBe(54)
+  })
+
+  test('random CE allocation on queued commands is honored during spend', () => {
+    const state = createChargedBattleState()
+    const gojo = getFighter(state, 'player', 'gojo')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    gojo.abilities[0].energyCost = { random: 1 }
+    state.playerEnergy.amounts = createEnergyAmounts({ physical: 1, technique: 2, vow: 0, mental: 0 })
+
+    const resolved = resolveTeamTurn(
+      state,
+      {
+        [gojo.instanceId]: {
+          actorId: gojo.instanceId,
+          team: 'player',
+          abilityId: gojo.abilities[0].id,
+          targetId: yuji.instanceId,
+          randomCostAllocation: { physical: 1 },
+        },
+      },
+      'player',
+    )
+
+    expect(resolved.state.playerEnergy.amounts.physical).toBe(0)
+    expect(resolved.state.playerEnergy.amounts.technique).toBe(2)
   })
 
   test('Nanami execute passive applies only below threshold', () => {

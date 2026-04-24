@@ -711,6 +711,10 @@ function getSecondPlayer(first: BattleTeamId): BattleTeamId {
   return first === 'player' ? 'enemy' : 'player'
 }
 
+function advanceRoundInitiative(state: BattleState) {
+  state.firstPlayer = getSecondPlayer(state.firstPlayer)
+}
+
 type BattleStateSetup = Partial<typeof defaultBattleSetup> & {
   battleSeed?: string
 }
@@ -733,8 +737,8 @@ export function createInitialBattleState(setupOverrides?: BattleStateSetup): Bat
     firstPlayer: first,
     activePlayer: first,
     battlefield: setup.battlefield,
-    playerEnergy: createRoundEnergyPool(first === 'player' ? 1 : playerTeam.filter(isAlive).length, null, `${setup.battleSeed}:initial:player`),
-    enemyEnergy: createRoundEnergyPool(first === 'enemy' ? 1 : enemyTeam.filter(isAlive).length, null, `${setup.battleSeed}:initial:enemy`),
+    playerEnergy: createRoundEnergyPool(first === 'player' ? 1 : playerTeam.filter(isAlive).length, `${setup.battleSeed}:initial:player`),
+    enemyEnergy: createRoundEnergyPool(first === 'enemy' ? 1 : enemyTeam.filter(isAlive).length, `${setup.battleSeed}:initial:enemy`),
     playerTeam,
     enemyTeam,
     playerTeamModifiers: createModifiers(),
@@ -809,6 +813,40 @@ function normalizeEnergyCost(cost: BattleEnergyCost) {
   return next
 }
 
+function getCommandResolvedCost(cost: BattleEnergyCost, command: QueuedBattleAction) {
+  const normalized = normalizeEnergyCost(cost)
+  const randomRequired = normalizeEnergyAmount(normalized.random)
+  if (randomRequired <= 0 || !command.randomCostAllocation) {
+    return normalized
+  }
+
+  const resolved: BattleEnergyCost = {}
+  battleEnergyOrder.forEach((type) => {
+    const typed = normalizeEnergyAmount(normalized[type])
+    if (typed > 0) {
+      resolved[type] = typed
+    }
+  })
+
+  let randomAllocated = 0
+  battleEnergyOrder.forEach((type) => {
+    if (randomAllocated >= randomRequired) return
+    const requested = normalizeEnergyAmount(command.randomCostAllocation?.[type])
+    if (requested <= 0) return
+
+    const applied = Math.min(requested, randomRequired - randomAllocated)
+    if (applied <= 0) return
+    resolved[type] = normalizeEnergyAmount(resolved[type]) + applied
+    randomAllocated += applied
+  })
+
+  if (randomAllocated !== randomRequired) {
+    return normalized
+  }
+
+  return resolved
+}
+
 function countEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
   return battleEnergyOrder.reduce((total, type) => total + normalizeEnergyAmount(amounts[type]), 0)
 }
@@ -857,7 +895,6 @@ function gainEnergyPool(
   return {
     pool: {
       amounts: nextAmounts,
-      focus: pool.focus,
     },
     gained,
   }
@@ -893,7 +930,6 @@ function drainEnergyPool(
   return {
     pool: {
       amounts: nextAmounts,
-      focus: pool.focus,
     },
     drained,
   }
@@ -943,21 +979,21 @@ function getCommandEnergyCost(state: BattleState, command: QueuedBattleAction) {
   if (!actor) return {}
 
   const ability = getAbilityById(actor, command.abilityId)
-  return ability ? getResolvedAbilityEnergyCost(actor, ability).cost : {}
+  if (!ability) return {}
+  const { cost } = getResolvedAbilityEnergyCost(actor, ability)
+  return getCommandResolvedCost(cost, command)
 }
 
 function cloneEnergyPool(state: BattleState, team: BattleTeamId) {
   const pool = getEnergyPool(state, team)
   return {
     amounts: { ...pool.amounts },
-    focus: pool.focus,
   }
 }
 
 function tryAffordAbilityWithExchanges(pool: ReturnType<typeof cloneEnergyPool>, cost: ReturnType<typeof getAbilityEnergyCost>) {
   let current = {
     amounts: { ...pool.amounts },
-    focus: pool.focus,
   }
   const exchanges: BattleEnergyType[] = []
   const maxExchanges = Math.floor(totalEnergyInPool(current) / battleEnergyExchangeCost)
@@ -2870,8 +2906,10 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   if (ability.id !== PASS_ABILITY_ID) {
     const { cost, applied } = getResolvedAbilityEnergyCost(actor, ability)
     const currentPool = getEnergyPool(state, actor.team)
-    const spent = getSpentEnergyAmounts(currentPool, cost)
-    const nextPool = spendEnergy(currentPool, cost)
+    const requestedCost = getCommandResolvedCost(cost, command)
+    const payableCost = canPayEnergy(currentPool, requestedCost) ? requestedCost : cost
+    const spent = getSpentEnergyAmounts(currentPool, payableCost)
+    const nextPool = spendEnergy(currentPool, payableCost)
     if (actor.team === 'player') {
       state.playerEnergy = nextPool
     } else {
@@ -2885,7 +2923,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       abilityId: ability.id,
       mode: 'spend',
       amounts: {
-        reserve: -countEnergyCost(cost),
+        reserve: -countEnergyCost(payableCost),
         ...Object.fromEntries(
           battleEnergyOrder
             .map((type) => [type, spent ? -spent[type] : 0] as const)
@@ -3022,8 +3060,8 @@ function applyRoundEnergyGeneration(state: BattleState, ctx: ResolutionContext) 
 
   if (playerAliveCount > 0) {
     const playerSeed = `${state.battleSeed}:round:${state.round}:player`
-    const playerGain = getRefreshGain(playerAliveCount, null, playerSeed)
-    state.playerEnergy = refreshRoundEnergy(state.playerEnergy, playerAliveCount, playerSeed, null)
+    const playerGain = getRefreshGain(playerAliveCount, playerSeed)
+    state.playerEnergy = refreshRoundEnergy(state.playerEnergy, playerAliveCount, playerSeed)
     makeEvent(
       ctx,
       state.round,
@@ -3042,8 +3080,8 @@ function applyRoundEnergyGeneration(state: BattleState, ctx: ResolutionContext) 
 
   if (enemyAliveCount > 0) {
     const enemySeed = `${state.battleSeed}:round:${state.round}:enemy`
-    const enemyGain = getRefreshGain(enemyAliveCount, null, enemySeed)
-    state.enemyEnergy = refreshRoundEnergy(state.enemyEnergy, enemyAliveCount, enemySeed, null)
+    const enemyGain = getRefreshGain(enemyAliveCount, enemySeed)
+    state.enemyEnergy = refreshRoundEnergy(state.enemyEnergy, enemyAliveCount, enemySeed)
     emitResourceChange(ctx, state.round, {
       kind: 'resource',
       targetTeam: 'enemy',
@@ -3259,6 +3297,7 @@ export function beginNewRound(previousState: BattleState): BattleResolutionResul
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
 
+  advanceRoundInitiative(state)
   state.round += 1
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
@@ -3285,6 +3324,7 @@ export function beginNewRoundTimeline(previousState: BattleState): BattleTimelin
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
   const steps: BattleTimelineStep[] = []
 
+  advanceRoundInitiative(state)
   state.round += 1
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
@@ -3456,10 +3496,13 @@ export function resolveRound(
     state.winner = winner
     makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
   } else {
+    advanceRoundInitiative(state)
     state.round += 1
     makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id, legacy: true } })
     applyRoundStartEffects(state, ctx)
     applyRoundEnergyGeneration(state, ctx)
+    state.activePlayer = state.firstPlayer
+    state.phase = 'firstPlayerCommand'
     makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} command window opened.`)
   }
 
