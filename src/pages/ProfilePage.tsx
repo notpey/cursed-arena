@@ -80,15 +80,29 @@ export function ProfilePage() {
     <section className="py-4 sm:py-6">
       <div className="grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] xl:gap-5">
         <div className="min-w-0 space-y-4">
-          <ProfileHeaderCard profile={profile} />
-          <RankCard profileStats={profileStats} lpPct={lpPct} />
-          <StatsBento items={statBento} />
-          {leaderboard.length > 0 && <LeaderboardCard leaderboard={leaderboard} currentUserId={user?.id} />}
+          <div className="animate-ca-stagger-in" style={{ animationDelay: '0ms' }}>
+            <ProfileHeaderCard profile={profile} />
+          </div>
+          <div className="animate-ca-stagger-in" style={{ animationDelay: '60ms' }}>
+            <RankCard profileStats={profileStats} lpPct={lpPct} />
+          </div>
+          <div className="animate-ca-stagger-in" style={{ animationDelay: '120ms' }}>
+            <StatsBento items={statBento} />
+          </div>
+          {leaderboard.length > 0 && (
+            <div className="animate-ca-stagger-in" style={{ animationDelay: '180ms' }}>
+              <LeaderboardCard leaderboard={leaderboard} currentUserId={user?.id} />
+            </div>
+          )}
         </div>
 
         <div className="min-w-0 space-y-4">
-          <FeaturedTeamCard currentSquad={currentSquad} />
-          <MatchHistoryCard recentMatches={recentMatches} />
+          <div className="animate-ca-stagger-in" style={{ animationDelay: '80ms' }}>
+            <FeaturedTeamCard currentSquad={currentSquad} />
+          </div>
+          <div className="animate-ca-stagger-in" style={{ animationDelay: '160ms' }}>
+            <MatchHistoryCard recentMatches={recentMatches} />
+          </div>
         </div>
       </div>
     </section>
@@ -193,10 +207,10 @@ function LeaderboardCard({
             <div
               key={entry.id}
               className={[
-                'flex items-center gap-3 rounded-[8px] border px-3 py-2.5',
+                'flex items-center gap-3 rounded-[8px] border px-3 py-2.5 transition duration-150',
                 isMe
-                  ? 'border-sky-400/20 bg-sky-400/6'
-                  : 'border-white/6 bg-[rgba(16,17,22,0.14)]',
+                  ? 'border-sky-400/20 bg-sky-400/6 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.08)]'
+                  : 'border-white/6 bg-[rgba(16,17,22,0.14)] hover:border-white/10 hover:bg-[rgba(20,21,28,0.2)]',
               ].join(' ')}
             >
               <span className={[
@@ -274,7 +288,7 @@ function MatchHistoryRow({ match }: { match: MatchHistoryEntry }) {
 
   return (
     <div
-      className="rounded-[10px] border border-white/7 bg-[rgba(16,17,22,0.16)] p-3"
+      className="rounded-[10px] border border-white/7 bg-[rgba(16,17,22,0.16)] p-3 transition duration-150 hover:border-white/12 hover:bg-[rgba(20,21,28,0.22)]"
       style={{ boxShadow: `inset 2px 0 0 ${win ? 'rgba(34,197,94,0.28)' : 'rgba(250,39,66,0.22)'}` }}
     >
       <div className="grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">

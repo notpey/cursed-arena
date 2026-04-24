@@ -196,7 +196,7 @@ export function SettingsPage() {
               </p>
             </div>
             {saveFlash !== 'idle' ? (
-              <span className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-3 py-2 text-[0.48rem] text-ca-teal">
+              <span className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-3 py-2 text-[0.48rem] text-ca-teal animate-ca-fade-in">
                 {saveFlash === 'saved' ? 'SETTINGS SAVED' : 'DEFAULTS RESTORED'}
               </span>
             ) : null}
@@ -226,7 +226,7 @@ export function SettingsPage() {
               </div>
 
               {accountMessage || auth.error ? (
-                <p className={`mt-3 text-sm ${accountFlash === 'error' || auth.error ? 'text-ca-red' : 'text-ca-teal'}`}>
+                <p className={`mt-3 text-sm animate-ca-slide-up ${accountFlash === 'error' || auth.error ? 'text-ca-red' : 'text-ca-teal'}`}>
                   {accountMessage ?? auth.error}
                 </p>
               ) : null}
@@ -256,7 +256,7 @@ export function SettingsPage() {
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div key={authMode} className="grid gap-3 sm:grid-cols-2 animate-ca-fade-in">
                     <Field label="Email">
                       <TextInput
                         value={emailInput}
@@ -312,7 +312,7 @@ export function SettingsPage() {
                       type="button"
                       onClick={() => { void (authMode === 'login' ? handlePasswordLogin() : handleSignup()) }}
                       disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
-                      className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal disabled:cursor-not-allowed disabled:opacity-50"
+                      className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal transition duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {authMode === 'login' ? 'LOG IN' : 'CREATE'}
                     </button>
@@ -321,7 +321,7 @@ export function SettingsPage() {
                       type="button"
                       onClick={() => { void handleGoogle() }}
                       disabled={!auth.isConfigured || accountBusy || auth.status === 'loading'}
-                      className="ca-mono-label rounded-lg border border-white/10 bg-[rgba(255,255,255,0.02)] px-4 py-3 text-[0.55rem] text-ca-text-2 hover:border-white/16 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="ca-mono-label rounded-lg border border-white/10 bg-[rgba(255,255,255,0.02)] px-4 py-3 text-[0.55rem] text-ca-text-2 transition duration-150 hover:border-white/16 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       CONTINUE WITH GOOGLE
                     </button>
@@ -337,7 +337,7 @@ export function SettingsPage() {
                     type="button"
                     onClick={() => { void handleSignOut() }}
                     disabled={accountBusy}
-                    className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red hover:bg-ca-red-wash disabled:cursor-not-allowed disabled:opacity-50"
+                    className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red transition duration-150 hover:bg-ca-red-wash active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     SIGN OUT
                   </button>
@@ -367,7 +367,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={copyPlayerId}
-                  className="ca-mono-label shrink-0 rounded-md border border-white/10 px-3 py-2 text-[0.5rem] text-ca-text-2 hover:border-ca-teal/30 hover:text-ca-teal"
+                  className="ca-mono-label shrink-0 rounded-md border border-white/10 px-3 py-2 text-[0.5rem] text-ca-text-2 transition duration-150 hover:border-ca-teal/30 hover:text-ca-teal active:scale-[0.95]"
                 >
                   {copiedId ? 'COPIED' : 'COPY'}
                 </button>
@@ -544,7 +544,7 @@ export function SettingsPage() {
           <button
             type="button"
             onClick={() => { void saveChanges() }}
-            className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal shadow-[0_0_18px_rgba(5,216,189,0.08)]"
+            className="ca-display rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-4 py-3 text-2xl text-ca-teal shadow-[0_0_18px_rgba(5,216,189,0.08)] transition duration-150 active:scale-[0.97]"
           >
             {saveFlash === 'saved' ? 'Saved' : 'Save Changes'}
           </button>
@@ -552,7 +552,7 @@ export function SettingsPage() {
           <button
             type="button"
             onClick={resetToDefaults}
-            className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red hover:bg-ca-red-wash"
+            className="ca-mono-label rounded-lg border border-ca-red/25 bg-transparent px-4 py-3 text-[0.55rem] text-ca-red transition duration-150 hover:bg-ca-red-wash active:scale-[0.97]"
           >
             RESET DEFAULTS
           </button>
@@ -665,13 +665,13 @@ function ToggleRow({
         aria-checked={checked}
         onClick={() => onChange(!checked)}
         className={[
-          'relative h-6 w-10 rounded-full border transition',
+          'relative h-6 w-10 rounded-full border transition duration-200',
           checked ? 'border-ca-teal/35 bg-ca-teal-wash' : 'border-white/10 bg-ca-highlight/65',
         ].join(' ')}
       >
         <span
           className={[
-            'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition',
+            'absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-white transition-all duration-200',
             checked ? 'left-[20px]' : 'left-[3px]',
           ].join(' ')}
         />
@@ -699,7 +699,7 @@ function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(option)}
             className={[
-              'flex-1 border-r px-3 py-2 text-sm transition last:border-r-0',
+              'flex-1 border-r px-3 py-2 text-sm transition duration-150 last:border-r-0 active:scale-[0.95]',
               active
                 ? 'border-ca-teal/25 bg-[rgba(255,255,255,0.03)] text-ca-text shadow-[inset_0_0_0_1px_rgba(5,216,189,0.22)]'
                 : 'border-white/8 text-ca-text-2 hover:bg-[rgba(255,255,255,0.02)]',

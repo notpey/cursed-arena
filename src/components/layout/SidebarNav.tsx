@@ -37,7 +37,9 @@ export function SidebarNav({ activeNav }: SidebarNavProps) {
 
   return (
     <aside className="sticky top-0 flex h-screen w-[72px] shrink-0 flex-col items-center border-r border-ca-border-subtle/70 bg-black/25 px-2 py-4 backdrop-blur-md">
-      <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-ca-red/30 bg-gradient-to-br from-ca-red/90 to-ca-red-deep shadow-[0_0_18px_rgba(250,39,66,0.25)]" />
+      <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-ca-red/30 bg-gradient-to-br from-ca-red/90 to-ca-red-deep shadow-[0_0_18px_rgba(250,39,66,0.25)]">
+        <span className="ca-display text-[0.7rem] font-black tracking-widest text-white/90">CA</span>
+      </div>
 
       <nav className="flex w-full flex-1 flex-col items-center gap-2">
         {navItems.map((item) => (
@@ -46,7 +48,7 @@ export function SidebarNav({ activeNav }: SidebarNavProps) {
             to={item.to}
             className={({ isActive }) =>
               [
-                'group relative flex w-full flex-col items-center gap-1 rounded-xl border px-1 py-2 transition',
+                'group relative flex w-full flex-col items-center gap-1 rounded-xl border px-1 py-2 transition duration-150',
                 'border-transparent bg-white/[0.02] hover:border-ca-border hover:bg-white/[0.04]',
                 isActive || activeNav === item.key ? 'border-ca-border bg-white/[0.05]' : '',
               ].join(' ')
@@ -57,14 +59,26 @@ export function SidebarNav({ activeNav }: SidebarNavProps) {
               <>
                 <span
                   className={[
-                    'absolute inset-y-1 left-0 w-0.5 rounded-full bg-ca-red transition-opacity',
+                    'absolute inset-y-1 left-0 w-0.5 rounded-full bg-ca-red transition-opacity duration-200',
                     isActive || activeNav === item.key ? 'opacity-100' : 'opacity-0',
                   ].join(' ')}
                 />
-                <span className="grid h-8 w-8 place-items-center rounded-lg border border-ca-border-subtle bg-ca-surface/70">
+                <span
+                  className={[
+                    'grid h-8 w-8 place-items-center rounded-lg border transition-colors duration-150',
+                    isActive || activeNav === item.key
+                      ? 'border-ca-red/20 bg-ca-red-wash [&_svg]:stroke-white'
+                      : 'border-ca-border-subtle bg-ca-surface/70',
+                  ].join(' ')}
+                >
                   <SidebarGlyph kind={item.key} />
                 </span>
-                <span className="ca-mono-label text-[0.45rem] leading-none text-ca-text-2">
+                <span
+                  className={[
+                    'ca-mono-label text-[0.45rem] leading-none transition-colors duration-150',
+                    isActive || activeNav === item.key ? 'text-ca-text' : 'text-ca-text-2',
+                  ].join(' ')}
+                >
                   {item.label}
                 </span>
               </>

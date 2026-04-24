@@ -37,11 +37,12 @@ function SkillTile({
       disabled={locked}
       title={ability.name}
       className={cn(
-        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
         queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
         locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
         !locked && !active && !queued && 'hover:border-white/30',
+        !locked && 'active:scale-[0.93]',
       )}
     >
       <div className="absolute inset-0 grid place-items-center">
@@ -78,11 +79,11 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
-        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         hasQueued
           ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
           : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
-        hasQueued && 'cursor-pointer',
+        hasQueued && 'cursor-pointer active:scale-[0.93]',
       )}
     >
       <div className="absolute inset-0 grid place-items-center">
@@ -142,7 +143,7 @@ function PassiveTile({ passive }: { passive: PassiveEffect }) {
       <div className="absolute bottom-0.5 left-0 right-0 flex justify-center">
         <span className="ca-mono-label rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5 text-[0.38rem] text-ca-teal">PASSIVE</span>
       </div>
-      <div className="pointer-events-none absolute inset-0 hidden flex-col justify-end bg-[rgba(5,10,18,0.92)] p-1.5 group-hover:flex">
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-end bg-[rgba(5,10,18,0.92)] p-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
         <p className="ca-mono-label text-[0.4rem] font-bold leading-tight text-ca-teal">{passive.label}</p>
       </div>
     </div>
@@ -223,7 +224,7 @@ export function BattleAbilityStrip({
 
         <div
           className={cn(
-            'relative min-w-0 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition',
+            'relative min-w-0 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition duration-200',
             selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
             actorTargetable && 'ring-2 ring-amber-300/30',
             actorMuted && 'opacity-50 saturate-75',

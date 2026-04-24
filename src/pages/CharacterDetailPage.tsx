@@ -68,9 +68,12 @@ export function CharacterDetailPage() {
           </p>
           <Link
             to="/battle/prep"
-            className="ca-mono-label mt-6 inline-flex rounded-md border border-white/10 px-3 py-2 text-[0.55rem] text-ca-text-2 hover:border-ca-teal/35 hover:text-ca-teal"
+            className="ca-mono-label mt-6 inline-flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-2 text-[0.55rem] text-ca-text-2 transition duration-150 hover:border-ca-teal/35 hover:text-ca-teal"
           >
-            {'<-'} ARENA
+            <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10 3L5 8l5 5" />
+            </svg>
+            ARENA
           </Link>
         </div>
       </section>
@@ -87,9 +90,12 @@ export function CharacterDetailPage() {
             <div className="border-b border-white/6 px-4 py-4 sm:px-5">
               <Link
                 to="/battle/prep"
-                className="ca-mono-label inline-flex items-center gap-2 text-[0.55rem] text-ca-text-3 hover:text-ca-text-2"
+                className="ca-mono-label inline-flex items-center gap-1.5 text-[0.55rem] text-ca-text-3 transition duration-150 hover:text-ca-text-2"
               >
-                {'<-'} ARENA
+                <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 3L5 8l5 5" />
+                </svg>
+                ARENA
               </Link>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 border-b border-white/6 pb-3">
@@ -99,7 +105,7 @@ export function CharacterDetailPage() {
                     type="button"
                     onClick={() => setActiveTab(tab)}
                     className={[
-                      'ca-mono-label relative pb-2 text-[0.55rem] transition',
+                      'ca-mono-label relative pb-2 text-[0.55rem] transition duration-150',
                       activeTab === tab ? 'text-ca-text' : 'text-ca-text-3 hover:text-ca-text-2',
                     ].join(' ')}
                   >
@@ -110,7 +116,7 @@ export function CharacterDetailPage() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+            <div key={activeTab} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 animate-ca-fade-in">
               {activeTab === 'OVERVIEW' ? <OverviewTab profile={profile} /> : null}
               {activeTab === 'SKILLS' ? <SkillsTab profile={profile} /> : null}
               {activeTab === 'LORE' ? (
@@ -224,17 +230,19 @@ function LoreTab({
                 <button
                   type="button"
                   onClick={() => onToggleVoiceLine(line.id)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition duration-150 hover:text-ca-text"
                 >
                   <span className="flex items-center gap-2">
-                    <span className="grid h-6 w-6 place-items-center rounded-full border border-white/10 bg-[rgba(255,255,255,0.02)] text-[0.65rem] text-ca-text-2">
-                      {'>'}
+                    <span className="grid h-6 w-6 place-items-center rounded-full border border-white/10 bg-[rgba(255,255,255,0.02)] text-ca-text-2">
+                      <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 3l6 5-6 5" />
+                      </svg>
                     </span>
                     <span className="ca-mono-label text-[0.5rem] text-ca-text-2">{line.title}</span>
                   </span>
                   <span className="ca-mono-label text-[0.45rem] text-ca-text-3">{isOpen ? 'HIDE' : 'SHOW'}</span>
                 </button>
-                {isOpen ? <p className="px-3 pb-3 text-sm text-ca-text-2">{line.text}</p> : null}
+                {isOpen ? <p className="px-3 pb-3 text-sm text-ca-text-2 animate-ca-slide-up">{line.text}</p> : null}
               </div>
             )
           })}
@@ -302,7 +310,7 @@ function CharacterDisplayPanel({
 
       <div className="absolute inset-0 z-[2] overflow-hidden">
         <div
-          className="absolute left-1/2 top-[4%]"
+          className="absolute left-1/2 top-[4%] animate-ca-fade-in"
           style={{
             width: maxWidth,
             maxWidth: '92%',
@@ -310,16 +318,18 @@ function CharacterDisplayPanel({
             transformOrigin: 'top center',
           }}
         >
-          <img
-            src={profile.renderSrc}
-            alt={profile.name}
-            className="block h-auto w-full object-contain object-top select-none"
-            draggable={false}
-            style={{
-              filter:
-                'drop-shadow(0 24px 28px rgba(0,0,0,0.28)) drop-shadow(0 -4px 20px rgba(228,230,239,0.12)) drop-shadow(0 0 24px rgba(228,230,239,0.07))',
-            }}
-          />
+          <div className="animate-ca-float">
+            <img
+              src={profile.renderSrc}
+              alt={profile.name}
+              className="block h-auto w-full object-contain object-top select-none"
+              draggable={false}
+              style={{
+                filter:
+                  'drop-shadow(0 24px 28px rgba(0,0,0,0.28)) drop-shadow(0 -4px 20px rgba(228,230,239,0.12)) drop-shadow(0 0 24px rgba(228,230,239,0.07))',
+              }}
+            />
+          </div>
         </div>
       </div>
 

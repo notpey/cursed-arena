@@ -513,6 +513,7 @@ export function BattlePrepPage() {
             <div className="rounded-[12px] border border-white/8 bg-[linear-gradient(135deg,rgba(255,255,255,0.045),rgba(255,255,255,0.015))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-4">
               {selectedEntry && selectedAbility ? (
                 <SelectedFighterPanel
+                  key={selectedEntry.id}
                   entry={selectedEntry}
                   selectedAbility={selectedAbility}
                   selectedAbilityId={selectedAbilityId}
@@ -536,7 +537,7 @@ export function BattlePrepPage() {
                       type="button"
                       onClick={() => setMatchMode(mode)}
                       className={[
-                        'ca-display rounded-md border px-1.5 py-2.5 text-[0.82rem] leading-none transition',
+                        'ca-display rounded-md border px-1.5 py-2.5 text-[0.82rem] leading-none transition duration-150 active:scale-[0.96]',
                         matchMode === mode
                           ? mode === 'practice'
                             ? 'border-ca-teal/35 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
@@ -570,7 +571,7 @@ export function BattlePrepPage() {
                     type="button"
                     onClick={handleEnterArena}
                     disabled={!isReady}
-                    className="ca-display mt-4 w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.18rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+                    className="ca-display mt-4 w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.18rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition duration-150 enabled:hover:-translate-y-[1px] enabled:active:scale-[0.98] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
                   >
                     {getModeButtonLabel(matchMode)}
                   </button>
@@ -746,7 +747,7 @@ function PracticePanel({
         >
           <span
             className={[
-              'absolute top-0.5 h-4 w-4 rounded-full transition-all',
+              'absolute top-0.5 h-4 w-4 rounded-full transition-all duration-200',
               aiEnabled ? 'left-[calc(100%-1.1rem)] bg-ca-teal' : 'left-0.5 bg-white/30',
             ].join(' ')}
           />
@@ -791,7 +792,7 @@ function PracticePanel({
         type="button"
         onClick={onStart}
         disabled={!isReady}
-        className="ca-display w-full rounded-xl border border-ca-teal/40 bg-[linear-gradient(180deg,rgba(5,216,189,0.22),rgba(5,216,189,0.1))] px-3 py-3 text-[1.18rem] text-ca-teal shadow-[0_8px_20px_rgba(5,216,189,0.1)] transition enabled:hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+        className="ca-display w-full rounded-xl border border-ca-teal/40 bg-[linear-gradient(180deg,rgba(5,216,189,0.22),rgba(5,216,189,0.1))] px-3 py-3 text-[1.18rem] text-ca-teal shadow-[0_8px_20px_rgba(5,216,189,0.1)] transition duration-150 enabled:hover:-translate-y-[1px] enabled:active:scale-[0.98] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
       >
         Start Practice
       </button>
@@ -850,7 +851,7 @@ function ChallengePanel({
 
       {/* Search results dropdown */}
       {searchResults.length > 0 && !selectedOpponent && (
-        <div className="rounded-[10px] border border-white/10 bg-[rgba(14,14,22,0.96)] py-1 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+        <div className="rounded-[10px] border border-white/10 bg-[rgba(14,14,22,0.96)] py-1 shadow-[0_8px_24px_rgba(0,0,0,0.4)] animate-ca-slide-up">
           {searchResults.map((result) => (
             <button
               key={result.id}
@@ -1015,7 +1016,7 @@ function SelectedFighterPanel({
   const style = rarityStyles[entry.rarity]
 
   return (
-    <div className="grid h-full items-start gap-6 sm:grid-cols-[10rem_minmax(0,1fr)] xl:grid-cols-[10.75rem_minmax(0,1fr)]">
+    <div className="grid h-full items-start gap-6 sm:grid-cols-[10rem_minmax(0,1fr)] xl:grid-cols-[10.75rem_minmax(0,1fr)] animate-ca-fade-in">
       <div className="relative inline-flex rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_16px_34px_rgba(0,0,0,0.18)]">
         <div
           className="pointer-events-none absolute inset-3 rounded-[14px] blur-2xl"
@@ -1170,7 +1171,7 @@ function RosterTile({
     <button
       type="button"
       onClick={onClick}
-      className="group relative overflow-hidden rounded-[8px] border bg-[rgba(18,18,26,0.72)] text-left transition duration-200 hover:-translate-y-[1px]"
+      className="group relative overflow-hidden rounded-[8px] border bg-[rgba(18,18,26,0.72)] text-left transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
       style={{
         borderColor: active ? style.border : 'rgba(228,230,239,0.1)',
         boxShadow: active ? `0 0 0 1px ${style.border}` : 'none',
@@ -1205,7 +1206,7 @@ function TeamSlotCard({
         type="button"
         onClick={onSelect}
         className={[
-          'w-full rounded-[10px] border border-dashed bg-[rgba(255,255,255,0.02)] px-3 py-3 text-left transition',
+          'w-full rounded-[10px] border border-dashed bg-[rgba(255,255,255,0.02)] px-3 py-3 text-left transition duration-150',
           focused ? 'border-ca-teal/35' : 'border-white/10 hover:border-white/18',
         ].join(' ')}
       >
@@ -1220,7 +1221,7 @@ function TeamSlotCard({
       type="button"
       onClick={onSelect}
       className={[
-        'w-full rounded-[10px] border bg-[rgba(255,255,255,0.03)] px-2.5 py-2.5 text-left transition',
+        'w-full rounded-[10px] border bg-[rgba(255,255,255,0.03)] px-2.5 py-2.5 text-left transition duration-150',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >

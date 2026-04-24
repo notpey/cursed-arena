@@ -68,8 +68,8 @@ export function BattleTopBar({
                 disabled={battleFinished || !exchangeReady}
                 onClick={() => onExchangeEnergy(type)}
                 className={cn(
-                  'flex items-center gap-1 rounded-[0.2rem] border px-1.5 py-1 transition',
-                  exchangeReady ? 'border-white/10 bg-[rgba(255,255,255,0.06)] hover:border-white/20 hover:bg-white/10' : 'border-transparent bg-transparent',
+                  'flex items-center gap-1 rounded-[0.2rem] border px-1.5 py-1 transition duration-150',
+                  exchangeReady ? 'border-white/10 bg-[rgba(255,255,255,0.06)] hover:border-white/20 hover:bg-white/10 active:scale-95' : 'border-transparent bg-transparent',
                   battleFinished ? 'cursor-default opacity-70' : !exchangeReady ? 'cursor-not-allowed opacity-60' : undefined,
                 )}
                 title={exchangeReady ? `Exchange ${battleEnergyExchangeCost} chakra into 1 ${meta.label}` : `${meta.label} reserve`}
@@ -91,9 +91,9 @@ export function BattleTopBar({
             onClick={onReady}
             disabled={!commitReady || battleFinished}
             className={cn(
-              'block w-[16rem] border px-4 py-2 ca-display text-[0.95rem] leading-none transition',
+              'block w-[16rem] border px-4 py-2 ca-display text-[0.95rem] leading-none transition duration-150',
               commitReady && !battleFinished
-                ? 'border-white/28 bg-[linear-gradient(180deg,rgba(248,248,252,0.95),rgba(223,224,232,0.88))] text-black hover:brightness-105'
+                ? 'border-white/28 bg-[linear-gradient(180deg,rgba(248,248,252,0.95),rgba(223,224,232,0.88))] text-black hover:brightness-105 active:scale-[0.98]'
                 : 'border-white/14 bg-[rgba(255,255,255,0.06)] text-ca-text-2',
             )}
           >
@@ -103,9 +103,9 @@ export function BattleTopBar({
           <div className="w-[16rem] overflow-hidden rounded-full bg-[rgba(0,0,0,0.35)]">
             <div
               className={cn(
-                'h-1.5 transition-all duration-1000',
+                'h-1.5 transition-[width] duration-1000',
                 timerUrgent
-                  ? 'animate-pulse bg-[linear-gradient(90deg,rgba(250,39,66,1),rgba(255,100,120,1))]'
+                  ? 'bg-[linear-gradient(90deg,rgba(250,39,66,1),rgba(255,80,100,1))] shadow-[0_0_8px_rgba(250,39,66,0.7)]'
                   : 'bg-[linear-gradient(90deg,rgba(250,39,66,0.96),rgba(255,180,190,0.92))]',
               )}
               style={{ width: `${timerPercent}%` }}
@@ -115,7 +115,7 @@ export function BattleTopBar({
 
         <div className="flex items-center gap-2">
           <span className="ca-mono-label text-[0.65rem] text-ca-text-2">{boardPrompt.toUpperCase()}</span>
-          <span className={cn('ca-mono-label text-[0.7rem] tabular-nums', timerUrgent ? 'animate-pulse text-ca-red' : 'text-ca-text')}>
+          <span className={cn('ca-mono-label text-[0.7rem] tabular-nums transition-colors duration-300', timerUrgent ? 'animate-ca-urgency text-ca-red' : 'text-ca-text')}>
             {String(turnSecondsLeft).padStart(2, '0')}S
           </span>
         </div>

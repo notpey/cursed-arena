@@ -50,7 +50,7 @@ export function BattleResultsPage() {
           <p className="mt-3 text-sm text-ca-text-2">Finish a battle to generate a results summary and match history entry.</p>
           <Link
             to="/battle/prep"
-            className="ca-display mt-6 inline-flex rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2 text-xl text-white"
+            className="ca-display mt-6 inline-flex rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2 text-xl text-white transition duration-150 hover:brightness-110 active:scale-[0.98]"
           >
             Return To Lobby
           </Link>
@@ -65,7 +65,7 @@ export function BattleResultsPage() {
     <section className="py-4 sm:py-6">
       <div className="grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)] xl:gap-5">
         <div className="space-y-4">
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5 animate-ca-stagger-in" style={{ animationDelay: '0ms' }}>
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Battle Results</p>
             <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -81,8 +81,8 @@ export function BattleResultsPage() {
                 </div>
                 <p className="mt-3 text-sm text-ca-text-2">
                   {result.opponentTitle}
-                  {result.opponentRankLabel ? ` • ${result.opponentRankLabel}` : ''}
-                  {result.roomCode ? ` • ${result.roomCode}` : ''}
+                  {result.opponentRankLabel ? ` ï¿½ ${result.opponentRankLabel}` : ''}
+                  {result.roomCode ? ` ï¿½ ${result.roomCode}` : ''}
                 </p>
               </div>
 
@@ -98,7 +98,7 @@ export function BattleResultsPage() {
             <RankShiftBanner shift={result.rankShift} rankBefore={result.rankBefore} rankAfter={result.rankAfter} />
           </section>
 
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '80ms' }}>
             <p className="ca-display text-3xl text-ca-text">Rank Readout</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
@@ -118,7 +118,7 @@ export function BattleResultsPage() {
             </div>
           </section>
 
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '160ms' }}>
             <p className="ca-display text-3xl text-ca-text">Lineups</p>
             <div className="mt-4 space-y-3">
               <TeamPillRow ids={result.yourTeam} label="YOU" />
@@ -126,7 +126,7 @@ export function BattleResultsPage() {
             </div>
           </section>
 
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '240ms' }}>
             <p className="ca-display text-3xl text-ca-text">Recent History</p>
             <div className="mt-4 space-y-2.5">
               {recentHistory.map((match) => {
@@ -159,7 +159,7 @@ export function BattleResultsPage() {
         </div>
 
         <div className="space-y-4">
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5 animate-ca-stagger-in" style={{ animationDelay: '100ms' }}>
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Updated Profile</p>
             <h2 className="ca-display mt-2 text-4xl text-ca-text">{result.profileSnapshot.rank}</h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
@@ -187,17 +187,17 @@ export function BattleResultsPage() {
             </div>
           </section>
 
-          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5">
+          <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5 animate-ca-stagger-in" style={{ animationDelay: '200ms' }}>
             <div className="flex flex-col gap-3">
               <Link
                 to="/battle/prep"
-                className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2.5 text-center text-[1.2rem] text-white"
+                className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2.5 text-center text-[1.2rem] text-white transition duration-150 hover:brightness-110 active:scale-[0.98]"
               >
                 Back To Lobby
               </Link>
               <Link
                 to="/profile"
-                className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-4 py-2.5 text-center text-[1rem] text-ca-text"
+                className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] px-4 py-2.5 text-center text-[1rem] text-ca-text transition duration-150 hover:brightness-105 active:scale-[0.98]"
               >
                 Open Profile
               </Link>

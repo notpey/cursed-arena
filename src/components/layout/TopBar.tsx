@@ -45,7 +45,7 @@ export function TopBar() {
           <CurrencyPill icon="hex" value={formatSoftCurrency(economy.gold)} />
           <Link
             to="/profile"
-            className="grid h-9 w-9 place-items-center rounded-full border border-ca-red/40 bg-gradient-to-br from-ca-red-wash-mid to-transparent p-[2px] transition hover:scale-[1.02]"
+            className="grid h-9 w-9 place-items-center rounded-full border border-ca-red/40 bg-gradient-to-br from-ca-red-wash-mid to-transparent p-[2px] transition duration-150 hover:scale-[1.02] hover:border-ca-red/60 hover:shadow-[0_0_12px_rgba(250,39,66,0.18)] active:scale-[0.96]"
             aria-label="Profile"
           >
             <span className="grid h-full w-full place-items-center rounded-full bg-ca-surface text-[0.6rem] font-semibold text-ca-text">

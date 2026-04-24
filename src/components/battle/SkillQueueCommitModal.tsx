@@ -224,8 +224,8 @@ export function SkillQueueCommitModal({
   }
 
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.82)] backdrop-blur-[3px]">
-      <div className="w-full max-w-[34rem] rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.99),rgba(10,9,18,1))] shadow-[0_24px_60px_rgba(0,0,0,0.6)]">
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(4,5,10,0.82)] backdrop-blur-[3px] animate-ca-fade-in">
+      <div className="w-full max-w-[34rem] rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,14,26,0.99),rgba(10,9,18,1))] shadow-[0_24px_60px_rgba(0,0,0,0.6)] animate-ca-slide-up">
         <div className="border-b border-white/8 px-5 py-4 text-center">
           <div className="flex items-center justify-between gap-3">
             <p className="ca-mono-label text-[0.46rem] text-ca-text-3">ROUND {round}</p>
@@ -376,14 +376,14 @@ export function SkillQueueCommitModal({
                         type="button"
                         disabled={allocated <= 0}
                         onClick={() => adjustGlobalAlloc(type, -1)}
-                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
-                      >âˆ’</button>
+                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition duration-100 hover:bg-[rgba(255,255,255,0.1)] active:scale-90 disabled:opacity-20 disabled:cursor-not-allowed"
+                      >−</button>
 
                       <button
                         type="button"
                         disabled={poolCount === 0 || allocated >= poolCount || atMax}
                         onClick={() => adjustGlobalAlloc(type, 1)}
-                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)] disabled:opacity-20 disabled:cursor-not-allowed"
+                        className="grid h-[1.3rem] w-[1.3rem] place-items-center rounded border border-white/15 bg-[rgba(255,255,255,0.05)] ca-mono-label text-[0.75rem] text-ca-text-2 transition duration-100 hover:bg-[rgba(255,255,255,0.1)] active:scale-90 disabled:opacity-20 disabled:cursor-not-allowed"
                       >+</button>
 
                       <p
@@ -401,13 +401,13 @@ export function SkillQueueCommitModal({
 
           <div className="mt-3">
             {hasUnallocated ? (
-              <p className="ca-mono-label text-[0.44rem] text-amber-300">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
+              <p key="unalloc" className="ca-mono-label text-[0.44rem] text-amber-300 animate-ca-fade-in">{totalRandomNeeded - totalAllocated} ENERGY REMAINING TO ASSIGN</p>
             ) : activeRows.length === 0 ? (
-              <p className="ca-mono-label text-[0.44rem] text-ca-text-2">NO TECHNIQUES QUEUED. ALL FIGHTERS WILL PASS.</p>
+              <p key="pass" className="ca-mono-label text-[0.44rem] text-ca-text-2 animate-ca-fade-in">NO TECHNIQUES QUEUED. ALL FIGHTERS WILL PASS.</p>
             ) : !canAfford ? (
-              <p className="ca-mono-label text-[0.44rem] text-ca-red">CANNOT AFFORD THIS QUEUE</p>
+              <p key="cant" className="ca-mono-label text-[0.44rem] text-ca-red animate-ca-fade-in">CANNOT AFFORD THIS QUEUE</p>
             ) : (
-              <p className="ca-mono-label text-[0.44rem] text-ca-teal">READY TO COMMIT</p>
+              <p key="ready" className="ca-mono-label text-[0.44rem] text-ca-teal animate-ca-fade-in">READY TO COMMIT</p>
             )}
           </div>
         </div>
@@ -417,14 +417,14 @@ export function SkillQueueCommitModal({
             type="button"
             disabled={!canAfford || hasUnallocated}
             onClick={() => onConfirm(orderedActionIds)}
-            className="ca-display rounded-lg border border-ca-teal/35 bg-[linear-gradient(180deg,rgba(5,216,189,0.16),rgba(5,216,189,0.07))] py-2.5 text-[1.05rem] text-ca-teal transition hover:brightness-110 disabled:opacity-35 disabled:cursor-not-allowed"
+            className="ca-display rounded-lg border border-ca-teal/35 bg-[linear-gradient(180deg,rgba(5,216,189,0.16),rgba(5,216,189,0.07))] py-2.5 text-[1.05rem] text-ca-teal transition duration-150 hover:brightness-110 active:scale-[0.97] disabled:opacity-35 disabled:cursor-not-allowed"
           >
             OK
           </button>
           <button
             type="button"
             onClick={onBack}
-            className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] py-2.5 text-[1.05rem] text-ca-text transition hover:bg-[rgba(36,34,48,0.8)]"
+            className="ca-display rounded-lg border border-white/12 bg-[rgba(28,28,36,0.72)] py-2.5 text-[1.05rem] text-ca-text transition duration-150 hover:bg-[rgba(36,34,48,0.8)] active:scale-[0.97]"
           >
             CANCEL
           </button>

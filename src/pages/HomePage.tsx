@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { SurfaceCard } from '@/components/ui/SurfaceCard'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -192,13 +192,19 @@ function MissionColumn({
             <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3">
               <div
                 className={[
-                  'grid h-7 w-7 place-items-center rounded-md border text-[0.65rem]',
+                  'grid h-7 w-7 place-items-center rounded-md border',
                   mission.complete
                     ? 'border-ca-teal/30 bg-ca-teal-wash-mid text-ca-teal'
                     : 'border-ca-border bg-ca-surface/70 text-ca-text-3',
                 ].join(' ')}
               >
-                {mission.complete ? 'OK' : ''}
+                {mission.complete ? (
+                  <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 8l3.5 3.5L13 4.5" />
+                  </svg>
+                ) : (
+                  <span className="text-[0.55rem] text-ca-text-3">–</span>
+                )}
               </div>
 
               <div className="min-w-0">
@@ -258,33 +264,33 @@ function BattlePassCard() {
 
 function StoryContinueCard() {
   return (
-    <SurfaceCard className="overflow-hidden border-white/10 bg-[rgba(15,15,21,0.26)] shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
-      <div className="relative p-4">
-        <div className="absolute inset-0 bg-[radial-gradient(80%_120%_at_80%_20%,rgba(5,216,189,0.06),transparent_60%),linear-gradient(115deg,#0f1018_10%,#301315_58%,#0f1018_100%)]" />
-        <div className="absolute inset-0 opacity-35 [background:linear-gradient(135deg,rgba(255,255,255,0.06),transparent_25%,rgba(250,39,66,0.08)_55%,transparent_80%)]" />
-        <div className="relative grid grid-cols-[auto_1fr_auto] items-center gap-4">
-          <div className="grid h-16 w-16 place-items-center rounded-lg border border-ca-teal/30 bg-ca-teal-wash">
-            <span className="ca-display text-3xl text-ca-teal">CH3</span>
+    <Link to="/story" className="block">
+      <SurfaceCard className="overflow-hidden border-white/10 bg-[rgba(15,15,21,0.26)] shadow-[0_10px_24px_rgba(0,0,0,0.2)] transition duration-150 hover:border-white/16 hover:shadow-[0_14px_30px_rgba(0,0,0,0.24)]">
+        <div className="relative p-4">
+          <div className="absolute inset-0 bg-[radial-gradient(80%_120%_at_80%_20%,rgba(5,216,189,0.06),transparent_60%),linear-gradient(115deg,#0f1018_10%,#301315_58%,#0f1018_100%)]" />
+          <div className="absolute inset-0 opacity-35 [background:linear-gradient(135deg,rgba(255,255,255,0.06),transparent_25%,rgba(250,39,66,0.08)_55%,transparent_80%)]" />
+          <div className="relative grid grid-cols-[auto_1fr_auto] items-center gap-4">
+            <div className="grid h-16 w-16 place-items-center rounded-lg border border-ca-teal/30 bg-ca-teal-wash">
+              <span className="ca-display text-3xl text-ca-teal">CH3</span>
+            </div>
+            <div className="min-w-0">
+              <p className="ca-mono-label text-[0.52rem] text-ca-teal">Continue Story</p>
+              <p className="ca-display mt-1 truncate text-3xl text-ca-text sm:text-[2.2rem]">
+                Chapter 3 - Cursed Womb
+              </p>
+              <p className="mt-1 text-xs text-ca-text-3">
+                Juvenile Detention Center Arc - 3 stages remaining
+              </p>
+            </div>
+            <div className="grid h-9 w-9 place-items-center rounded-full border border-ca-border bg-ca-overlay/70 text-ca-text-2 transition duration-150 group-hover:border-ca-border-strong group-hover:text-ca-text">
+              <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 3l5 5-5 5" />
+              </svg>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="ca-mono-label text-[0.52rem] text-ca-teal">Continue Story</p>
-            <p className="ca-display mt-1 truncate text-3xl text-ca-text sm:text-[2.2rem]">
-              Chapter 3 - Cursed Womb
-            </p>
-            <p className="mt-1 text-xs text-ca-text-3">
-              Juvenile Detention Center Arc - 3 stages remaining
-            </p>
-          </div>
-          <button
-            type="button"
-            className="grid h-9 w-9 place-items-center rounded-full border border-ca-border bg-ca-overlay/70 text-ca-text-2 hover:border-ca-border-strong"
-            aria-label="Continue story"
-          >
-            {'>'}
-          </button>
         </div>
-      </div>
-    </SurfaceCard>
+      </SurfaceCard>
+    </Link>
   )
 }
 
@@ -485,7 +491,7 @@ function HeroPlayPanel({
         <button
           type="button"
           onClick={() => onLaunchMode(selectedMode)}
-          className="ca-display relative mx-auto w-full rounded-xl border border-ca-red/55 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] px-6 py-8 text-6xl text-white shadow-[0_20px_60px_rgba(250,39,66,0.24)] transition hover:scale-[1.01] hover:shadow-[0_25px_70px_rgba(250,39,66,0.3)] sm:text-7xl"
+          className="ca-display relative mx-auto w-full rounded-xl border border-ca-red/55 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] px-6 py-8 text-6xl text-white shadow-[0_20px_60px_rgba(250,39,66,0.24)] transition duration-150 hover:scale-[1.01] hover:shadow-[0_25px_70px_rgba(250,39,66,0.3)] active:scale-[0.98] sm:text-7xl"
           style={{ maxWidth: ctaWidth }}
         >
           <span className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(60%_55%_at_50%_30%,rgba(255,255,255,0.18),transparent_60%)]" />
@@ -501,7 +507,7 @@ function HeroPlayPanel({
                 type="button"
                 onClick={() => onLaunchMode(mode)}
                 className={[
-                  'ca-display rounded-xl border px-3 py-3 text-xl transition',
+                  'ca-display rounded-xl border px-3 py-3 text-xl transition duration-150 active:scale-[0.96]',
                   active
                     ? 'border-ca-red/55 bg-ca-red-wash text-ca-text'
                     : 'border-ca-red/35 bg-[rgba(12,12,18,0.18)] text-ca-text hover:border-ca-red/55 hover:bg-ca-red-wash',
@@ -514,7 +520,10 @@ function HeroPlayPanel({
         </div>
 
         <div className="mx-auto grid w-full gap-2.5" style={{ maxWidth: ctaWidth }}>
-          <div className="rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm">
+          <Link
+            to="/battle/results"
+            className="block rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm transition duration-150 hover:border-white/16 hover:bg-[rgba(14,14,22,0.62)]"
+          >
             <div className="flex items-center justify-between gap-3">
               <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Recent Match</p>
               {activeMatch ? (
@@ -538,7 +547,7 @@ function HeroPlayPanel({
             ) : (
               <p className="mt-2 text-xs leading-5 text-ca-text-2">No recent battle data.</p>
             )}
-          </div>
+          </Link>
         </div>
       </div>
 

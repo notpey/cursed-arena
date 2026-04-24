@@ -98,7 +98,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
     >
       {/* Main pip square — full-bleed icon */}
       <div className={cn(
-        'relative h-[2.2rem] w-[2.2rem] shrink-0 cursor-default overflow-hidden rounded-[0.22rem] border-2 transition',
+        'relative h-[2.2rem] w-[2.2rem] shrink-0 cursor-default overflow-hidden rounded-[0.22rem] border-2 transition duration-150',
         border,
         hovered ? glow : '',
       )}>
@@ -263,7 +263,7 @@ function PortraitSquare({
       )}
 
       {!isAlive(fighter) ? (
-        <div className="absolute inset-0 grid place-items-center bg-black/72">
+        <div className="absolute inset-0 grid place-items-center bg-black/72 animate-ca-fade-in">
           <span className="text-[1.8rem] font-black text-white/40">X</span>
         </div>
       ) : null}
@@ -323,7 +323,7 @@ export function BattlePortraitSlot({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group relative w-fit text-left transition',
+        'group relative w-fit text-left transition duration-200',
         muted && 'opacity-35 saturate-75',
         !isAlive(fighter) && 'opacity-55 grayscale',
         onClick ? 'cursor-pointer hover:-translate-y-[1px]' : 'cursor-default',
@@ -341,7 +341,7 @@ export function BattlePortraitSlot({
 
         <div
         className={cn(
-          'rounded-[0.2rem] p-0.5 transition',
+          'rounded-[0.2rem] p-0.5 transition duration-200',
           active && accentStyles.glow,
           targetable && 'shadow-[0_0_0_2px_rgba(255,209,102,0.5),0_0_18px_rgba(255,209,102,0.2)]',
           selectedTarget && 'shadow-[0_0_0_2px_rgba(255,255,255,0.55),0_0_18px_rgba(255,255,255,0.2)]',
@@ -354,13 +354,13 @@ export function BattlePortraitSlot({
       </div>
 
       {statusTag ? (
-        <span className="pointer-events-none absolute right-0 top-0 rounded-full border border-white/12 bg-black/60 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)]">
+        <span className="pointer-events-none absolute right-0 top-0 rounded-full border border-white/12 bg-black/60 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)] animate-ca-fade-in">
           {statusTag}
         </span>
       ) : null}
 
       {targetable ? (
-        <span className="pointer-events-none absolute left-0 top-0 rounded-full border border-amber-300/30 bg-amber-300/12 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)]">
+        <span className="pointer-events-none absolute left-0 top-0 rounded-full border border-amber-300/30 bg-amber-300/12 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)] animate-ca-fade-in">
           TARGET
         </span>
       ) : null}

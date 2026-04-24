@@ -37,8 +37,12 @@ export function BattleLogPanel({
 
       <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
         {displayEvents.length > 0 ? (
-          displayEvents.map((event) => (
-            <div key={event.id} className={cn('rounded-[0.3rem] border px-2.5 py-2', toneClasses(event.tone))}>
+          displayEvents.map((event, i) => (
+            <div
+              key={event.id}
+              className={cn('rounded-[0.3rem] border px-2.5 py-2 animate-ca-slide-up', toneClasses(event.tone))}
+              style={{ animationDelay: `${Math.min(i, 4) * 18}ms` }}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className="ca-mono-label text-[0.6rem] text-ca-text-3">R{event.round}</span>

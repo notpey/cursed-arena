@@ -56,13 +56,13 @@ export function BattleBoard({
           {state.firstPlayer === 'player' ? 'OPENING WINDOW' : 'RESPONSE WINDOW'}
         </span>
         {selectedAbility ? (
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2">
+          <span key={selectedAbility.id} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2 animate-ca-fade-in">
             {targetingEnemies ? 'TARGET ENEMY' : targetingAllies ? 'TARGET ALLY' : selectedAbility.name.toUpperCase()}
           </span>
         ) : null}
         {timelineFocus ? (
-          <span className={[
-            'rounded-full border px-2.5 py-1 ca-mono-label text-[0.58rem]',
+          <span key={timelineFocus.label} className={[
+            'rounded-full border px-2.5 py-1 ca-mono-label text-[0.58rem] animate-ca-fade-in',
             timelineFocus.tone === 'red'
               ? 'border-ca-red/24 bg-ca-red-wash text-ca-red'
               : timelineFocus.tone === 'teal'
@@ -131,7 +131,7 @@ export function BattleBoard({
                 {enemy ? (
                   <div
                     className={[
-                      'rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition sm:p-2',
+                      'rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition duration-200 sm:p-2',
                       enemyTimelineRole === 'actor'
                         ? 'border-ca-red/50 shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_0_22px_rgba(250,39,66,0.18)]'
                         : enemyTimelineRole === 'target'

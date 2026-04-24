@@ -151,7 +151,7 @@ export function LoginPage() {
           <div className="mb-8 text-center">
             <p className="ca-mono-label text-[0.52rem] tracking-[0.22em] text-ca-text-3">ENTER THE</p>
             <h1 className="ca-display mt-2 text-5xl text-ca-text">Cursed Arena</h1>
-            <p className="mt-2 text-[0.78rem] text-ca-text-3">
+            <p key={mode} className="mt-2 text-[0.78rem] text-ca-text-3 animate-ca-fade-in">
               {mode === 'login'
                 ? 'Sign in with your arena username.'
                 : 'Create an account to start climbing the ladder.'}
@@ -159,7 +159,7 @@ export function LoginPage() {
           </div>
 
           {/* Card */}
-          <div className="rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] shadow-[0_22px_54px_rgba(0,0,0,0.44)]">
+          <div className="rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] shadow-[0_22px_54px_rgba(0,0,0,0.44)] animate-ca-slide-up">
             {/* Mode tabs */}
             <div className="flex border-b border-white/8">
               {(['login', 'signup'] as const).map((tab) => (
@@ -168,7 +168,7 @@ export function LoginPage() {
                   type="button"
                   onClick={() => switchMode(tab)}
                   className={[
-                    'flex-1 py-3 ca-mono-label text-[0.58rem] transition',
+                    'flex-1 py-3 ca-mono-label text-[0.58rem] transition duration-150',
                     mode === tab
                       ? 'border-b-2 border-ca-teal text-ca-teal'
                       : 'text-ca-text-3 hover:text-ca-text-2',
@@ -181,19 +181,19 @@ export function LoginPage() {
 
             <div className="p-6">
               {confirmMsg ? (
-                <div className="mb-4 rounded-[0.35rem] border border-ca-teal/22 bg-ca-teal-wash px-3 py-2.5">
+                <div className="mb-4 rounded-[0.35rem] border border-ca-teal/22 bg-ca-teal-wash px-3 py-2.5 animate-ca-slide-up">
                   <p className="text-[0.75rem] leading-5 text-ca-teal">{confirmMsg}</p>
                 </div>
               ) : null}
 
               {errorMsg ? (
-                <div className="mb-4 rounded-[0.35rem] border border-ca-red/22 bg-ca-red-wash px-3 py-2.5">
+                <div className="mb-4 rounded-[0.35rem] border border-ca-red/22 bg-ca-red-wash px-3 py-2.5 animate-ca-slide-up">
                   <p className="text-[0.75rem] leading-5 text-ca-red">{errorMsg}</p>
                 </div>
               ) : null}
 
               {mode === 'login' ? (
-                <form onSubmit={handleLogin} className="space-y-3">
+                <form key="login" onSubmit={handleLogin} className="space-y-3 animate-ca-fade-in">
                   <Field
                     label="Username"
                     type="text"
@@ -213,7 +213,7 @@ export function LoginPage() {
                   <ActionButton busy={busy} label="SIGN IN" />
                 </form>
               ) : (
-                <form onSubmit={handleSignup} className="space-y-3">
+                <form key="signup" onSubmit={handleSignup} className="space-y-3 animate-ca-fade-in">
                   <Field
                     label="Username"
                     type="text"
@@ -265,7 +265,7 @@ export function LoginPage() {
                 type="button"
                 onClick={handleGoogle}
                 disabled={busy}
-                className="mt-3 flex w-full items-center justify-center gap-2.5 rounded-[0.4rem] border border-white/12 bg-[rgba(255,255,255,0.05)] px-4 py-2.5 text-[0.78rem] text-ca-text transition hover:bg-[rgba(255,255,255,0.09)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-3 flex w-full items-center justify-center gap-2.5 rounded-[0.4rem] border border-white/12 bg-[rgba(255,255,255,0.05)] px-4 py-2.5 text-[0.78rem] text-ca-text transition duration-150 hover:bg-[rgba(255,255,255,0.09)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <GoogleIcon />
                 Continue with Google
@@ -313,7 +313,7 @@ function ActionButton({ busy, label }: { busy: boolean; label: string }) {
     <button
       type="submit"
       disabled={busy}
-      className="mt-1 w-full rounded-[0.4rem] border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 ca-display text-[1rem] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-1 w-full rounded-[0.4rem] border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] py-2.5 ca-display text-[1rem] text-white transition duration-150 hover:opacity-90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
     >
       {busy ? 'PLEASE WAIT…' : label}
     </button>

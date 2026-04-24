@@ -203,14 +203,16 @@ export function StoryPage() {
         <div className="absolute left-[8%] bottom-[16%] h-[18rem] w-[18rem] rounded-full bg-white/4 blur-3xl" />
       </div>
 
-      {view === 'chapters' ? (
-        <ChapterSelectView selectedChapterId={selectedChapterId} onOpenChapter={openChapter} />
-      ) : (
-        <StageSelectView
-          chapter={selectedChapter}
-          onBack={() => setView('chapters')}
-        />
-      )}
+      <div key={view} className="animate-ca-fade-in">
+        {view === 'chapters' ? (
+          <ChapterSelectView selectedChapterId={selectedChapterId} onOpenChapter={openChapter} />
+        ) : (
+          <StageSelectView
+            chapter={selectedChapter}
+            onBack={() => setView('chapters')}
+          />
+        )}
+      </div>
     </section>
   )
 }
@@ -272,7 +274,7 @@ function ChapterCard({
       type="button"
       onClick={onOpen}
       disabled={chapter.locked}
-      className="w-full text-left disabled:cursor-not-allowed"
+      className="w-full text-left transition duration-150 active:scale-[0.99] disabled:cursor-not-allowed"
     >
       <div
         className="relative overflow-hidden rounded-[12px] border p-4 transition duration-200"
@@ -357,9 +359,12 @@ function StageSelectView({
               <button
                 type="button"
                 onClick={onBack}
-                className="ca-mono-label inline-flex items-center gap-2 text-[0.52rem] text-ca-text-3 hover:text-ca-text-2"
+                className="ca-mono-label inline-flex items-center gap-1.5 text-[0.52rem] text-ca-text-3 transition duration-150 hover:text-ca-text-2"
               >
-                {'<-'} CHAPTERS
+                <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 3L5 8l5 5" />
+                </svg>
+                CHAPTERS
               </button>
               <div className="mt-3 flex items-center gap-3">
                 <div className="grid h-14 w-14 place-items-center rounded-xl border border-ca-teal/28 bg-[rgba(5,216,189,0.1)]">
@@ -481,12 +486,12 @@ function StageCard({
           type="button"
           disabled={locked}
           className={[
-            'ca-display min-w-[8rem] rounded-lg border px-4 py-3 text-xl transition',
+            'ca-display min-w-[8rem] rounded-lg border px-4 py-3 text-xl transition duration-150',
             locked
               ? 'cursor-not-allowed border-white/10 bg-[rgba(255,255,255,0.02)] text-ca-text-disabled'
               : actionIsPrimary
-                ? 'border-ca-red/45 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] text-white shadow-[0_10px_26px_rgba(250,39,66,0.18)] hover:shadow-[0_14px_30px_rgba(250,39,66,0.24)]'
-                : 'border-white/12 bg-[rgba(18,19,26,0.16)] text-ca-text hover:border-ca-teal/28 hover:text-ca-teal',
+                ? 'border-ca-red/45 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] text-white shadow-[0_10px_26px_rgba(250,39,66,0.18)] hover:shadow-[0_14px_30px_rgba(250,39,66,0.24)] active:scale-[0.97]'
+                : 'border-white/12 bg-[rgba(18,19,26,0.16)] text-ca-text hover:border-ca-teal/28 hover:text-ca-teal active:scale-[0.97]',
           ].join(' ')}
         >
           {actionLabel}

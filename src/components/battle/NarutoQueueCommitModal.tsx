@@ -257,8 +257,8 @@ export function NarutoQueueCommitModal({
           : 'text-ca-teal'
 
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.82)] px-3 backdrop-blur-[3px]">
-      <div className="relative w-full max-w-[36rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(180deg,#1e1c24,#17151c)] shadow-[0_24px_60px_rgba(0,0,0,0.58)]">
+    <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.82)] px-3 backdrop-blur-[3px] animate-ca-fade-in">
+      <div className="relative w-full max-w-[36rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(180deg,#1e1c24,#17151c)] shadow-[0_24px_60px_rgba(0,0,0,0.58)] animate-ca-slide-up">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(250,39,66,0.09),transparent_42%),radial-gradient(circle_at_right,rgba(5,216,189,0.08),transparent_44%)]" />
         <div className="relative grid gap-0 sm:grid-cols-[4.4rem_minmax(0,1fr)]">
           <div className="hidden border-r border-white/8 bg-[linear-gradient(180deg,rgba(250,39,66,0.12),rgba(255,255,255,0.02))] sm:flex sm:flex-col sm:items-center sm:justify-between sm:px-2 sm:py-4">
@@ -452,14 +452,14 @@ export function NarutoQueueCommitModal({
                 type="button"
                 disabled={!canAfford || hasUnallocated}
                 onClick={() => onConfirm(orderedActionIds)}
-                className="ca-display rounded-[8px] border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.22)] transition hover:translate-y-[-1px] hover:bg-[#ff3d5a] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                className="ca-display rounded-[8px] border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.22)] transition duration-150 hover:translate-y-[-1px] hover:bg-[#ff3d5a] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
               >
                 OK
               </button>
               <button
                 type="button"
                 onClick={onBack}
-                className="ca-display rounded-[8px] border border-white/12 bg-[rgba(255,255,255,0.06)] px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-ca-text transition hover:border-ca-teal/35 hover:bg-ca-teal/10 hover:text-ca-teal"
+                className="ca-display rounded-[8px] border border-white/12 bg-[rgba(255,255,255,0.06)] px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-ca-text transition duration-150 hover:border-ca-teal/35 hover:bg-ca-teal/10 hover:text-ca-teal active:scale-[0.97]"
               >
                 CANCEL
               </button>

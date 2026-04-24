@@ -46,7 +46,7 @@ export function BattleInfoPanel({
           )}
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div key={ability?.id ?? 'empty'} className="flex min-w-0 flex-1 flex-col animate-ca-fade-in">
           <div className="border-b border-white/8 px-5 py-3">
             <p className="ca-display truncate text-[1.2rem] leading-none text-white/90">
               {ability ? ability.name.toUpperCase() : 'NO TECHNIQUE SELECTED'}
