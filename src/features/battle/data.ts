@@ -190,8 +190,9 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         trigger: 'onRoundStart',
         effects: [{ type: 'adjustCounter', key: 'shikigami', amount: 1, target: 'self' }],
         label: 'Ten Shadows Strategist',
-        description: 'At the start of each turn, Megumi gains 1 Shikigami.',
+        description: 'At the start of each turn, Megumi gains 1 Shikigami. His Divine Dogs, Nue, and Shadow Recall skills empower or consume Shikigami when used at 3 or more stacks.',
         icon: { label: 'TS', tone: 'teal' },
+        counterKey: 'shikigami',
       }),
       definePassive({
         id: 'megumi-shikigami-pressure-dogs',
@@ -204,6 +205,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Shikigami Pressure',
         description: 'If Megumi has 3 or more Shikigami, his damaging Ten Shadows skills deal 5 additional damage.',
         icon: { label: 'SP', tone: 'red' },
+        hidden: true,
       }),
       definePassive({
         id: 'megumi-shikigami-pressure-nue',
@@ -216,6 +218,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Shikigami Pressure',
         description: 'If Megumi has 3 or more Shikigami, his damaging Ten Shadows skills deal 5 additional damage.',
         icon: { label: 'SP', tone: 'red' },
+        hidden: true,
       }),
       definePassive({
         id: 'megumi-divine-dogs-pack',
@@ -232,6 +235,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Divine Dogs Pack Hunt',
         description: 'With more than 3 Shikigami, Divine Dogs: Pursuit deals 15 additional damage, seals Physical skills for 1 turn, and consumes 2 Shikigami.',
         icon: { label: 'DD', tone: 'red' },
+        hidden: true,
       }),
       definePassive({
         id: 'megumi-nue-overhead-drop',
@@ -248,6 +252,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Nue Overhead Drop',
         description: 'With more than 3 Shikigami, Nue: Electric Drop deals 10 additional damage, fully stuns the target for 1 turn, and consumes 3 Shikigami.',
         icon: { label: 'NO', tone: 'gold' },
+        hidden: true,
       }),
       definePassive({
         id: 'megumi-shadow-recall-surge',
@@ -263,6 +268,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Shadow Recall Surge',
         description: 'If Megumi has 3 or more Shikigami, Shadow Recall heals 10 additional health and consumes 3 Shikigami.',
         icon: { label: 'SR', tone: 'teal' },
+        hidden: true,
       }),
       definePassive({
         id: 'megumi-desperate-dismissal',
@@ -279,6 +285,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         label: 'Desperate Dismissal',
         description: 'The first time Megumi falls below 30 health, he loses 3 Shikigami.',
         icon: { label: 'DD', tone: 'frost' },
+        hidden: true,
       }),
     ],
     abilities: [

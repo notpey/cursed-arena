@@ -338,12 +338,11 @@ function groupPassives(passiveEffects: PassiveEffect[]): CharacterPassive[] {
   const seen = new Set<string>()
   const result: CharacterPassive[] = []
   for (const passive of passiveEffects) {
+    if (passive.hidden) continue
     const root = rootPassiveName(passive.label)
     if (seen.has(root)) continue
     seen.add(root)
-    // Use the root entry (exact name match) as the representative if it exists,
-    // otherwise fall back to the first entry in the group.
-    const representative = passiveEffects.find((p) => p.label === root) ?? passive
+    const representative = passiveEffects.find((p) => p.label === root && !p.hidden) ?? passive
     result.push(describePassiveEntry(representative))
   }
   return result

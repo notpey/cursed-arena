@@ -562,6 +562,13 @@ export type PassiveEffect = {
   label: string
   description?: string
   icon?: BattleAbilityIcon
+  // When true, this passive runs in the engine but is omitted from static
+  // passive lists (detail page, ACP live preview, battle board baseline).
+  // Use for rules already described in skill copy.
+  hidden?: boolean
+  // Declares that this passive is the visible "home" for a fighter counter
+  // (e.g. 'shikigami'). The live count is rendered on this passive's pip.
+  counterKey?: string
 }
 
 export type TurnPhase =

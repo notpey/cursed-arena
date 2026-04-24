@@ -308,8 +308,10 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
 }
 
 function isBaselinePassiveVisible(passive: PassiveEffect): boolean {
-  // Keep the opening board readable: only always-on passive identity is shown by default.
-  return passive.trigger === 'whileAlive'
+  // Hidden passives (conditional sub-effects already described in skill copy) are
+  // engine-only. Everything else — the signature passive identity — is shown.
+  if (passive.hidden) return false
+  return true
 }
 
 function normalizeCounterKey(value: string): string {
@@ -415,9 +417,44 @@ function counterKeyVariants(counterKey: string): string[] {
     mergeTurns(group, guard.remainingRounds)
   }
 
-  // ── Counters: attach to their source ability group if one exists ──────────
+  // ── Passive abilities ─────────────────────────────────────────────────────
+  // Built before counters so the counter pass can attach to passive pips.
+  const seenPassiveRoots = new Set<string>()
+  const counterKeyToGroupId = new Map<string, string>()
+  for (const passive of fighter.passiveEffects ?? []) {
+    if (!isBaselinePassiveVisible(passive)) continue
+    const root = passive.label.split(':')[0].trim()
+    if (seenPassiveRoots.has(root)) continue
+    seenPassiveRoots.add(root)
+    const sourceId = `passive-${passive.id ?? root}`
+    if (groups.has(sourceId)) continue
+    if (passive.counterKey) counterKeyToGroupId.set(passive.counterKey, sourceId)
+    groups.set(sourceId, {
+      key: sourceId,
+      label: passive.label,
+      lines: describePassiveLines(passive),
+      turnsLeft: null,
+      tone: 'buff',
+      iconSrc: passive.icon?.src,
+      iconLabel: passive.icon?.label ?? root.slice(0, 2).toUpperCase(),
+      iconTone: passive.icon?.tone ?? 'teal',
+      stackCount: null,
+    })
+  }
+
+  // ── Counters: attach to their owning passive (or best-match source group) ──
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue
+
+    const explicitGroupId = counterKeyToGroupId.get(key)
+    if (explicitGroupId) {
+      const owner = groups.get(explicitGroupId)
+      if (owner) {
+        owner.stackCount = value
+        continue
+      }
+    }
+
     const variants = counterKeyVariants(key)
     let ownerGroup: Group | null = null
     let ownerScore = 0
@@ -451,28 +488,6 @@ function counterKeyVariants(counterKey: string): string[] {
     }
 
     if (ownerGroup) ownerGroup.stackCount = value
-  }
-
-  // ── Passive abilities ─────────────────────────────────────────────────────
-  const seenPassiveRoots = new Set<string>()
-  for (const passive of fighter.passiveEffects ?? []) {
-    if (!isBaselinePassiveVisible(passive)) continue
-    const root = passive.label.split(':')[0].trim()
-    if (seenPassiveRoots.has(root)) continue
-    seenPassiveRoots.add(root)
-    const sourceId = `passive-${passive.id ?? root}`
-    if (groups.has(sourceId)) continue
-    groups.set(sourceId, {
-      key: sourceId,
-      label: passive.label,
-      lines: describePassiveLines(passive),
-      turnsLeft: null,
-      tone: 'buff',
-      iconSrc: passive.icon?.src,
-      iconLabel: passive.icon?.label ?? root.slice(0, 2).toUpperCase(),
-      iconTone: passive.icon?.tone ?? 'teal',
-      stackCount: null,
-    })
   }
 
   return [...groups.values()].map((g) => ({

@@ -573,10 +573,11 @@ function groupNamedPassives(passiveEffects: PassiveEffect[]): PassiveEffect[] {
   const seen = new Set<string>()
   const result: PassiveEffect[] = []
   for (const p of passiveEffects) {
+    if (p.hidden) continue
     const root = p.label.split(':')[0].trim()
     if (seen.has(root)) continue
     seen.add(root)
-    result.push(passiveEffects.find((x) => x.label === root) ?? p)
+    result.push(passiveEffects.find((x) => x.label === root && !x.hidden) ?? p)
   }
   return result
 }

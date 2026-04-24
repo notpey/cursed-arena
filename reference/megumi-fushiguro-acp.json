@@ -16,9 +16,10 @@
     {
       "id": "megumi-ten-shadows-strategist",
       "label": "Ten Shadows Strategist",
-      "description": "At the start of each turn, Megumi gains 1 Shikigami.",
+      "description": "At the start of each turn, Megumi gains 1 Shikigami. His Divine Dogs, Nue, and Shadow Recall skills empower or consume Shikigami when used at 3 or more stacks.",
       "trigger": "onRoundStart",
       "icon": { "label": "TS", "tone": "teal" },
+      "counterKey": "shikigami",
       "effects": [
         { "type": "adjustCounter", "key": "shikigami", "amount": 1, "target": "self" }
       ]
@@ -33,6 +34,7 @@
         { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
       ],
       "icon": { "label": "SP", "tone": "red" },
+      "hidden": true,
       "effects": [
         { "type": "damage", "power": 5, "target": "inherit" }
       ]
@@ -47,6 +49,7 @@
         { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
       ],
       "icon": { "label": "SP", "tone": "red" },
+      "hidden": true,
       "effects": [
         { "type": "damage", "power": 5, "target": "inherit" }
       ]
@@ -61,6 +64,7 @@
         { "type": "counterAtLeast", "key": "shikigami", "value": 4 }
       ],
       "icon": { "label": "DD", "tone": "red" },
+      "hidden": true,
       "effects": [
         { "type": "damage", "power": 15, "target": "inherit" },
         { "type": "classStun", "duration": 1, "blockedClasses": ["Physical"], "target": "inherit" },
@@ -77,6 +81,7 @@
         { "type": "counterAtLeast", "key": "shikigami", "value": 4 }
       ],
       "icon": { "label": "NO", "tone": "gold" },
+      "hidden": true,
       "effects": [
         { "type": "damage", "power": 10, "target": "inherit" },
         { "type": "stun", "duration": 1, "target": "inherit" },
@@ -93,6 +98,7 @@
         { "type": "counterAtLeast", "key": "shikigami", "value": 3 }
       ],
       "icon": { "label": "SR", "tone": "teal" },
+      "hidden": true,
       "effects": [
         { "type": "heal", "power": 10, "target": "self" },
         { "type": "adjustCounter", "key": "shikigami", "amount": -3, "target": "self" }
@@ -109,6 +115,7 @@
         { "type": "fighterFlag", "key": "desperate_dismissal_used", "value": false }
       ],
       "icon": { "label": "DD", "tone": "frost" },
+      "hidden": true,
       "effects": [
         { "type": "adjustCounter", "key": "shikigami", "amount": -3, "target": "self" },
         { "type": "setFlag", "key": "desperate_dismissal_used", "value": true, "target": "self" }
