@@ -554,14 +554,16 @@ export function BattlePrepPage() {
 
   return (
     <section className="relative h-[calc(100vh-6.75rem)] overflow-hidden py-2 sm:py-3">
-      <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.36]"
-        style={{ backgroundImage: `url(${homeBgBase})` }}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.2),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.15),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,rgba(23,8,14,0.68)_0%,rgba(13,12,17,0.72)_42%,rgba(24,16,32,0.66)_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-32 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
-      <div className="pointer-events-none absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/12 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/8 blur-3xl" />
+      <div className="pointer-events-none fixed bottom-0 left-[72px] right-0 top-16 z-0 overflow-hidden">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-[0.36]"
+          style={{ backgroundImage: `url(${homeBgBase})` }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.2),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.15),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,rgba(23,8,14,0.68)_0%,rgba(13,12,17,0.72)_42%,rgba(24,16,32,0.66)_100%)]" />
+        <div className="absolute inset-0 opacity-32 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
+        <div className="absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/12 blur-3xl" />
+        <div className="absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/8 blur-3xl" />
+      </div>
 
       <div className="relative z-10 flex h-full min-h-0 flex-col gap-3 pt-2">
         <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(30,28,38,0.82),rgba(13,12,18,0.86))] p-2 shadow-[0_20px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:p-3">
