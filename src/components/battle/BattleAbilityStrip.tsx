@@ -46,9 +46,9 @@ function SkillTile({
       disabled={locked}
       title={lockReason ? `${ability.name} - ${lockReason}` : ability.name}
       className={cn(
-        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
+        'group relative h-[3.2rem] w-[3.2rem] shrink-0 overflow-hidden rounded-[0.14rem] border-2 bg-[rgba(20,20,28,0.9)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
-        queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
+        queued && 'border-ca-teal/55 shadow-[0_0_8px_rgba(5,216,189,0.16)]',
         locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
         !locked && !active && !queued && 'hover:border-white/30',
         !locked && 'active:scale-[0.93]',
@@ -94,9 +94,9 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
-        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
+        'group relative h-[3.2rem] w-[3.2rem] shrink-0 overflow-hidden rounded-[0.14rem] border-2 transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
         hasQueued
-          ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
+          ? 'border-ca-teal/55 bg-[rgba(5,216,189,0.025)] shadow-[0_0_8px_rgba(5,216,189,0.14)]'
           : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
         hasQueued && 'cursor-pointer active:scale-[0.93]',
       )}
@@ -178,7 +178,7 @@ export function BattleAbilityStrip({
           : null
 
   return (
-    <div className="relative flex items-start gap-2.5 sm:gap-3">
+    <div className="relative flex items-start gap-2 sm:gap-2.5">
       <div className="relative z-10 shrink-0 pt-0.5">
         <BattlePortraitSlot
           fighter={fighter}
@@ -188,7 +188,7 @@ export function BattleAbilityStrip({
           selectedTarget={Boolean(actorSelectedTarget)}
           muted={Boolean(actorMuted)}
           hideHp
-          sizeClass="w-[7rem] sm:w-[8.5rem] xl:w-[10rem]"
+          sizeClass="w-[5.5rem] sm:w-[6.5rem] xl:w-[7.35rem]"
           carryoverLabels={carryoverLabels}
           timelineRole={timelineRole}
           timelineTone={timelineTone}
@@ -197,13 +197,13 @@ export function BattleAbilityStrip({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-end gap-1 pb-0.5">
-        <div className="flex min-h-[2.4rem] items-end px-1.5 sm:px-2">
+        <div className="flex min-h-[1.55rem] items-end px-1.5 sm:px-2">
           <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
         <div
           className={cn(
-            'relative min-w-0 overflow-hidden rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(12,10,24,0.94),rgba(18,14,32,0.9))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition duration-200',
+            'relative min-w-0 overflow-hidden rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(14,12,24,0.96),rgba(19,15,31,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.34)] transition duration-200',
             selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
             actorTargetable && 'ring-2 ring-amber-300/30',
             actorMuted && 'opacity-50 saturate-75',
@@ -212,7 +212,7 @@ export function BattleAbilityStrip({
             timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
           )}
         >
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_60%,rgba(5,216,189,0.03)_85%,rgba(5,216,189,0.06)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_72%,rgba(5,216,189,0.012)_100%)]" />
 
           <div className="relative border-b border-white/6 bg-black/40">
             <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />
@@ -226,7 +226,7 @@ export function BattleAbilityStrip({
             ) : null}
           </div>
 
-          <div className="relative flex min-w-0 items-center gap-2 px-2 py-2 sm:gap-2.5 sm:px-2.5">
+          <div className="relative flex min-w-0 items-center gap-1.5 px-1.5 py-1.5 sm:gap-2 sm:px-2">
             <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
             {abilities.map((ability) => {

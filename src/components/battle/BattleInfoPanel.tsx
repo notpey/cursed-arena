@@ -58,7 +58,7 @@ export function BattleInfoPanel({
     : []
 
   return (
-    <section className="h-[13.75rem] overflow-hidden rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,12,26,0.96),rgba(10,8,18,0.98))] text-ca-text shadow-[0_12px_22px_rgba(0,0,0,0.3)]">
+    <section className="h-[13.75rem] overflow-hidden rounded-[0.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(18,16,28,0.96),rgba(10,8,18,0.98))] text-ca-text shadow-[0_12px_22px_rgba(0,0,0,0.34)]">
       <div className="flex h-full items-stretch">
         <div className="flex w-[7.5rem] shrink-0 flex-col items-center justify-center border-r border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
           {actor ? (

@@ -499,15 +499,16 @@ export function BattlePrepPage() {
 
   return (
     <section className="relative h-[calc(100vh-6.75rem)] overflow-hidden py-2 sm:py-3">
-      <div className="pointer-events-none absolute -left-20 top-12 h-64 w-64 rounded-full bg-ca-red/8 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-ca-teal/8 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/7 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/7 blur-3xl" />
 
       <div className="relative z-10 flex h-full min-h-0 flex-col gap-3 pt-2">
-        <section className="relative shrink-0 overflow-hidden rounded-[14px] border border-white/8 bg-[linear-gradient(135deg,rgba(20,19,28,0.96),rgba(11,11,17,0.92))] p-3 shadow-[0_20px_44px_rgba(0,0,0,0.22)] backdrop-blur-sm sm:p-4">
-          <div className="pointer-events-none absolute -left-20 top-0 h-56 w-56 rounded-full bg-ca-red/8 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-ca-teal/8 blur-3xl" />
-          <div className="relative grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
-            <div className="rounded-[12px] border border-white/8 bg-[linear-gradient(135deg,rgba(255,255,255,0.045),rgba(255,255,255,0.015))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-4">
+        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(30,28,38,0.96),rgba(13,12,18,0.96))] p-2 shadow-[0_20px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:p-3">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.45),rgba(228,230,239,0.12),rgba(5,216,189,0.35))]" />
+          <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-ca-red/7 blur-3xl" />
+          <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-ca-teal/7 blur-3xl" />
+          <div className="relative grid gap-2 xl:grid-cols-[minmax(0,1fr)_17.5rem]">
+            <div className="rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,17,25,0.92),rgba(9,9,14,0.9))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3">
               {selectedEntry && selectedAbility ? (
                 <SelectedFighterPanel
                   key={selectedEntry.id}
@@ -519,22 +520,22 @@ export function BattlePrepPage() {
               ) : null}
             </div>
 
-            <div className="flex h-full flex-col rounded-[12px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <div className="rounded-[14px] border border-white/8 bg-[linear-gradient(180deg,rgba(14,14,20,0.88),rgba(10,10,16,0.78))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_14px_28px_rgba(0,0,0,0.14)]">
+            <div className="flex h-full flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,15,24,0.9),rgba(9,9,14,0.86))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <div className="rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,11,18,0.92),rgba(9,8,14,0.88))] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_24px_rgba(0,0,0,0.16)]">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Queue Mode</p>
-                  <span className="ca-mono-label rounded-md border border-white/10 px-2 py-1 text-[0.38rem] text-ca-text-3">
+                  <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Match Mode</p>
+                  <span className="ca-mono-label rounded-[3px] border border-white/10 px-2 py-1 text-[0.38rem] text-ca-text-3">
                     {getModeLabel(matchMode)}
                   </span>
                 </div>
-                <div className="mt-3 grid grid-cols-4 gap-1.5">
+                <div className="mt-2.5 grid grid-cols-4 gap-1">
                   {battleMatchModes.map((mode) => (
                     <button
                       key={mode}
                       type="button"
                       onClick={() => setMatchMode(mode)}
                       className={[
-                        'ca-display rounded-md border px-1.5 py-2.5 text-[0.82rem] leading-none transition duration-150 active:scale-[0.96]',
+                        'ca-display rounded-[4px] border px-1 py-2 text-[0.8rem] leading-none transition duration-150 active:scale-[0.96]',
                         matchMode === mode
                           ? mode === 'practice'
                             ? 'border-ca-teal/35 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
@@ -568,7 +569,7 @@ export function BattlePrepPage() {
                     type="button"
                     onClick={handleEnterArena}
                     disabled={!isReady}
-                    className="ca-display mt-4 w-full rounded-xl border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.18rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition duration-150 enabled:hover:-translate-y-[1px] enabled:active:scale-[0.98] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+                    className="ca-display mt-3 w-full rounded-[6px] border border-ca-red/40 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.12rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition duration-150 enabled:hover:-translate-y-[1px] enabled:active:scale-[0.98] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
                   >
                     {getModeButtonLabel(matchMode)}
                   </button>
@@ -599,13 +600,13 @@ export function BattlePrepPage() {
                 )}
               </div>
 
-              <div className="mt-3 flex-1 rounded-[14px] border border-white/8 bg-[linear-gradient(180deg,rgba(16,16,24,0.88),rgba(10,10,16,0.76))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_14px_28px_rgba(0,0,0,0.12)]">
+              <div className="mt-2 flex-1 rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,15,23,0.88),rgba(9,9,14,0.78))] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_24px_rgba(0,0,0,0.12)]">
                 <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Battle Record</p>
-                <div className="mt-3 rounded-[12px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                  <p className="ca-display text-[2.15rem] leading-none text-ca-text">{profileStats.rank}</p>
+                <div className="mt-2 rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                  <p className="ca-display text-[2rem] leading-none text-ca-text">{profileStats.rank}</p>
                   <p className="ca-mono-label mt-2 text-[0.4rem] text-ca-text-3">Current Ladder Placement</p>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
                   <RecordStat label="Wins" value={String(profileStats.wins)} />
                   <RecordStat label="Losses" value={String(profileStats.losses)} />
                   <RecordStat label="Win %" value={`${winRate}%`} />
@@ -615,8 +616,8 @@ export function BattlePrepPage() {
           </div>
         </section>
 
-        <section className="min-h-0 flex-1 overflow-hidden rounded-[12px] border border-white/8 bg-[linear-gradient(135deg,rgba(18,18,26,0.9),rgba(12,12,18,0.84))] p-3 shadow-[0_16px_34px_rgba(0,0,0,0.16)] backdrop-blur-sm sm:p-4">
-          <div className="grid h-full min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_15.5rem]">
+        <section className="min-h-0 flex-1 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,17,25,0.92),rgba(10,10,16,0.88))] p-2.5 shadow-[0_16px_34px_rgba(0,0,0,0.2)] backdrop-blur-sm sm:p-3">
+          <div className="grid h-full min-h-0 gap-2.5 xl:grid-cols-[minmax(0,1fr)_15.25rem]">
             <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -624,7 +625,7 @@ export function BattlePrepPage() {
                     value={searchValue}
                     onChange={(event) => setSearchValue(event.target.value)}
                     placeholder="Search fighter, role, passive"
-                    className="w-full max-w-md rounded-[10px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2.5 text-sm text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
+                    className="w-full max-w-md rounded-[6px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2.5 text-sm text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
                   />
                   <div className="flex items-center gap-2">
                     <label className="ca-mono-label text-[0.44rem] text-ca-text-3" htmlFor="prep-role">
@@ -665,7 +666,7 @@ export function BattlePrepPage() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 overscroll-contain">
-                <div className="grid auto-rows-max content-start grid-cols-5 gap-1.5 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-8 2xl:grid-cols-8">
+                <div className="grid auto-rows-max content-start grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-11">
                   {visibleRoster.map((entry) => (
                     <RosterTile
                       key={entry.id}
@@ -679,7 +680,7 @@ export function BattlePrepPage() {
               </div>
             </div>
 
-            <aside className="flex h-full min-h-0 flex-col rounded-[10px] border border-white/8 bg-[rgba(12,12,18,0.68)] p-3">
+            <aside className="flex h-full min-h-0 flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.88),rgba(8,8,13,0.82))] p-2.5">
               <div className="shrink-0">
                 <p className="ca-mono-label text-[0.48rem] text-ca-text-3">Your Team</p>
                 <h2 className="ca-display mt-1.5 text-[2rem] leading-none text-ca-text">3 Slots</h2>
@@ -1013,49 +1014,49 @@ function SelectedFighterPanel({
   const style = rarityStyles[entry.rarity]
 
   return (
-    <div className="grid h-full items-start gap-6 sm:grid-cols-[10rem_minmax(0,1fr)] xl:grid-cols-[10.75rem_minmax(0,1fr)] animate-ca-fade-in">
-      <div className="relative inline-flex rounded-[18px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_16px_34px_rgba(0,0,0,0.18)]">
+    <div className="grid h-full items-start gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)] xl:grid-cols-[9rem_minmax(0,1fr)] animate-ca-fade-in">
+      <div className="relative inline-flex rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.012))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_28px_rgba(0,0,0,0.18)]">
         <div
-          className="pointer-events-none absolute inset-3 rounded-[14px] blur-2xl"
+          className="pointer-events-none absolute inset-2 rounded-[6px] blur-2xl"
           style={{ background: `radial-gradient(circle at 35% 25%, ${style.wash}, transparent 72%)` }}
         />
-        <div className="pointer-events-none absolute inset-[11px] rounded-[15px] border border-white/6" />
-        <div className="relative overflow-hidden rounded-[14px]">
-          <PortraitThumb entry={entry} sizeClass="h-36 w-36 sm:h-40 sm:w-40 xl:h-[10.25rem] xl:w-[10.25rem]" />
+        <div className="pointer-events-none absolute inset-[7px] rounded-[6px] border border-white/8" />
+        <div className="relative overflow-hidden rounded-[6px]">
+          <PortraitThumb entry={entry} sizeClass="h-32 w-32 sm:h-[8.5rem] sm:w-[8.5rem] xl:h-[8.5rem] xl:w-[8.5rem]" />
         </div>
       </div>
 
       <div className="min-w-0">
-        <div className="relative overflow-hidden rounded-[16px] border border-white/8 bg-[linear-gradient(135deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
           <div
             className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full blur-3xl"
             style={{ background: `radial-gradient(circle, ${style.wash}, transparent 72%)` }}
           />
-          <div className="relative grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+          <div className="relative grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className="ca-mono-label rounded-md border px-2 py-1 text-[0.42rem]"
+                  className="ca-mono-label rounded-[3px] border px-2 py-1 text-[0.42rem]"
                   style={{ borderColor: style.border, background: style.wash, color: style.text }}
                 >
                   {entry.gradeLabel}
                 </span>
-                <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
+                <span className="ca-mono-label rounded-[3px] border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
                   {entry.role}
                 </span>
               </div>
 
-              <h2 className="ca-display mt-3 text-[2.65rem] leading-[0.86] text-ca-text sm:text-[3.05rem]">{entry.name}</h2>
-              <div className="mt-3 h-[3px] w-28 rounded-full" style={{ background: style.text, boxShadow: `0 0 18px ${style.wash}` }} />
-              <p className="mt-3 max-w-2xl text-[1rem] leading-6 text-ca-text-2">{entry.passiveLabel}</p>
+              <h2 className="ca-display mt-2 text-[2.35rem] leading-[0.86] text-ca-text sm:text-[2.75rem]">{entry.name}</h2>
+              <div className="mt-2 h-[3px] w-24 rounded-full" style={{ background: style.text, boxShadow: `0 0 18px ${style.wash}` }} />
+              <p className="mt-2 max-w-2xl text-[0.92rem] leading-5 text-ca-text-2">{entry.passiveLabel}</p>
             </div>
 
-            <div className="rounded-[14px] border border-white/8 bg-[rgba(7,7,12,0.34)] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="rounded-[6px] border border-white/10 bg-[rgba(7,7,12,0.34)] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="ca-mono-label text-[0.38rem] text-ca-text-3">Technique Loadout</p>
                 <span className="ca-mono-label text-[0.36rem] text-ca-text-3">4 SKILLS</span>
               </div>
-              <div className="flex flex-wrap gap-2.5 xl:justify-end">
+              <div className="flex flex-wrap gap-2 xl:justify-end">
                 {abilities.map((ability) => {
                   const active = selectedAbilityId === ability.id
                   return (
@@ -1064,7 +1065,7 @@ function SelectedFighterPanel({
                       type="button"
                       onClick={() => onSelectAbility(ability.id)}
                       className={[
-                        'group relative h-[4.45rem] w-[4.45rem] overflow-hidden rounded-[12px] border transition duration-200',
+                        'group relative h-[3.75rem] w-[3.75rem] overflow-hidden rounded-[4px] border transition duration-200',
                         active
                           ? 'border-ca-red/40 shadow-[0_0_0_1px_rgba(250,39,66,0.18),0_12px_24px_rgba(250,39,66,0.12)]'
                           : 'border-white/10 bg-[rgba(255,255,255,0.03)] hover:border-white/18 hover:-translate-y-[1px]',
@@ -1090,7 +1091,7 @@ function SelectedFighterPanel({
           </div>
         </div>
 
-        <div className="relative mt-4 overflow-hidden rounded-[16px] border border-white/8 bg-[linear-gradient(180deg,rgba(13,13,19,0.9),rgba(9,9,14,0.78))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_28px_rgba(0,0,0,0.16)]">
+        <div className="relative mt-2.5 overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,13,19,0.9),rgba(9,9,14,0.78))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_24px_rgba(0,0,0,0.16)]">
           <div
             className="pointer-events-none absolute left-0 top-0 h-full w-1"
             style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
@@ -1099,12 +1100,12 @@ function SelectedFighterPanel({
             className="pointer-events-none absolute -left-12 top-0 h-40 w-40 rounded-full blur-3xl"
             style={{ background: `radial-gradient(circle, ${style.wash}, transparent 72%)` }}
           />
-          <div className="relative grid gap-4 md:grid-cols-[6.5rem_minmax(0,1fr)] md:items-start">
-            <div className="overflow-hidden rounded-[14px] border border-white/10 bg-[rgba(255,255,255,0.04)] shadow-[0_12px_22px_rgba(0,0,0,0.18)]">
+          <div className="relative grid gap-3 md:grid-cols-[5.5rem_minmax(0,1fr)] md:items-start">
+            <div className="overflow-hidden rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.04)] shadow-[0_12px_22px_rgba(0,0,0,0.18)]">
               {selectedAbility.icon.src ? (
-                <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-[6.5rem] w-[6.5rem] object-cover" />
+                <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-[5.5rem] w-[5.5rem] object-cover" />
               ) : (
-                <div className="grid h-[6.5rem] w-[6.5rem] place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
+                <div className="grid h-[5.5rem] w-[5.5rem] place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
                   <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>
                 </div>
               )}
@@ -1114,8 +1115,8 @@ function SelectedFighterPanel({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="ca-mono-label text-[0.38rem] text-ca-text-3">Active Technique</p>
-                  <p className="mt-2 font-[var(--font-display-alt)] text-[1.42rem] font-bold text-ca-text sm:text-[1.58rem]">{selectedAbility.name}</p>
-                  <p className="mt-2 max-w-3xl text-[0.98rem] leading-6 text-ca-text-2">{selectedAbility.description}</p>
+                  <p className="mt-1.5 font-[var(--font-display-alt)] text-[1.25rem] font-bold text-ca-text sm:text-[1.42rem]">{selectedAbility.name}</p>
+                  <p className="mt-1.5 max-w-3xl text-[0.88rem] leading-5 text-ca-text-2">{selectedAbility.description}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   {selectedAbility.classes.includes('Ultimate') ? (
@@ -1129,7 +1130,7 @@ function SelectedFighterPanel({
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-3 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
                 <MetaPill label="Cost">
                   <EnergyCostRow cost={getAbilityEnergyCost(selectedAbility)} compact />
                 </MetaPill>
@@ -1168,16 +1169,19 @@ function RosterTile({
     <button
       type="button"
       onClick={onClick}
-      className="group relative overflow-hidden rounded-[8px] border bg-[rgba(18,18,26,0.72)] text-left transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
+      className="group relative overflow-hidden rounded-[4px] border bg-[rgba(18,18,26,0.72)] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
       style={{
-        borderColor: active ? style.border : 'rgba(228,230,239,0.1)',
-        boxShadow: active ? `0 0 0 1px ${style.border}` : 'none',
+        borderColor: active ? style.border : inTeam ? 'rgba(5,216,189,0.34)' : 'rgba(228,230,239,0.1)',
+        boxShadow: active ? `0 0 0 1px ${style.border}, 0 10px 18px rgba(0,0,0,0.18)` : undefined,
       }}
     >
-      <PortraitThumb entry={entry} sizeClass="aspect-square w-full" labelClass="text-[0.3rem]" bordered={false} />
+      <PortraitThumb entry={entry} sizeClass="aspect-square w-full" labelClass="text-[0.3rem]" bordered={false} showLabel />
       {inTeam ? (
-        <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-ca-teal/25 bg-ca-teal shadow-[0_0_10px_rgba(5,216,189,0.28)]" />
+        <span className="absolute right-1 top-1 rounded-[2px] border border-ca-teal/35 bg-[rgba(5,216,189,0.16)] px-1 py-0.5 ca-mono-label text-[0.34rem] text-ca-teal shadow-[0_0_10px_rgba(5,216,189,0.22)]">
+          IN
+        </span>
       ) : null}
+      {active ? <span className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: style.text }} /> : null}
     </button>
   )
 }
@@ -1203,7 +1207,7 @@ function TeamSlotCard({
         type="button"
         onClick={onSelect}
         className={[
-          'w-full rounded-[10px] border border-dashed bg-[rgba(255,255,255,0.02)] px-3 py-3 text-left transition duration-150',
+          'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] px-3 py-3 text-left transition duration-150',
           focused ? 'border-ca-teal/35' : 'border-white/10 hover:border-white/18',
         ].join(' ')}
       >
@@ -1218,7 +1222,7 @@ function TeamSlotCard({
       type="button"
       onClick={onSelect}
       className={[
-        'w-full rounded-[10px] border bg-[rgba(255,255,255,0.03)] px-2.5 py-2.5 text-left transition duration-150',
+        'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] px-2.5 py-2.5 text-left transition duration-150',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >
@@ -1234,7 +1238,7 @@ function TeamSlotCard({
             event.stopPropagation()
             onClear()
           }}
-          className="grid h-7 w-7 place-items-center rounded-md border border-white/10 text-[0.72rem] text-ca-text-3 transition hover:border-white/18 hover:text-ca-text"
+          className="grid h-7 w-7 place-items-center rounded-[4px] border border-white/10 text-[0.72rem] text-ca-text-3 transition hover:border-white/18 hover:text-ca-text"
           aria-label="Clear slot"
         >
           X
@@ -1246,7 +1250,7 @@ function TeamSlotCard({
 
 function MetaPill({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-[10px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.018))] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <p className="ca-mono-label text-[0.38rem] text-ca-text-3">{label}</p>
       <div className="mt-2 min-h-[1rem]">{children}</div>
     </div>

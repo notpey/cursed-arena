@@ -70,9 +70,6 @@ type BattleTimelineFocus = {
   tone: 'red' | 'teal' | 'gold' | 'frost'
 }
 
-const timelineStepDelayMs = 360
-const timelineSystemDelayMs = 240
-const timelineRoundDelayMs = 300
 const timelineEventPriority: BattleRuntimeEvent['type'][] = [
   'fighter_defeated',
   'damage_applied',
@@ -88,12 +85,6 @@ const timelineEventPriority: BattleRuntimeEvent['type'][] = [
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-}
-
-function getTimelineStepDelay(step: BattleTimelineStep) {
-  if (step.kind === 'action') return timelineStepDelayMs
-  if (step.kind === 'roundStart' || step.kind === 'roundEnd') return timelineRoundDelayMs
-  return timelineSystemDelayMs
 }
 
 function createTimelineFocus(step: BattleTimelineStep): BattleTimelineFocus | null {
@@ -269,7 +260,8 @@ function applyRandomAllocationToQueuedActions(
 ) {
   return Object.fromEntries(
     Object.entries(queued).map(([actorId, command]) => {
-      const { randomCostAllocation: _unused, ...baseCommand } = command
+      const baseCommand = { ...command }
+      delete baseCommand.randomCostAllocation
       const allocation = randomAlloc[actorId]
       if (!allocation) return [actorId, baseCommand]
 
@@ -334,7 +326,7 @@ function UtilityRail({
   onSurrender: () => void
 }) {
   return (
-    <aside className="flex w-[10rem] shrink-0 flex-col gap-1.5 rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,12,26,0.96),rgba(10,8,18,0.98))] p-2 shadow-[0_12px_22px_rgba(0,0,0,0.3)]">
+    <aside className="flex w-[10rem] shrink-0 flex-col gap-1.5 rounded-[0.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(20,18,30,0.96),rgba(10,8,18,0.98))] p-2 shadow-[0_12px_22px_rgba(0,0,0,0.34)]">
       <button
         type="button"
         onClick={onSurrender}
@@ -387,6 +379,7 @@ export function BattlePage() {
   const [opponentDisconnected, setOpponentDisconnected] = useState(false)
   const [timelineLocked, setTimelineLocked] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
+  const [boardRevealKey, setBoardRevealKey] = useState(0)
   const [isDocumentVisible, setIsDocumentVisible] = useState(
     () => typeof document === 'undefined' || document.visibilityState === 'visible',
   )
@@ -515,29 +508,17 @@ export function BattlePage() {
     clearPendingSelection()
     setHoveredAbility(null)
 
-    // Lock interactions immediately, then resolve board + focus in readable beats.
+    // Lock interactions immediately, then reveal the resolved state all at once.
     setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
 
-    for (const step of steps) {
-      if (timelineRunRef.current !== runId) {
-        return false
-      }
-
-      setBattle((current) => ({
-        ...current,
-        state: step.state,
-        queued: {},
-        selectedActorId: null,
-      }))
-
-      if (step.events.length > 0) {
-        setBattleLog((current) => [...current, ...step.events].slice(-36))
-      }
-
-      const focus = createTimelineFocus(step)
-      setTimelineFocus(focus)
-      await wait(getTimelineStepDelay(step))
+    const events = steps.flatMap((step) => step.events)
+    if (events.length > 0) {
+      setBattleLog((current) => [...current, ...events].slice(-36))
     }
+
+    const finalFocus = [...steps].reverse().map(createTimelineFocus).find(Boolean) ?? null
+    setTimelineFocus(finalFocus ?? { label: 'TURN RESOLVED', tone: 'frost' })
+    await wait(260)
 
     if (timelineRunRef.current !== runId) {
       return false
@@ -567,6 +548,7 @@ export function BattlePage() {
         actionOrder: getCommandablePlayerUnits(multiplayerBattleState).map((fighter) => fighter.instanceId),
         selectedActorId: nextActorId,
       })
+      setBoardRevealKey((current) => current + 1)
       setSelectedAbilityId(null)
       setSelectedTargetId(null)
       setTimelineLocked(false)
@@ -914,6 +896,7 @@ export function BattlePage() {
       actionOrder: getCommandablePlayerUnits(currentState).map((f) => f.instanceId),
       selectedActorId: nextActorId,
     })
+    setBoardRevealKey((current) => current + 1)
     setTimelineLocked(false)
     setTimelineFocus(null)
   }
@@ -979,11 +962,11 @@ export function BattlePage() {
 
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
-      <div className="absolute inset-0 bg-cover bg-center opacity-[0.55]" style={{ backgroundImage: `url(${homeBgBase})` }} />
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(4,5,8,0.05),rgba(4,5,8,0.4))]" />
+      <div className="absolute inset-0 bg-cover bg-center opacity-[0.42]" style={{ backgroundImage: `url(${homeBgBase})` }} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(250,39,66,0.08),transparent_34%),radial-gradient(circle_at_84%_24%,rgba(5,216,189,0.08),transparent_32%),linear-gradient(180deg,rgba(4,5,8,0.18),rgba(4,5,8,0.58))]" />
 
       <div className="relative flex h-full w-full flex-col p-2 sm:p-3">
-        <div className="flex w-full flex-1 flex-col overflow-y-auto rounded-[0.45rem] border border-white/8 bg-[rgba(8,8,12,0.06)] shadow-[0_20px_56px_rgba(0,0,0,0.28)]">
+        <div className="flex w-full flex-1 flex-col overflow-y-auto rounded-[0.35rem] border border-white/10 bg-[rgba(8,8,12,0.18)] shadow-[0_20px_56px_rgba(0,0,0,0.34)]">
           <BattleTopBar
             playerProfile={playerBoardProfile}
             enemyProfile={enemyBoardProfile}
@@ -998,6 +981,7 @@ export function BattlePage() {
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
             <BattleBoard
+              key={boardRevealKey}
               state={battle.state}
               queued={battle.queued}
               selectedActorId={battle.selectedActorId}

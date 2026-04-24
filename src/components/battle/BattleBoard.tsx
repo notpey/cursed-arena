@@ -49,22 +49,23 @@ export function BattleBoard({
   timelineFocus?: TimelineFocus | null
 }) {
   return (
-    <section className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.3rem] border border-white/6 bg-[rgba(6,6,10,0.18)] px-3 py-3 sm:px-4">
-      <div className="relative z-10 mb-3 flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-amber-300/24 bg-amber-300/10 px-2.5 py-1 ca-mono-label text-[0.58rem] text-amber-300">
+    <section className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(12,11,18,0.26),rgba(8,8,13,0.2))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] animate-ca-turn-reveal sm:px-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.32),transparent_42%,rgba(5,216,189,0.28))]" />
+      <div className="relative z-10 mb-2 flex flex-wrap items-center gap-2">
+        <span className="rounded-[0.18rem] border border-amber-300/24 bg-amber-300/10 px-2.5 py-1 ca-mono-label text-[0.58rem] text-amber-300">
           {state.battlefield.label.toUpperCase()}
         </span>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2">
+        <span className="rounded-[0.18rem] border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2">
           {state.firstPlayer === 'player' ? 'OPENING WINDOW' : 'RESPONSE WINDOW'}
         </span>
         {selectedAbility ? (
-          <span key={selectedAbility.id} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2 animate-ca-fade-in">
+          <span key={selectedAbility.id} className="rounded-[0.18rem] border border-white/10 bg-white/5 px-2.5 py-1 ca-mono-label text-[0.58rem] text-ca-text-2 animate-ca-fade-in">
             {targetingEnemies ? 'TARGET ENEMY' : targetingAllies ? 'TARGET ALLY' : selectedAbility.name.toUpperCase()}
           </span>
         ) : null}
         {timelineFocus ? (
           <span key={timelineFocus.label} className={[
-            'rounded-full border px-2.5 py-1 ca-mono-label text-[0.58rem] animate-ca-fade-in',
+            'rounded-[0.18rem] border px-2.5 py-1 ca-mono-label text-[0.58rem] animate-ca-fade-in',
             timelineFocus.tone === 'red'
               ? 'border-ca-red/24 bg-ca-red-wash text-ca-red'
               : timelineFocus.tone === 'teal'
@@ -78,7 +79,7 @@ export function BattleBoard({
         ) : null}
       </div>
 
-      <div className="relative z-10 flex flex-1 flex-col justify-evenly gap-2 sm:gap-3">
+      <div className="relative z-10 flex flex-1 flex-col justify-evenly gap-1.5 sm:gap-2">
         {state.playerTeam.map((fighter, index) => {
           const enemy = state.enemyTeam[index]
           const allyQueued = queued[fighter.instanceId]
@@ -100,8 +101,8 @@ export function BattleBoard({
               : null
 
           return (
-            <div key={fighter.instanceId} className="flex items-start justify-between gap-4 sm:gap-6">
-              <div className="w-full max-w-[36rem] md:max-w-[42rem] xl:max-w-[48rem] 2xl:max-w-[54rem]">
+            <div key={fighter.instanceId} className="flex items-start justify-between gap-3 sm:gap-4">
+              <div className="w-full max-w-[30rem] md:max-w-[35rem] xl:max-w-[40rem] 2xl:max-w-[44rem]">
                 <BattleAbilityStrip
                   fighter={fighter}
                   selected={selectedActorId === fighter.instanceId}
@@ -134,7 +135,7 @@ export function BattleBoard({
                 {enemy ? (
                   <div
                     className={[
-                      'rounded-[0.3rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.3)] transition duration-200 sm:p-2',
+                      'rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.34)] transition duration-200 sm:p-2',
                       enemyTimelineRole === 'actor'
                         ? 'border-ca-red/50 shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_0_22px_rgba(250,39,66,0.18)]'
                         : enemyTimelineRole === 'target'
@@ -144,7 +145,7 @@ export function BattleBoard({
                   >
                     <div className="flex flex-col items-center gap-1">
                       {/* Pip row above the portrait, centered with the frame */}
-                      <div className="flex min-h-[2.4rem] items-center justify-center">
+                      <div className="flex min-h-[1.55rem] items-center justify-center">
                         <ActiveEffectPips fighter={enemy} mirrored />
                       </div>
 
@@ -155,7 +156,7 @@ export function BattleBoard({
                         targetable={enemyTargetable}
                         selectedTarget={selectedTargetId === enemy.instanceId}
                         muted={Boolean(targetingEnemies && !enemyTargetable && selectedAbility)}
-                        sizeClass="w-[5rem] sm:w-[5.75rem] xl:w-[6.5rem]"
+                        sizeClass="w-[4rem] sm:w-[4.75rem] xl:w-[5.4rem]"
                         timelineRole={enemyTimelineRole}
                         timelineTone={timelineFocus?.tone ?? null}
                         onClick={enemyTargetable && !interactionLocked ? () => onTargetFighter(enemy) : undefined}

@@ -24,14 +24,14 @@ export function EnergyPip({ type, small = false }: { type: BattleEnergyType | 'r
   return (
     <span
       className={cn(
-        'border shadow-[0_0_12px_var(--energy-glow)]',
+        'border shadow-[0_0_6px_var(--energy-glow)]',
         small ? 'h-2.5 w-2.5' : 'h-3.5 w-3.5',
         type === 'random' ? 'rounded-[0.15rem]' : 'rounded-full',
       )}
       style={{
         backgroundColor: meta.color,
         borderColor: meta.border,
-        boxShadow: `0 0 12px ${meta.glow}`,
+        boxShadow: `0 0 6px ${meta.glow}`,
       }}
       title={meta.label}
     />

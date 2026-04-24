@@ -116,7 +116,7 @@ function generateRefreshAmounts(
 ): BattleEnergyAmounts {
   void rule
   const next = createEnergyAmounts()
-  let remaining = Math.max(0, livingCount)
+  const remaining = Math.max(0, livingCount)
 
   const random = createSeededRandom(seed)
   for (let index = 0; index < remaining; index += 1) {

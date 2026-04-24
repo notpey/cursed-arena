@@ -14,7 +14,7 @@ function ProfileBlock({
 
   return (
     <div className={cn('flex items-center gap-2.5', mirrored && 'flex-row-reverse text-right')}>
-      <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-[0.25rem] border-2 text-[0.82rem] font-black tracking-[0.08em]', accent.border, accent.wash, accent.text)}>
+      <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-[0.18rem] border-2 text-[0.82rem] font-black tracking-[0.08em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]', accent.border, accent.wash, accent.text)}>
         {profile.initials}
       </div>
       <div className="min-w-0">
@@ -51,7 +51,7 @@ export function BattleTopBar({
   const exchangeReady = canExchangeEnergy(playerEnergy)
 
   return (
-    <header className="flex items-center gap-4 border-b border-white/8 bg-[linear-gradient(180deg,rgba(12,10,22,0.92),rgba(16,13,28,0.88))] px-4 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+    <header className="flex items-center gap-4 border-b border-white/10 bg-[linear-gradient(180deg,rgba(16,14,25,0.96),rgba(10,9,18,0.92))] px-4 py-2 shadow-[0_2px_10px_rgba(0,0,0,0.38)]">
       <div className="w-[13rem] shrink-0">
         <ProfileBlock profile={playerProfile} />
       </div>
@@ -68,7 +68,7 @@ export function BattleTopBar({
                 disabled={battleFinished || !exchangeReady}
                 onClick={() => onExchangeEnergy(type)}
                 className={cn(
-                  'flex items-center gap-1 rounded-[0.2rem] border px-1.5 py-1 transition duration-150',
+                  'flex items-center gap-1 rounded-[0.14rem] border px-1.5 py-1 transition duration-150',
                   exchangeReady ? 'border-white/10 bg-[rgba(255,255,255,0.06)] hover:border-white/20 hover:bg-white/10 active:scale-95' : 'border-transparent bg-transparent',
                   battleFinished ? 'cursor-default opacity-70' : !exchangeReady ? 'cursor-not-allowed opacity-60' : undefined,
                 )}
@@ -93,7 +93,7 @@ export function BattleTopBar({
             className={cn(
               'block w-[16rem] border px-4 py-2 ca-display text-[0.95rem] leading-none transition duration-150',
               commitReady && !battleFinished
-                ? 'border-white/28 bg-[linear-gradient(180deg,rgba(248,248,252,0.95),rgba(223,224,232,0.88))] text-black hover:brightness-105 active:scale-[0.98]'
+                ? 'border-white/28 bg-[linear-gradient(180deg,rgba(248,248,252,0.96),rgba(220,222,232,0.9))] text-black shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_10px_18px_rgba(0,0,0,0.22)] hover:brightness-105 active:scale-[0.98]'
                 : 'border-white/14 bg-[rgba(255,255,255,0.06)] text-ca-text-2',
             )}
           >

@@ -95,7 +95,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
     >
       {/* Main pip square — full-bleed icon */}
       <div className={cn(
-        'relative h-[2.1rem] w-[2.1rem] shrink-0 cursor-default overflow-hidden rounded-[0.2rem] border-2 transition duration-150',
+        'relative h-[1.55rem] w-[1.55rem] shrink-0 cursor-default overflow-hidden rounded-[0.16rem] border transition duration-150',
         border,
         hovered ? glow : '',
       )}>
@@ -304,8 +304,8 @@ export function BattlePortraitSlot({
   const accentStyles = getAccentStyles(accent)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
   const portraitSizeClass = sizeClassOverride ?? (compact
-    ? 'w-[3.2rem] sm:w-[3.8rem]'
-    : 'w-[4.5rem] sm:w-[6rem]')
+    ? 'w-[3rem] sm:w-[3.45rem]'
+    : 'w-[4rem] sm:w-[5.25rem]')
   const statusTag = fighter.hp <= 0
     ? 'KO'
     : hasStatus(fighter.statuses, 'stun')

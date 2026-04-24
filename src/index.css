@@ -110,6 +110,24 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes ca-turn-reveal {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.992);
+    filter: saturate(0.82) brightness(0.86);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1);
+    filter: saturate(1.08) brightness(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: saturate(1) brightness(1);
+  }
+}
+
 @layer utilities {
   .ca-card {
     background: rgba(18, 18, 24, 0.34);
@@ -152,6 +170,10 @@
 
   .animate-ca-stagger-in {
     animation: ca-stagger-in 280ms var(--ease-out-expo) both;
+  }
+
+  .animate-ca-turn-reveal {
+    animation: ca-turn-reveal 340ms var(--ease-out-expo) both;
   }
 
   .ca-mono-label {
