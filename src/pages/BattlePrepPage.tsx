@@ -184,6 +184,7 @@ export function BattlePrepPage() {
     const defaults = battlePrepRoster.slice(3, 6).map((e) => e.id)
     return [defaults[0] ?? null, defaults[1] ?? null, defaults[2] ?? null]
   })
+  const [practiceOpen, setPracticeOpen] = useState(false)
 
   // ── Multiplayer private match state ─────────────────────────────────────
   const [privateOpen, setPrivateOpen] = useState(false)
@@ -319,10 +320,11 @@ export function BattlePrepPage() {
     })
   }
 
-  async function handleEnterArena() {
+  async function handleEnterArena(modeOverride?: BattleMatchMode) {
+    const selectedMode = modeOverride ?? matchMode
     if (!isReady) return
 
-    if (matchMode === 'practice') {
+    if (selectedMode === 'practice') {
       const sanitized = sanitizePrepTeamIds(teamIds)
       const enemyIds = sanitizePrepTeamIds(practiceEnemyIds)
       const session = createPracticeSession(sanitized, { aiEnabled: practiceAiEnabled, enemyTeamIds: enemyIds })
@@ -331,7 +333,7 @@ export function BattlePrepPage() {
       return
     }
 
-    if (matchMode === 'private') {
+    if (selectedMode === 'private') {
       setPrivateOpen(true)
       setMpError(null)
       setSearchQuery('')
@@ -341,7 +343,7 @@ export function BattlePrepPage() {
 
     // Ranked / Quick — requires auth; join the matchmaking queue
     if (!user) {
-      stageBattleLaunch(teamIds, matchMode)
+      stageBattleLaunch(teamIds, selectedMode)
       navigate('/battle')
       return
     }
@@ -353,7 +355,7 @@ export function BattlePrepPage() {
     setSearching(true)
     setQueueError(null)
 
-    const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName, lp })
+    const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName, lp })
     if (qErr) {
       setSearching(false)
       setQueueError(qErr)
@@ -363,7 +365,7 @@ export function BattlePrepPage() {
     searchingRef.current = true
     searchAttemptsRef.current = 0
     setAiFallback(false)
-    void pollForMatch({ playerId: user.id, mode: matchMode, teamIds: sanitized, displayName })
+    void pollForMatch({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName })
   }
 
   async function pollForMatch({
@@ -507,7 +509,7 @@ export function BattlePrepPage() {
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.45),rgba(228,230,239,0.12),rgba(5,216,189,0.35))]" />
           <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-ca-red/7 blur-3xl" />
           <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-ca-teal/7 blur-3xl" />
-          <div className="relative grid gap-2 xl:grid-cols-[minmax(0,1fr)_17.5rem]">
+          <div className="relative">
             <div className="rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,17,25,0.92),rgba(9,9,14,0.9))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3">
               {selectedEntry && selectedAbility ? (
                 <SelectedFighterPanel
@@ -519,99 +521,68 @@ export function BattlePrepPage() {
                 />
               ) : null}
             </div>
+          </div>
+        </section>
 
-            <div className="flex h-full flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,15,24,0.9),rgba(9,9,14,0.86))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-              <div className="rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(12,11,18,0.92),rgba(9,8,14,0.88))] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_24px_rgba(0,0,0,0.16)]">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Match Mode</p>
-                  <span className="ca-mono-label rounded-[3px] border border-white/10 px-2 py-1 text-[0.38rem] text-ca-text-3">
-                    {getModeLabel(matchMode)}
-                  </span>
-                </div>
-                <div className="mt-2.5 grid grid-cols-4 gap-1">
-                  {battleMatchModes.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setMatchMode(mode)}
-                      className={[
-                        'ca-display rounded-[4px] border px-1 py-2 text-[0.8rem] leading-none transition duration-150 active:scale-[0.96]',
-                        matchMode === mode
-                          ? mode === 'practice'
-                            ? 'border-ca-teal/35 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
-                            : 'border-ca-red/35 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
-                          : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2 hover:border-white/18',
-                      ].join(' ')}
-                    >
-                      {getModeLabel(mode)}
-                    </button>
-                  ))}
-                </div>
+        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(90deg,rgba(58,20,30,0.62),rgba(18,17,25,0.94)_28%,rgba(18,17,25,0.94)_72%,rgba(8,66,58,0.42))] px-3 py-2.5 shadow-[0_14px_30px_rgba(0,0,0,0.2)]">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_50%,rgba(250,39,66,0.12),transparent_30%),radial-gradient(circle_at_82%_50%,rgba(5,216,189,0.09),transparent_32%)]" />
+          <div className="relative grid gap-2 lg:grid-cols-[minmax(12rem,0.55fr)_minmax(22rem,1fr)_minmax(12rem,0.55fr)] lg:items-center">
+            <PlayerInfoPanel profileName={authProfile?.display_name ?? 'PLAYER'} stats={profileStats} winRate={winRate} />
 
-                {matchMode === 'practice' ? (
-                  <PracticePanel
-                    aiEnabled={practiceAiEnabled}
-                    enemyIds={practiceEnemyIds}
-                    isReady={isReady}
-                    onToggleAi={() => setPracticeAiEnabled((v) => !v)}
-                    onSetEnemyIds={setPracticeEnemyIds}
-                    onStart={handleEnterArena}
-                  />
-                ) : searching ? (
-                  <SearchingPanel
-                    mode={matchMode}
-                    error={queueError}
-                    aiFallback={aiFallback}
-                    onCancel={handleCancelSearch}
-                  />
-                ) : !privateOpen || matchMode !== 'private' ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {battleMatchModes.map((mode) => {
+                const active = matchMode === mode
+                const launchesQueue = mode === 'ranked' || mode === 'quick'
+                const disabled = launchesQueue && (!isReady || searching)
+
+                return (
                   <button
+                    key={mode}
                     type="button"
-                    onClick={handleEnterArena}
-                    disabled={!isReady}
-                    className="ca-display mt-3 w-full rounded-[6px] border border-ca-red/40 bg-[linear-gradient(180deg,rgba(250,39,66,0.96),rgba(186,17,41,0.94))] px-3 py-3 text-[1.12rem] text-white shadow-[0_12px_26px_rgba(250,39,66,0.18)] transition duration-150 enabled:hover:-translate-y-[1px] enabled:active:scale-[0.98] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-[rgba(30,30,36,0.6)] disabled:text-ca-text-disabled"
+                    disabled={disabled}
+                    onClick={() => {
+                      setMatchMode(mode)
+                      if (mode === 'practice') {
+                        setPrivateOpen(false)
+                        setPracticeOpen(true)
+                        return
+                      }
+                      if (mode === 'private') {
+                        setPracticeOpen(false)
+                        setPrivateOpen(true)
+                        setMpError(null)
+                        setSearchQuery('')
+                        setSelectedOpponent(null)
+                        return
+                      }
+                      setPracticeOpen(false)
+                      setPrivateOpen(false)
+                      void handleEnterArena(mode)
+                    }}
+                    className={[
+                      'ca-display rounded-[5px] border px-3 py-3 text-[1rem] leading-none transition duration-300 active:scale-[0.98]',
+                      active
+                        ? mode === 'practice'
+                          ? 'border-ca-teal/45 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
+                          : 'border-ca-red/45 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
+                        : 'border-white/10 bg-[rgba(255,255,255,0.04)] text-ca-text-2 hover:border-white/20 hover:text-ca-text',
+                      disabled ? 'cursor-not-allowed opacity-45' : '',
+                    ].join(' ')}
                   >
-                    {getModeButtonLabel(matchMode)}
+                    {getModeButtonLabel(mode)}
                   </button>
-                ) : (
-                  <ChallengePanel
-                    searchQuery={searchQuery}
-                    searchResults={visibleSearchResults}
-                    selectedOpponent={selectedOpponent}
-                    loading={mpLoading}
-                    error={mpError}
-                    isReady={isReady}
-                    isLoggedIn={Boolean(user)}
-                    onSearchChange={(v) => { setSearchQuery(v); setSelectedOpponent(null) }}
-                    onSelectOpponent={setSelectedOpponent}
-                    onChallenge={handleSendChallenge}
-                    onCancel={() => { setPrivateOpen(false); setMpError(null); setSearchQuery(''); setSelectedOpponent(null) }}
-                  />
-                )}
+                )
+              })}
+            </div>
 
-                {incomingChallenge && (
-                  <IncomingChallengeBar
-                    challengerName={incomingChallenge.player_a_display_name}
-                    loading={mpLoading}
-                    isReady={isReady}
-                    onAccept={handleAcceptChallenge}
-                    onDecline={handleDeclineChallenge}
-                  />
-                )}
-              </div>
-
-              <div className="mt-2 flex-1 rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(16,15,23,0.88),rgba(9,9,14,0.78))] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_12px_24px_rgba(0,0,0,0.12)]">
-                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Battle Record</p>
-                <div className="mt-2 rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                  <p className="ca-display text-[2rem] leading-none text-ca-text">{profileStats.rank}</p>
-                  <p className="ca-mono-label mt-2 text-[0.4rem] text-ca-text-3">Current Ladder Placement</p>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
-                  <RecordStat label="Wins" value={String(profileStats.wins)} />
-                  <RecordStat label="Losses" value={String(profileStats.losses)} />
-                  <RecordStat label="Win %" value={`${winRate}%`} />
-                </div>
-              </div>
+            <div className="rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] px-3 py-2">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Ready Check</p>
+              <p className={['ca-display mt-1 text-[1.35rem] leading-none', isReady ? 'text-ca-teal' : 'text-ca-text-disabled'].join(' ')}>
+                {explicitTeamIds.length}/3 Selected
+              </p>
+              <p className="mt-1 text-[0.72rem] leading-4 text-ca-text-3">
+                {isReady ? 'Choose a mode to enter matchmaking.' : 'Fill all team slots to begin.'}
+              </p>
             </div>
           </div>
         </section>
@@ -702,11 +673,122 @@ export function BattlePrepPage() {
           </div>
         </section>
       </div>
+
+      {searching ? (
+        <PrepDialog title="Matchmaking" onClose={() => { void handleCancelSearch() }}>
+          <SearchingPanel
+            mode={matchMode}
+            error={queueError}
+            aiFallback={aiFallback}
+            onCancel={handleCancelSearch}
+          />
+        </PrepDialog>
+      ) : null}
+
+      {privateOpen && matchMode === 'private' ? (
+        <PrepDialog title="Private Match" onClose={() => { setPrivateOpen(false); setMpError(null); setSearchQuery(''); setSelectedOpponent(null) }}>
+          <ChallengePanel
+            searchQuery={searchQuery}
+            searchResults={visibleSearchResults}
+            selectedOpponent={selectedOpponent}
+            loading={mpLoading}
+            error={mpError}
+            isReady={isReady}
+            isLoggedIn={Boolean(user)}
+            onSearchChange={(v) => { setSearchQuery(v); setSelectedOpponent(null) }}
+            onSelectOpponent={setSelectedOpponent}
+            onChallenge={handleSendChallenge}
+            onCancel={() => { setPrivateOpen(false); setMpError(null); setSearchQuery(''); setSelectedOpponent(null) }}
+          />
+        </PrepDialog>
+      ) : null}
+
+      {practiceOpen ? (
+        <PrepDialog title="Practice Setup" onClose={() => setPracticeOpen(false)}>
+          <PracticePanel
+            aiEnabled={practiceAiEnabled}
+            enemyIds={practiceEnemyIds}
+            isReady={isReady}
+            onToggleAi={() => setPracticeAiEnabled((v) => !v)}
+            onSetEnemyIds={setPracticeEnemyIds}
+            onStart={() => { setPracticeOpen(false); void handleEnterArena('practice') }}
+          />
+        </PrepDialog>
+      ) : null}
+
+      {incomingChallenge ? (
+        <PrepDialog title="Incoming Challenge" onClose={handleDeclineChallenge}>
+          <IncomingChallengeBar
+            challengerName={incomingChallenge.player_a_display_name}
+            loading={mpLoading}
+            isReady={isReady}
+            onAccept={handleAcceptChallenge}
+            onDecline={handleDeclineChallenge}
+          />
+        </PrepDialog>
+      ) : null}
     </section>
   )
 }
 
 // ── Practice panel ────────────────────────────────────────────────────────────
+
+function PrepDialog({
+  title,
+  children,
+  onClose,
+}: {
+  title: string
+  children: ReactNode
+  onClose: () => void
+}) {
+  return (
+    <div className="absolute inset-0 z-30 grid place-items-center bg-[rgba(5,6,10,0.7)] px-4 backdrop-blur-[3px] animate-ca-fade-in">
+      <div className="relative w-full max-w-[25rem] overflow-hidden rounded-[10px] border border-white/12 bg-[linear-gradient(180deg,rgba(30,28,38,0.98),rgba(13,12,18,0.99))] shadow-[0_24px_70px_rgba(0,0,0,0.55)] animate-ca-slide-up">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(250,39,66,0.1),transparent_44%),radial-gradient(circle_at_right,rgba(5,216,189,0.08),transparent_44%)]" />
+        <div className="relative flex items-center justify-between gap-3 border-b border-white/8 px-4 py-3">
+          <p className="ca-display text-[1.15rem] leading-none text-ca-text">{title}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-7 w-7 place-items-center rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.04)] text-[0.72rem] text-ca-text-3 transition duration-300 hover:border-white/20 hover:text-ca-text"
+            aria-label="Close dialog"
+          >
+            X
+          </button>
+        </div>
+        <div className="relative px-4 pb-4 pt-1">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function PlayerInfoPanel({
+  profileName,
+  stats,
+  winRate,
+}: {
+  profileName: string
+  stats: ReturnType<typeof readBattleProfileStats>
+  winRate: number
+}) {
+  return (
+    <div className="grid grid-cols-[2.65rem_minmax(0,1fr)] items-center gap-2 rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] px-3 py-2">
+      <div className="grid h-10 w-10 place-items-center rounded-[5px] border border-ca-red/35 bg-ca-red-wash">
+        <span className="ca-display text-[0.9rem] text-ca-red">{profileName.slice(0, 2).toUpperCase()}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="ca-display truncate text-[1.05rem] leading-none text-ca-text">{profileName}</p>
+        <p className="ca-mono-label mt-1 truncate text-[0.42rem] text-ca-text-3">{stats.rank}</p>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          <RecordStat label="Wins" value={String(stats.wins)} compact />
+          <RecordStat label="Losses" value={String(stats.losses)} compact />
+          <RecordStat label="Win %" value={`${winRate}%`} compact />
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function PracticePanel({
   aiEnabled,
@@ -990,11 +1072,11 @@ function SearchingPanel({
   )
 }
 
-function RecordStat({ label, value }: { label: string; value: string }) {
+function RecordStat({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className="rounded-[9px] border border-white/8 bg-[rgba(255,255,255,0.035)] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className={['rounded-[6px] border border-white/8 bg-[rgba(255,255,255,0.035)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', compact ? 'px-1.5 py-1.5' : 'px-2.5 py-2.5'].join(' ')}>
       <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
-      <p className="ca-display mt-1.5 text-[1.1rem] leading-none text-ca-text">{value}</p>
+      <p className={['ca-display leading-none text-ca-text', compact ? 'mt-1 text-[0.88rem]' : 'mt-1.5 text-[1.1rem]'].join(' ')}>{value}</p>
     </div>
   )
 }

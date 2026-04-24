@@ -138,8 +138,8 @@
   }
 
   .ca-card-hover {
-    transition: transform var(--transition-fast), border-color var(--transition-fast),
-      box-shadow var(--transition-fast);
+    transition: transform 280ms var(--ease-out-expo), border-color 280ms var(--ease-out-expo),
+      box-shadow 280ms var(--ease-out-expo);
   }
 
   .ca-card-hover:hover {
@@ -149,15 +149,15 @@
   }
 
   .animate-ca-fade-in {
-    animation: ca-fade-in 200ms var(--ease-out-expo) both;
+    animation: ca-fade-in 320ms var(--ease-out-expo) both;
   }
 
   .animate-ca-slide-up {
-    animation: ca-slide-up 220ms var(--ease-out-expo) both;
+    animation: ca-slide-up 360ms var(--ease-out-expo) both;
   }
 
   .animate-ca-urgency {
-    animation: ca-urgency-pulse 750ms ease-in-out infinite;
+    animation: ca-urgency-pulse 1000ms ease-in-out infinite;
   }
 
   .animate-ca-float {
@@ -165,15 +165,15 @@
   }
 
   .animate-ca-bar-grow {
-    animation: ca-bar-grow 600ms var(--ease-out-expo) both;
+    animation: ca-bar-grow 850ms var(--ease-out-expo) both;
   }
 
   .animate-ca-stagger-in {
-    animation: ca-stagger-in 280ms var(--ease-out-expo) both;
+    animation: ca-stagger-in 420ms var(--ease-out-expo) both;
   }
 
   .animate-ca-turn-reveal {
-    animation: ca-turn-reveal 340ms var(--ease-out-expo) both;
+    animation: ca-turn-reveal 560ms var(--ease-out-expo) both;
   }
 
   .ca-mono-label {
