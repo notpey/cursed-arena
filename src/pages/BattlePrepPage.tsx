@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { getTargetLabel } from '@/components/battle/battleDisplay'
@@ -320,6 +320,58 @@ export function BattlePrepPage() {
     })
   }
 
+  function handleRosterDragStart(event: DragEvent, characterId: string) {
+    event.dataTransfer.setData('application/x-cursed-roster-id', characterId)
+    event.dataTransfer.effectAllowed = 'copy'
+  }
+
+  function handleTeamSlotDragStart(event: DragEvent, slotIndex: number) {
+    event.dataTransfer.setData('application/x-cursed-team-slot', String(slotIndex))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleTeamSlotDrop(event: DragEvent, slotIndex: number) {
+    event.preventDefault()
+    const rosterId = event.dataTransfer.getData('application/x-cursed-roster-id')
+    const sourceSlot = event.dataTransfer.getData('application/x-cursed-team-slot')
+
+    if (rosterId && battlePrepRosterById[rosterId]) {
+      setSelectedRosterId(rosterId)
+      setSelectedAbilityId(getDefaultAbilityId(battlePrepRosterById[rosterId]))
+      setTeamIds((current) => {
+        const next = [...current]
+        const existingIndex = next.findIndex((teamId) => teamId === rosterId)
+        if (existingIndex >= 0) next[existingIndex] = null
+        next[slotIndex] = rosterId
+        return next
+      })
+      setFocusedSlot(slotIndex)
+      return
+    }
+
+    if (sourceSlot !== '') {
+      const from = Number(sourceSlot)
+      if (!Number.isInteger(from) || from === slotIndex) return
+      setTeamIds((current) => {
+        const next = [...current]
+        const moved = next[from]
+        next[from] = next[slotIndex]
+        next[slotIndex] = moved
+        return next
+      })
+      setFocusedSlot(slotIndex)
+    }
+  }
+
+  function handleRosterDrop(event: DragEvent) {
+    event.preventDefault()
+    const sourceSlot = event.dataTransfer.getData('application/x-cursed-team-slot')
+    if (sourceSlot === '') return
+    const slotIndex = Number(sourceSlot)
+    if (!Number.isInteger(slotIndex)) return
+    handleClearSlot(slotIndex)
+  }
+
   async function handleEnterArena(modeOverride?: BattleMatchMode) {
     const selectedMode = modeOverride ?? matchMode
     if (!isReady) return
@@ -600,7 +652,11 @@ export function BattlePrepPage() {
                 <p className="ca-mono-label text-[0.46rem] text-ca-text-3">{visibleRoster.length} AVAILABLE</p>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 overscroll-contain">
+              <div
+                className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 overscroll-contain"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleRosterDrop}
+              >
                 <div className="grid auto-rows-max content-start grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-11">
                   {visibleRoster.map((entry) => (
                     <RosterTile
@@ -609,6 +665,7 @@ export function BattlePrepPage() {
                       active={selectedRosterId === entry.id}
                       inTeam={teamIds.includes(entry.id)}
                       onClick={() => handleAssignCharacter(entry.id)}
+                      onDragStart={(event) => handleRosterDragStart(event, entry.id)}
                     />
                   ))}
                 </div>
@@ -639,6 +696,8 @@ export function BattlePrepPage() {
                       compact
                       onSelect={() => handleSelectSlot(index)}
                       onClear={() => handleClearSlot(index)}
+                      onDragStart={(event) => handleTeamSlotDragStart(event, index)}
+                      onDrop={(event) => handleTeamSlotDrop(event, index)}
                     />
                   ))}
                 </div>
@@ -1126,137 +1185,117 @@ function SelectedFighterPanel({
   const style = rarityStyles[entry.rarity]
 
   return (
-    <div className="grid h-full items-start gap-3 sm:grid-cols-[8.5rem_minmax(0,1fr)] xl:grid-cols-[9rem_minmax(0,1fr)] animate-ca-fade-in">
-      <div className="relative inline-flex rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.012))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_28px_rgba(0,0,0,0.18)]">
-        <div
-          className="pointer-events-none absolute inset-2 rounded-[6px] blur-2xl"
-          style={{ background: `radial-gradient(circle at 35% 25%, ${style.wash}, transparent 72%)` }}
-        />
-        <div className="pointer-events-none absolute inset-[7px] rounded-[6px] border border-white/8" />
-        <div className="relative overflow-hidden rounded-[6px]">
-          <PortraitThumb entry={entry} sizeClass="h-32 w-32 sm:h-[8.5rem] sm:w-[8.5rem] xl:h-[8.5rem] xl:w-[8.5rem]" />
+    <div className="animate-ca-fade-in">
+      <div className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(135deg,rgba(228,230,239,0.07),rgba(13,12,18,0.78))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(250,39,66,0.12),transparent_32%),radial-gradient(circle_at_88%_10%,rgba(5,216,189,0.08),transparent_36%)]" />
+        <div className="relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="ca-mono-label rounded-[3px] border px-2 py-1 text-[0.42rem]"
+                style={{ borderColor: style.border, background: style.wash, color: style.text }}
+              >
+                {entry.gradeLabel}
+              </span>
+              <span className="ca-mono-label rounded-[3px] border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
+                {entry.role}
+              </span>
+            </div>
+
+            <h2 className="ca-display mt-2 text-[2.4rem] leading-[0.88] text-ca-text sm:text-[2.85rem]">{entry.name}</h2>
+            <p className="mt-1.5 max-w-3xl text-[0.9rem] leading-5 text-ca-text-2">{entry.passiveLabel}</p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {abilities.map((ability) => {
+                const active = selectedAbilityId === ability.id
+                return (
+                  <button
+                    key={ability.id}
+                    type="button"
+                    onClick={() => onSelectAbility(ability.id)}
+                    className={[
+                      'group relative h-[4rem] w-[4rem] overflow-hidden rounded-[3px] border transition duration-300',
+                      active
+                        ? 'border-ca-red/55 shadow-[0_0_0_1px_rgba(250,39,66,0.22),0_12px_24px_rgba(250,39,66,0.14)]'
+                        : 'border-white/12 bg-[rgba(255,255,255,0.035)] hover:border-white/24 hover:-translate-y-[1px]',
+                    ].join(' ')}
+                    aria-label={ability.name}
+                  >
+                    {ability.icon.src ? (
+                      <img src={ability.icon.src} alt={ability.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.035]" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
+                        <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(0,0,0,0.2))]" />
+                    {active ? <div className="absolute inset-x-0 bottom-0 h-[3px] bg-ca-red" /> : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="relative min-h-[9.75rem] overflow-hidden rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.7),rgba(8,8,12,0.72))]">
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{ background: `radial-gradient(circle at 50% 25%, ${style.wash}, transparent 68%)` }}
+            />
+            {entry.battleTemplate.boardPortraitSrc ? (
+              <img
+                src={entry.battleTemplate.boardPortraitSrc}
+                alt={entry.name}
+                className="relative h-[10.75rem] w-full object-contain object-center"
+                draggable={false}
+              />
+            ) : (
+              <div className="relative grid h-[10.75rem] place-items-center">
+                <span className="ca-display text-[3rem]" style={{ color: style.text }}>{entry.battleTemplate.shortName[0]}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="min-w-0">
-        <div className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div
-            className="pointer-events-none absolute -left-10 top-0 h-40 w-40 rounded-full blur-3xl"
-            style={{ background: `radial-gradient(circle, ${style.wash}, transparent 72%)` }}
-          />
-          <div className="relative grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="ca-mono-label rounded-[3px] border px-2 py-1 text-[0.42rem]"
-                  style={{ borderColor: style.border, background: style.wash, color: style.text }}
-                >
-                  {entry.gradeLabel}
-                </span>
-                <span className="ca-mono-label rounded-[3px] border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
-                  {entry.role}
-                </span>
+      <div className="relative mt-2 overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,13,19,0.86),rgba(9,9,14,0.72))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 w-1"
+          style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
+        />
+        <div className="relative grid gap-3 md:grid-cols-[minmax(0,1fr)_6rem] md:items-stretch">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-[var(--font-display-alt)] text-[1.35rem] font-extrabold leading-none text-ca-red sm:text-[1.55rem]">{selectedAbility.name}</p>
+                <p className="mt-2 max-w-4xl text-[0.92rem] leading-5 text-ca-text-2">{selectedAbility.description}</p>
               </div>
-
-              <h2 className="ca-display mt-2 text-[2.35rem] leading-[0.86] text-ca-text sm:text-[2.75rem]">{entry.name}</h2>
-              <div className="mt-2 h-[3px] w-24 rounded-full" style={{ background: style.text, boxShadow: `0 0 18px ${style.wash}` }} />
-              <p className="mt-2 max-w-2xl text-[0.92rem] leading-5 text-ca-text-2">{entry.passiveLabel}</p>
+              <div className="min-w-[5rem] rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.035)] px-2 py-1.5">
+                <p className="ca-mono-label text-[0.36rem] text-ca-text-3">Energy</p>
+                <div className="mt-1"><EnergyCostRow cost={getAbilityEnergyCost(selectedAbility)} compact /></div>
+              </div>
             </div>
 
-            <div className="rounded-[6px] border border-white/10 bg-[rgba(7,7,12,0.34)] px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="ca-mono-label text-[0.38rem] text-ca-text-3">Technique Loadout</p>
-                <span className="ca-mono-label text-[0.36rem] text-ca-text-3">4 SKILLS</span>
-              </div>
-              <div className="flex flex-wrap gap-2 xl:justify-end">
-                {abilities.map((ability) => {
-                  const active = selectedAbilityId === ability.id
-                  return (
-                    <button
-                      key={ability.id}
-                      type="button"
-                      onClick={() => onSelectAbility(ability.id)}
-                      className={[
-                        'group relative h-[3.75rem] w-[3.75rem] overflow-hidden rounded-[4px] border transition duration-200',
-                        active
-                          ? 'border-ca-red/40 shadow-[0_0_0_1px_rgba(250,39,66,0.18),0_12px_24px_rgba(250,39,66,0.12)]'
-                          : 'border-white/10 bg-[rgba(255,255,255,0.03)] hover:border-white/18 hover:-translate-y-[1px]',
-                      ].join(' ')}
-                      aria-label={ability.name}
-                    >
-                      {ability.icon.src ? (
-                        <img src={ability.icon.src} alt={ability.name} className="absolute inset-0 h-full w-full object-cover transition duration-200 group-hover:scale-[1.04]" />
-                      ) : (
-                        <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
-                          <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.22))]" />
-                      {active ? (
-                        <div className="absolute inset-x-0 bottom-0 h-[3px] bg-ca-red shadow-[0_0_12px_rgba(250,39,66,0.45)]" />
-                      ) : null}
-                    </button>
-                  )
-                })}
-              </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <MetaPill label="Classes">
+                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{formatAbilityClasses(selectedAbility)}</span>
+              </MetaPill>
+              <MetaPill label="Target">
+                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{getTargetLabel(selectedAbility)}</span>
+              </MetaPill>
+              <MetaPill label="Cooldown">
+                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{selectedAbility.cooldown || 'NONE'}</span>
+              </MetaPill>
             </div>
           </div>
-        </div>
 
-        <div className="relative mt-2.5 overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,13,19,0.9),rgba(9,9,14,0.78))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_24px_rgba(0,0,0,0.16)]">
-          <div
-            className="pointer-events-none absolute left-0 top-0 h-full w-1"
-            style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
-          />
-          <div
-            className="pointer-events-none absolute -left-12 top-0 h-40 w-40 rounded-full blur-3xl"
-            style={{ background: `radial-gradient(circle, ${style.wash}, transparent 72%)` }}
-          />
-          <div className="relative grid gap-3 md:grid-cols-[5.5rem_minmax(0,1fr)] md:items-start">
-            <div className="overflow-hidden rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.04)] shadow-[0_12px_22px_rgba(0,0,0,0.18)]">
-              {selectedAbility.icon.src ? (
-                <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-[5.5rem] w-[5.5rem] object-cover" />
-              ) : (
-                <div className="grid h-[5.5rem] w-[5.5rem] place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
-                  <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="ca-mono-label text-[0.38rem] text-ca-text-3">Active Technique</p>
-                  <p className="mt-1.5 font-[var(--font-display-alt)] text-[1.25rem] font-bold text-ca-text sm:text-[1.42rem]">{selectedAbility.name}</p>
-                  <p className="mt-1.5 max-w-3xl text-[0.88rem] leading-5 text-ca-text-2">{selectedAbility.description}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedAbility.classes.includes('Ultimate') ? (
-                    <span className="ca-mono-label rounded-md border border-amber-400/22 bg-amber-400/10 px-2 py-1 text-[0.4rem] text-amber-300">
-                      ULT
-                    </span>
-                  ) : null}
-                  <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
-                    CD {selectedAbility.cooldown || '-'}
-                  </span>
-                </div>
+          <div className="overflow-hidden rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.04)]">
+            {selectedAbility.icon.src ? (
+              <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-full min-h-[5.5rem] w-full object-cover" />
+            ) : (
+              <div className="grid h-full min-h-[5.5rem] w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
+                <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>
               </div>
-
-              <div className="mt-3 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-                <MetaPill label="Cost">
-                  <EnergyCostRow cost={getAbilityEnergyCost(selectedAbility)} compact />
-                </MetaPill>
-                <MetaPill label="Target">
-                  <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{getTargetLabel(selectedAbility)}</span>
-                </MetaPill>
-                <MetaPill label="Classes">
-                  <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{formatAbilityClasses(selectedAbility)}</span>
-                </MetaPill>
-                <MetaPill label="Cooldown">
-                  <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{selectedAbility.cooldown || 'NONE'}</span>
-                </MetaPill>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -1269,11 +1308,13 @@ function RosterTile({
   active,
   inTeam,
   onClick,
+  onDragStart,
 }: {
   entry: BattlePrepRosterEntry
   active: boolean
   inTeam: boolean
   onClick: () => void
+  onDragStart: (event: DragEvent) => void
 }) {
   const style = rarityStyles[entry.rarity]
 
@@ -1281,6 +1322,8 @@ function RosterTile({
     <button
       type="button"
       onClick={onClick}
+      draggable
+      onDragStart={onDragStart}
       className="group relative overflow-hidden rounded-[4px] border bg-[rgba(18,18,26,0.72)] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
       style={{
         borderColor: active ? style.border : inTeam ? 'rgba(5,216,189,0.34)' : 'rgba(228,230,239,0.1)',
@@ -1305,6 +1348,8 @@ function TeamSlotCard({
   compact = false,
   onSelect,
   onClear,
+  onDragStart,
+  onDrop,
 }: {
   slotIndex: number
   entry: BattlePrepRosterEntry | null
@@ -1312,6 +1357,8 @@ function TeamSlotCard({
   compact?: boolean
   onSelect: () => void
   onClear: () => void
+  onDragStart: (event: DragEvent) => void
+  onDrop: (event: DragEvent) => void
 }) {
   const label = `SLOT ${slotIndex + 1}`
 
@@ -1320,6 +1367,8 @@ function TeamSlotCard({
       <button
         type="button"
         onClick={onSelect}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={onDrop}
         className={[
           'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] text-left transition duration-150',
           compact ? 'px-2 py-2' : 'px-3 py-3',
@@ -1336,13 +1385,22 @@ function TeamSlotCard({
     <button
       type="button"
       onClick={onSelect}
+      onDoubleClick={(event) => {
+        event.preventDefault()
+        onClear()
+      }}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
+      title="Double-click to remove. Drag to reorder or drop back into the roster."
       className={[
         'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] text-left transition duration-150',
         compact ? 'px-2 py-2' : 'px-2.5 py-2.5',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >
-      <div className={['grid items-center', compact ? 'grid-cols-[minmax(0,1fr)_auto] gap-1.5' : 'grid-cols-[2.6rem_minmax(0,1fr)_auto] gap-2.5'].join(' ')}>
+      <div className={['grid items-center', compact ? 'grid-cols-1 gap-1.5' : 'grid-cols-[2.6rem_minmax(0,1fr)] gap-2.5'].join(' ')}>
         {!compact ? (
           <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
         ) : null}
@@ -1351,17 +1409,6 @@ function TeamSlotCard({
           <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
           <p className={['ca-display mt-1 truncate leading-none text-ca-text', compact ? 'text-[0.92rem]' : 'text-[1.08rem]'].join(' ')}>{entry.battleTemplate.shortName}</p>
         </div>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onClear()
-          }}
-          className="grid h-7 w-7 place-items-center rounded-[4px] border border-white/10 text-[0.72rem] text-ca-text-3 transition hover:border-white/18 hover:text-ca-text"
-          aria-label="Clear slot"
-        >
-          X
-        </button>
       </div>
     </button>
   )
