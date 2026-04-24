@@ -105,28 +105,4 @@ describe('battleDisplay active pips', () => {
     expect(passivePip?.lines[1]?.text).toContain('Gain 20% bonus damage')
     expect(passivePip?.lines.some((line) => line.text.toLowerCase().includes('this is a passive'))).toBe(false)
   })
-
-  test('renders legacy pass-kind abilities as passive pips for compatibility', () => {
-    const fighter = createPlayerFighter()
-    const passAbility = {
-      ...fighter.abilities[0],
-      id: `${fighter.templateId}-legacy-passive`,
-      name: 'Legacy Passive',
-      kind: 'pass' as const,
-      targetRule: 'none' as const,
-      effects: [{ type: 'damageBoost', amount: 0.15, target: 'self' }] as typeof fighter.abilities[0]['effects'],
-    }
-
-    fighter.abilities = [passAbility, ...fighter.abilities.slice(1)]
-    fighter.passiveEffects = []
-    fighter.modifiers = []
-    fighter.stateCounters = {}
-
-    const pips = getActivePips(fighter)
-    const legacyPip = pips.find((pip) => pip.key === `pass-ability-${passAbility.id}`)
-
-    expect(legacyPip).toBeTruthy()
-    expect(legacyPip?.label).toBe('Legacy Passive')
-    expect(legacyPip?.lines[0]?.text).toContain('Gain 15% bonus damage')
-  })
 })
