@@ -26,6 +26,7 @@ import {
 } from '@/features/battle/matches'
 import { createInitialBattleState } from '@/features/battle/engine'
 import { createBattleSeed } from '@/features/battle/random'
+import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import {
   searchPlayersByName,
   createChallenge,
@@ -553,8 +554,12 @@ export function BattlePrepPage() {
 
   return (
     <section className="relative h-[calc(100vh-6.75rem)] overflow-hidden py-2 sm:py-3">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.16),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,#17080e_0%,#0d0c11_42%,#181020_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-45 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
+      <div
+        className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-[0.36]"
+        style={{ backgroundImage: `url(${homeBgBase})` }}
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.2),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.15),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,rgba(23,8,14,0.68)_0%,rgba(13,12,17,0.72)_42%,rgba(24,16,32,0.66)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-32 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
       <div className="pointer-events-none absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/12 blur-3xl" />
       <div className="pointer-events-none absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/8 blur-3xl" />
 
@@ -1188,7 +1193,7 @@ function SelectedFighterPanel({
     <div className="animate-ca-fade-in">
       <div className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(135deg,rgba(228,230,239,0.07),rgba(13,12,18,0.78))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(250,39,66,0.12),transparent_32%),radial-gradient(circle_at_88%_10%,rgba(5,216,189,0.08),transparent_36%)]" />
-        <div className="relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start">
+        <div className="relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem] lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span
@@ -1236,7 +1241,7 @@ function SelectedFighterPanel({
             </div>
           </div>
 
-          <div className="relative min-h-[9.75rem] overflow-hidden rounded-[6px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.7),rgba(8,8,12,0.72))]">
+          <div className="relative min-h-[9.75rem] w-full max-w-[12rem] justify-self-end overflow-hidden rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.7),rgba(8,8,12,0.72))]">
             <div
               className="pointer-events-none absolute inset-0"
               style={{ background: `radial-gradient(circle at 50% 25%, ${style.wash}, transparent 68%)` }}
@@ -1262,7 +1267,7 @@ function SelectedFighterPanel({
           className="pointer-events-none absolute inset-y-0 left-0 w-1"
           style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
         />
-        <div className="relative grid gap-3 md:grid-cols-[minmax(0,1fr)_6rem] md:items-stretch">
+        <div className="relative grid gap-3 md:grid-cols-[minmax(0,1fr)_7.5rem] md:items-stretch">
           <div className="min-w-0">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
@@ -1290,9 +1295,9 @@ function SelectedFighterPanel({
 
           <div className="overflow-hidden rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.04)]">
             {selectedAbility.icon.src ? (
-              <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-full min-h-[5.5rem] w-full object-cover" />
+              <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-full min-h-[7.25rem] w-full object-cover object-center" />
             ) : (
-              <div className="grid h-full min-h-[5.5rem] w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
+              <div className="grid h-full min-h-[7.25rem] w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
                 <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>
               </div>
             )}
@@ -1396,7 +1401,7 @@ function TeamSlotCard({
       title="Double-click to remove. Drag to reorder or drop back into the roster."
       className={[
         'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] text-left transition duration-150',
-        compact ? 'px-2 py-2' : 'px-2.5 py-2.5',
+        compact ? 'px-2 py-1.5' : 'px-2.5 py-2.5',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >
@@ -1405,7 +1410,7 @@ function TeamSlotCard({
           <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
         ) : null}
         <div className="min-w-0">
-          {compact ? <PortraitThumb entry={entry} sizeClass="mb-1 aspect-square w-full" labelClass="text-[0.28rem]" bordered={false} showLabel /> : null}
+          {compact ? <PortraitThumb entry={entry} sizeClass="mb-1 h-[5.85rem] w-full" labelClass="text-[0.26rem]" bordered={false} showLabel /> : null}
           <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
           <p className={['ca-display mt-1 truncate leading-none text-ca-text', compact ? 'text-[0.92rem]' : 'text-[1.08rem]'].join(' ')}>{entry.battleTemplate.shortName}</p>
         </div>
