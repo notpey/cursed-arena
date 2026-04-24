@@ -456,7 +456,7 @@ function applyCostModifier(cost: BattleEnergyCost, modifier: BattleCostModifierS
   return next
 }
 
-function getResolvedAbilityEnergyCost(
+export function getResolvedAbilityEnergyCost(
   fighter: BattleFighterState,
   ability: BattleAbilityTemplate,
 ) {
@@ -1020,14 +1020,35 @@ export function canQueueAbility(
   fighter: BattleFighterState,
   abilityId: string,
 ) {
+  return getQueueAbilityBlockReason(state, queued, fighter, abilityId) === null
+}
+
+export function getQueueAbilityBlockReason(
+  state: BattleState,
+  queued: Record<string, QueuedBattleAction>,
+  fighter: BattleFighterState,
+  abilityId: string,
+): string | null {
   const ability = getAbilityById(fighter, abilityId)
-  if (!ability) return false
-  if (!isAlive(fighter)) return false
-  if (abilityId === PASS_ABILITY_ID) return true
-  if (getCooldown(fighter, abilityId) > 0) return false
+  if (!ability) return 'Technique unavailable'
+  if (!isAlive(fighter)) return 'Fighter is KO'
+  if (abilityId === PASS_ABILITY_ID) return null
+  if (hasModifierStatus(fighter.modifiers, 'stun')) return 'Stunned this turn'
+  if (isAbilityClassStunned(fighter, ability)) return 'Technique class sealed'
+
+  const cooldown = getCooldown(fighter, abilityId)
+  if (cooldown > 0) return `Cooldown ${cooldown} turn${cooldown === 1 ? '' : 's'}`
+
+  if ((ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single') && getValidTargetIds(state, fighter.instanceId, abilityId).length === 0) {
+    return 'No valid targets'
+  }
 
   const projectedPool = getProjectedTeamEnergy(state, queued, fighter.team, fighter.instanceId)
-  return canPayEnergy(projectedPool, getResolvedAbilityEnergyCost(fighter, ability).cost)
+  if (!canPayEnergy(projectedPool, getResolvedAbilityEnergyCost(fighter, ability).cost)) {
+    return 'Insufficient cursed energy'
+  }
+
+  return null
 }
 
 export function getValidTargetIds(state: BattleState, actorId: string, abilityId: string) {

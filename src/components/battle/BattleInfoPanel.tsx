@@ -1,9 +1,9 @@
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
-import { getTargetLabel } from '@/components/battle/battleDisplay'
+import { describeSkillEffectForUi, getSkillEffectDuration, getTargetLabel } from '@/components/battle/battleDisplay'
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
-import { getCooldown } from '@/features/battle/engine'
-import type { BattleAbilityTemplate, BattleFighterState } from '@/features/battle/types'
+import { getCooldown, getQueueAbilityBlockReason, getResolvedAbilityEnergyCost, getValidTargetIds } from '@/features/battle/engine'
+import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
 
 function classLabel(kind: BattleAbilityTemplate['kind']): string {
   switch (kind) {
@@ -24,16 +24,38 @@ function formatSkillClasses(ability: BattleAbilityTemplate): string {
 }
 
 export function BattleInfoPanel({
+  state,
+  queued,
   actor,
   ability,
 }: {
+  state: BattleState
+  queued: Record<string, QueuedBattleAction>
   actor: BattleFighterState | null
   ability: BattleAbilityTemplate | null
 }) {
   const description = ability?.description ?? null
   const cooldown = ability && actor ? getCooldown(actor, ability.id) : null
-  const cost = ability ? getAbilityEnergyCost(ability) : null
+  const cost = ability && actor ? getResolvedAbilityEnergyCost(actor, ability).cost : ability ? getAbilityEnergyCost(ability) : null
   const totalCost = cost ? countEnergyCost(cost) : 0
+  const blockReason = actor && ability ? getQueueAbilityBlockReason(state, queued, actor, ability.id) : null
+  const validTargets =
+    actor && ability && (ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single')
+      ? getValidTargetIds(state, actor.instanceId, ability.id).length
+      : null
+  const effectLines = ability
+    ? (ability.effects ?? [])
+        .map((effect) => ({
+          text: describeSkillEffectForUi(effect),
+          turns: getSkillEffectDuration(effect),
+        }))
+        .sort((left, right) => {
+          if (left.turns === null && right.turns === null) return 0
+          if (left.turns === null) return 1
+          if (right.turns === null) return -1
+          return left.turns - right.turns
+        })
+    : []
 
   return (
     <section className="overflow-hidden rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(14,12,26,0.96),rgba(10,8,18,0.98))] text-ca-text shadow-[0_12px_22px_rgba(0,0,0,0.3)]">
@@ -61,6 +83,19 @@ export function BattleInfoPanel({
                 Select a technique to inspect details.
               </p>
             )}
+
+            {ability && effectLines.length > 0 ? (
+              <div className="mt-2.5 rounded-[0.2rem] border border-white/8 bg-[rgba(0,0,0,0.2)] px-2.5 py-2">
+                <p className="ca-mono-label text-[0.5rem] text-white/40">LIVE EFFECT BREAKDOWN</p>
+                <ul className="mt-1 space-y-1">
+                  {effectLines.map((entry, index) => (
+                    <li key={`${ability.id}-fx-${index}`} className="ca-mono-label text-[0.52rem] leading-snug text-white/75">
+                      {`- ${entry.text.toUpperCase()}${entry.turns !== null ? ` (${entry.turns} TURN${entry.turns === 1 ? '' : 'S'})` : ''}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-t border-white/6 px-5 py-2.5">
@@ -73,7 +108,10 @@ export function BattleInfoPanel({
 
             <div className="flex items-center gap-2">
               <span className="ca-mono-label text-[0.55rem] text-white/35">TARGET</span>
-              <span className="ca-mono-label text-[0.62rem] text-white/75">{ability ? getTargetLabel(ability) : 'BOARD'}</span>
+              <span className="ca-mono-label text-[0.62rem] text-white/75">
+                {ability ? getTargetLabel(ability) : 'BOARD'}
+                {validTargets !== null ? ` (${validTargets} VALID)` : ''}
+              </span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -89,6 +127,15 @@ export function BattleInfoPanel({
               <span className="ca-mono-label text-[0.55rem] text-white/35">COOLDOWN</span>
               <span className="ca-mono-label text-[0.62rem] text-white/75">{cooldown !== null ? cooldown : ability ? ability.cooldown : 'NONE'}</span>
             </div>
+
+            {ability ? (
+              <div className="flex items-center gap-2">
+                <span className="ca-mono-label text-[0.55rem] text-white/35">STATUS</span>
+                <span className={`ca-mono-label text-[0.62rem] ${blockReason ? 'text-ca-red' : 'text-ca-teal'}`}>
+                  {blockReason ? blockReason.toUpperCase() : 'READY'}
+                </span>
+              </div>
+            ) : null}
 
             {ability ? (
               <div className="flex items-center gap-2">

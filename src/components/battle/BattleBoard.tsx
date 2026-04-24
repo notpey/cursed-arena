@@ -25,6 +25,7 @@ export function BattleBoard({
   onLeaveAbility,
   onDequeue,
   canUsePlayerAbility,
+  getPlayerAbilityBlockReason,
   interactionLocked = false,
   timelineFocus = null,
 }: {
@@ -43,6 +44,7 @@ export function BattleBoard({
   onLeaveAbility: () => void
   onDequeue: (actorId: string) => void
   canUsePlayerAbility: (fighter: BattleFighterState, abilityId: string) => boolean
+  getPlayerAbilityBlockReason: (fighter: BattleFighterState, abilityId: string) => string | null
   interactionLocked?: boolean
   timelineFocus?: TimelineFocus | null
 }) {
@@ -109,6 +111,7 @@ export function BattleBoard({
                   pendingAbilityId={selectedActorId === fighter.instanceId ? selectedAbility?.id ?? null : null}
                   queuedAction={allyQueued}
                   validAbility={(abilityId) => canUsePlayerAbility(fighter, abilityId)}
+                  abilityBlockReason={(abilityId) => getPlayerAbilityBlockReason(fighter, abilityId)}
                   interactionLocked={interactionLocked}
                   timelineRole={allyTimelineRole}
                   timelineTone={timelineFocus?.tone ?? null}

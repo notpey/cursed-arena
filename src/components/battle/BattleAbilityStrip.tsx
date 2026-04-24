@@ -12,6 +12,7 @@ function SkillTile({
   active,
   queued,
   locked,
+  lockReason,
   onSelect,
   onHover,
   onLeave,
@@ -20,11 +21,19 @@ function SkillTile({
   active: boolean
   queued: boolean
   locked: boolean
+  lockReason?: string | null
   onSelect?: () => void
   onHover?: () => void
   onLeave?: () => void
 }) {
   const cost = getAbilityEnergyCost(ability)
+  const reasonTag =
+    lockReason?.includes('Cooldown') ? 'CD'
+      : lockReason?.includes('energy') ? 'NO CE'
+      : lockReason?.includes('Stunned') ? 'STUN'
+      : lockReason?.includes('sealed') ? 'SEALED'
+      : lockReason?.includes('targets') ? 'NO TARGET'
+      : null
 
   return (
     <button
@@ -35,7 +44,7 @@ function SkillTile({
       onFocus={onHover}
       onBlur={onLeave}
       disabled={locked}
-      title={ability.name}
+      title={lockReason ? `${ability.name} - ${lockReason}` : ability.name}
       className={cn(
         'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
@@ -56,6 +65,12 @@ function SkillTile({
       <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
         <EnergyCostRow cost={cost} compact />
       </div>
+
+      {locked && reasonTag ? (
+        <div className="absolute left-0.5 top-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.76)] px-1 py-0.5">
+          <span className="ca-mono-label text-[0.34rem] text-ca-red">{reasonTag}</span>
+        </div>
+      ) : null}
     </button>
   )
 }
@@ -121,6 +136,7 @@ export function BattleAbilityStrip({
   pendingAbilityId,
   queuedAction,
   validAbility,
+  abilityBlockReason,
   carryoverLabels = [],
   interactionLocked = false,
   timelineRole = null,
@@ -139,6 +155,7 @@ export function BattleAbilityStrip({
   pendingAbilityId?: string | null
   queuedAction?: QueuedBattleAction
   validAbility?: (abilityId: string) => boolean
+  abilityBlockReason?: (abilityId: string) => string | null
   carryoverLabels?: string[]
   interactionLocked?: boolean
   timelineRole?: 'actor' | 'target' | null
@@ -212,18 +229,25 @@ export function BattleAbilityStrip({
           <div className="relative flex min-w-0 items-center gap-2 px-2 py-2 sm:gap-2.5 sm:px-2.5">
             <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
-            {abilities.map((ability) => (
+            {abilities.map((ability) => {
+              const lockReason = interactionLocked
+                ? 'Locked during resolution'
+                : abilityBlockReason?.(ability.id) ?? null
+              const isLocked = interactionLocked || !(validAbility?.(ability.id) ?? true)
+              return (
               <SkillTile
                 key={ability.id}
                 ability={ability}
                 active={pendingAbilityId === ability.id}
                 queued={queuedAction?.abilityId === ability.id}
-                locked={interactionLocked || !(validAbility?.(ability.id) ?? true)}
+                locked={isLocked}
+                lockReason={isLocked ? lockReason : null}
                 onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
                 onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
                 onLeave={!interactionLocked ? onLeaveAbility : undefined}
               />
-            ))}
+              )
+            })}
           </div>
         </div>
       </div>

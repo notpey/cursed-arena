@@ -29,6 +29,7 @@ import {
   getAbilityById,
   getCommandablePlayerUnits,
   getFighterById,
+  getQueueAbilityBlockReason,
   getValidTargetIds,
   isAlive,
   resolveTeamTurn,
@@ -911,13 +912,14 @@ export function BattlePage() {
               onLeaveAbility={() => setHoveredAbility(null)}
               onDequeue={clearQueuedAction}
               canUsePlayerAbility={(fighter, abilityId) => canQueueAbility(battle.state, battle.queued, fighter, abilityId)}
+              getPlayerAbilityBlockReason={(fighter, abilityId) => getQueueAbilityBlockReason(battle.state, battle.queued, fighter, abilityId)}
               interactionLocked={timelineLocked}
               timelineFocus={timelineFocus}
             />
 
             <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
               <UtilityRail onSurrender={handleSurrender} />
-              <BattleInfoPanel actor={inspectedActor} ability={inspectedAbility} />
+              <BattleInfoPanel state={battle.state} queued={battle.queued} actor={inspectedActor} ability={inspectedAbility} />
             </div>
           </div>
         </div>

@@ -157,7 +157,7 @@ describe('battle engine scenarios', () => {
     const pips = getActivePips(updatedGojo)
     expect(
       pips.some((pip) =>
-        pip.lines.some((line) => line.includes('uses a harmful skill') && line.includes('Cursed Nails')),
+        pip.lines.some((line) => line.text.includes('uses a harmful skill') && line.text.includes('Cursed Nails')),
       ),
     ).toBe(true)
   })
@@ -193,12 +193,12 @@ describe('battle engine scenarios', () => {
     const pips = getActivePips(updatedGojo)
     expect(
       pips.some((pip) =>
-        pip.lines.some((line) => line.includes('Cursed Nails was applied to this character for 1 turn')),
+        pip.lines.some((line) => line.text.includes('Cursed Nails was applied to this character for 1 turn')),
       ),
     ).toBe(true)
     expect(
       pips.some((pip) =>
-        pip.lines.some((line) => line.includes('uses a harmful skill') && line.includes('Cursed Nails')),
+        pip.lines.some((line) => line.text.includes('uses a harmful skill') && line.text.includes('Cursed Nails')),
       ),
     ).toBe(false)
   })

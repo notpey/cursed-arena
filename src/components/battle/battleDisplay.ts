@@ -1,6 +1,7 @@
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import { getAttackUpAmount, getBurnDamage, getMarkBonus, hasStatus } from '@/features/battle/statuses'
 import { getAbilityById, getFighterById } from '@/features/battle/engine'
+import { describeReactionCondition } from '@/features/battle/reactions'
 import type {
   BattleAbilityIcon,
   BattleAbilityTemplate,
@@ -9,9 +10,16 @@ import type {
   BattleModifierInstance,
   BattleState,
   QueuedBattleAction,
+  PassiveEffect,
+  SkillEffect,
 } from '@/features/battle/types'
 
 export type ActivePipTone = 'default' | 'burn' | 'stun' | 'heal' | 'buff' | 'debuff' | 'void'
+
+export type ActiveEffectLine = {
+  text: string
+  turnsLeft: number | null
+}
 
 export type ActiveEffectPip = {
   key: string
@@ -19,7 +27,7 @@ export type ActiveEffectPip = {
   iconLabel: string
   iconTone: BattleBoardAccent
   label: string
-  lines: string[]       // bullet lines shown in tooltip
+  lines: ActiveEffectLine[]
   turnsLeft: number | null
   stackCount: number | null  // shown as center overlay when > 0
   tone: ActivePipTone
@@ -32,44 +40,38 @@ function modDuration(mod: BattleModifierInstance): number | null {
   return null
 }
 
-function durSuffix(mod: BattleModifierInstance): string {
-  const turns = modDuration(mod)
-  if (turns === null) return mod.duration.kind === 'permanent' ? ' (permanent).' : '.'
-  return ` [${turns} turn${turns !== 1 ? 's' : ''} left].`
-}
-
 // ── Per-modifier effect line ──────────────────────────────────────────────────
 
-function modEffectLine(mod: BattleModifierInstance): { line: string; tone: ActivePipTone } {
-  const dur = durSuffix(mod)
-  if (mod.statusKind === 'stun') return { line: `Cannot use abilities${dur}`, tone: 'stun' }
-  if (mod.statusKind === 'invincible') return { line: `Invulnerable to all enemy skills${dur}`, tone: 'void' }
-  if (mod.statusKind === 'burn' && typeof mod.value === 'number') return { line: `Taking ${mod.value} affliction damage each turn${dur}`, tone: 'burn' }
-  if (mod.statusKind === 'mark' && typeof mod.value === 'number') return { line: `Marked — next hit deals +${mod.value} bonus damage${dur}`, tone: 'debuff' }
-  if (mod.statusKind === 'attackUp' && typeof mod.value === 'number') return { line: `All damage increased by ${mod.value}${dur}`, tone: 'buff' }
+function modEffectLine(mod: BattleModifierInstance): { line: string; tone: ActivePipTone; turnsLeft: number | null } {
+  const turnsLeft = modDuration(mod)
+  if (mod.statusKind === 'stun') return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
+  if (mod.statusKind === 'invincible') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
+  if (mod.statusKind === 'burn' && typeof mod.value === 'number') return { line: `Taking ${mod.value} affliction damage each turn`, tone: 'burn', turnsLeft }
+  if (mod.statusKind === 'mark' && typeof mod.value === 'number') return { line: `Marked — next hit deals +${mod.value} bonus damage`, tone: 'debuff', turnsLeft }
+  if (mod.statusKind === 'attackUp' && typeof mod.value === 'number') return { line: `All damage increased by ${mod.value}`, tone: 'buff', turnsLeft }
 
   if (mod.stat === 'damageTaken' && typeof mod.value === 'number') {
     if (mod.mode === 'flat') {
       const line = mod.value < 0
-        ? `Damage taken reduced by ${Math.abs(mod.value)}${dur}`
-        : `Damage taken increased by ${mod.value}${dur}`
-      return { line, tone: mod.value < 0 ? 'buff' : 'debuff' }
+        ? `Damage taken reduced by ${Math.abs(mod.value)}`
+        : `Damage taken increased by ${mod.value}`
+      return { line, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft }
     }
     if (mod.mode === 'percentAdd') {
-      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%${dur}`, tone: mod.value < 0 ? 'buff' : 'debuff' }
+      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%`, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft }
     }
   }
   if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
     const dir = mod.value > 0 ? `increased by ${mod.value}` : `reduced by ${Math.abs(mod.value)}`
-    return { line: `Damage dealt ${dir}${dur}`, tone: mod.value > 0 ? 'buff' : 'debuff' }
+    return { line: `Damage dealt ${dir}`, tone: mod.value > 0 ? 'buff' : 'debuff', turnsLeft }
   }
-  if (mod.stat === 'canReduceDamageTaken' && mod.value === false) return { line: `Cannot reduce damage taken${dur}`, tone: 'debuff' }
-  if (mod.stat === 'canGainInvulnerable' && mod.value === false) return { line: `Cannot become invulnerable${dur}`, tone: 'debuff' }
-  if (mod.stat === 'isInvulnerable') return { line: `Invulnerable to all enemy skills${dur}`, tone: 'void' }
-  if (mod.stat === 'canAct' && mod.value === false) return { line: `Cannot use abilities${dur}`, tone: 'stun' }
-  if (mod.stat === 'canAct' && mod.value === true) return { line: `Immune to stun effects${dur}`, tone: 'buff' }
-  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: `${mod.label}${dur}`, tone: 'heal' }
-  return { line: `${mod.label}${dur}`, tone: 'default' }
+  if (mod.stat === 'canReduceDamageTaken' && mod.value === false) return { line: 'Cannot reduce damage taken', tone: 'debuff', turnsLeft }
+  if (mod.stat === 'canGainInvulnerable' && mod.value === false) return { line: 'Cannot become invulnerable', tone: 'debuff', turnsLeft }
+  if (mod.stat === 'isInvulnerable') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
+  if (mod.stat === 'canAct' && mod.value === false) return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
+  if (mod.stat === 'canAct' && mod.value === true) return { line: 'Immune to stun effects', tone: 'buff', turnsLeft }
+  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: mod.label, tone: 'heal', turnsLeft }
+  return { line: mod.label, tone: 'default', turnsLeft }
 }
 
 // ── Icon resolution ───────────────────────────────────────────────────────────
@@ -106,6 +108,107 @@ function resolveSourceName(fighter: BattleFighterState, sourceAbilityId: string)
   return sourceAbilityId
 }
 
+export function getSkillEffectDuration(effect: SkillEffect): number | null {
+  switch (effect.type) {
+    case 'stun':
+    case 'invulnerable':
+    case 'attackUp':
+    case 'mark':
+    case 'burn':
+    case 'classStun':
+    case 'counter':
+    case 'reflect':
+    case 'replaceAbility':
+    case 'effectImmunity':
+      return effect.duration
+    case 'classStunScaledByCounter':
+      return effect.baseDuration
+    default:
+      return null
+  }
+}
+
+export function describeSkillEffectForUi(effect: SkillEffect): string {
+  switch (effect.type) {
+    case 'damage':
+      return `Deal ${effect.power} damage`
+    case 'damageFiltered':
+      return `Deal ${effect.power} damage to ${effect.requiresTag} targets`
+    case 'damageScaledByCounter':
+      return `Deal ${effect.powerPerStack} damage per ${effect.counterKey} stack`
+    case 'damageEqualToActorShield':
+      return 'Deal damage equal to actor shield'
+    case 'shieldDamage':
+      return `Damage shield for ${effect.amount}`
+    case 'energyGain':
+      return 'Gain cursed energy'
+    case 'energyDrain':
+      return 'Drain enemy energy'
+    case 'energySteal':
+      return 'Steal enemy energy'
+    case 'cooldownAdjust':
+      return `${effect.amount < 0 ? 'Reduce' : 'Increase'} cooldowns by ${Math.abs(effect.amount)}`
+    case 'heal':
+      return `Restore ${effect.power} HP`
+    case 'stun':
+      return `Stun for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'invulnerable':
+      return `Gain invulnerability for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'attackUp':
+      return `Gain +${effect.amount} damage for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'mark':
+      return `Apply mark (+${effect.bonus} damage) for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'burn':
+      return `Apply burn (${effect.damage}/turn) for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'cooldownReduction':
+      return `Reduce cooldowns by ${effect.amount} extra each round`
+    case 'damageBoost':
+      return `Gain ${Math.round(effect.amount * 100)}% bonus damage`
+    case 'classStun':
+      return `Seal ${effect.blockedClasses.join('/')} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'classStunScaledByCounter':
+      return `Seal ${effect.blockedClasses.join('/')} scaled by ${effect.counterKey}`
+    case 'counter':
+      return `Counter for ${effect.counterDamage} damage (${effect.duration} turn${effect.duration === 1 ? '' : 's'})`
+    case 'reflect':
+      return `Reflect harmful effects for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'adjustCounter':
+      return `Adjust ${effect.key} by ${effect.amount}`
+    case 'adjustCounterByTriggerAmount':
+      return `Adjust ${effect.key} by trigger amount`
+    case 'resetCounter':
+      return `Reset ${effect.key}`
+    case 'setFlag':
+      return `Set ${effect.key} to ${effect.value ? 'true' : 'false'}`
+    case 'modifyAbilityCost':
+      return `Modify ability cost (${effect.modifier.label})`
+    case 'replaceAbility':
+      return `Replace ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+    case 'replaceAbilities':
+      return `Replace ${effect.replacements.length} abilities`
+    case 'modifyAbilityState':
+      return `Apply ${effect.delta.mode} ability state`
+    case 'addModifier':
+      return `Apply modifier: ${effect.modifier.label}`
+    case 'removeModifier':
+      return 'Remove matching modifier'
+    case 'shield':
+      return `Gain ${effect.amount} shield`
+    case 'breakShield':
+      return 'Break shield'
+    case 'effectImmunity':
+      return `Gain immunity: ${effect.label}`
+    case 'removeEffectImmunity':
+      return 'Remove matching immunity'
+    case 'schedule':
+      return `Schedule ${effect.effects.length} delayed effect${effect.effects.length === 1 ? '' : 's'}`
+    case 'overhealToShield':
+      return `Convert overheal to shield (${effect.power})`
+    default:
+      return 'Unknown effect'
+  }
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
@@ -113,7 +216,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
   type Group = {
     key: string
     label: string
-    lines: string[]
+    lines: ActiveEffectLine[]
     turnsLeft: number | null
     tone: ActivePipTone
     iconSrc?: string
@@ -149,18 +252,69 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     else group.turnsLeft = Math.max(group.turnsLeft, turns)
   }
 
-  function mergeTone(group: Group, tone: ActivePipTone) {
-    if (group.tone === 'default') group.tone = tone
+function mergeTone(group: Group, tone: ActivePipTone) {
+  if (group.tone === 'default') group.tone = tone
+}
+
+function passiveTriggerLabel(passive: PassiveEffect): string {
+  switch (passive.trigger) {
+    case 'whileAlive':
+      return 'While alive'
+    case 'onRoundStart':
+      return 'Round start'
+    case 'onRoundEnd':
+      return 'Round end'
+    case 'onAbilityUse':
+      return 'On ability use'
+    case 'onAbilityResolve':
+      return 'On ability resolve'
+    case 'onDealDamage':
+      return 'On dealing damage'
+    case 'onTakeDamage':
+      return 'On taking damage'
+    case 'onShieldBroken':
+      return 'On shield break'
+    case 'onHeal':
+      return 'On heal'
+    case 'onShieldGain':
+      return 'On shield gain'
+    case 'onDefeat':
+      return 'On defeat'
+    case 'onDefeatEnemy':
+      return 'On defeating an enemy'
+    case 'onBeingTargeted':
+      return 'When targeted'
+    case 'onTargetBelow':
+      return passive.threshold != null ? `Target below ${Math.round(passive.threshold * 100)}% HP` : 'Execute window'
   }
+}
+
+function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
+  const prefix = passiveTriggerLabel(passive)
+  const conditionText =
+    passive.conditions && passive.conditions.length > 0
+      ? `, if ${passive.conditions.map(describeReactionCondition).join(', ')}`
+      : ''
+  if (passive.effects.length > 0) {
+    return passive.effects.map((effect) => ({
+      text: `${prefix}${conditionText}: ${describeSkillEffectForUi(effect)}`,
+      turnsLeft: getSkillEffectDuration(effect),
+    }))
+  }
+  if (passive.description?.trim()) {
+    return [{ text: `${prefix}${conditionText}: ${passive.description.trim()}`, turnsLeft: null }]
+  }
+  return [{ text: `${prefix}${conditionText}: no passive effects configured`, turnsLeft: null }]
+}
 
   // ── Visible modifiers grouped by sourceAbilityId ─────────────────────────
   for (const mod of fighter.modifiers) {
     if (!mod.visible) continue
     const sourceId = mod.sourceAbilityId ?? '__engine__'
     const group = ensureGroup(sourceId)
-    const { line, tone } = modEffectLine(mod)
-    group.lines.push(line)
-    mergeTurns(group, modDuration(mod))
+    const { line, tone, turnsLeft } = modEffectLine(mod)
+    group.lines.push({ text: line, turnsLeft })
+    mergeTurns(group, turnsLeft)
     mergeTone(group, tone)
   }
 
@@ -174,7 +328,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
       group.iconLabel = delta.replacement.icon.label
       group.iconTone = delta.replacement.icon.tone
       group.label = delta.replacement.name
-      group.lines.push(`Active for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      group.lines.push({ text: 'Active replacement', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
     } else if (delta.mode === 'grant') {
       const sourceId = `grant-${delta.grantedAbility.id}`
@@ -183,14 +337,14 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
       group.iconLabel = delta.grantedAbility.icon.label
       group.iconTone = delta.grantedAbility.icon.tone
       group.label = delta.grantedAbility.name
-      group.lines.push(`Granted for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      group.lines.push({ text: 'Granted ability', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'buff')
     } else if (delta.mode === 'lock') {
       const sourceId = `lock-${delta.slotAbilityId}`
       const group = ensureGroup(sourceId)
       group.label = 'Ability Locked'
-      group.lines.push(`Locked for ${delta.duration} more turn${delta.duration !== 1 ? 's' : ''}.`)
+      group.lines.push({ text: 'Locked ability slot', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'stun')
     }
@@ -200,7 +354,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
   if (fighter.shield && fighter.shield.amount > 0) {
     const sourceId = fighter.shield.sourceAbilityId ?? '__shield__'
     const group = ensureGroup(sourceId)
-    group.lines.push(`${fighter.shield.label}: ${fighter.shield.amount} shield remaining.`)
+    group.lines.push({ text: `${fighter.shield.label}: ${fighter.shield.amount} shield remaining`, turnsLeft: null })
     mergeTone(group, 'buff')
   }
 
@@ -208,7 +362,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
   for (const immunity of fighter.effectImmunities) {
     const sourceId = immunity.sourceAbilityId ?? '__immunity__'
     const group = ensureGroup(sourceId)
-    group.lines.push(`${immunity.label} (${immunity.remainingRounds} turn${immunity.remainingRounds !== 1 ? 's' : ''} remaining).`)
+    group.lines.push({ text: immunity.label, turnsLeft: immunity.remainingRounds })
     mergeTurns(group, immunity.remainingRounds)
     mergeTone(group, 'void')
   }
@@ -217,7 +371,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
   for (const cs of fighter.classStuns) {
     const sourceId = cs.sourceAbilityId ?? '__classstun__'
     const group = ensureGroup(sourceId)
-    group.lines.push(`${cs.blockedClasses.join('/')} techniques sealed for ${cs.remainingRounds} turn${cs.remainingRounds !== 1 ? 's' : ''}.`)
+    group.lines.push({ text: `${cs.blockedClasses.join('/')} techniques sealed`, turnsLeft: cs.remainingRounds })
     mergeTurns(group, cs.remainingRounds)
     mergeTone(group, 'stun')
   }
@@ -230,12 +384,16 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
       : 'harmful skill'
     const triggerScope = guard.consumeOnTrigger ? 'the first' : 'any'
     if (guard.kind === 'counter') {
-      group.lines.push(
-        `If this character uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage.`,
-      )
+      group.lines.push({
+        text: `If this character uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage`,
+        turnsLeft: guard.remainingRounds,
+      })
       mergeTone(group, 'stun')
     } else {
-      group.lines.push(`If this character uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected.`)
+      group.lines.push({
+        text: `If this character uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected`,
+        turnsLeft: guard.remainingRounds,
+      })
       mergeTone(group, 'buff')
     }
     mergeTurns(group, guard.remainingRounds)
@@ -262,7 +420,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     groups.set(sourceId, {
       key: sourceId,
       label: passive.label,
-      lines: [passive.description ?? 'Passive ability.'],
+      lines: describePassiveLines(passive),
       turnsLeft: null,
       tone: 'buff',
       iconSrc: passive.icon?.src,
@@ -278,7 +436,12 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     iconLabel: g.iconLabel,
     iconTone: g.iconTone,
     label: g.label,
-    lines: g.lines,
+    lines: [...g.lines].sort((left, right) => {
+      if (left.turnsLeft === null && right.turnsLeft === null) return 0
+      if (left.turnsLeft === null) return 1
+      if (right.turnsLeft === null) return -1
+      return left.turnsLeft - right.turnsLeft
+    }),
     turnsLeft: g.turnsLeft,
     stackCount: g.stackCount,
     tone: g.tone,
