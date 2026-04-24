@@ -46,7 +46,7 @@ function SkillTile({
       disabled={locked}
       title={lockReason ? `${ability.name} - ${lockReason}` : ability.name}
       className={cn(
-        'group relative aspect-square w-full min-w-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition duration-150',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)] transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
         queued && 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.25)]',
         locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
@@ -94,7 +94,7 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
-        'group relative aspect-square w-full min-w-0 overflow-hidden rounded-[0.2rem] border-2 transition duration-150',
+        'group relative h-[4rem] w-[4rem] shrink-0 overflow-hidden rounded-[0.2rem] border-2 transition duration-150 sm:h-[5rem] sm:w-[5rem] xl:h-[6rem] xl:w-[6rem]',
         hasQueued
           ? 'border-ca-teal/60 bg-[rgba(5,216,189,0.08)] shadow-[0_0_10px_rgba(5,216,189,0.2)]'
           : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
@@ -166,9 +166,7 @@ export function BattleAbilityStrip({
   onLeaveAbility?: () => void
   onDequeue?: () => void
 }) {
-  const abilities = fighter.abilities
-    .concat(fighter.ultimate)
-    .filter((ability) => ability.kind !== 'pass')
+  const abilities = fighter.abilities.concat(fighter.ultimate)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
   const disabledLabel =
     fighter.hp <= 0
@@ -180,7 +178,7 @@ export function BattleAbilityStrip({
           : null
 
   return (
-    <div data-testid="battle-ability-strip" className="relative flex items-start gap-2 sm:gap-3">
+    <div className="relative flex items-start gap-2.5 sm:gap-3">
       <div className="relative z-10 shrink-0 pt-0.5">
         <BattlePortraitSlot
           fighter={fighter}
@@ -190,7 +188,7 @@ export function BattleAbilityStrip({
           selectedTarget={Boolean(actorSelectedTarget)}
           muted={Boolean(actorMuted)}
           hideHp
-          sizeClass="w-[5.4rem] sm:w-[6.6rem] xl:w-[8rem]"
+          sizeClass="w-[7rem] sm:w-[8.5rem] xl:w-[10rem]"
           carryoverLabels={carryoverLabels}
           timelineRole={timelineRole}
           timelineTone={timelineTone}
@@ -199,8 +197,8 @@ export function BattleAbilityStrip({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-end gap-1 pb-0.5">
-        <div className="flex h-[2.5rem] items-end overflow-hidden px-2">
-          <ActiveEffectPips fighter={fighter} tooltipDown wrap={false} />
+        <div className="flex min-h-[2.4rem] items-end px-1.5 sm:px-2">
+          <ActiveEffectPips fighter={fighter} tooltipDown />
         </div>
 
         <div
@@ -228,30 +226,28 @@ export function BattleAbilityStrip({
             ) : null}
           </div>
 
-          <div className="relative min-w-0 px-2 py-2 sm:px-2.5">
-            <div data-testid="ability-strip-skill-grid" className="grid min-w-0 grid-cols-5 gap-2 overflow-hidden">
-              <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+          <div className="relative flex min-w-0 items-center gap-2 px-2 py-2 sm:gap-2.5 sm:px-2.5">
+            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
 
-              {abilities.map((ability) => {
-                const lockReason = interactionLocked
-                  ? 'Locked during resolution'
-                  : abilityBlockReason?.(ability.id) ?? null
-                const isLocked = interactionLocked || !(validAbility?.(ability.id) ?? true)
-                return (
-                  <SkillTile
-                    key={ability.id}
-                    ability={ability}
-                    active={pendingAbilityId === ability.id}
-                    queued={queuedAction?.abilityId === ability.id}
-                    locked={isLocked}
-                    lockReason={isLocked ? lockReason : null}
-                    onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
-                    onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
-                    onLeave={!interactionLocked ? onLeaveAbility : undefined}
-                  />
-                )
-              })}
-            </div>
+            {abilities.map((ability) => {
+              const lockReason = interactionLocked
+                ? 'Locked during resolution'
+                : abilityBlockReason?.(ability.id) ?? null
+              const isLocked = interactionLocked || !(validAbility?.(ability.id) ?? true)
+              return (
+              <SkillTile
+                key={ability.id}
+                ability={ability}
+                active={pendingAbilityId === ability.id}
+                queued={queuedAction?.abilityId === ability.id}
+                locked={isLocked}
+                lockReason={isLocked ? lockReason : null}
+                onSelect={!interactionLocked && onAbilityClick ? () => onAbilityClick(ability.id) : undefined}
+                onHover={!interactionLocked && onHoverAbility ? () => onHoverAbility(ability.id) : undefined}
+                onLeave={!interactionLocked ? onLeaveAbility : undefined}
+              />
+              )
+            })}
           </div>
         </div>
       </div>

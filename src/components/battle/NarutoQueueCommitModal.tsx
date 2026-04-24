@@ -288,223 +288,247 @@ export function NarutoQueueCommitModal({
 
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.82)] px-3 backdrop-blur-[3px] animate-ca-fade-in">
-      <div className="relative w-full max-w-[34rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(180deg,#1e1c24,#17151c)] shadow-[0_24px_60px_rgba(0,0,0,0.58)] animate-ca-slide-up">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(250,39,66,0.08),transparent_42%),radial-gradient(circle_at_right,rgba(5,216,189,0.07),transparent_44%)]" />
-
-        <div className="relative px-4 py-4 text-ca-text sm:px-5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="ca-mono-label text-[0.56rem] tracking-[0.14em] text-ca-text-3">ROUND {round}</p>
-            <p
-              className={[
-                'ca-mono-label text-[0.56rem] tracking-[0.14em]',
-                timerCritical ? 'text-ca-red' : timerWarning ? 'text-ca-gold' : 'text-ca-text-2',
-              ].join(' ')}
-            >
-              TIMER {String(turnSecondsLeft).padStart(2, '0')}S
-            </p>
-          </div>
-
-          <div className="mt-2.5 flex items-start justify-between gap-4">
-            <h2 className="ca-display text-[1.48rem] tracking-[0.05em] text-ca-text">{title}</h2>
+      <div className="relative w-full max-w-[36rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(180deg,#1e1c24,#17151c)] shadow-[0_24px_60px_rgba(0,0,0,0.58)] animate-ca-slide-up">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(250,39,66,0.09),transparent_42%),radial-gradient(circle_at_right,rgba(5,216,189,0.08),transparent_44%)]" />
+        <div className="relative grid gap-0 sm:grid-cols-[4.4rem_minmax(0,1fr)]">
+          <div className="hidden border-r border-white/8 bg-[linear-gradient(180deg,rgba(250,39,66,0.12),rgba(255,255,255,0.02))] sm:flex sm:flex-col sm:items-center sm:justify-between sm:px-2 sm:py-4">
+            <span className="rounded-full border border-ca-red/30 bg-ca-red/10 px-2 py-1 ca-mono-label text-[0.54rem] tracking-[0.14em] text-ca-red">R{round}</span>
+            <span className="ca-display rotate-[-90deg] whitespace-nowrap text-[1rem] tracking-[0.08em] text-ca-text">TURN ORDER</span>
             <span
               className={[
-                'rounded-full border px-2 py-1 ca-mono-label text-[0.56rem] tracking-[0.14em]',
+                'rounded-full border px-2 py-1 ca-mono-label text-[0.54rem] tracking-[0.14em]',
                 timerCritical
-                  ? 'border-ca-red/30 bg-ca-red/10 text-ca-red'
+                  ? 'border-ca-red/35 bg-ca-red/10 text-ca-red'
                   : timerWarning
                     ? 'border-ca-gold/35 bg-ca-gold/10 text-ca-gold'
-                    : statusToneClass === 'text-ca-teal'
+                  : 'border-ca-teal/25 bg-ca-teal/10 text-ca-teal',
+              ].join(' ')}
+            >
+              {String(turnSecondsLeft).padStart(2, '0')}S
+            </span>
+          </div>
+
+          <div className="px-4 py-4 text-ca-text sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="ca-mono-label text-[0.56rem] tracking-[0.14em] text-ca-text-3">ROUND {round}</p>
+              <p className={['ca-mono-label text-[0.56rem] tracking-[0.14em]', timerCritical ? 'text-ca-red' : timerWarning ? 'text-ca-gold' : 'text-ca-text-2'].join(' ')}>
+                TIMER {String(turnSecondsLeft).padStart(2, '0')}S
+              </p>
+            </div>
+
+            <div className="mt-3">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="ca-display text-[1.55rem] tracking-[0.05em] text-ca-text">{title}</h2>
+                  <p className="mt-1 max-w-[20rem] text-[0.78rem] text-ca-text-2">
+                    Lock your turn, assign random CE if needed, and drag the portraits below to set the resolution order.
+                  </p>
+                </div>
+                <span
+                  className={[
+                    'rounded-full border px-2 py-1 ca-mono-label text-[0.56rem] tracking-[0.14em]',
+                    timerCritical
+                      ? 'border-ca-red/30 bg-ca-red/10 text-ca-red'
+                      : timerWarning
+                        ? 'border-ca-gold/35 bg-ca-gold/10 text-ca-gold'
+                        : statusToneClass === 'text-ca-teal'
                       ? 'border-ca-teal/25 bg-ca-teal/10 text-ca-teal'
                       : statusToneClass === 'text-ca-red'
                         ? 'border-ca-red/30 bg-ca-red/10 text-ca-red'
                         : 'border-white/10 bg-white/5 text-ca-text-2',
-              ].join(' ')}
-            >
-              {activeRows.length === 0 ? 'PASS TURN' : `${activeRows.length} ACTIVE`}
-            </span>
-          </div>
+                  ].join(' ')}
+                >
+                  {timerCritical ? 'FINAL SECONDS' : timerWarning ? 'LOCK TURN' : activeRows.length === 0 ? 'PASS TURN' : `${activeRows.length} ACTIVE`}
+                </span>
+              </div>
+            </div>
 
-          {randomRows.length > 0 ? (
-            <div className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="ca-display text-[0.9rem] tracking-[0.05em] text-ca-text">RANDOM CE ASSIGNMENT</p>
-                <p className={['ca-mono-label text-[0.56rem] tracking-[0.12em]', hasUnallocated ? 'text-ca-red' : 'text-ca-teal'].join(' ')}>
-                  {totalAllocated}/{totalRandomNeeded}
+            <div className="mt-5 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="ca-display text-[0.94rem] tracking-[0.05em] text-ca-text">RANDOM CE ASSIGNMENT</p>
+                <p className={['ca-mono-label text-[0.58rem] tracking-[0.12em]', hasUnallocated ? 'text-ca-red' : 'text-ca-teal'].join(' ')}>
+                  ASSIGNED {totalAllocated}/{totalRandomNeeded}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                {randomRows.map((row) => {
-                  const actorId = row.fighter.instanceId
-                  const actorAlloc = randomAlloc[actorId] ?? {}
-                  const actorNeeded = row.cost.random ?? 0
-                  const actorAssigned = sumRandomAllocation(actorAlloc)
-                  const actorComplete = actorAssigned >= actorNeeded
+              {randomRows.length === 0 ? (
+                <div className="rounded-[8px] border border-white/8 bg-[rgba(13,12,17,0.38)] px-3 py-3 text-center">
+                  <p className="ca-mono-label text-[0.58rem] tracking-[0.1em] text-ca-text-2">NO RANDOM CE COSTS QUEUED</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {randomRows.map((row) => {
+                    const actorId = row.fighter.instanceId
+                    const actorAlloc = randomAlloc[actorId] ?? {}
+                    const actorNeeded = row.cost.random ?? 0
+                    const actorAssigned = sumRandomAllocation(actorAlloc)
+                    const actorComplete = actorAssigned >= actorNeeded
+
+                    return (
+                      <div key={actorId} className="rounded-[8px] border border-white/8 bg-[rgba(13,12,17,0.38)] px-3 py-2.5">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="ca-display text-[0.84rem] tracking-[0.04em] text-ca-text">
+                            {row.fighter.shortName.toUpperCase()} • {row.abilityName.toUpperCase()}
+                          </p>
+                          <p className={['ca-mono-label text-[0.52rem] tracking-[0.12em]', actorComplete ? 'text-ca-teal' : 'text-ca-gold'].join(' ')}>
+                            {actorAssigned}/{actorNeeded} RANDOM
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                          {battleEnergyOrder.map((type) => {
+                            const meta = battleEnergyMeta[type]
+                            const assigned = actorAlloc[type] ?? 0
+                            const spentForType = randomSpendByType[type]
+                            const availableForType = Math.max(0, getEnergyCount(energy, type) - fixedSpendByType[type] - spentForType)
+
+                            return (
+                              <div key={`${actorId}-${type}`} className="rounded-[6px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-2 py-1.5">
+                                <div className="mb-1 flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 rounded-full border border-black/30" style={{ backgroundColor: meta.color }} />
+                                    <span className="ca-mono-label text-[0.46rem] tracking-[0.12em] text-ca-text-2">{getEnergyTypeLabel(type)}</span>
+                                  </div>
+                                  <span className="ca-display text-[0.78rem] text-ca-text">{assigned}</span>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustActorAlloc(actorId, type, -1, actorNeeded)}
+                                    disabled={assigned <= 0}
+                                    className="ca-display h-6 w-6 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.9rem] leading-none text-ca-text transition hover:border-ca-red/35 hover:bg-ca-red/10 disabled:opacity-40"
+                                  >
+                                    -
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => adjustActorAlloc(actorId, type, 1, actorNeeded)}
+                                    disabled={actorAssigned >= actorNeeded || availableForType <= 0}
+                                    className="ca-display h-6 w-6 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.9rem] leading-none text-ca-text transition hover:border-ca-teal/35 hover:bg-ca-teal/10 disabled:opacity-40"
+                                  >
+                                    +
+                                  </button>
+                                  <span className="ca-mono-label text-[0.42rem] tracking-[0.12em] text-ca-text-3">
+                                    LEFT {availableForType}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 rounded-[10px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="ca-display text-[0.92rem] tracking-[0.05em] text-ca-text">RESOLUTION ORDER</p>
+                <p className="ca-mono-label text-[0.58rem] tracking-[0.12em] text-ca-text-3">DRAG TO REORDER</p>
+              </div>
+
+              <div className="flex items-center justify-center gap-1.5">
+                {rows.map((row, index) => {
+                  const isDragging = dragIndex === index
+                  const isTarget = dragOverIndex === index && dragIndex !== index
+                  const resolvedCost = resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {})
 
                   return (
-                    <div key={actorId} className="rounded-[8px] border border-white/8 bg-[rgba(13,12,17,0.38)] px-2.5 py-2">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <p className="ca-display text-[0.8rem] tracking-[0.04em] text-ca-text">
-                          {row.fighter.shortName.toUpperCase()} • {row.abilityName.toUpperCase()}
-                        </p>
-                        <p className={['ca-mono-label text-[0.5rem] tracking-[0.12em]', actorComplete ? 'text-ca-teal' : 'text-ca-gold'].join(' ')}>
-                          {actorAssigned}/{actorNeeded}
-                        </p>
+                    <div
+                      key={row.fighter.instanceId}
+                      data-queue-index={index}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(event) => handleDragOver(event, index)}
+                      onDrop={(event) => handleDrop(event, index)}
+                      onDragEnd={clearDrag}
+                      onTouchStart={(event) => handleTouchStart(event, index)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      className={[
+                        'relative h-[3.55rem] w-[3.55rem] cursor-grab overflow-hidden rounded-[8px] border bg-[linear-gradient(180deg,#302e3a,#1e1c24)] touch-none shadow-[0_8px_18px_rgba(0,0,0,0.3)] transition',
+                        row.isPass ? 'border-white/10' : 'border-white/14',
+                        isTarget ? 'scale-[1.04] border-ca-red shadow-[0_0_0_1px_rgba(250,39,66,0.35),0_12px_28px_rgba(250,39,66,0.2)]' : '',
+                        isDragging ? 'opacity-35' : 'opacity-100',
+                      ].join(' ')}
+                      title={`${index + 1}. ${row.summary}`}
+                    >
+                      {row.iconSrc ? (
+                        <img src={row.iconSrc} alt={row.abilityName} className="h-full w-full object-cover" draggable={false} />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,#26242e,#17151c)]">
+                          <span className="ca-display text-[0.76rem] text-ca-text">{getQueueTileLabel(row)}</span>
+                        </div>
+                      )}
+
+                      <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(13,12,17,0.15),rgba(13,12,17,0.88))] px-1 py-[3px] text-center">
+                        <span className="ca-mono-label text-[0.34rem] tracking-[0.1em] text-ca-text">#{index + 1}</span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                        {battleEnergyOrder.map((type) => {
-                          const meta = battleEnergyMeta[type]
-                          const assigned = actorAlloc[type] ?? 0
-                          const spentForType = randomSpendByType[type]
-                          const availableForType = Math.max(0, getEnergyCount(energy, type) - fixedSpendByType[type] - spentForType)
-
-                          return (
-                            <div key={`${actorId}-${type}`} className="rounded-[6px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-2 py-1.5">
-                              <div className="mb-1 flex items-center justify-between gap-1.5">
-                                <div className="flex items-center gap-1">
-                                  <span className="h-2.5 w-2.5 rounded-full border border-black/30" style={{ backgroundColor: meta.color }} />
-                                  <span className="ca-mono-label text-[0.44rem] tracking-[0.12em] text-ca-text-2">{getEnergyTypeLabel(type)}</span>
-                                </div>
-                                <span className="ca-display text-[0.74rem] text-ca-text">{assigned}</span>
-                              </div>
-
-                              <div className="flex items-center justify-between gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => adjustActorAlloc(actorId, type, -1, actorNeeded)}
-                                  disabled={assigned <= 0}
-                                  className="ca-display h-5 w-5 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.86rem] leading-none text-ca-text transition hover:border-ca-red/35 hover:bg-ca-red/10 disabled:opacity-40"
-                                >
-                                  -
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => adjustActorAlloc(actorId, type, 1, actorNeeded)}
-                                  disabled={actorAssigned >= actorNeeded || availableForType <= 0}
-                                  className="ca-display h-5 w-5 rounded-[5px] border border-white/10 bg-[rgba(255,255,255,0.06)] text-[0.86rem] leading-none text-ca-text transition hover:border-ca-teal/35 hover:bg-ca-teal/10 disabled:opacity-40"
-                                >
-                                  +
-                                </button>
-                                <span className="ca-mono-label text-[0.4rem] tracking-[0.11em] text-ca-text-3">
-                                  {availableForType}
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                      {!row.isPass ? (
+                        <div className="absolute right-1 top-1 flex gap-[2px] rounded-full bg-[rgba(13,12,17,0.72)] px-[4px] py-[3px]">
+                          {battleEnergyOrder.flatMap((type) =>
+                            Array.from({ length: resolvedCost[type] ?? 0 }, (_, pipIndex) => (
+                              <span key={`${type}-${pipIndex}`} className="h-2 w-2 rounded-full border border-black/30" style={{ backgroundColor: battleEnergyMeta[type].color }} />
+                            )),
+                          )}
+                        </div>
+                      ) : (
+                        <div className="absolute right-1 top-1 rounded-full border border-white/10 bg-[rgba(13,12,17,0.72)] px-1.5 py-[2px]">
+                          <span className="ca-mono-label text-[0.32rem] tracking-[0.1em] text-ca-text-2">PASS</span>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
               </div>
-            </div>
-          ) : null}
 
-          <div className="mt-4 rounded-[10px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="ca-display text-[0.9rem] tracking-[0.05em] text-ca-text">RESOLUTION ORDER</p>
-              <p className="ca-mono-label text-[0.56rem] tracking-[0.12em] text-ca-text-3">DRAG TO REORDER</p>
-            </div>
-
-            <div className="flex items-center justify-center gap-1.5">
-              {rows.map((row, index) => {
-                const isDragging = dragIndex === index
-                const isTarget = dragOverIndex === index && dragIndex !== index
-                const resolvedCost = resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {})
-
-                return (
-                  <div
-                    key={row.fighter.instanceId}
-                    data-queue-index={index}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(event) => handleDragOver(event, index)}
-                    onDrop={(event) => handleDrop(event, index)}
-                    onDragEnd={clearDrag}
-                    onTouchStart={(event) => handleTouchStart(event, index)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    className={[
-                      'relative h-[3.5rem] w-[3.5rem] cursor-grab overflow-hidden rounded-[8px] border bg-[linear-gradient(180deg,#302e3a,#1e1c24)] touch-none shadow-[0_8px_18px_rgba(0,0,0,0.3)] transition',
-                      row.isPass ? 'border-white/10' : 'border-white/14',
-                      isTarget ? 'scale-[1.04] border-ca-red shadow-[0_0_0_1px_rgba(250,39,66,0.35),0_12px_28px_rgba(250,39,66,0.2)]' : '',
-                      isDragging ? 'opacity-35' : 'opacity-100',
-                    ].join(' ')}
-                    title={`${index + 1}. ${row.summary}`}
-                  >
-                    {row.iconSrc ? (
-                      <img src={row.iconSrc} alt={row.abilityName} className="h-full w-full object-cover" draggable={false} />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,#26242e,#17151c)]">
-                        <span className="ca-display text-[0.74rem] text-ca-text">{getQueueTileLabel(row)}</span>
-                      </div>
-                    )}
-
-                    <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(13,12,17,0.15),rgba(13,12,17,0.88))] px-1 py-[3px] text-center">
-                      <span className="ca-mono-label text-[0.33rem] tracking-[0.1em] text-ca-text">#{index + 1}</span>
-                    </div>
-
-                    {!row.isPass ? (
-                      <div className="absolute right-1 top-1 flex gap-[2px] rounded-full bg-[rgba(13,12,17,0.72)] px-[4px] py-[3px]">
-                        {battleEnergyOrder.flatMap((type) =>
-                          Array.from({ length: resolvedCost[type] ?? 0 }, (_, pipIndex) => (
-                            <span key={`${type}-${pipIndex}`} className="h-2 w-2 rounded-full border border-black/30" style={{ backgroundColor: battleEnergyMeta[type].color }} />
-                          )),
-                        )}
-                      </div>
-                    ) : (
-                      <div className="absolute right-1 top-1 rounded-full border border-white/10 bg-[rgba(13,12,17,0.72)] px-1.5 py-[2px]">
-                        <span className="ca-mono-label text-[0.32rem] tracking-[0.1em] text-ca-text-2">PASS</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              <div className="mt-3 rounded-[8px] border border-white/6 bg-[rgba(13,12,17,0.38)] px-3 py-2 text-center">
+                <p className="ca-mono-label text-[0.48rem] tracking-[0.08em] text-ca-text-2">
+                  {rows.length > 0
+                    ? rows.map((row, index) => `${index + 1}. ${row.summary.toUpperCase()}`).join('  •  ')
+                    : 'ALL LIVING FIGHTERS WILL PASS'}
+                </p>
+              </div>
             </div>
 
-            <div className="mt-3 rounded-[8px] border border-white/6 bg-[rgba(13,12,17,0.38)] px-3 py-2 text-center">
-              <p className="ca-mono-label text-[0.48rem] tracking-[0.08em] text-ca-text-2">
-                {rows.length > 0
-                  ? rows.map((row, index) => `${index + 1}. ${row.summary.toUpperCase()}`).join('  •  ')
-                  : 'ALL LIVING FIGHTERS WILL PASS'}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className={['ca-mono-label text-[0.58rem] tracking-[0.12em]', statusToneClass].join(' ')}>
+                {totalRandomNeeded > 0 && hasUnallocated ? (
+                  <>ASSIGN {totalRandomNeeded - totalAllocated} MORE RANDOM CE PIPS</>
+                ) : !canAfford ? (
+                  <>CANNOT AFFORD THIS TURN</>
+                ) : activeRows.length === 0 ? (
+                  <>NO ACTIVE SKILLS QUEUED</>
+                ) : (
+                  <>DISPLAYED ORDER IS THE RESOLUTION ORDER</>
+                )}
+              </p>
+              <p className="ca-mono-label text-[0.58rem] tracking-[0.12em] text-ca-text-3">
+                TOTAL RANDOM {totalAllocated}/{totalRandomNeeded}
               </p>
             </div>
-          </div>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <p className={['ca-mono-label text-[0.58rem] tracking-[0.12em]', statusToneClass].join(' ')}>
-              {totalRandomNeeded > 0 && hasUnallocated ? (
-                <>ASSIGN {totalRandomNeeded - totalAllocated} MORE RANDOM CE PIPS</>
-              ) : !canAfford ? (
-                <>CANNOT AFFORD THIS TURN</>
-              ) : activeRows.length === 0 ? (
-                <>NO ACTIVE SKILLS QUEUED</>
-              ) : (
-                <>DISPLAYED ORDER IS THE RESOLUTION ORDER</>
-              )}
-            </p>
-            <p className="ca-mono-label text-[0.58rem] tracking-[0.12em] text-ca-text-3">
-              TOTAL RANDOM {totalAllocated}/{totalRandomNeeded}
-            </p>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={!canAfford || hasUnallocated}
-              onClick={() => onConfirm(orderedActionIds, randomAlloc)}
-              className="ca-display rounded-[8px] border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.22)] transition duration-150 hover:translate-y-[-1px] hover:bg-[#ff3d5a] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-            >
-              OK
-            </button>
-            <button
-              type="button"
-              onClick={onBack}
-              className="ca-display rounded-[8px] border border-white/12 bg-[rgba(255,255,255,0.06)] px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-ca-text transition duration-150 hover:border-ca-teal/35 hover:bg-ca-teal/10 hover:text-ca-teal active:scale-[0.97]"
-            >
-              CANCEL
-            </button>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={!canAfford || hasUnallocated}
+                onClick={() => onConfirm(orderedActionIds, randomAlloc)}
+                className="ca-display rounded-[8px] border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.22)] transition duration-150 hover:translate-y-[-1px] hover:bg-[#ff3d5a] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              >
+                OK
+              </button>
+              <button
+                type="button"
+                onClick={onBack}
+                className="ca-display rounded-[8px] border border-white/12 bg-[rgba(255,255,255,0.06)] px-4 py-2.5 text-[1.08rem] tracking-[0.05em] text-ca-text transition duration-150 hover:border-ca-teal/35 hover:bg-ca-teal/10 hover:text-ca-teal active:scale-[0.97]"
+              >
+                CANCEL
+              </button>
+            </div>
           </div>
         </div>
       </div>

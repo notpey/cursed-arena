@@ -144,8 +144,8 @@ export function BattleBoard({
                   >
                     <div className="flex flex-col items-center gap-1">
                       {/* Pip row above the portrait, centered with the frame */}
-                      <div className="flex h-[2.5rem] items-center justify-center overflow-hidden">
-                        <ActiveEffectPips fighter={enemy} mirrored wrap={false} />
+                      <div className="flex min-h-[2.4rem] items-center justify-center">
+                        <ActiveEffectPips fighter={enemy} mirrored />
                       </div>
 
                       <BattlePortraitSlot

@@ -1,22 +1,6 @@
-# Reference Index
+Place your canonical home screenshot here as:
 
-## Single Source Of Truth
-Use this document for prep + battle product decisions:
-- [battle-contract-v1.md](./battle-contract-v1.md)
+- `reference/home-screen.png`
 
-Use this for PR/release gating:
-- [battle-contract-v1-checklist.md](./battle-contract-v1-checklist.md)
+The chat attachment cannot be written directly to disk from this tool, so save the image you sent into that path manually.
 
-## Canonical Visual References
-- `home-screen.png` (primary visual anchor)
-- `design-system-v3.html` (token and component rules)
-
-## Supporting Data (Non-Contract)
-- `na-baseline/` (coverage snapshots and normalized NA helper data)
-- `*-acp.json` files (ACP character draft references)
-
-## Archived Legacy Docs
-Legacy/contradictory docs were moved to:
-- `archive/legacy-2026-04-24/`
-
-These files are retained only for historical context and are not authoritative.

@@ -1,6 +1,6 @@
 
 > Detailed follow-up spec: [battle-engine-effects-spec.md](./battle-engine-effects-spec.md)
-> Core gameplay target: [battle-contract-v1.md](./battle-contract-v1.md)
+> Core gameplay target: [battle-parity-spec.md](./battle-parity-spec.md)
 
 
 ## Philosophy

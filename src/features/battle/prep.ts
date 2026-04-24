@@ -218,24 +218,9 @@ export function stageBattleLaunch(playerTeamIds: Array<string | null | undefined
 export function readStagedBattleLaunch() {
   const session = readStagedBattleSession()
   if (session) {
-    const hasValidPlayerTeam =
-      session.playerTeamIds.length === 3
-      && session.playerTeamIds.every((teamId) => Boolean(battlePrepRosterById[teamId]))
-    const hasValidEnemyTeam =
-      session.enemyTeamIds.length === 3
-      && session.enemyTeamIds.every((teamId) => Boolean(battlePrepRosterById[teamId]))
-
-    if (hasValidPlayerTeam && hasValidEnemyTeam) {
-      return {
-        playerTeamIds: session.playerTeamIds.slice(),
-        enemyTeamIds: session.enemyTeamIds.slice(),
-        battleSeed: session.battleSeed,
-      }
-    }
-
     return {
       playerTeamIds: sanitizePrepTeamIds(session.playerTeamIds),
-      enemyTeamIds: (hasValidEnemyTeam ? session.enemyTeamIds : defaultBattleSetup.enemyTeamIds).slice(),
+      enemyTeamIds: (session.enemyTeamIds.length ? session.enemyTeamIds : defaultBattleSetup.enemyTeamIds).slice(),
       battleSeed: session.battleSeed,
     }
   }
