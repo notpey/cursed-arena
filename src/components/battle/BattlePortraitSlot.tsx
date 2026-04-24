@@ -54,28 +54,28 @@ function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; toolti
   const border = pipToneBorder(pip.tone)
   return (
     <div className={cn(
-      'pointer-events-none rounded-[0.3rem] border px-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.65)] backdrop-blur-sm',
+      'pointer-events-none rounded-[0.45rem] border px-3 py-2.5 shadow-[0_16px_30px_rgba(0,0,0,0.48)] backdrop-blur-md',
       border,
-      'bg-[rgba(10,9,18,0.97)]',
+      'bg-[linear-gradient(180deg,rgba(13,12,20,0.98),rgba(8,7,14,0.99))]',
     )}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="ca-display text-[0.68rem] leading-none tracking-[0.05em] text-ca-text">{pip.label.toUpperCase()}</p>
+        <p className="ca-display text-[0.86rem] leading-none tracking-[0.06em] text-ca-text">{pip.label.toUpperCase()}</p>
       </div>
-      <ul className="space-y-0.5">
+      <ul className="space-y-1">
         {pip.lines.map((line, i) => (
-          <li key={i} className="ca-mono-label text-[0.46rem] leading-snug tracking-[0.02em] text-ca-text-2">
+          <li key={i} className="text-[0.66rem] leading-snug text-ca-text-2">
             {`- ${line.text.toUpperCase()}${line.turnsLeft !== null ? ` (${line.turnsLeft} TURN${line.turnsLeft === 1 ? '' : 'S'} LEFT)` : ''}`}
           </li>
         ))}
       </ul>
       {/* Caret arrow — top when opening downward, bottom when opening upward */}
       <div className={cn(
-        'absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2',
+        'absolute left-1/2 h-3 w-3 -translate-x-1/2',
         tooltipDown
-          ? '-top-[5px] rotate-[225deg] border-b border-r'
-          : '-bottom-[5px] rotate-45 border-b border-r',
+          ? '-top-[6px] rotate-[225deg] border-b border-r'
+          : '-bottom-[6px] rotate-45 border-b border-r',
         border,
-        'bg-[rgba(10,9,18,0.97)]',
+        'bg-[rgba(10,9,18,0.98)]',
       )} />
     </div>
   )
@@ -138,7 +138,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
       {/* Tooltip — opens downward for player strips, upward for enemies */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute z-[100] w-48',
+          'pointer-events-none absolute z-[100] w-72',
           tooltipDown
             ? 'top-[calc(100%+5px)]'
             : 'bottom-[calc(100%+5px)]',
