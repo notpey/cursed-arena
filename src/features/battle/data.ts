@@ -627,13 +627,38 @@ const publishedBattleValidation = validateBattleContent(
 )
 
 if (publishedBattleValidation.errors.length > 0 && typeof console !== 'undefined') {
-  console.warn('Ignoring invalid published battle content.', publishedBattleValidation.errors)
+  console.warn(
+    'Published battle content has validation warnings; using published roster with sanitized default setup.',
+    publishedBattleValidation.errors,
+  )
 }
 
-const runtimeBattleContent =
-  publishedBattleValidation.errors.length === 0 ? publishedBattleContent : authoredBattleContent
+function sanitizeRuntimeSetup(
+  setup: { playerTeamIds: string[]; enemyTeamIds: string[] },
+  rosterIds: string[],
+) {
+  const rosterSet = new Set(rosterIds)
+  const fallbackPool = rosterIds.slice(0, 3)
 
-export const battleRoster: BattleFighterTemplate[] = runtimeBattleContent.roster
+  function sanitizeSide(ids: string[], authoredFallback: string[]) {
+    const unique = ids.filter((id, index, list) => rosterSet.has(id) && list.indexOf(id) === index)
+    const authoredValid = authoredFallback.filter((id) => rosterSet.has(id) && !unique.includes(id))
+    const fillPool = [...authoredValid, ...fallbackPool.filter((id) => !unique.includes(id))]
+    return [...unique, ...fillPool].slice(0, 3)
+  }
+
+  return {
+    playerTeamIds: sanitizeSide(setup.playerTeamIds, authoredDefaultBattleSetup.playerTeamIds),
+    enemyTeamIds: sanitizeSide(setup.enemyTeamIds, authoredDefaultBattleSetup.enemyTeamIds),
+  }
+}
+
+const runtimeSetup = sanitizeRuntimeSetup(
+  publishedBattleContent.defaultSetup,
+  publishedBattleContent.roster.map((fighter) => fighter.id),
+)
+
+export const battleRoster: BattleFighterTemplate[] = publishedBattleContent.roster
 
 export const battleRosterById = Object.fromEntries(
   battleRoster.map((fighterData) => [fighterData.id, fighterData]),
@@ -641,7 +666,7 @@ export const battleRosterById = Object.fromEntries(
 
 export const defaultBattleSetup = {
   battlefield: battlefieldEffect,
-  playerTeamIds: runtimeBattleContent.defaultSetup.playerTeamIds,
-  enemyTeamIds: runtimeBattleContent.defaultSetup.enemyTeamIds,
+  playerTeamIds: runtimeSetup.playerTeamIds,
+  enemyTeamIds: runtimeSetup.enemyTeamIds,
 }
 

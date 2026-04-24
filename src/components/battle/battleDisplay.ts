@@ -475,6 +475,33 @@ function counterKeyVariants(counterKey: string): string[] {
     })
   }
 
+  // ── Compatibility: passives authored as `kind: pass` abilities ───────────
+  for (const ability of [...fighter.abilities, fighter.ultimate]) {
+    if (ability.kind !== 'pass') continue
+    const sourceId = `pass-ability-${ability.id}`
+    if (groups.has(sourceId)) continue
+
+    const lines =
+      (ability.effects ?? []).length > 0
+        ? (ability.effects ?? []).map((effect) => ({
+            text: describeSkillEffectForUi(effect),
+            turnsLeft: getSkillEffectDuration(effect),
+          }))
+        : [{ text: ability.description.trim() || 'Passive effect active', turnsLeft: null }]
+
+    groups.set(sourceId, {
+      key: sourceId,
+      label: ability.name,
+      lines,
+      turnsLeft: null,
+      tone: 'buff',
+      iconSrc: ability.icon.src,
+      iconLabel: ability.icon.label ?? ability.name.slice(0, 2).toUpperCase(),
+      iconTone: ability.icon.tone ?? 'teal',
+      stackCount: null,
+    })
+  }
+
   return [...groups.values()].map((g) => ({
     key: g.key,
     iconSrc: g.iconSrc,
