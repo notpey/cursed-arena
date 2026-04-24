@@ -556,7 +556,7 @@ export function BattlePrepPage() {
     <section className="relative h-[calc(100vh-6.75rem)] overflow-hidden py-2 sm:py-3">
       <div className="pointer-events-none fixed bottom-0 left-[72px] right-0 top-16 z-0 overflow-hidden">
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-[0.36]"
+          className="absolute inset-0 bg-cover bg-center opacity-[0.52]"
           style={{ backgroundImage: `url(${homeBgBase})` }}
         />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.2),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.15),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,rgba(23,8,14,0.68)_0%,rgba(13,12,17,0.72)_42%,rgba(24,16,32,0.66)_100%)]" />
@@ -1378,7 +1378,7 @@ function TeamSlotCard({
         onDrop={onDrop}
         className={[
           'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] text-left transition duration-150',
-          compact ? 'px-2 py-2' : 'px-3 py-3',
+          compact ? 'h-[4.75rem] px-2 py-2' : 'px-3 py-3',
           focused ? 'border-ca-teal/35' : 'border-white/10 hover:border-white/18',
         ].join(' ')}
       >
@@ -1403,20 +1403,27 @@ function TeamSlotCard({
       title="Double-click to remove. Drag to reorder or drop back into the roster."
       className={[
         'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] text-left transition duration-150',
-        compact ? 'px-2 py-1.5' : 'px-2.5 py-2.5',
+        compact ? 'h-[4.75rem] overflow-hidden px-2 py-2' : 'px-2.5 py-2.5',
         focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
       ].join(' ')}
     >
-      <div className={['grid items-center', compact ? 'grid-cols-1 gap-1.5' : 'grid-cols-[2.6rem_minmax(0,1fr)] gap-2.5'].join(' ')}>
-        {!compact ? (
-          <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
-        ) : null}
-        <div className="min-w-0">
-          {compact ? <PortraitThumb entry={entry} sizeClass="mb-1 h-[5.85rem] w-full" labelClass="text-[0.26rem]" bordered={false} showLabel /> : null}
-          <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
-          <p className={['ca-display mt-1 truncate leading-none text-ca-text', compact ? 'text-[0.92rem]' : 'text-[1.08rem]'].join(' ')}>{entry.battleTemplate.shortName}</p>
+      {compact ? (
+        <div className="grid h-full min-h-0 grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-2">
+          <PortraitThumb entry={entry} sizeClass="h-[3.25rem] w-[3.25rem]" labelClass="text-[0.26rem]" bordered={false} />
+          <div className="min-w-0">
+            <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
+            <p className="ca-display mt-1 truncate text-[0.92rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid items-center gap-2.5 grid-cols-[2.6rem_minmax(0,1fr)]">
+          <PortraitThumb entry={entry} sizeClass="h-[3rem] w-[2.6rem]" labelClass="text-[0.3rem]" bordered={false} />
+          <div className="min-w-0">
+            <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
+            <p className="ca-display mt-1 truncate text-[1.08rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
+          </div>
+        </div>
+      )}
     </button>
   )
 }
