@@ -4,7 +4,7 @@ import type { BattleFighterTemplate } from '@/features/battle/types.ts'
 // ways that make older published snapshots stale (kit redesigns, new
 // fighters, breaking effect-shape changes). Snapshots without a matching
 // version are treated as outdated and the runtime falls back to authored.
-export const CONTENT_SCHEMA_VERSION = 3
+export const CONTENT_SCHEMA_VERSION = 4
 
 const draftContentKey = `ca-battle-content-draft-v${CONTENT_SCHEMA_VERSION}`
 const publishedContentKey = `ca-battle-content-published-v${CONTENT_SCHEMA_VERSION}`
