@@ -12,6 +12,7 @@ import type {
   BattlefieldEffect,
   BattleFighterTemplate,
   BattleModifierStat,
+  BattleSkillDamageType,
   BattleUserProfile,
   EffectTarget,
   SkillEffect,
@@ -216,6 +217,7 @@ function modifierEffect(
   rounds: number | 'permanent',
   target: EffectTarget,
   tags: string[] = [],
+  options: { damageClass?: BattleSkillDamageType; excludedDamageClass?: BattleSkillDamageType } = {},
 ): SkillEffect {
   return {
     type: 'addModifier',
@@ -229,6 +231,8 @@ function modifierEffect(
       tags,
       visible: true,
       stacking: 'replace',
+      damageClass: options.damageClass,
+      excludedDamageClass: options.excludedDamageClass,
     },
   }
 }

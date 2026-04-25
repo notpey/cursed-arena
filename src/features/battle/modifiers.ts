@@ -60,7 +60,7 @@ function mergeValue(current: BattleModifierValue, next: BattleModifierValue) {
   return next
 }
 
-function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'targetId' | 'label' | 'stat' | 'mode' | 'statusKind' | 'tags' | 'damageClass'>) {
+function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'targetId' | 'label' | 'stat' | 'mode' | 'statusKind' | 'tags' | 'damageClass' | 'excludedDamageClass'>) {
   return [
     modifier.scope,
     modifier.targetId ?? 'global',
@@ -69,6 +69,7 @@ function getModifierKey(modifier: Pick<BattleModifierInstance, 'scope' | 'target
     modifier.mode,
     modifier.statusKind ?? 'none',
     modifier.damageClass ?? 'any',
+    modifier.excludedDamageClass ?? 'none',
     [...modifier.tags].sort().join('|'),
   ].join('::')
 }
@@ -117,6 +118,7 @@ export function cloneModifiers(modifiers: BattleModifierInstance[]): BattleModif
     duration: cloneModifierDuration(modifier.duration),
     tags: [...modifier.tags],
     damageClass: modifier.damageClass,
+    excludedDamageClass: modifier.excludedDamageClass,
   }))
 }
 
@@ -150,6 +152,7 @@ export function createModifierInstance(
     stacking: template.stacking ?? 'max',
     statusKind: template.statusKind,
     damageClass: template.damageClass,
+    excludedDamageClass: template.excludedDamageClass,
   }
 }
 
@@ -203,6 +206,7 @@ export function sumNumericModifierValuesForClass(
   return modifiers.reduce((total, modifier) => {
     if (modifier.stat !== stat || modifier.mode !== mode || typeof modifier.value !== 'number') return total
     if (modifier.damageClass && modifier.damageClass !== incomingClass) return total
+    if (modifier.excludedDamageClass && modifier.excludedDamageClass === incomingClass) return total
     if (filter.statusKind && modifier.statusKind !== filter.statusKind) return total
     if ((filter.tags ?? []).some((tag) => !modifier.tags.includes(tag))) return total
     return total + modifier.value
@@ -218,6 +222,7 @@ export function getNumericModifierMultiplierForClass(
   return modifiers.reduce((total, modifier) => {
     if (modifier.stat !== stat || modifier.mode !== 'multiplier' || typeof modifier.value !== 'number') return total
     if (modifier.damageClass && modifier.damageClass !== incomingClass) return total
+    if (modifier.excludedDamageClass && modifier.excludedDamageClass === incomingClass) return total
     if (filter.statusKind && modifier.statusKind !== filter.statusKind) return total
     if ((filter.tags ?? []).some((tag) => !modifier.tags.includes(tag))) return total
     return total * modifier.value

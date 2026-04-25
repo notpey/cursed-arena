@@ -463,6 +463,8 @@ function createReactionCondition(type: BattleReactionCondition['type']): BattleR
       return { type: 'usedAbilityWithinRounds', abilityId: 'ability-id', rounds: 3 }
     case 'usedAbilityOnTarget':
       return { type: 'usedAbilityOnTarget', abilityId: 'ability-id' }
+    case 'firstAbilityOnTarget':
+      return { type: 'firstAbilityOnTarget' }
     case 'shieldActive':
       return { type: 'shieldActive', tag: 'shield-tag' }
     case 'brokenShieldTag':
@@ -508,6 +510,8 @@ function describeCondition(condition: BattleReactionCondition) {
       return `used ${condition.abilityId} within ${condition.rounds} rounds`
     case 'usedAbilityOnTarget':
       return `used ${condition.abilityId} on this target`
+    case 'firstAbilityOnTarget':
+      return condition.abilityId ? `first time using ${condition.abilityId} on this target` : 'first ability on this target'
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'shield active'
     case 'brokenShieldTag':

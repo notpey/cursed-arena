@@ -219,6 +219,8 @@ export type BattleModifierTemplate = {
   statusKind?: BattleStatusKind
   /** When set on damageTaken modifiers, only applies to damage from abilities with this class */
   damageClass?: BattleSkillDamageType
+  /** When set on damageTaken modifiers, does not apply to damage from abilities with this class */
+  excludedDamageClass?: BattleSkillDamageType
 }
 
 export type BattleModifierFilter = {
@@ -252,6 +254,13 @@ export type BattleModifierInstance = {
   appliedInRound?: number
   /** When set on damageTaken modifiers, only applies to damage from abilities with this class */
   damageClass?: BattleSkillDamageType
+  /** When set on damageTaken modifiers, does not apply to damage from abilities with this class */
+  excludedDamageClass?: BattleSkillDamageType
+}
+
+export type BattleStateModeDuration = {
+  remainingRounds: number
+  appliedInRound?: number
 }
 
 export type BattleClassStunState = {
@@ -313,6 +322,7 @@ export type BattleReactionCondition =
   | { type: 'usedDifferentAbilityLastTurn'; abilityId: string }
   | { type: 'usedAbilityWithinRounds'; abilityId: string; rounds: number }
   | { type: 'usedAbilityOnTarget'; abilityId: string }
+  | { type: 'firstAbilityOnTarget'; abilityId?: string }
   | { type: 'shieldActive'; tag?: string }
   | { type: 'brokenShieldTag'; tag: string }
   | { type: 'isUltimate' }
@@ -364,6 +374,7 @@ export type BattleFighterState = {
   stateFlags: Record<string, boolean>
   stateCounters: Record<string, number>
   stateModes: Record<string, string>
+  stateModeDurations: Record<string, BattleStateModeDuration>
   lastUsedAbilityId: string | null
   previousUsedAbilityId: string | null
   abilityHistory: Array<{ abilityId: string; round: number; targetId?: string | null }>
@@ -562,7 +573,7 @@ export type SkillEffect =
   | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
   | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
   | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
-  | { type: 'setMode'; key: string; value: string; target: EffectTarget }
+  | { type: 'setMode'; key: string; value: string; duration?: number; target: EffectTarget }
   | { type: 'clearMode'; key: string; target: EffectTarget }
   | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; min?: number; max?: number; target: EffectTarget }
   | { type: 'setCounter'; key: string; value: number; target: EffectTarget }

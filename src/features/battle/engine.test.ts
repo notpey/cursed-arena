@@ -871,4 +871,111 @@ describe('battle engine scenarios', () => {
     expect(report.errors).toEqual([])
     expect(report.errors.some((issue) => issue.includes('renderSrc'))).toBe(false)
   })
+
+  test('setMode with duration expires the mode after N rounds, skipping the round it was applied', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'player', 'yuji')
+
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].targetRule = 'self'
+    yuji.abilities[0].kind = 'buff'
+    yuji.abilities[0].effects = [{ type: 'setMode', key: 'form', value: 'powered', duration: 2, target: 'self' }]
+
+    const activated = resolveTeamTurn(state, queue('player', yuji.instanceId, yuji.abilities[0].id, yuji.instanceId), 'player')
+    const afterActivation = getFighter(activated.state, 'player', 'yuji')
+    expect(afterActivation.stateModes.form).toBe('powered')
+    expect(afterActivation.stateModeDurations.form?.remainingRounds).toBe(2)
+
+    // end-of-round tick in the same round should not decrement (skip rule)
+    const afterRound1 = endRound(activated.state)
+    const r1Fighter = getFighter(afterRound1.state, 'player', 'yuji')
+    expect(r1Fighter.stateModes.form).toBe('powered')
+    expect(r1Fighter.stateModeDurations.form?.remainingRounds).toBe(2)
+
+    // next end-of-round should decrement
+    const afterRound2 = endRound(afterRound1.state)
+    const r2Fighter = getFighter(afterRound2.state, 'player', 'yuji')
+    expect(r2Fighter.stateModes.form).toBe('powered')
+    expect(r2Fighter.stateModeDurations.form?.remainingRounds).toBe(1)
+
+    // last tick expires the mode
+    const afterRound3 = endRound(afterRound2.state)
+    const r3Fighter = getFighter(afterRound3.state, 'player', 'yuji')
+    expect(r3Fighter.stateModes.form).toBeUndefined()
+    expect(r3Fighter.stateModeDurations.form).toBeUndefined()
+  })
+
+  test('firstAbilityOnTarget is true the first time an ability targets a specific enemy', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'player', 'yuji')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    const enemyNobara = getFighter(state, 'enemy', 'nobara')
+
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].cooldown = 0
+    yuji.abilities[0].effects = [
+      {
+        type: 'conditional',
+        conditions: [{ type: 'firstAbilityOnTarget' }],
+        effects: [{ type: 'adjustCounter', key: 'first_hit_bonus', amount: 1, target: 'self' }],
+        target: 'inherit',
+      },
+      { type: 'damage', power: 5, target: 'inherit' },
+    ]
+
+    // First hit on enemyYuji: condition fires
+    const firstHit = resolveTeamTurn(state, queue('player', yuji.instanceId, yuji.abilities[0].id, enemyYuji.instanceId), 'player')
+    expect(getFighter(firstHit.state, 'player', 'yuji').stateCounters.first_hit_bonus).toBe(1)
+
+    // Second hit on same target: condition does NOT fire
+    const yujiAfterFirst = getFighter(firstHit.state, 'player', 'yuji')
+    const secondHit = resolveTeamTurn(firstHit.state, queue('player', yujiAfterFirst.instanceId, yuji.abilities[0].id, enemyYuji.instanceId), 'player')
+    expect(getFighter(secondHit.state, 'player', 'yuji').stateCounters.first_hit_bonus).toBe(1)
+
+    // First hit on different target (enemyNobara): condition fires again
+    const yujiAfterSecond = getFighter(secondHit.state, 'player', 'yuji')
+    const thirdHit = resolveTeamTurn(secondHit.state, queue('player', yujiAfterSecond.instanceId, yuji.abilities[0].id, enemyNobara.instanceId), 'player')
+    expect(getFighter(thirdHit.state, 'player', 'yuji').stateCounters.first_hit_bonus).toBe(2)
+  })
+
+  test('excludedDamageClass skips damageTaken modifier for matching damage class', () => {
+    // A modifier with excludedDamageClass: 'Energy' should apply to Physical abilities
+    // but be skipped for Energy abilities.
+    const makeModifier = (targetId: string) => ({
+      id: 'mod-nonenergy-dr',
+      label: 'Non-Energy Guard',
+      scope: 'fighter' as const,
+      targetId,
+      stat: 'damageTaken' as const,
+      mode: 'percentAdd' as const,
+      value: -0.5,
+      duration: { kind: 'permanent' as const },
+      tags: [] as string[],
+      visible: false,
+      stacking: 'max' as const,
+      excludedDamageClass: 'Energy' as const,
+    })
+
+    // Physical hit: modifier applies → 20 * 0.5 = 10 damage, 100 - 10 = 90 HP
+    const physicalState = createChargedBattleState()
+    const physicalAttacker = getFighter(physicalState, 'player', 'megumi')
+    const physicalTarget = getFighter(physicalState, 'enemy', 'yuji')
+    physicalTarget.modifiers.push(makeModifier(physicalTarget.instanceId))
+    physicalAttacker.abilities[0].energyCost = {}
+    physicalAttacker.abilities[0].classes = ['Melee', 'Physical', 'Action']
+    physicalAttacker.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+    const physicalHit = resolveTeamTurn(physicalState, queue('player', physicalAttacker.instanceId, physicalAttacker.abilities[0].id, physicalTarget.instanceId), 'player')
+    expect(getFighter(physicalHit.state, 'enemy', 'yuji').hp).toBe(90)
+
+    // Energy hit: modifier is excluded → full 20 damage, 100 - 20 = 80 HP
+    const energyState = createChargedBattleState()
+    const energyAttacker = getFighter(energyState, 'player', 'megumi')
+    const energyTarget = getFighter(energyState, 'enemy', 'yuji')
+    energyTarget.modifiers.push(makeModifier(energyTarget.instanceId))
+    energyAttacker.abilities[0].energyCost = {}
+    energyAttacker.abilities[0].classes = ['Ranged', 'Energy', 'Action']
+    energyAttacker.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+    const energyHit = resolveTeamTurn(energyState, queue('player', energyAttacker.instanceId, energyAttacker.abilities[0].id, energyTarget.instanceId), 'player')
+    expect(getFighter(energyHit.state, 'enemy', 'yuji').hp).toBe(80)
+  })
 })

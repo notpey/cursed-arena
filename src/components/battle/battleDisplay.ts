@@ -429,6 +429,15 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   if (key === 'scorched') {
     return `${value} Scorched stack${value === 1 ? '' : 's'}`
   }
+  if (key === 'limitless_blue') {
+    return 'Lapse: Blue has been used recently'
+  }
+  if (key === 'limitless_red') {
+    return 'Reversal: Red has been used recently'
+  }
+  if (key === 'vocal_strain_bonus') {
+    return `Cursed speech bonus: +${value} damage`
+  }
   return null
 }
 
@@ -489,7 +498,9 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.label = value
     group.iconLabel = value.slice(0, 2).toUpperCase()
     group.iconTone = 'gold'
-    group.lines.push({ text: `${key}: ${value}`, turnsLeft: null })
+    const modeDuration = fighter.stateModeDurations?.[key]?.remainingRounds ?? null
+    group.lines.push({ text: `${key}: ${value}`, turnsLeft: modeDuration })
+    mergeTurns(group, modeDuration)
     mergeTone(group, 'buff')
   }
 

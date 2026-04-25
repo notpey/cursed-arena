@@ -158,6 +158,9 @@ function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     stateFlags: { ...fighter.stateFlags },
     stateCounters: { ...fighter.stateCounters },
     stateModes: { ...fighter.stateModes },
+    stateModeDurations: Object.fromEntries(
+      Object.entries(fighter.stateModeDurations ?? {}).map(([key, duration]) => [key, { ...duration }]),
+    ),
     lastUsedAbilityId: fighter.lastUsedAbilityId,
     previousUsedAbilityId: fighter.previousUsedAbilityId,
     abilityHistory: fighter.abilityHistory.map((entry) => ({ ...entry })),
@@ -270,6 +273,7 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         stateFlags: {},
         stateCounters: { ...(template.initialStateCounters ?? {}) },
         stateModes: { ...(template.initialStateModes ?? {}) },
+        stateModeDurations: {},
         lastUsedAbilityId: null,
         previousUsedAbilityId: null,
         abilityHistory: [],
@@ -1357,6 +1361,10 @@ function matchesReactionCondition(
         actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.round >= Math.max(1, context.round ?? 0) - condition.rounds)
     case 'usedAbilityOnTarget':
       return Boolean(context.target && actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.targetId === context.target?.instanceId))
+    case 'firstAbilityOnTarget':
+      return Boolean(context.target && !actor.abilityHistory.some((entry) =>
+        entry.targetId === context.target?.instanceId && (!condition.abilityId || entry.abilityId === condition.abilityId),
+      ))
     case 'shieldActive':
       return Boolean(actor.shield && (!condition.tag || actor.shield.tags.includes(condition.tag)))
     case 'brokenShieldTag':
@@ -2671,10 +2679,12 @@ function resolveEffects(
             abilityId,
             baseAmount: basePower,
             amount,
-            damageType: 'normal',
+            damageType: effect.damageType ?? 'normal',
             tags: abilityClasses ?? [],
             flags: {
               isUltimate: isUlt,
+              ignoresInvulnerability: effect.ignoresInvulnerability,
+              ignoresShield: effect.ignoresShield,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -3124,18 +3134,25 @@ function resolveEffects(
           emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
           break
         case 'setMode':
+          t.stateModeDurations ??= {}
           t.stateModes[effect.key] = effect.value
+          if (effect.duration && effect.duration > 0) {
+            t.stateModeDurations[effect.key] = { remainingRounds: effect.duration, appliedInRound: state.round }
+          } else {
+            delete t.stateModeDurations[effect.key]
+          }
           makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
             actorId: actor.instanceId,
             targetId: t.instanceId,
             team: t.team,
             abilityId,
-            meta: { key: effect.key, value: effect.value },
+            meta: { key: effect.key, value: effect.value, duration: effect.duration ?? null },
           })
           makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} entered ${effect.value}.`, actor.instanceId, t.instanceId, undefined, abilityId)
           break
         case 'clearMode':
           delete t.stateModes[effect.key]
+          delete t.stateModeDurations?.[effect.key]
           makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
             actorId: actor.instanceId,
             targetId: t.instanceId,
@@ -3255,6 +3272,7 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     tickEffectImmunities(fighter)
     tickClassStuns(fighter, state.round)
     tickReactionGuards(fighter, state.round)
+    tickStateModes(fighter, state.round, ctx)
   })
 
   ;(['player', 'enemy'] as BattleTeamId[]).forEach((team) => {
@@ -3454,7 +3472,28 @@ function applyRoundStartEffects(state: BattleState, ctx: ResolutionContext) {
 
     if (isAlive(fighter)) {
       firePassives(state, ctx, fighter, null, 'onRoundStart')
+      }
+    })
+}
+
+function tickStateModes(fighter: BattleFighterState, round: number, ctx: ResolutionContext) {
+  Object.entries(fighter.stateModeDurations ?? {}).forEach(([key, duration]) => {
+    if (duration.appliedInRound === round) return
+    const remainingRounds = Math.max(0, duration.remainingRounds - 1)
+    if (remainingRounds > 0) {
+      fighter.stateModeDurations[key] = { ...duration, remainingRounds }
+      return
     }
+
+    const previousValue = fighter.stateModes[key]
+    delete fighter.stateModes[key]
+    delete fighter.stateModeDurations[key]
+    makeRuntimeEvent(ctx, round, 'fighter_flag_changed', {
+      targetId: fighter.instanceId,
+      team: fighter.team,
+      meta: { key, value: null, previousValue, expired: true },
+    })
+    makeEvent(ctx, round, 'status', 'frost', `${fighter.shortName} left ${previousValue ?? key}.`, undefined, fighter.instanceId)
   })
 }
 

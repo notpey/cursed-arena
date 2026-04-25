@@ -155,6 +155,8 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `used ${condition.abilityId} within ${condition.rounds} rounds`
     case 'usedAbilityOnTarget':
       return `used ${condition.abilityId} on this target`
+    case 'firstAbilityOnTarget':
+      return condition.abilityId ? `first ${condition.abilityId} on this target` : 'first skill used on this target'
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'any shield active'
     case 'brokenShieldTag':

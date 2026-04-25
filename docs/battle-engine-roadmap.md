@@ -53,17 +53,33 @@ Implemented in the current pass:
 - Tightened Gojo Hollow Purple using Limitless counters and shield/invulnerability bypass flags.
 - Added tests for Panda mode branches and Gojo enhanced Hollow Purple.
 
+Implemented in the WIP pass (now merged):
+
+- Added `BattleStateModeDuration` and `stateModeDurations` on fighter state.
+- `setMode` accepts optional `duration`; expired modes are ticked at round end (with skip-on-apply-round rule matching stun/classStun behavior).
+- Pip display shows mode duration remaining.
+- Added `excludedDamageClass` on `BattleModifierTemplate` and `BattleModifierInstance`; modifier math skips the modifier when the incoming damage class matches the excluded class.
+- Added `firstAbilityOnTarget` reaction condition (true when actor has not yet used the ability, or any ability if omitted, on the current target).
+- Validation and ACP description support for `firstAbilityOnTarget`.
+- Fixed: counter damage in `runPreDamageReactionWindow` used an undefined `effect` reference; hardcoded to `'normal'` damageType.
+- Added focused tests: mode duration expiry, `firstAbilityOnTarget` per-target tracking, and `excludedDamageClass` modifier filtering.
+
 Remaining Milestone 3 work:
 
-- Add damage filters for direct, affliction, fatigue, piercing, non-affliction, non-mental, and skill-class-specific damage.
 - Add prevention filters for direct-damage death versus affliction/debuff death.
-- Add first-interaction-with-each-enemy history predicates.
-- Add first-class mode duration/expiry. Current modes persist until cleared.
 - Convert durable states to modes:
   - Nanami Overtime.
   - Gojo Infinity active/collapsed.
   - Maki Weapon Mastery.
   - Yuji/Sukuna transformation.
+  - Panda temporary Core Shift mode should expire instead of permanently forcing Gorilla Mode.
+- Improve roster fidelity:
+  - Kamo sequencing.
+  - Shoko death prevention / affliction-specific preserve behavior.
+  - Toge Vocal Strain scaling/reset.
+  - Sukuna cost decay.
+  - Gojo Blue/Red/Purple exactness.
+  - Maki/Nanami/Panda mode and cost behavior.
 - Add tests for Gojo Blue/Red/Purple, Kamo sequencing, Panda form upgrades, Shoko death prevention, and Toge strain.
 
 ## Milestone 4: Roster Fidelity and UI Polish

@@ -104,6 +104,9 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
     case 'usedAbilityOnTarget':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityOnTarget abilityId is required')
       return
+    case 'firstAbilityOnTarget':
+      if (condition.abilityId !== undefined && !condition.abilityId.trim()) pushIssue(issues, scope, 'firstAbilityOnTarget abilityId cannot be blank')
+      return
     case 'shieldActive':
       return
     case 'brokenShieldTag':
@@ -236,6 +239,7 @@ function validateSkillEffect(
     case 'setMode':
       if (!effect.key.trim()) pushIssue(issues, scope, 'setMode key is required')
       if (!effect.value.trim()) pushIssue(issues, scope, 'setMode value is required')
+      if (effect.duration !== undefined && effect.duration <= 0) pushIssue(issues, scope, 'setMode duration must be positive')
       return
     case 'clearMode':
       if (!effect.key.trim()) pushIssue(issues, scope, 'clearMode key is required')
