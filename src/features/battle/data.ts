@@ -718,7 +718,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         trigger: 'onRoundStart',
         effects: [modifierEffect('Weak Constitution', 'damageTaken', 5, 1, 'self', ['weak-constitution'])],
         label: 'Weak Constitution',
-        description: 'Junpei Yoshino takes 5 additional damage from all sources. When an enemy takes affliction damage, Junpei heals 5 health.',
+        description: 'Junpei Yoshino takes 5 additional damage from all sources. When Junpei deals affliction damage, he heals 5 health.',
         icon: { label: 'WC', tone: 'red' },
       }),
       definePassive({
@@ -1278,7 +1278,10 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       definePassive({
         id: 'miwa-steady-discipline',
         trigger: 'onRoundStart',
-        effects: [modifierEffect('Steady Discipline', 'damageTaken', -5, 1, 'self', ['steady-discipline'])],
+        effects: [
+          { type: 'effectImmunity', label: 'Steady Discipline', blocks: ['nonDamage'], duration: 1, tags: ['steady-discipline'], target: 'self' },
+          modifierEffect('Steady Discipline', 'damageTaken', -5, 1, 'self', ['steady-discipline']),
+        ],
         label: 'Steady Discipline',
         description: 'While Miwa is not affected by any non-damage effects, she takes 5 less damage from all sources.',
         icon: { label: 'SD', tone: 'teal' },
