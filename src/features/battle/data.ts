@@ -1218,7 +1218,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
           {
             type: 'effectImmunity',
             label: 'Simple Domain',
-            blocks: [{ kind: 'all' }],
+            blocks: ['nonDamage'],
             duration: 2,
             tags: ['simple-domain'],
             target: 'self',
