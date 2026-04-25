@@ -1,4 +1,4 @@
-import { type DragEvent, type TouchEvent, useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
+import { type DragEvent, type PointerEvent, type TouchEvent, useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, exchangeEnergy, getAbilityEnergyCost, getEnergyCount, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
@@ -570,19 +570,66 @@ function practiceLogToneClasses(tone: PracticeTurnLogEntry['tone']) {
   return 'border-white/10 bg-white/[0.035]'
 }
 
-function PracticeTurnLogPanel({
+function PracticeTurnLogOverlay({
   entries,
   eventCount,
 }: {
   entries: PracticeTurnLogEntry[]
   eventCount: number
 }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const [position, setPosition] = useState(() => ({ x: 16, y: 88 }))
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
   const displayEntries = [...entries].reverse()
   const latestRound = displayEntries[0]?.round ?? 1
 
+  function clampPosition(x: number, y: number) {
+    if (typeof window === 'undefined') return { x, y }
+    const width = Math.min(320, window.innerWidth - 16)
+    const height = collapsed ? 64 : Math.min(420, window.innerHeight - 16)
+    return {
+      x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - width - 8)),
+      y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - height - 8)),
+    }
+  }
+
+  function handleDragStart(event: PointerEvent<HTMLElement>) {
+    if (event.button !== 0) return
+    const rect = event.currentTarget.parentElement?.getBoundingClientRect()
+    if (!rect) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function handleDragMove(event: PointerEvent<HTMLElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    setPosition(clampPosition(event.clientX - drag.offsetX, event.clientY - drag.offsetY))
+  }
+
+  function handleDragEnd(event: PointerEvent<HTMLElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+
   return (
-    <aside className="flex h-[14rem] min-h-0 flex-col rounded-[0.3rem] border border-ca-teal/18 bg-[linear-gradient(180deg,rgba(30,28,36,0.96),rgba(13,12,17,0.98))] p-3 shadow-[0_16px_34px_rgba(0,0,0,0.28)] lg:h-auto">
-      <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-2">
+    <aside
+      className="fixed z-30 flex max-h-[min(26rem,calc(100dvh-1rem))] min-h-0 w-[min(20rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-[0.35rem] border border-ca-teal/24 bg-[linear-gradient(180deg,rgba(30,28,36,0.97),rgba(13,12,17,0.99))] shadow-[0_20px_52px_rgba(0,0,0,0.52)] backdrop-blur-md"
+      style={{ left: position.x, top: position.y }}
+    >
+      <div
+        className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b border-white/8 px-3 py-2.5"
+        onPointerDown={handleDragStart}
+        onPointerMove={handleDragMove}
+        onPointerUp={handleDragEnd}
+        onPointerCancel={handleDragEnd}
+      >
         <div>
           <p className="ca-mono-label text-[0.58rem] text-ca-teal">PRACTICE ONLY</p>
           <p className="ca-display mt-1 text-[1rem] leading-none text-ca-text">TURN LOG</p>
@@ -594,33 +641,43 @@ function PracticeTurnLogPanel({
           <span className="ca-mono-label rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[0.56rem] text-ca-text-3">
             {entries.length || eventCount}
           </span>
+          <button
+            type="button"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setCollapsed((value) => !value)}
+            className="rounded-full border border-white/12 bg-white/6 px-2 py-1 ca-mono-label text-[0.52rem] text-ca-text-2 transition hover:border-ca-teal/35 hover:text-ca-teal"
+          >
+            {collapsed ? 'OPEN' : 'HIDE'}
+          </button>
         </div>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-        {displayEntries.length > 0 ? (
-          displayEntries.map((entry, index) => (
-            <div
-              key={entry.id}
-              className={['rounded-[0.32rem] border px-2.5 py-2 animate-ca-slide-up', practiceLogToneClasses(entry.tone)].join(' ')}
-              style={{ animationDelay: `${Math.min(index, 4) * 18}ms` }}
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="ca-mono-label text-[0.56rem] text-ca-text-3">R{entry.round}</span>
-                <span className="rounded-full border border-white/10 bg-black/18 px-1.5 py-0.5 ca-mono-label text-[0.5rem] text-ca-text-2">
-                  {entry.label}
-                </span>
+      {!collapsed ? (
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 pt-2.5">
+          {displayEntries.length > 0 ? (
+            displayEntries.map((entry, index) => (
+              <div
+                key={entry.id}
+                className={['rounded-[0.32rem] border px-2.5 py-2 animate-ca-slide-up', practiceLogToneClasses(entry.tone)].join(' ')}
+                style={{ animationDelay: `${Math.min(index, 4) * 18}ms` }}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="ca-mono-label text-[0.56rem] text-ca-text-3">R{entry.round}</span>
+                  <span className="rounded-full border border-white/10 bg-black/18 px-1.5 py-0.5 ca-mono-label text-[0.5rem] text-ca-text-2">
+                    {entry.label}
+                  </span>
+                </div>
+                <p className="text-[0.72rem] leading-5 text-ca-text-2">{entry.summary}</p>
+                {entry.detail ? <p className="mt-1 text-[0.64rem] leading-4 text-ca-text-3">{entry.detail}</p> : null}
               </div>
-              <p className="text-[0.72rem] leading-5 text-ca-text-2">{entry.summary}</p>
-              {entry.detail ? <p className="mt-1 text-[0.64rem] leading-4 text-ca-text-3">{entry.detail}</p> : null}
+            ))
+          ) : (
+            <div className="rounded-[0.3rem] border border-dashed border-white/10 bg-white/[0.02] px-3 py-4">
+              <p className="text-[0.72rem] leading-5 text-ca-text-3">Commit a practice turn to see each resolved action, status, tracker, shield, and resource change.</p>
             </div>
-          ))
-        ) : (
-          <div className="rounded-[0.3rem] border border-dashed border-white/10 bg-white/[0.02] px-3 py-4">
-            <p className="text-[0.72rem] leading-5 text-ca-text-3">Commit a practice turn to see each resolved action, status, tracker, shield, and resource change.</p>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      ) : null}
     </aside>
   )
 }
@@ -1283,16 +1340,14 @@ export function BattlePage() {
               timelineFocus={timelineFocus}
             />
 
-            <div className={isPracticeBattle
-              ? 'grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)_20rem]'
-              : 'grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]'
-            }>
+            <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
               <UtilityRail onSurrender={handleSurrender} />
               <BattleInfoPanel state={battle.state} queued={battle.queued} actor={inspectedActor} ability={inspectedAbility} />
-              {isPracticeBattle ? <PracticeTurnLogPanel entries={practiceTurnLog} eventCount={battleLog.length} /> : null}
             </div>
           </div>
         </div>
+
+        {isPracticeBattle ? <PracticeTurnLogOverlay entries={practiceTurnLog} eventCount={battleLog.length} /> : null}
 
         {multiplayer && multiplayer.status === 'waiting_for_opponent' ? (
           <WaitingForOpponentOverlay />
