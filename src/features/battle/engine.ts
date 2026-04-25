@@ -1581,13 +1581,19 @@ function resolveRandomEnemyDamageTick(
     emitCounterChange(ctx, state.round, actor, effect.repeatCounterKey, actor.stateCounters[effect.repeatCounterKey] ?? 0, actor.instanceId, abilityId)
   }
 
-  const amount = calculateDamage(state, actor, target, effect.power, abilityClasses?.includes('Ultimate') ?? false, false, abilityId, abilityClasses)
+  if (!wasRepeat && effect.newTargetCounterKey && effect.newTargetCounterAmount) {
+    adjustFighterCounter(actor, effect.newTargetCounterKey, effect.newTargetCounterAmount)
+    emitCounterChange(ctx, state.round, actor, effect.newTargetCounterKey, actor.stateCounters[effect.newTargetCounterKey] ?? 0, actor.instanceId, abilityId)
+  }
+
+  const effectivePower = wasRepeat && effect.repeatPowerBonus ? effect.power + effect.repeatPowerBonus : effect.power
+  const amount = calculateDamage(state, actor, target, effectivePower, abilityClasses?.includes('Ultimate') ?? false, false, abilityId, abilityClasses)
   applyDamagePacket(state, ctx, actor, target, {
     kind: 'damage',
     sourceActorId: actor.instanceId,
     targetId: target.instanceId,
     abilityId,
-    baseAmount: effect.power,
+    baseAmount: effectivePower,
     amount,
     damageType: 'normal',
     tags: abilityClasses ?? [],
@@ -2419,8 +2425,11 @@ function resolveEffects(
             type: 'randomEnemyDamageTick',
             power: effect.power,
             historyKey: `${abilityId ?? 'effect'}:${effect.historyKey}`,
+            repeatPowerBonus: effect.repeatPowerBonus,
             repeatCounterKey: effect.repeatCounterKey,
             repeatCounterAmount: effect.repeatCounterAmount,
+            newTargetCounterKey: effect.newTargetCounterKey,
+            newTargetCounterAmount: effect.newTargetCounterAmount,
             target: 'self',
           }],
         })

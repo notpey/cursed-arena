@@ -361,13 +361,13 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'yuji-cursed-rush',
         name: 'Cursed Rush',
-        description: "Deals 10 damage to one random enemy each turn for 3 turns. If an enemy is struck twice from a single use, Yuji's transformation health gain increases by 5. This effect stacks.",
+        description: "Deals 10 damage to one random enemy each turn for 3 turns. If an enemy is struck twice from a single use, it will deal 5 more damage to them. Each time this skill damages a new enemy, Yuji's transformation health gain increases by 5; this effect stacks.",
         kind: 'attack',
         targetRule: 'self',
         classes: ['Physical', 'Melee', 'Action'],
-        cooldown: 5,
-        energyCost: { random: 2 },
-        effects: [{ type: 'randomEnemyDamageOverTime', power: 10, duration: 3, historyKey: 'cursed-rush', repeatCounterKey: 'sukuna_bonus_hp', repeatCounterAmount: 5, target: 'self' }],
+        cooldown: 3,
+        energyCost: { vow: 2 },
+        effects: [{ type: 'randomEnemyDamageOverTime', power: 10, duration: 3, historyKey: 'cursed-rush', repeatPowerBonus: 5, newTargetCounterKey: 'sukuna_bonus_hp', newTargetCounterAmount: 5, target: 'self' }],
       }),
       skill({
         id: 'yuji-black-flash',
@@ -376,8 +376,8 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Physical', 'Melee', 'Instant'],
-        cooldown: 1,
-        energyCost: { random: 2 },
+        cooldown: 0,
+        energyCost: { vow: 1, mental: 1 },
         power: 20,
         effects: [
           { type: 'damage', power: 20, target: 'inherit' },
@@ -407,7 +407,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       classes: ['Strategic', 'Instant', 'Ultimate'],
       cooldown: 4,
       duration: 1,
-      energyCost: { random: 1 },
+      energyCost: { mental: 1 },
       effects: [
         { type: 'invulnerable', duration: 1, target: 'self' },
         {

@@ -586,8 +586,8 @@ export type SkillEffect =
   | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
   | { type: 'conditional'; conditions: BattleReactionCondition[]; effects: SkillEffect[]; elseEffects?: SkillEffect[]; target: EffectTarget }
-  | { type: 'randomEnemyDamageOverTime'; power: number; duration: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
-  | { type: 'randomEnemyDamageTick'; power: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
+  | { type: 'randomEnemyDamageOverTime'; power: number; duration: number; historyKey: string; repeatPowerBonus?: number; repeatCounterKey?: string; repeatCounterAmount?: number; newTargetCounterKey?: string; newTargetCounterAmount?: number; target: EffectTarget }
+  | { type: 'randomEnemyDamageTick'; power: number; historyKey: string; repeatPowerBonus?: number; repeatCounterKey?: string; repeatCounterAmount?: number; newTargetCounterKey?: string; newTargetCounterAmount?: number; target: EffectTarget }
   | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
