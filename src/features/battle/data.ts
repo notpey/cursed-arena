@@ -555,14 +555,14 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     role: 'Debuff / Punish',
     portraitFrame: { scale: 2.08, y: '-10%' },
     maxHp: 100,
+    initialStateCounters: { straw_doll_ritual_stacks: 0 },
     passiveEffects: [
       definePassive({
         id: 'nobara-straw-doll-ritual-loop',
         trigger: 'onRoundStart',
         conditions: [{ type: 'fighterFlag', key: 'straw_doll_ritual_active', value: true }],
         effects: [
-          { type: 'damage', power: 5, target: 'all-enemies' },
-          { type: 'adjustCounter', key: 'straw_doll_damage_taken', amount: 1, target: 'all-enemies' },
+          { type: 'damageScaledByCounter', counterKey: 'straw_doll_ritual_stacks', counterSource: 'actor', powerPerStack: 5, consumeStacks: false, target: 'all-enemies' },
           { type: 'shield', amount: 5, label: 'Straw Doll Guard', tags: ['straw-doll-ritual'], target: 'self' },
         ],
         label: 'Straw Doll Ritual Loop',
@@ -594,7 +594,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       definePassive({
         id: 'nobara-straw-effigy',
         trigger: 'onDealDamage',
-        conditions: [{ type: 'abilityClass', class: 'Physical' }],
         effects: [
           {
             type: 'addModifier',
@@ -612,7 +611,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
           },
         ],
         label: 'Straw Effigy',
-        description: 'Whenever an enemy takes damage from Nobara skills, they gain Straw Effigy for 1 turn. If an enemy with Straw Effigy uses a skill, they receive 5 damage.',
+        description: 'Whenever an enemy takes damage from Nobara\'s skills, they gain Straw Effigy for 1 turn. If an enemy with Straw Effigy uses a skill, they will receive 5 damage.',
         icon: { label: 'SE', tone: 'red' },
       }),
     ],
@@ -620,19 +619,20 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'nobara-straw-doll-ritual',
         name: 'Straw Doll Ritual',
-        description: 'For the rest of the game, each turn all enemies take 5 damage and receive 5 less healing. Nobara gains 5 destructible defense each turn. While active, enemies who use a skill on Nobara can be targeted by Hairpin for 1 turn.',
+        description: 'Each turn, for the rest of the game, all enemies will receive 5 damage and will be healed 5 less health. Nobara will gain 5 destructible defense. This skill stacks. While this skill is active, any enemy who uses a skill on Nobara can be targeted by Hairpin for 1 turn.',
         kind: 'utility',
         targetRule: 'self',
         classes: ['Special', 'Ranged', 'Instant'],
         cooldown: 4,
-        energyCost: { physical: 1, mental: 1 },
+        energyCost: { technique: 1, mental: 1 },
         effects: [
           { type: 'setFlag', key: 'straw_doll_ritual_active', value: true, target: 'self' },
+          { type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'self' },
           {
             type: 'addModifier',
             target: 'all-enemies',
             modifier: {
-              label: 'Straw Doll Ritual Healing Curse',
+              label: 'Straw Doll Ritual',
               stat: 'healTaken',
               mode: 'flat',
               value: -5,
@@ -647,26 +647,25 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'nobara-hammer-and-nails',
         name: 'Hammer & Nails',
-        description: 'Targets one enemy, dealing 20 damage. For the next two turns, they receive an additional 5 damage from Straw Doll Ritual. During this time, Hairpin can be used on them.',
+        description: 'This skill targets one enemy, dealing 20 damage to them. For the next two turns, they will receive an additional 5 damage from Straw Doll Ritual. During this time, Hairpin can be used on them.',
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Physical', 'Ranged', 'Instant'],
         cooldown: 1,
-        energyCost: { technique: 1 },
+        energyCost: { physical: 1 },
         power: 20,
         effects: [
           { type: 'damage', power: 20, target: 'inherit' },
-          { type: 'adjustCounter', key: 'straw_doll_damage_taken', amount: 1, target: 'inherit' },
           {
             type: 'addModifier',
             target: 'inherit',
             modifier: {
-              label: 'Hairpin Opening',
-              stat: 'cooldownTick',
+              label: 'Hammer & Nails',
+              stat: 'damageTaken',
               mode: 'flat',
-              value: 0,
+              value: 5,
               duration: { kind: 'rounds', rounds: 2 },
-              tags: ['nobara-hairpin-targetable'],
+              tags: ['straw-doll-ritual', 'nobara-hairpin-targetable'],
               visible: true,
               stacking: 'replace',
             },
@@ -676,7 +675,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'nobara-hairpin',
         name: 'Hairpin',
-        description: 'Deals 15 damage to all applicable enemies and increases the damage they receive from Straw Doll Ritual permanently by 5.',
+        description: 'This skill deals 15 damage to all applicable enemies and increases the damage they receive from Straw Doll Ritual permanently by 5.',
         kind: 'attack',
         targetRule: 'enemy-all',
         classes: ['Physical', 'Ranged', 'Instant'],
@@ -685,20 +684,24 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         power: 15,
         effects: [
           { type: 'damageFiltered', power: 15, requiresTag: 'nobara-hairpin-targetable', target: 'all-enemies' },
-          { type: 'damageScaledByCounter', counterKey: 'straw_doll_damage_taken', counterSource: 'target', powerPerStack: 5, consumeStacks: false, requiresTag: 'nobara-hairpin-targetable', target: 'all-enemies' },
-          { type: 'adjustCounter', key: 'straw_doll_damage_taken', amount: 1, requiresTag: 'nobara-hairpin-targetable', target: 'all-enemies' },
+          {
+            type: 'conditional',
+            target: 'inherit',
+            conditions: [{ type: 'targetHasModifierTag', tag: 'nobara-hairpin-targetable' }],
+            effects: [{ type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'self' }],
+          },
         ],
       }),
     ],
     ultimate: defendSkill({
-      id: 'nobara-straw-guard',
-      name: 'Straw Guard',
-      description: 'Nobara becomes invulnerable for 1 turn.',
+      id: 'nobara-straw-doll-decoy',
+      name: 'Straw Doll Decoy',
+      description: 'This skill makes Nobara invulnerable for 1 turn.',
       targetRule: 'self',
       classes: ['Strategic', 'Instant', 'Ultimate'],
       cooldown: 4,
       duration: 1,
-      energyCost: { random: 1 },
+      energyCost: { mental: 1 },
     }),
   }),
   fighter({
