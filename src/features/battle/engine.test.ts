@@ -169,47 +169,43 @@ describe('battle engine scenarios', () => {
     expect(resolved.state.playerEnergy.amounts.technique).toBe(2)
   })
 
-  test('Nanami execute passive applies only below threshold', () => {
-    const aboveThreshold = createChargedBattleState()
-    const belowThreshold = createChargedBattleState()
+  test('Nanami Collapse Point applies a permanent mark and piercing damage', () => {
+    const state = createChargedBattleState()
+    const nanami = getFighter(state, 'enemy', 'nanami')
+    const gojo = getFighter(state, 'player', 'gojo')
 
-    const gojoAbove = getFighter(aboveThreshold, 'player', 'gojo')
-    const gojoBelow = getFighter(belowThreshold, 'player', 'gojo')
-    const nanamiAbove = getFighter(aboveThreshold, 'enemy', 'nanami')
-    const nanamiBelow = getFighter(belowThreshold, 'enemy', 'nanami')
-
-    gojoAbove.hp = 60
-    gojoBelow.hp = 50
-
-    const aboveResult = resolveTeamTurn(
-      aboveThreshold,
-      queue('enemy', nanamiAbove.instanceId, 'nanami-collapse', gojoAbove.instanceId),
-      'enemy',
-    )
-    const belowResult = resolveTeamTurn(
-      belowThreshold,
-      queue('enemy', nanamiBelow.instanceId, 'nanami-collapse', gojoBelow.instanceId),
+    const result = resolveTeamTurn(
+      state,
+      queue('enemy', nanami.instanceId, 'nanami-collapse', gojo.instanceId),
       'enemy',
     )
 
-    expect(getFighter(aboveResult.state, 'player', 'gojo').hp).toBe(3)
-    expect(getFighter(belowResult.state, 'player', 'gojo').hp).toBe(0)
+    const updatedGojo = getFighter(result.state, 'player', 'gojo')
+    // 5 piercing damage from Collapse Point.
+    expect(gojo.hp - updatedGojo.hp).toBe(5)
+    // Permanent mark applied to the target so future hits do +5.
+    expect(updatedGojo.modifiers.some((mod) => mod.statusKind === 'mark')).toBe(true)
   })
 
-  test('Jogo passive applies burn on hit', () => {
+  test('Jogo Ember Insects applies Scorched stacks and a Molten shield', () => {
     const state = createChargedBattleState()
     const jogo = getFighter(state, 'player', 'jogo')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
     const result = resolveTeamTurn(
       state,
-      queue('player', jogo.instanceId, 'jogo-embers', yuji.instanceId),
+      queue('player', jogo.instanceId, 'jogo-ember-insects', yuji.instanceId),
       'player',
     )
 
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
-    expect(getStatusDuration(updatedYuji.statuses, 'burn')).toBe(2)
-    expect(getBurnDamage(updatedYuji.statuses)).toBe(7)
+    const updatedJogo = getFighter(result.state, 'player', 'jogo')
+    // Ember Insects applies a Scorched counter (5) and a 5/turn burn.
+    expect(updatedYuji.stateCounters.scorched).toBe(5)
+    expect(getStatusDuration(updatedYuji.statuses, 'burn')).toBe(5)
+    expect(getBurnDamage(updatedYuji.statuses)).toBe(5)
+    // Self-shield with the molten-husk tag.
+    expect(updatedJogo.shield?.tags.includes('molten-husk')).toBe(true)
   })
 
   test('Yuji passive heals at round start', () => {

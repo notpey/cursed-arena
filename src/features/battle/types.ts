@@ -30,6 +30,8 @@ export type BattleSkillClass =
   | BattleSkillActionType
   | 'Unique'
   | 'Ultimate'
+  | 'Strategic'
+  | 'Special'
 
 export const battleSkillRangeValues: BattleSkillRange[] = ['Melee', 'Ranged']
 export const battleSkillDamageTypeValues: BattleSkillDamageType[] = ['Physical', 'Energy', 'Affliction', 'Mental']
