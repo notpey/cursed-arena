@@ -337,7 +337,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
           },
         ],
         label: "Sukuna's Vessel",
-        description: "The first time Yuji drops below 10 health, Sukuna manifests for one turn, Yuji cannot be defeated, and his health becomes 10 plus all accumulated transformation bonuses.",
+        description: "When Yuji's health drops below 10 for the first time, this passive ability will activate. Yuji will transform into Sukuna for one turn; this transformation cannot be ignored. While transformed, Yuji becomes unable to die. When this transformation ends, Yuji's health will be set to 10 plus all accumulated bonuses from his skills. This transformation can only occur once.",
         icon: { label: 'SV', tone: 'red' },
         counterKey: 'sukuna_bonus_hp',
       }),
@@ -346,7 +346,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'yuji-divergent-fist',
         name: 'Divergent Fist',
-        description: "Targets one enemy, dealing 25 damage and increasing Yuji's transformation health gain by 5. This effect stacks.",
+        description: "This skill targets one enemy, dealing 25 damage to them and increasing the health Yuji gains after Sukuna's transformation by 5; this effect stacks.",
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Physical', 'Melee', 'Instant'],
@@ -361,7 +361,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'yuji-cursed-rush',
         name: 'Cursed Rush',
-        description: "Deals 10 damage to one random enemy each turn for 3 turns. If an enemy is struck twice from a single use, it will deal 5 more damage to them. Each time this skill damages a new enemy, Yuji's transformation health gain increases by 5; this effect stacks.",
+        description: "This skill deals 10 damage to one random enemy each turn for 3 turns. If an enemy is struck twice by this skill from a single use, it will deal 5 more damage to them. Each time this skill damages a new enemy, the health Yuji gains after Sukuna's transformation will be increased by 5 permanently; this effect stacks.",
         kind: 'attack',
         targetRule: 'self',
         classes: ['Physical', 'Melee', 'Action'],
@@ -372,7 +372,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'yuji-black-flash',
         name: 'Black Flash',
-        description: "Targets one enemy, dealing 20 damage to them and 5 damage to all other enemies. For one turn, if the main target uses a harmful skill, Yuji's transformation health gain increases by 5. This effect stacks.",
+        description: "This skill targets one enemy dealing 20 damage to them and 5 to all other enemies. For one turn, if the main target of this skill uses a new harmful skill, the health Yuji gains after Sukuna's transformation will be increased by 5; this effect stacks.",
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Physical', 'Melee', 'Instant'],
@@ -402,7 +402,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
     ultimate: defendSkill({
       id: 'yuji-brink-control',
       name: 'Brink Control',
-      description: "Yuji becomes invulnerable for 1 turn. If Yuji takes damage while invulnerable, his transformation health gain increases by 5. This effect stacks.",
+      description: "This skill makes Yuji invulnerable for 1 turn. If Yuji takes any damage while invulnerable, the health he gains after Sukuna's transformation will be increased by 5; this effect stacks.",
       targetRule: 'self',
       classes: ['Strategic', 'Instant', 'Ultimate'],
       cooldown: 4,
