@@ -7,18 +7,9 @@ import type {
   CharacterSkill,
   CharacterUltimate,
 } from '@/types/characters'
-import aoiTodoRender from '@/assets/renders/Aoi_Todo_Cursed_Clash.webp'
-import chosoRender from '@/assets/renders/Choso_Cursed_Clash.webp'
-import kasumiMiwaRender from '@/assets/renders/Kasumi_Miwa_Cursed_Clash.webp'
-import kentoNanamiRender from '@/assets/renders/Kento_Nanami_Cursed_Clash.webp'
-import maiZeninRender from '@/assets/renders/Mai_Zenin_Cursed_Clash.webp'
-import makiZeninRender from '@/assets/renders/Maki_Zenin_Cursed_Clash.webp'
-import noritoshiKamoRender from '@/assets/renders/Noritoshi_Kamo_Cursed_Clash.webp'
-import pandaRender from '@/assets/renders/Panda_29.webp'
-import satoruGojoRender from '@/assets/renders/Satoru_Gojo_Cursed_Clash.webp'
-import togeInumakiRender from '@/assets/renders/Toge_Inumaki_Cursed_Clash.webp'
+import megumiFushiguroRender from '@/assets/renders/Megumi_Fushiguro_Cursed_Clash.webp'
+import nobaraKugisakiRender from '@/assets/renders/Nobara_Kugisaki_Cursed_Clash.webp'
 import yujiItadoriRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
-import yutaOkkotsuRender from '@/assets/renders/Yuta_Okkotsu_Cursed_Clash.webp'
 import { battleRosterById } from '@/features/battle/data'
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
 import { describeReactionCondition } from '@/features/battle/reactions'
@@ -39,152 +30,34 @@ type BaseCharacterSeed = {
 
 const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
   {
-    id: 'gojo',
-    name: 'Satoru Gojo',
-    rarity: 'SSR',
-    archetypes: ['BLASTER', 'AMPLIFIER'],
-    renderSrc: satoruGojoRender,
-    obtainedOrder: 11,
-    portraitFrame: { scale: 1.8, y: '14%' },
-    detailRenderFrame: { scale: 0.94, x: '4%', y: '2%', maxWidth: '34.5rem' },
-  },
-  {
     id: 'yuji',
     name: 'Yuji Itadori',
     rarity: 'SSR',
     archetypes: ['STRIKER'],
     renderSrc: yujiItadoriRender,
-    obtainedOrder: 10,
+    obtainedOrder: 2,
     portraitFrame: { scale: 1.74, y: '13%' },
     detailRenderFrame: { scale: 1, x: '2%', y: '4%', maxWidth: '37rem' },
   },
   {
-    id: 'yuta',
-    name: 'Yuta Okkotsu',
-    rarity: 'SSR',
-    archetypes: ['AMPLIFIER', 'STRIKER'],
-    renderSrc: yutaOkkotsuRender,
-    obtainedOrder: 9,
-    portraitFrame: { scale: 1.72, y: '12%' },
-    detailRenderFrame: { scale: 0.98, x: '2%', y: '4%', maxWidth: '35rem' },
-  },
-  {
-    id: 'nanami',
-    name: 'Kento Nanami',
+    id: 'nobara',
+    name: 'Nobara Kugisaki',
     rarity: 'SR',
-    archetypes: ['GUARDIAN', 'STRIKER'],
-    renderSrc: kentoNanamiRender,
-    obtainedOrder: 8,
-    portraitFrame: { scale: 1.64, y: '13%' },
-    detailRenderFrame: { scale: 0.96, x: '2%', y: '6%', maxWidth: '34rem' },
-  },
-  {
-    id: 'todo',
-    name: 'Aoi Todo',
-    rarity: 'SR',
-    archetypes: ['STRIKER', 'DISRUPTOR'],
-    renderSrc: aoiTodoRender,
-    obtainedOrder: 7,
-    portraitFrame: { scale: 1.62, y: '11%' },
-    detailRenderFrame: { scale: 0.94, x: '3%', y: '5%', maxWidth: '36rem' },
-  },
-  {
-    id: 'inumaki',
-    name: 'Toge Inumaki',
-    rarity: 'SR',
-    archetypes: ['DISRUPTOR', 'AMPLIFIER'],
-    renderSrc: togeInumakiRender,
-    obtainedOrder: 6,
-    portraitFrame: { scale: 1.68, y: '14%' },
-    detailRenderFrame: { scale: 0.96, x: '1%', y: '6%', maxWidth: '33rem' },
-  },
-  {
-    id: 'choso',
-    name: 'Choso',
-    rarity: 'SR',
-    archetypes: ['BLASTER', 'DISRUPTOR'],
-    renderSrc: chosoRender,
-    obtainedOrder: 5,
-    portraitFrame: { scale: 1.62, y: '12%' },
-    detailRenderFrame: { scale: 0.95, x: '3%', y: '5%', maxWidth: '35rem' },
-  },
-  {
-    id: 'maki',
-    name: 'Maki Zenin',
-    rarity: 'SR',
-    archetypes: ['STRIKER', 'GUARDIAN'],
-    renderSrc: makiZeninRender,
-    obtainedOrder: 4,
+    archetypes: ['DISRUPTOR', 'BLASTER'],
+    renderSrc: nobaraKugisakiRender,
+    obtainedOrder: 1,
     portraitFrame: { scale: 1.68, y: '13%' },
     detailRenderFrame: { scale: 0.95, x: '2%', y: '4%', maxWidth: '33rem' },
   },
   {
-    id: 'mai',
-    name: 'Mai Zenin',
-    rarity: 'R',
-    archetypes: ['BLASTER'],
-    renderSrc: maiZeninRender,
-    obtainedOrder: 3,
-    portraitFrame: { scale: 1.62, y: '13%' },
-    detailRenderFrame: { scale: 0.92, x: '1%', y: '6%', maxWidth: '31rem' },
-  },
-  {
-    id: 'miwa',
-    name: 'Kasumi Miwa',
-    rarity: 'R',
-    archetypes: ['GUARDIAN', 'RESTORER'],
-    renderSrc: kasumiMiwaRender,
-    obtainedOrder: 2,
-    portraitFrame: { scale: 1.72, y: '13%' },
-    detailRenderFrame: { scale: 0.92, x: '2%', y: '6%', maxWidth: '30rem' },
-  },
-  {
-    id: 'kamo',
-    name: 'Noritoshi Kamo',
-    rarity: 'R',
-    archetypes: ['BLASTER', 'DISRUPTOR'],
-    renderSrc: noritoshiKamoRender,
-    obtainedOrder: 1,
-    portraitFrame: { scale: 1.68, y: '10%' },
-    detailRenderFrame: { scale: 0.94, x: '2%', y: '4%', maxWidth: '35rem' },
-  },
-  {
-    id: 'panda',
-    name: 'Panda',
-    rarity: 'R',
-    archetypes: ['GUARDIAN'],
-    renderSrc: pandaRender,
-    obtainedOrder: 0,
-    portraitFrame: { scale: 1.8, y: '14%' },
-    detailRenderFrame: { scale: 0.94, x: '4%', y: '6%', maxWidth: '34rem' },
-  },
-  {
-    id: 'hanami',
-    name: 'Hanami',
-    rarity: 'SR',
-    archetypes: ['GUARDIAN', 'RESTORER'],
-    obtainedOrder: 12,
-  },
-  {
-    id: 'junpei',
-    name: 'Junpei Yoshino',
-    rarity: 'R',
-    archetypes: ['DISRUPTOR'],
-    obtainedOrder: 13,
-  },
-  {
-    id: 'mahito',
-    name: 'Mahito',
+    id: 'megumi',
+    name: 'Megumi Fushiguro',
     rarity: 'SSR',
-    archetypes: ['STRIKER', 'AMPLIFIER'],
-    obtainedOrder: 14,
-  },
-  {
-    id: 'ijichi',
-    name: 'Kiyotaka Ijichi',
-    rarity: 'R',
-    archetypes: ['GUARDIAN', 'AMPLIFIER'],
-    obtainedOrder: 15,
+    archetypes: ['DISRUPTOR', 'AMPLIFIER'],
+    renderSrc: megumiFushiguroRender,
+    obtainedOrder: 0,
+    portraitFrame: { scale: 1.68, y: '12%' },
+    detailRenderFrame: { scale: 0.96, x: '2%', y: '4%', maxWidth: '34rem' },
   },
 ]
 
@@ -265,6 +138,8 @@ function describeSkillEffect(effect: SkillEffect) {
       return `deal ${effect.power} damage`
     case 'heal':
       return `restore ${effect.power} HP`
+    case 'setHpFromCounter':
+      return `set HP to at least ${effect.base} plus ${effect.counterKey}`
     case 'stun':
       return `stun for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
     case 'invulnerable':
@@ -289,8 +164,14 @@ function describeSkillEffect(effect: SkillEffect) {
       return `set ${effect.key} to ${effect.value ? 'true' : 'false'}`
     case 'adjustCounter':
       return `adjust ${effect.key} by ${effect.amount}`
+    case 'adjustSourceCounter':
+      return `adjust source ${effect.key} by ${effect.amount}`
     case 'schedule':
       return `schedule ${effect.effects.length} delayed effect row${effect.effects.length === 1 ? '' : 's'} for ${effect.delay} ${effect.phase === 'roundStart' ? 'round start' : 'round end'}`
+    case 'randomEnemyDamageOverTime':
+      return `deal ${effect.power} damage to random enemies for ${effect.duration} turns`
+    case 'randomEnemyDamageTick':
+      return `deal ${effect.power} damage to a random enemy`
     case 'replaceAbility':
       return `replace ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}`
   }

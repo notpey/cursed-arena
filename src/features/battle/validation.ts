@@ -26,7 +26,7 @@ type EffectValidationContext =
 
 const supportedPassiveTriggers: PassiveEffect['trigger'][] = [...passiveTriggerOrder]
 const supportedStatuses = ['stun', 'invincible', 'mark', 'burn', 'attackUp']
-const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable', 'canGainInvulnerable', 'canReduceDamageTaken']
+const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable', 'isUndying', 'canGainInvulnerable', 'canReduceDamageTaken']
 const supportedModifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const supportedModifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
 
@@ -128,6 +128,10 @@ function validateSkillEffect(
       return
     case 'damageEqualToActorShield':
       return
+    case 'setHpFromCounter':
+      if (effect.base < 0) pushIssue(issues, scope, 'setHpFromCounter base cannot be negative')
+      if (!effect.counterKey.trim()) pushIssue(issues, scope, 'setHpFromCounter counterKey is required')
+      return
     case 'energyGain':
     case 'energyDrain':
     case 'energySteal':
@@ -204,6 +208,11 @@ function validateSkillEffect(
     case 'adjustCounter':
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounter key is required')
       if (effect.amount === 0) pushIssue(issues, scope, 'adjustCounter amount cannot be zero')
+      if (effect.requiresTag != null && !effect.requiresTag.trim()) pushIssue(issues, scope, 'adjustCounter requiresTag cannot be empty')
+      return
+    case 'adjustSourceCounter':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'adjustSourceCounter key is required')
+      if (effect.amount === 0) pushIssue(issues, scope, 'adjustSourceCounter amount cannot be zero')
       return
     case 'adjustCounterByTriggerAmount':
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounterByTriggerAmount key is required')
@@ -238,6 +247,19 @@ function validateSkillEffect(
         validateSkillEffect(`${scope} nested effect ${index + 1}`, nestedEffect, issues, context),
       )
       return
+    case 'randomEnemyDamageOverTime':
+      if (effect.power <= 0) pushIssue(issues, scope, 'randomEnemyDamageOverTime power must be positive')
+      if (effect.duration <= 0) pushIssue(issues, scope, 'randomEnemyDamageOverTime duration must be positive')
+      if (!effect.historyKey.trim()) pushIssue(issues, scope, 'randomEnemyDamageOverTime historyKey is required')
+      if (effect.repeatCounterKey != null && !effect.repeatCounterKey.trim()) pushIssue(issues, scope, 'randomEnemyDamageOverTime repeatCounterKey cannot be empty')
+      if (effect.repeatCounterAmount != null && effect.repeatCounterAmount <= 0) pushIssue(issues, scope, 'randomEnemyDamageOverTime repeatCounterAmount must be positive')
+      return
+    case 'randomEnemyDamageTick':
+      if (effect.power <= 0) pushIssue(issues, scope, 'randomEnemyDamageTick power must be positive')
+      if (!effect.historyKey.trim()) pushIssue(issues, scope, 'randomEnemyDamageTick historyKey is required')
+      if (effect.repeatCounterKey != null && !effect.repeatCounterKey.trim()) pushIssue(issues, scope, 'randomEnemyDamageTick repeatCounterKey cannot be empty')
+      if (effect.repeatCounterAmount != null && effect.repeatCounterAmount <= 0) pushIssue(issues, scope, 'randomEnemyDamageTick repeatCounterAmount must be positive')
+      return
     case 'replaceAbility':
       if (effect.duration <= 0) pushIssue(issues, scope, 'replaceAbility duration must be positive')
       if (!effect.slotAbilityId.trim()) pushIssue(issues, scope, 'replaceAbility slotAbilityId is required')
@@ -246,6 +268,7 @@ function validateSkillEffect(
     case 'damageScaledByCounter':
       if (!effect.counterKey.trim()) pushIssue(issues, scope, 'damageScaledByCounter counterKey is required')
       if (effect.powerPerStack <= 0) pushIssue(issues, scope, 'damageScaledByCounter powerPerStack must be positive')
+      if (effect.requiresTag != null && !effect.requiresTag.trim()) pushIssue(issues, scope, 'damageScaledByCounter requiresTag cannot be empty')
       return
     case 'classStun':
       if (effect.duration <= 0) pushIssue(issues, scope, 'classStun duration must be positive')
@@ -342,7 +365,7 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
     pushIssue(issues, scope, 'Ultimate class may only appear on the dedicated fourth slot')
   }
 
-  const damageEffectTypes = ['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield'] as const
+  const damageEffectTypes = ['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick'] as const
   if (ability.kind === 'attack' && !effects.some((effect) => (damageEffectTypes as readonly string[]).includes(effect.type))) {
     pushIssue(issues, scope, 'attack abilities require at least one damage effect')
   }

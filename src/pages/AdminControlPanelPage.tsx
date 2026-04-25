@@ -42,9 +42,9 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onHeal', 'onShieldBroken', 'onShieldGain', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'adjustCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
+const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
 const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
-const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'random-enemy']
+const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'other-enemies', 'attacker', 'random-enemy']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const modifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
@@ -56,6 +56,7 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
   damageFiltered: { label: 'Filtered Damage', hint: 'Deals damage only to targets that carry a specific modifier tag.' },
   heal: { label: 'Heal', hint: 'Restore HP to allies or self.' },
+  setHpFromCounter: { label: 'Set HP From Counter', hint: 'Raise HP to a base amount plus a stored fighter counter.' },
   overhealToShield: { label: 'Overheal to Shield', hint: 'Heals up to max HP; any excess converts to destructible defense.' },
   damageEqualToActorShield: { label: 'Shield-Scaled Damage', hint: "Deals damage equal to the actor's current destructible defense." },
   invulnerable: { label: 'Invulnerable', hint: 'Ignore incoming damage for a duration.' },
@@ -79,12 +80,15 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   removeEffectImmunity: { label: 'Remove Effect Immunity', hint: 'Strip an active effect immunity by label or tag.' },
   setFlag: { label: 'Set Flag', hint: 'Flip a named fighter state flag on or off.' },
   adjustCounter: { label: 'Adjust Counter', hint: 'Increment or decrement a named fighter state counter.' },
+  adjustSourceCounter: { label: 'Adjust Source Counter', hint: 'Increment or decrement a named counter on a linked source fighter.' },
   adjustCounterByTriggerAmount: { label: 'Adjust Counter by Event Amount', hint: 'Increments a counter by the numeric amount of the triggering event (e.g. HP healed, shield gained).' },
   resetCounter: { label: 'Reset Counter', hint: 'Sets a named fighter state counter back to zero.' },
   addModifier: { label: 'Add Modifier', hint: 'Apply a generic runtime modifier bundle.' },
   removeModifier: { label: 'Remove Modifier', hint: 'Strip modifiers by filter instead of hardcoding dispels.' },
   modifyAbilityState: { label: 'Ability State', hint: 'Grant, lock, or replace abilities using the generalized runtime model.' },
   schedule: { label: 'Delayed Effect', hint: 'Queue nested effects for a future round start or end.' },
+  randomEnemyDamageOverTime: { label: 'Random Enemy Damage Over Time', hint: 'Schedule repeated random enemy hits with repeat tracking.' },
+  randomEnemyDamageTick: { label: 'Random Enemy Damage Tick', hint: 'Resolve one tracked random enemy hit.' },
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
   damageScaledByCounter: { label: 'Counter-Scaled Damage', hint: 'Deal damage multiplied by a named counter value, optionally consuming stacks.' },
   classStun: { label: 'Class Stun', hint: 'Seal abilities of specific skill classes for a duration.' },
@@ -239,6 +243,8 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'damage', power: 20, target: 'inherit', piercing: false, cannotBeCountered: false, cannotBeReflected: false }
     case 'heal':
       return { type: 'heal', power: 18, target: 'inherit' }
+    case 'setHpFromCounter':
+      return { type: 'setHpFromCounter', base: 10, counterKey: 'state-counter', target: 'self' }
     case 'invulnerable':
       return { type: 'invulnerable', duration: 1, target: 'inherit' }
     case 'attackUp':
@@ -295,6 +301,8 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'setFlag', key: 'state-flag', value: true, target: 'self' }
     case 'adjustCounter':
       return { type: 'adjustCounter', key: 'state-counter', amount: 1, target: 'self' }
+    case 'adjustSourceCounter':
+      return { type: 'adjustSourceCounter', key: 'state-counter', amount: 1, target: 'inherit' }
     case 'adjustCounterByTriggerAmount':
       return { type: 'adjustCounterByTriggerAmount', key: 'state-counter', target: 'self' }
     case 'resetCounter':
@@ -329,6 +337,10 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       }
     case 'schedule':
       return { type: 'schedule', delay: 1, phase: 'roundStart', target: 'inherit', effects: [{ type: 'damage', power: 12, target: 'inherit' }] }
+    case 'randomEnemyDamageOverTime':
+      return { type: 'randomEnemyDamageOverTime', power: 10, duration: 3, historyKey: 'random-hit', target: 'self' }
+    case 'randomEnemyDamageTick':
+      return { type: 'randomEnemyDamageTick', power: 10, historyKey: 'random-hit', target: 'self' }
     case 'replaceAbility':
       return {
         type: 'replaceAbility',
@@ -368,6 +380,8 @@ function formatEffectTarget(target: SkillEffect['target']) {
   if (target === 'self') return 'self'
   if (target === 'all-allies') return 'all allies'
   if (target === 'attacker') return 'the attacker'
+  if (target === 'other-enemies') return 'other enemies'
+  if (target === 'random-enemy') return 'a random enemy'
   return 'all enemies'
 }
 
@@ -451,6 +465,8 @@ function describeEffect(effect: SkillEffect) {
       return `Deals ${effect.power} damage to ${formatEffectTarget(effect.target)}${effect.piercing ? ' (piercing)' : ''}${effect.cannotBeCountered ? ', cannot be countered' : ''}${effect.cannotBeReflected ? ', cannot be reflected' : ''}.`
     case 'heal':
       return `Restores ${effect.power} HP to ${formatEffectTarget(effect.target)}.`
+    case 'setHpFromCounter':
+      return `Sets ${formatEffectTarget(effect.target)} to at least ${effect.base} HP plus ${effect.counterKey}.`
     case 'invulnerable':
       return `Makes ${formatEffectTarget(effect.target)} invulnerable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`
     case 'attackUp':
@@ -501,6 +517,8 @@ function describeEffect(effect: SkillEffect) {
       return `Set ${effect.key} to ${effect.value ? 'true' : 'false'} on ${formatEffectTarget(effect.target)}.`
     case 'adjustCounter':
       return `Adjust ${effect.key} by ${effect.amount} on ${formatEffectTarget(effect.target)}.`
+    case 'adjustSourceCounter':
+      return `Adjust ${effect.key} by ${effect.amount} on the linked source fighter.`
     case 'adjustCounterByTriggerAmount':
       return `Adjust ${effect.key} on ${formatEffectTarget(effect.target)} by the triggering event's amount (heal, shield, etc.).`
     case 'resetCounter':
@@ -517,6 +535,10 @@ function describeEffect(effect: SkillEffect) {
           : `Lock ${effect.delta.slotAbilityId} on ${formatEffectTarget(effect.target)} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
     case 'schedule':
       return `After ${effect.delay} round ${effect.phase === 'roundStart' ? 'start' : 'end'} trigger${effect.delay === 1 ? '' : 's'}, resolve ${effect.effects.length} nested effect row${effect.effects.length === 1 ? '' : 's'}.`
+    case 'randomEnemyDamageOverTime':
+      return `Schedules ${effect.duration} random enemy hit${effect.duration === 1 ? '' : 's'} for ${effect.power} damage.`
+    case 'randomEnemyDamageTick':
+      return `Deals ${effect.power} damage to a tracked random enemy.`
     case 'replaceAbility':
       return `Replace ${effect.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`
     case 'damageScaledByCounter':

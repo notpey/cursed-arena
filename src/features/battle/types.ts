@@ -54,6 +54,7 @@ export type BattleAbilityTemplate = {
   cooldown: number
   cannotBeCountered?: boolean
   cannotBeReflected?: boolean
+  requiredTargetTags?: string[]
   energyCost?: BattleEnergyCost
   effects?: SkillEffect[]
   power?: number
@@ -183,6 +184,7 @@ export type BattleModifierStat =
   | 'dotDamage'
   | 'canAct'
   | 'isInvulnerable'
+  | 'isUndying'
   | 'canGainInvulnerable'
   | 'canReduceDamageTaken'
 
@@ -506,18 +508,19 @@ export type BattleTimelineResult = {
   steps: BattleTimelineStep[]
 }
 
-export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'attacker' | 'random-enemy'
+export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'other-enemies' | 'attacker' | 'random-enemy'
 
 export type SkillEffect =
   | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
   | { type: 'damageFiltered'; power: number; requiresTag: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
-  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; counterSource?: 'actor' | 'target' }
+  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; requiresTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; counterSource?: 'actor' | 'target' }
   | { type: 'shieldDamage'; amount: number; tag?: string; target: EffectTarget }
   | { type: 'energyGain'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'energyDrain'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'energySteal'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'cooldownAdjust'; amount: number; abilityId?: string; includeReady?: boolean; target: EffectTarget }
   | { type: 'heal'; power: number; target: EffectTarget }
+  | { type: 'setHpFromCounter'; base: number; counterKey: string; target: EffectTarget }
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
   | { type: 'stun'; duration: number; target: EffectTarget }
@@ -532,7 +535,8 @@ export type SkillEffect =
   | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
   | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
   | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
-  | { type: 'adjustCounter'; key: string; amount: number; target: EffectTarget }
+  | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; target: EffectTarget }
+  | { type: 'adjustSourceCounter'; key: string; amount: number; target: EffectTarget }
   | { type: 'adjustCounterByTriggerAmount'; key: string; target: EffectTarget }
   | { type: 'resetCounter'; key: string; target: EffectTarget }
   | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
@@ -540,6 +544,8 @@ export type SkillEffect =
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
   | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
+  | { type: 'randomEnemyDamageOverTime'; power: number; duration: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
+  | { type: 'randomEnemyDamageTick'; power: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
   | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }

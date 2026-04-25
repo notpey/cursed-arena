@@ -117,21 +117,18 @@ const rankTiers: RankTier[] = [
 ]
 
 const rankedOpponentPool: OpponentSeed[] = [
-  { opponentName: 'HEX_KING', opponentTitle: 'Ladder Hunter', opponentRankLabel: 'PLATINUM I', enemyTeamIds: ['yuji', 'nobara', 'nanami'] },
-  { opponentName: 'DOMAINFRAME', opponentTitle: 'Barrier Technician', opponentRankLabel: 'PLATINUM II', enemyTeamIds: ['todo', 'nanami', 'yuji'] },
-  { opponentName: 'VESSEL_17', opponentTitle: 'Jujutsu Student', opponentRankLabel: 'GOLD I', enemyTeamIds: ['yuta', 'todo', 'nanami'] },
-  { opponentName: 'SEALBREAKER', opponentTitle: 'Specialist Duelist', opponentRankLabel: 'PLATINUM III', enemyTeamIds: ['gojo', 'todo', 'jogo'] },
+  { opponentName: 'HEX_KING', opponentTitle: 'Ladder Hunter', opponentRankLabel: 'PLATINUM I', enemyTeamIds: ['yuji', 'nobara', 'megumi'] },
+  { opponentName: 'DOMAINFRAME', opponentTitle: 'Barrier Technician', opponentRankLabel: 'PLATINUM II', enemyTeamIds: ['megumi', 'yuji', 'nobara'] },
 ]
 
 const quickOpponentPool: OpponentSeed[] = [
-  { opponentName: 'SCRIM_01', opponentTitle: 'Quick Match', enemyTeamIds: ['yuji', 'nobara', 'nanami'] },
-  { opponentName: 'CASUAL_FOG', opponentTitle: 'Practice Squad', enemyTeamIds: ['todo', 'jogo', 'nanami'] },
-  { opponentName: 'SPAR_PARTNER', opponentTitle: 'Open Lobby', enemyTeamIds: ['yuta', 'yuji', 'todo'] },
+  { opponentName: 'SCRIM_01', opponentTitle: 'Quick Match', enemyTeamIds: ['yuji', 'nobara', 'megumi'] },
+  { opponentName: 'SPAR_PARTNER', opponentTitle: 'Open Lobby', enemyTeamIds: ['megumi', 'nobara', 'yuji'] },
 ]
 
 const privateOpponentPool: OpponentSeed[] = [
-  { opponentName: 'ROOM_GUEST', opponentTitle: 'Private Match', enemyTeamIds: ['yuji', 'todo', 'nanami'], roomCode: 'ROOM-742' },
-  { opponentName: 'FRIEND_SLOT', opponentTitle: 'Private Match', enemyTeamIds: ['gojo', 'jogo', 'todo'], roomCode: 'ROOM-188' },
+  { opponentName: 'ROOM_GUEST', opponentTitle: 'Private Match', enemyTeamIds: ['yuji', 'nobara', 'megumi'], roomCode: 'ROOM-742' },
+  { opponentName: 'FRIEND_SLOT', opponentTitle: 'Private Match', enemyTeamIds: ['megumi', 'yuji', 'nobara'], roomCode: 'ROOM-188' },
 ]
 
 function canUseLocalStorage() {
@@ -212,8 +209,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       opponentName: 'HEX_KING',
       opponentTitle: 'Ladder Hunter',
       opponentRankLabel: 'PLATINUM I',
-      yourTeam: ['gojo', 'yuji', 'yuta'],
-      theirTeam: ['todo', 'nanami', 'jogo'],
+      yourTeam: ['yuji', 'nobara', 'megumi'],
+      theirTeam: ['megumi', 'nobara', 'yuji'],
       timestamp: hours(2),
       rounds: 4,
       lpDelta: 24,
@@ -228,8 +225,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       opponentName: 'DOMAINFRAME',
       opponentTitle: 'Barrier Technician',
       opponentRankLabel: 'PLATINUM II',
-      yourTeam: ['gojo', 'yuji', 'todo'],
-      theirTeam: ['yuta', 'todo', 'nanami'],
+      yourTeam: ['yuji', 'megumi', 'nobara'],
+      theirTeam: ['nobara', 'yuji', 'megumi'],
       timestamp: hours(5),
       rounds: 5,
       lpDelta: -18,
@@ -243,8 +240,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       mode: 'quick',
       opponentName: 'VESSEL_17',
       opponentTitle: 'Open Lobby',
-      yourTeam: ['yuji', 'yuta', 'todo'],
-      theirTeam: ['gojo', 'jogo', 'nanami'],
+      yourTeam: ['yuji', 'nobara', 'megumi'],
+      theirTeam: ['megumi', 'yuji', 'nobara'],
       timestamp: hours(9),
       rounds: 3,
       lpDelta: 0,
@@ -258,8 +255,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       mode: 'private',
       opponentName: 'SEALBREAKER',
       opponentTitle: 'Private Match',
-      yourTeam: ['gojo', 'nanami', 'todo'],
-      theirTeam: ['yuji', 'jogo', 'yuta'],
+      yourTeam: ['megumi', 'nobara', 'yuji'],
+      theirTeam: ['yuji', 'megumi', 'nobara'],
       timestamp: days(1),
       rounds: 6,
       lpDelta: 0,
@@ -274,8 +271,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       opponentName: 'MALVOLENT',
       opponentTitle: 'Ladder Hunter',
       opponentRankLabel: 'DIAMOND III',
-      yourTeam: ['yuji', 'todo', 'nanami'],
-      theirTeam: ['gojo', 'yuta', 'nanami'],
+      yourTeam: ['yuji', 'nobara', 'megumi'],
+      theirTeam: ['megumi', 'yuji', 'nobara'],
       timestamp: days(1),
       rounds: 4,
       lpDelta: -18,
@@ -289,8 +286,8 @@ function createDefaultHistorySeed(): MatchHistoryEntry[] {
       mode: 'quick',
       opponentName: 'TOKYO_CURSE',
       opponentTitle: 'Quick Match',
-      yourTeam: ['gojo', 'nanami', 'yuta'],
-      theirTeam: ['todo', 'jogo', 'yuji'],
+      yourTeam: ['yuji', 'megumi', 'nobara'],
+      theirTeam: ['nobara', 'megumi', 'yuji'],
       timestamp: days(2),
       rounds: 2,
       lpDelta: 0,

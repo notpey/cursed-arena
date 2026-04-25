@@ -522,12 +522,24 @@ function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: 
 
 const NOBARA_CURSED_NAILS_PENDING_TAG = 'nobara-cursed-nails-pending'
 const NOBARA_CURSED_NAILS_APPLIED_TAG = 'nobara-cursed-nails-applied'
+const NOBARA_STRAW_EFFIGY_TAG = 'nobara-straw-effigy'
+const YUJI_SUKUNA_BONUS_ON_HARMFUL_SKILL_TAG = 'yuji-sukuna-bonus-on-harmful-skill'
 
 function isHarmfulAbility(ability: BattleAbilityTemplate) {
   if (ability.id === PASS_ABILITY_ID) return false
   const targetsEnemy = ability.targetRule === 'enemy-single' || ability.targetRule === 'enemy-all'
   if (!targetsEnemy) return false
   return ability.kind !== 'heal' && ability.kind !== 'defend' && ability.kind !== 'buff' && ability.kind !== 'pass'
+}
+
+function getModifierSourceFighter(state: BattleState, modifier: { sourceActorId?: string }) {
+  return modifier.sourceActorId ? getFighterById(state, modifier.sourceActorId) : null
+}
+
+function targetHasRequiredTags(state: BattleState, target: BattleFighterState, ability: BattleAbilityTemplate) {
+  const requiredTags = ability.requiredTargetTags ?? []
+  if (requiredTags.length === 0) return true
+  return requiredTags.every((tag) => getFighterModifierPool(state, target).some((modifier) => modifier.tags.includes(tag)))
 }
 
 function isEffectReflectable(effect: SkillEffect) {
@@ -714,6 +726,40 @@ function tryTriggerCursedNails(
     undefined,
     removed[0]?.sourceAbilityId ?? ability.id,
   )
+}
+
+function triggerMarkedSkillUseReactions(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  ability: BattleAbilityTemplate,
+) {
+  const strawEffigy = actor.modifiers.filter((modifier) => modifier.tags.includes(NOBARA_STRAW_EFFIGY_TAG))
+  for (const modifier of strawEffigy) {
+    const source = getModifierSourceFighter(state, modifier)
+    if (!source || !isAlive(source)) continue
+    applyDamagePacket(state, ctx, source, actor, {
+      kind: 'damage',
+      sourceActorId: source.instanceId,
+      targetId: actor.instanceId,
+      abilityId: modifier.sourceAbilityId ?? ability.id,
+      baseAmount: 5,
+      amount: calculateDamage(state, source, actor, 5, false, false, modifier.sourceAbilityId, ['Physical', 'Instant']),
+      damageType: 'normal',
+      tags: [NOBARA_STRAW_EFFIGY_TAG],
+      flags: { cannotBeCountered: true, cannotBeReflected: true },
+    })
+  }
+
+  if (!isHarmfulAbility(ability)) return
+
+  const sukunaBonusMarkers = actor.modifiers.filter((modifier) => modifier.tags.includes(YUJI_SUKUNA_BONUS_ON_HARMFUL_SKILL_TAG))
+  for (const modifier of sukunaBonusMarkers) {
+    const source = getModifierSourceFighter(state, modifier)
+    if (!source || !isAlive(source)) continue
+    adjustFighterCounter(source, 'sukuna_bonus_hp', 5)
+    emitCounterChange(ctx, state.round, source, 'sukuna_bonus_hp', source.stateCounters.sukuna_bonus_hp ?? 0, source.instanceId, modifier.sourceAbilityId ?? ability.id)
+  }
 }
 export function coinFlip(seed = 'default-battle-seed'): BattleTeamId {
   return createSeededRandom(seed)() < 0.5 ? 'player' : 'enemy'
@@ -1112,9 +1158,9 @@ export function getValidTargetIds(state: BattleState, actorId: string, abilityId
     case 'self':
       return [actor.instanceId]
     case 'enemy-single':
-      return enemies.map((fighter) => fighter.instanceId)
+      return enemies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
     case 'ally-single':
-      return allies.map((fighter) => fighter.instanceId)
+      return allies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
     default:
       return []
   }
@@ -1348,6 +1394,8 @@ function cloneEffect(effect: SkillEffect): SkillEffect {
       return { ...effect, effects: effect.effects.map(cloneEffect) }
     case 'replaceAbility':
       return { ...effect, ability: cloneAbilityTemplate(effect.ability) }
+    case 'replaceAbilities':
+      return { ...effect, replacements: effect.replacements.map((replacement) => ({ ...replacement, ability: cloneAbilityTemplate(replacement.ability) })) }
     case 'modifyAbilityState':
       return { ...effect, delta: cloneAbilityStateDelta(effect.delta) }
     default:
@@ -1372,6 +1420,8 @@ function resolveEffectTargets(
       return allies
     case 'all-enemies':
       return enemies
+    case 'other-enemies':
+      return enemies.filter((enemy) => enemy.instanceId !== selectedTarget?.instanceId)
     case 'attacker': {
       if (!state) return []
       const attackerId = actor.lastAttackerId
@@ -1390,6 +1440,46 @@ function resolveEffectTargets(
     default:
       return selectedTarget ? [selectedTarget] : []
   }
+}
+
+function resolveRandomEnemyDamageTick(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'randomEnemyDamageTick' }>,
+  abilityId?: string,
+  abilityClasses?: BattleAbilityTemplate['classes'],
+) {
+  const aliveEnemies = getOpposingTeam(state, actor.team).filter(isAlive)
+  if (aliveEnemies.length === 0) return
+
+  const unhitEnemies = aliveEnemies.filter((enemy) => (actor.stateCounters[`${effect.historyKey}:${enemy.templateId}`] ?? 0) <= 0)
+  const candidates = unhitEnemies.length > 0 ? unhitEnemies : aliveEnemies
+  const rng = createSeededRandom(`${state.battleSeed}:${effect.historyKey}:${state.round}:${ctx.runtimeEvents.length}`)
+  const target = candidates[Math.floor(rng() * candidates.length)] ?? candidates[0]
+  if (!target) return
+
+  const wasRepeat = (actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0) > 0
+  actor.stateCounters[`${effect.historyKey}:${target.templateId}`] = (actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0) + 1
+  emitCounterChange(ctx, state.round, actor, `${effect.historyKey}:${target.templateId}`, actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0, actor.instanceId, abilityId)
+
+  if (wasRepeat && effect.repeatCounterKey && effect.repeatCounterAmount) {
+    adjustFighterCounter(actor, effect.repeatCounterKey, effect.repeatCounterAmount)
+    emitCounterChange(ctx, state.round, actor, effect.repeatCounterKey, actor.stateCounters[effect.repeatCounterKey] ?? 0, actor.instanceId, abilityId)
+  }
+
+  const amount = calculateDamage(state, actor, target, effect.power, abilityClasses?.includes('Ultimate') ?? false, false, abilityId, abilityClasses)
+  applyDamagePacket(state, ctx, actor, target, {
+    kind: 'damage',
+    sourceActorId: actor.instanceId,
+    targetId: target.instanceId,
+    abilityId,
+    baseAmount: effect.power,
+    amount,
+    damageType: 'normal',
+    tags: abilityClasses ?? [],
+    flags: {},
+  }, effect)
 }
 
 function getResourcePacketAmount(amounts: Partial<Record<BattleResourceKey, number>>) {
@@ -1912,6 +2002,10 @@ function applyDamagePacket(
   })
 
   if (hasModifierBoolean(state, target, 'isInvulnerable', true, { statusKind: 'invincible' }) && !packet.flags.ignoresInvulnerability) {
+    if (target.modifiers.some((modifier) => modifier.tags.includes('yuji-sukuna-bonus-on-blocked-damage'))) {
+      adjustFighterCounter(target, 'sukuna_bonus_hp', 5)
+      emitCounterChange(ctx, state.round, target, 'sukuna_bonus_hp', target.stateCounters.sukuna_bonus_hp ?? 0, actor?.instanceId, packet.abilityId)
+    }
     makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName} nullified ${actor?.shortName ?? 'the attack'}.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
     makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
       actorId: packet.sourceActorId,
@@ -1978,7 +2072,9 @@ function applyDamagePacket(
     return 0
   }
 
-  target.hp = Math.max(0, target.hp - remainingDamage)
+  const nextHp = Math.max(0, target.hp - remainingDamage)
+  const isUndying = hasBooleanModifierForStat(getFighterModifierPool(state, target), 'isUndying', true)
+  target.hp = isUndying && nextHp <= 0 ? 1 : nextHp
   makeEvent(ctx, state.round, 'damage', 'red', `${actor?.shortName ?? target.shortName} hit ${target.shortName} for ${remainingDamage}.`, actor?.instanceId, target.instanceId, remainingDamage, packet.abilityId)
   makeRuntimeEvent(ctx, state.round, 'damage_applied', {
     actorId: packet.sourceActorId,
@@ -2167,6 +2263,29 @@ function resolveEffects(
       continue
     }
 
+    if (effect.type === 'randomEnemyDamageOverTime') {
+      for (let delay = 1; delay <= effect.duration; delay += 1) {
+        state.scheduledEffects.push({
+          id: `scheduled-${state.round}-${state.scheduledEffects.length}`,
+          actorId: actor.instanceId,
+          targetIds: [actor.instanceId],
+          abilityId,
+          dueRound: state.round + delay,
+          phase: 'roundStart',
+          effects: [{
+            type: 'randomEnemyDamageTick',
+            power: effect.power,
+            historyKey: `${abilityId ?? 'effect'}:${effect.historyKey}`,
+            repeatCounterKey: effect.repeatCounterKey,
+            repeatCounterAmount: effect.repeatCounterAmount,
+            target: 'self',
+          }],
+        })
+      }
+      makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} set a roaming strike for ${effect.duration} turns.`, actor.instanceId, undefined, undefined, abilityId)
+      continue
+    }
+
     const scopedTargets = new Set<string>()
 
     for (const t of targets) {
@@ -2211,6 +2330,9 @@ function resolveEffects(
       }
 
       switch (effect.type) {
+        case 'randomEnemyDamageTick':
+          resolveRandomEnemyDamageTick(state, ctx, actor, effect, abilityId, abilityClasses)
+          break
         case 'damage': {
           const isPiercing = effect.piercing ?? false
           const packetTarget = effectTarget
@@ -2392,6 +2514,7 @@ function resolveEffects(
           break
         }
         case 'damageScaledByCounter': {
+          if (effect.requiresTag && !getFighterModifierPool(state, effectTarget).some((modifier) => modifier.tags.includes(effect.requiresTag!))) break
           const counterOwner = (effect.counterSource ?? 'target') === 'actor' ? effectActor : effectTarget
           const stackCount = counterOwner.stateCounters[effect.counterKey] ?? 0
           if (stackCount <= 0) break
@@ -2439,6 +2562,21 @@ function resolveEffects(
             flags: {},
           }
           applyHealPacket(state, ctx, effectActor, effectTarget, packet)
+          break
+        }
+        case 'setHpFromCounter': {
+          const amount = Math.min(t.maxHp, effect.base + (t.stateCounters[effect.counterKey] ?? 0))
+          t.hp = Math.max(t.hp, amount)
+          makeEvent(ctx, state.round, 'heal', 'teal', `${t.shortName} forced their body back to ${t.hp} HP.`, actor.instanceId, t.instanceId, t.hp, abilityId)
+          makeRuntimeEvent(ctx, state.round, 'heal_applied', {
+            actorId: actor.instanceId,
+            targetId: t.instanceId,
+            team: t.team,
+            abilityId,
+            amount: t.hp,
+            tags: abilityClasses ?? [],
+            meta: { setHpFromCounter: effect.counterKey },
+          })
           break
         }
         case 'overhealToShield': {
@@ -2803,9 +2941,16 @@ function resolveEffects(
           emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
           break
         case 'adjustCounter':
+          if (effect.requiresTag && !getFighterModifierPool(state, t).some((modifier) => modifier.tags.includes(effect.requiresTag!))) break
           adjustFighterCounter(t, effect.key, effect.amount)
           emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
           break
+        case 'adjustSourceCounter': {
+          const source = getModifierSourceFighter(state, { sourceActorId: t.modifiers.find((modifier) => modifier.sourceActorId === actor.instanceId)?.sourceActorId }) ?? actor
+          adjustFighterCounter(source, effect.key, effect.amount)
+          emitCounterChange(ctx, state.round, source, effect.key, source.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          break
+        }
         case 'adjustCounterByTriggerAmount': {
           const delta = Math.floor(triggerAmount ?? 0)
           if (delta > 0) {
@@ -2978,13 +3123,16 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   const allies = getTeam(state, actor.team)
   const enemies = getOpposingTeam(state, actor.team)
   const explicitTarget = command.targetId ? getFighterById(state, command.targetId) : null
+  const validTargetIds = new Set(getValidTargetIds(state, actor.instanceId, ability.id))
+  const requiresValidatedSingleTarget = ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single'
+  const fallbackSingleTarget = ability.targetRule === 'enemy-single'
+    ? enemies.find((fighter) => isAlive(fighter) && targetHasRequiredTags(state, fighter, ability)) ?? null
+    : ability.targetRule === 'ally-single'
+      ? allies.find((fighter) => isAlive(fighter) && targetHasRequiredTags(state, fighter, ability)) ?? null
+      : null
   const singleTarget: BattleFighterState | null =
-    (explicitTarget && isAlive(explicitTarget) ? explicitTarget : null) ??
-    (ability.targetRule === 'enemy-single'
-      ? enemies.find(isAlive) ?? null
-      : ability.targetRule === 'ally-single'
-        ? allies.find(isAlive) ?? null
-        : null)
+    (explicitTarget && isAlive(explicitTarget) && (!requiresValidatedSingleTarget || validTargetIds.has(explicitTarget.instanceId)) ? explicitTarget : null) ??
+    fallbackSingleTarget
   const allTargeted = ability.targetRule === 'enemy-all'
     ? getOpposingTeam(state, actor.team).filter(isAlive)
     : ability.targetRule === 'ally-all'
@@ -2992,6 +3140,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       : singleTarget && isAlive(singleTarget) ? [singleTarget] : []
 
   tryTriggerCursedNails(state, ctx, actor, ability)
+  triggerMarkedSkillUseReactions(state, ctx, actor, ability)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
   const preDamageReaction = runPreDamageReactionWindow(state, ctx, actor, ability, allTargeted)
   if (!preDamageReaction.cancelAction && isAlive(actor)) {

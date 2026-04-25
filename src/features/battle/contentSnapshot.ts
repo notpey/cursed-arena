@@ -4,7 +4,7 @@ import type { BattleFighterTemplate } from '@/features/battle/types.ts'
 // ways that make older published snapshots stale (kit redesigns, new
 // fighters, breaking effect-shape changes). Snapshots without a matching
 // version are treated as outdated and the runtime falls back to authored.
-export const CONTENT_SCHEMA_VERSION = 2
+export const CONTENT_SCHEMA_VERSION = 3
 
 const draftContentKey = `ca-battle-content-draft-v${CONTENT_SCHEMA_VERSION}`
 const publishedContentKey = `ca-battle-content-published-v${CONTENT_SCHEMA_VERSION}`
@@ -23,7 +23,7 @@ export type BattleContentSnapshot = {
 
 const validAbilityKinds = new Set(['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass'])
 const validTargetRules = new Set(['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all'])
-const validSkillClasses = new Set(['Melee', 'Ranged', 'Physical', 'Energy', 'Affliction', 'Mental', 'Instant', 'Action', 'Control', 'Unique', 'Ultimate'])
+const validSkillClasses = new Set(['Melee', 'Ranged', 'Physical', 'Energy', 'Affliction', 'Mental', 'Instant', 'Action', 'Control', 'Unique', 'Ultimate', 'Strategic', 'Special'])
 
 function deriveAbilityLabel(name: string) {
   const words = name
