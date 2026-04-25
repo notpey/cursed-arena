@@ -1,8 +1,10 @@
 import { getSupabaseClient } from '@/lib/supabase.ts'
 import {
+  CONTENT_SCHEMA_VERSION,
   createContentSnapshot,
   clearDraftBattleContent,
   clearPublishedBattleContent,
+  isSnapshotCurrent,
   readDraftBattleContent,
   readPublishedBattleContent,
   saveDraftBattleContent,
@@ -37,6 +39,7 @@ function clonePublishedSnapshot(snapshot: BattleContentSnapshot): BattleContentS
       enemyTeamIds: snapshot.defaultSetup.enemyTeamIds.slice(),
     },
     updatedAt: Date.now(),
+    schemaVersion: CONTENT_SCHEMA_VERSION,
   }
 }
 
@@ -121,6 +124,11 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
 
     const remote = data.content
     if (!remote || typeof remote.updatedAt !== 'number') return false
+
+    // Reject remote snapshots that don't carry the current schema version.
+    // They were published from an older app build and would re-introduce the
+    // stale roster the moment we wrote them to localStorage.
+    if (!isSnapshotCurrent(remote)) return false
 
     const local = readPublishedBattleContent(fallback)
     if (remote.updatedAt <= local.updatedAt) return false

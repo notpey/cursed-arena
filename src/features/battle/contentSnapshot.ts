@@ -1,7 +1,13 @@
 import type { BattleFighterTemplate } from '@/features/battle/types.ts'
 
-const draftContentKey = 'ca-battle-content-draft-v1'
-const publishedContentKey = 'ca-battle-content-published-v1'
+// Bump CONTENT_SCHEMA_VERSION whenever the authored roster shape changes in
+// ways that make older published snapshots stale (kit redesigns, new
+// fighters, breaking effect-shape changes). Snapshots without a matching
+// version are treated as outdated and the runtime falls back to authored.
+export const CONTENT_SCHEMA_VERSION = 2
+
+const draftContentKey = `ca-battle-content-draft-v${CONTENT_SCHEMA_VERSION}`
+const publishedContentKey = `ca-battle-content-published-v${CONTENT_SCHEMA_VERSION}`
 
 export type BattleContentSetup = {
   playerTeamIds: string[]
@@ -12,6 +18,7 @@ export type BattleContentSnapshot = {
   roster: BattleFighterTemplate[]
   defaultSetup: BattleContentSetup
   updatedAt: number
+  schemaVersion?: number
 }
 
 const validAbilityKinds = new Set(['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass'])
@@ -227,7 +234,12 @@ export function createContentSnapshot(roster: BattleFighterTemplate[], defaultSe
       enemyTeamIds: defaultSetup.enemyTeamIds.slice(),
     },
     updatedAt: Date.now(),
+    schemaVersion: CONTENT_SCHEMA_VERSION,
   }
+}
+
+export function isSnapshotCurrent(snapshot: BattleContentSnapshot | null | undefined): boolean {
+  return Boolean(snapshot) && snapshot!.schemaVersion === CONTENT_SCHEMA_VERSION
 }
 
 export function readDraftBattleContent(fallback: BattleContentSnapshot) {
@@ -246,7 +258,9 @@ export function clearDraftBattleContent() {
 }
 
 export function readPublishedBattleContent(fallback: BattleContentSnapshot) {
-  return cloneSnapshot(readStorage(publishedContentKey) ?? fallback)
+  const stored = readStorage(publishedContentKey)
+  if (!isSnapshotCurrent(stored)) return cloneSnapshot(fallback)
+  return cloneSnapshot(stored!)
 }
 
 export function clearPublishedBattleContent() {
@@ -257,6 +271,7 @@ export function clearPublishedBattleContent() {
 export function savePublishedBattleContent(snapshot: BattleContentSnapshot) {
   const next = cloneSnapshot(snapshot)
   next.updatedAt = typeof snapshot.updatedAt === 'number' ? snapshot.updatedAt : Date.now()
+  next.schemaVersion = CONTENT_SCHEMA_VERSION
   writeStorage(publishedContentKey, next)
   return next
 }
