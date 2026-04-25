@@ -195,32 +195,6 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         counterKey: 'shikigami',
       }),
       definePassive({
-        id: 'megumi-shikigami-pressure-dogs',
-        trigger: 'onAbilityResolve',
-        conditions: [
-          { type: 'abilityId', abilityId: 'megumi-dogs' },
-          { type: 'counterAtLeast', key: 'shikigami', value: 3 },
-        ],
-        effects: [{ type: 'damage', power: 5, target: 'inherit' }],
-        label: 'Shikigami Pressure',
-        description: 'If Megumi has 3 or more Shikigami, his damaging Ten Shadows skills deal 5 additional damage.',
-        icon: { label: 'SP', tone: 'red' },
-        hidden: true,
-      }),
-      definePassive({
-        id: 'megumi-shikigami-pressure-nue',
-        trigger: 'onAbilityResolve',
-        conditions: [
-          { type: 'abilityId', abilityId: 'megumi-nue' },
-          { type: 'counterAtLeast', key: 'shikigami', value: 3 },
-        ],
-        effects: [{ type: 'damage', power: 5, target: 'inherit' }],
-        label: 'Shikigami Pressure',
-        description: 'If Megumi has 3 or more Shikigami, his damaging Ten Shadows skills deal 5 additional damage.',
-        icon: { label: 'SP', tone: 'red' },
-        hidden: true,
-      }),
-      definePassive({
         id: 'megumi-divine-dogs-pack',
         trigger: 'onAbilityResolve',
         conditions: [
@@ -228,14 +202,14 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
           { type: 'counterAtLeast', key: 'shikigami', value: 4 },
         ],
         effects: [
-          { type: 'damage', power: 15, target: 'inherit' },
           { type: 'classStun', duration: 1, blockedClasses: ['Physical'], target: 'inherit' },
           { type: 'adjustCounter', key: 'shikigami', amount: -2, target: 'self' },
         ],
         label: 'Divine Dogs Pack Hunt',
-        description: 'With more than 3 Shikigami, Divine Dogs: Pursuit deals 15 additional damage, seals Physical skills for 1 turn, and consumes 2 Shikigami.',
+        description: 'With 4 or more Shikigami, Divine Dogs: Pursuit also seals Physical skills for 1 turn and consumes 2 Shikigami.',
         icon: { label: 'DD', tone: 'red' },
         hidden: true,
+        iconFromAbilityId: 'megumi-dogs',
       }),
       definePassive({
         id: 'megumi-nue-overhead-drop',
@@ -292,14 +266,17 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       skill({
         id: 'megumi-dogs',
         name: 'Divine Dogs: Pursuit',
-        description: 'Deals 5 damage to one enemy. If Megumi has more than 3 Shikigami, this skill deals 15 additional damage, seals their Physical skills for 1 turn, and consumes 2 Shikigami.',
+        description: 'Deals 5 damage to one enemy, plus 5 damage per Shikigami stack. At 4 or more Shikigami, also seals the target\'s Physical skills for 1 turn and consumes 2 Shikigami.',
         kind: 'attack',
         targetRule: 'enemy-single',
         classes: ['Melee', 'Physical', 'Instant'],
         cooldown: 0,
         energyCost: { physical: 1 },
         power: 5,
-        effects: [{ type: 'damage', power: 5, target: 'inherit' }],
+        effects: [
+          { type: 'damage', power: 5, target: 'inherit' },
+          { type: 'damageScaledByCounter', counterKey: 'shikigami', counterSource: 'actor', powerPerStack: 5, consumeStacks: false, target: 'inherit' },
+        ],
       }),
       skill({
         id: 'megumi-nue',

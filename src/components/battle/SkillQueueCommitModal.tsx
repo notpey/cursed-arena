@@ -1,5 +1,5 @@
 import { type DragEvent, type TouchEvent, useRef, useState } from 'react'
-import { getCommandSummary } from '@/components/battle/battleDisplay'
+import { describeSkillEffectForUi, getCommandSummary } from '@/components/battle/battleDisplay'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import {
@@ -13,10 +13,24 @@ import {
   type BattleEnergyPool,
   type BattleEnergyType,
 } from '@/features/battle/energy'
-import { getAbilityById } from '@/features/battle/engine'
-import type { BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import { getAbilityById, isAlive } from '@/features/battle/engine'
+import type { BattleFighterState, BattleState, PassiveEffect, QueuedBattleAction } from '@/features/battle/types'
 
 type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
+
+function buildRoundStartPreview(team: BattleFighterState[]): Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> {
+  const rows: Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> = []
+  for (const fighter of team) {
+    if (!isAlive(fighter)) continue
+    for (const passive of fighter.passiveEffects ?? []) {
+      if (passive.trigger !== 'onRoundStart') continue
+      if (passive.hidden) continue
+      const effectText = passive.effects.map(describeSkillEffectForUi).join(', ')
+      rows.push({ fighter, passive, text: effectText || passive.description || passive.label })
+    }
+  }
+  return rows
+}
 
 function buildDefaultRandomAllocation(
   rows: { fighter: BattleFighterState; cost: BattleEnergyCost | null; isPass: boolean }[],
@@ -243,6 +257,25 @@ export function SkillQueueCommitModal({
             <p className="ca-display mt-1 text-[1.35rem] leading-tight text-ca-text">CONFIRM ACTIONS</p>
           )}
         </div>
+
+        {(() => {
+          const roundStartRows = buildRoundStartPreview(state.playerTeam)
+          if (roundStartRows.length === 0) return null
+          return (
+            <div className="border-b border-white/8 px-5 py-4">
+              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ROUND START — RESOLVES BEFORE YOUR SKILLS</p>
+              <div className="mt-2 space-y-1.5">
+                {roundStartRows.map(({ fighter, passive, text }) => (
+                  <div key={`${fighter.instanceId}-${passive.id ?? passive.label}`} className="flex items-center gap-2 rounded-[0.4rem] border border-ca-teal/18 bg-ca-teal-wash/40 px-3 py-2">
+                    <span className="ca-mono-label w-[3.2rem] shrink-0 text-[0.42rem] text-ca-teal">{fighter.shortName.toUpperCase()}</span>
+                    <span className="ca-mono-label shrink-0 text-[0.42rem] text-ca-text-3">{passive.label.toUpperCase()}</span>
+                    <span className="truncate text-[0.72rem] text-ca-text-2">{text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         <div className="border-b border-white/8 px-5 py-4">
           <div className="flex items-center justify-between gap-3">

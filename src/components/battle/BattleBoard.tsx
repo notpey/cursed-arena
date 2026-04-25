@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { BattleAbilityStrip } from '@/components/battle/BattleAbilityStrip'
 import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
+import { setActiveBattleStateForPips } from '@/components/battle/battleDisplay'
 import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
 
 type TimelineFocus = {
@@ -48,6 +50,11 @@ export function BattleBoard({
   interactionLocked?: boolean
   timelineFocus?: TimelineFocus | null
 }) {
+  useEffect(() => {
+    setActiveBattleStateForPips(state)
+    return () => setActiveBattleStateForPips(null)
+  }, [state])
+
   return (
     <section className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(12,11,18,0.26),rgba(8,8,13,0.2))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] animate-ca-turn-reveal sm:px-4">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.32),transparent_42%,rgba(5,216,189,0.28))]" />
@@ -143,11 +150,9 @@ export function BattleBoard({
                           : 'border-[rgba(250,39,66,0.2)]',
                     ].join(' ')}
                   >
-                    <div className="flex flex-col items-center gap-1">
-                      {/* Pip row above the portrait, centered with the frame */}
-                      <div className="flex min-h-[1.55rem] items-center justify-center">
-                        <ActiveEffectPips fighter={enemy} mirrored />
-                      </div>
+                    <div className="flex items-start gap-2">
+                      {/* Pip column to the LEFT of the portrait so the stack can stretch */}
+                      <ActiveEffectPips fighter={enemy} mirrored column className="pt-0.5" />
 
                       <BattlePortraitSlot
                         fighter={enemy}

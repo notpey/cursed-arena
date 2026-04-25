@@ -347,15 +347,23 @@ function tickEffectImmunities(fighter: BattleFighterState) {
     .filter((immunity) => immunity.remainingRounds > 0)
 }
 
-function tickClassStuns(fighter: BattleFighterState) {
+function tickClassStuns(fighter: BattleFighterState, round: number) {
   fighter.classStuns = fighter.classStuns
-    .map((cs) => ({ ...cs, remainingRounds: Math.max(0, cs.remainingRounds - 1) }))
+    .map((cs) => {
+      // Skip the first end-of-round tick: "stun for N turns" should mean
+      // the victim misses N of *their own* turns, not N-1.
+      if (cs.appliedInRound !== undefined && cs.appliedInRound === round) return cs
+      return { ...cs, remainingRounds: Math.max(0, cs.remainingRounds - 1) }
+    })
     .filter((cs) => cs.remainingRounds > 0)
 }
 
-function tickReactionGuards(fighter: BattleFighterState) {
+function tickReactionGuards(fighter: BattleFighterState, round: number) {
   fighter.reactionGuards = fighter.reactionGuards
-    .map((guard) => ({ ...guard, remainingRounds: Math.max(0, guard.remainingRounds - 1) }))
+    .map((guard) => {
+      if (guard.appliedInRound !== undefined && guard.appliedInRound === round) return guard
+      return { ...guard, remainingRounds: Math.max(0, guard.remainingRounds - 1) }
+    })
     .filter((guard) => guard.remainingRounds > 0)
 }
 
@@ -363,12 +371,14 @@ function createClassStunState(
   actor: BattleFighterState,
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'classStun' }>,
+  round: number,
 ): BattleClassStunState {
   return {
     id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
     label: `Class Stun (${effect.blockedClasses.join(', ')})`,
     blockedClasses: [...effect.blockedClasses],
     remainingRounds: effect.duration,
+    appliedInRound: round,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,
   }
@@ -378,12 +388,14 @@ function createReactionGuardState(
   actor: BattleFighterState,
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'counter' | 'reflect' }>,
+  round: number,
 ): BattleReactionGuardState {
   return {
     id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
     kind: effect.type,
     label: effect.type === 'counter' ? 'Counter' : 'Reflect',
     remainingRounds: effect.duration,
+    appliedInRound: round,
     counterDamage: effect.type === 'counter' ? effect.counterDamage : undefined,
     abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined,
     consumeOnTrigger: effect.consumeOnTrigger ?? true,
@@ -1580,6 +1592,11 @@ function applyModifierToFighter(
     targetId: target.instanceId,
     nextIndex: target.modifiers.length,
   })
+  // Stamp the round for disabling statuses so their first end-of-round tick
+  // is skipped (so "stun for N turns" means N victim turns, not N-1).
+  if (next.statusKind === 'stun' || next.stat === 'canAct') {
+    next.appliedInRound = state.round
+  }
   target.modifiers = upsertModifier(target.modifiers, next)
   syncFighterStatusesFromModifiers(target)
   emitModifierApplied(ctx, state.round, target, next, actorId, abilityId)
@@ -2375,7 +2392,8 @@ function resolveEffects(
           break
         }
         case 'damageScaledByCounter': {
-          const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
+          const counterOwner = (effect.counterSource ?? 'target') === 'actor' ? effectActor : effectTarget
+          const stackCount = counterOwner.stateCounters[effect.counterKey] ?? 0
           if (stackCount <= 0) break
           const basePower = stackCount * effect.powerPerStack
           const isPiercing = effect.piercing ?? false
@@ -2400,10 +2418,10 @@ function resolveEffects(
           }
           applyDamagePacket(state, ctx, packetActor, packetTarget, packet, effect)
           if (effect.consumeStacks) {
-            effectTarget.stateCounters[effect.counterKey] = 0
-            emitCounterChange(ctx, state.round, effectTarget, effect.counterKey, 0, effectActor.instanceId, abilityId)
+            counterOwner.stateCounters[effect.counterKey] = 0
+            emitCounterChange(ctx, state.round, counterOwner, effect.counterKey, 0, effectActor.instanceId, abilityId)
             if (effect.modifierTag) {
-              removeModifiersFromFighter(state, ctx, effectTarget, { tags: [effect.modifierTag] }, effectActor.instanceId, abilityId)
+              removeModifiersFromFighter(state, ctx, counterOwner, { tags: [effect.modifierTag] }, effectActor.instanceId, abilityId)
             }
           }
           break
@@ -2468,7 +2486,7 @@ function resolveEffects(
           makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName} is stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
           break
         case 'classStun': {
-          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, effect))
+          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, effect, state.round))
           makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
           makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
             actorId: effectActor.instanceId,
@@ -2482,7 +2500,7 @@ function resolveEffects(
         case 'classStunScaledByCounter': {
           const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
           const duration = effect.baseDuration + stackCount * effect.durationPerStack
-          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, target: effect.target }))
+          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, target: effect.target }, state.round))
           makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${duration} turn${duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, duration, abilityId)
           makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
             actorId: effectActor.instanceId,
@@ -2734,7 +2752,7 @@ function resolveEffects(
         }
         case 'counter': {
           t.reactionGuards = t.reactionGuards.filter((guard) => guard.kind !== 'counter')
-          const guard = createReactionGuardState(actor, abilityId, effect)
+          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
           t.reactionGuards.push(guard)
           makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
             actorId: actor.instanceId,
@@ -2758,7 +2776,7 @@ function resolveEffects(
         }
         case 'reflect': {
           t.reactionGuards = t.reactionGuards.filter((guard) => guard.kind !== 'reflect')
-          const guard = createReactionGuardState(actor, abilityId, effect)
+          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
           t.reactionGuards.push(guard)
           makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
             actorId: actor.instanceId,
@@ -2848,7 +2866,7 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     })
 
     const beforeKinds = fighter.statuses.map((status) => status.kind)
-    const ticked = tickModifiers(fighter.modifiers)
+    const ticked = tickModifiers(fighter.modifiers, state.round)
     fighter.modifiers = ticked.modifiers
     syncFighterStatusesFromModifiers(fighter)
 
@@ -2862,8 +2880,8 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     tickAbilityState(fighter)
     tickCostModifiers(fighter)
     tickEffectImmunities(fighter)
-    tickClassStuns(fighter)
-    tickReactionGuards(fighter)
+    tickClassStuns(fighter, state.round)
+    tickReactionGuards(fighter, state.round)
   })
 
   ;(['player', 'enemy'] as BattleTeamId[]).forEach((team) => {

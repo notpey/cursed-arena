@@ -12,8 +12,23 @@ import {
   type BattleEnergyPool,
   type BattleEnergyType,
 } from '@/features/battle/energy'
-import { getAbilityById } from '@/features/battle/engine'
-import type { BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import { describeSkillEffectForUi } from '@/components/battle/battleDisplay'
+import { getAbilityById, isAlive } from '@/features/battle/engine'
+import type { BattleFighterState, BattleState, PassiveEffect, QueuedBattleAction } from '@/features/battle/types'
+
+function buildRoundStartPreview(team: BattleFighterState[]): Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> {
+  const rows: Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> = []
+  for (const fighter of team) {
+    if (!isAlive(fighter)) continue
+    for (const passive of fighter.passiveEffects ?? []) {
+      if (passive.trigger !== 'onRoundStart') continue
+      if (passive.hidden) continue
+      const effectText = passive.effects.map(describeSkillEffectForUi).join(', ')
+      rows.push({ fighter, passive, text: effectText || passive.description || passive.label })
+    }
+  }
+  return rows
+}
 
 type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
 type EnergyAllocation = Partial<Record<BattleEnergyType, number>>
@@ -374,6 +389,25 @@ export function NarutoQueueCommitModal({
               </div>
             </section>
           </div>
+
+          {(() => {
+            const roundStartRows = buildRoundStartPreview(state.playerTeam)
+            if (roundStartRows.length === 0) return null
+            return (
+              <section className="mt-3 border border-black/35 bg-[rgba(13,12,17,0.7)] p-2">
+                <p className="ca-mono-label text-[0.48rem] tracking-[0.12em] text-ca-teal">ROUND START — RESOLVES BEFORE YOUR SKILLS</p>
+                <div className="mt-2 space-y-1">
+                  {roundStartRows.map(({ fighter, passive, text }) => (
+                    <div key={`${fighter.instanceId}-${passive.id ?? passive.label}`} className="flex items-center gap-2 border border-ca-teal/20 bg-ca-teal-wash/40 px-2 py-1.5">
+                      <span className="ca-mono-label w-[3rem] shrink-0 text-[0.42rem] text-ca-teal">{fighter.shortName.toUpperCase()}</span>
+                      <span className="ca-mono-label shrink-0 text-[0.42rem] text-ca-text-3">{passive.label.toUpperCase()}</span>
+                      <span className="truncate text-[0.72rem] text-ca-text-2">{text}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )
+          })()}
 
           <section className="mt-3 border border-black/35 bg-[rgba(13,12,17,0.7)] p-2">
             <div className="mb-2 flex items-center justify-between gap-3">

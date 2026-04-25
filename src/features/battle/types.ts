@@ -240,6 +240,10 @@ export type BattleModifierInstance = {
   visible: boolean
   stacking: BattleModifierStacking
   statusKind?: BattleStatusKind
+  // Round in which this modifier was applied. Used to skip the first
+  // end-of-round tick for disabling statuses (stun) so their duration
+  // measures victim turns, not applier turns.
+  appliedInRound?: number
   /** When set on damageTaken modifiers, only applies to damage from abilities with this class */
   damageClass?: BattleSkillDamageType
 }
@@ -249,6 +253,9 @@ export type BattleClassStunState = {
   label: string
   blockedClasses: BattleSkillClass[]
   remainingRounds: number
+  // Round in which this class-stun was applied. The end-of-round tick for
+  // that same round is skipped so "duration: N" always means N victim turns.
+  appliedInRound?: number
   sourceActorId?: string
   sourceAbilityId?: string
 }
@@ -260,6 +267,7 @@ export type BattleReactionGuardState = {
   kind: BattleReactionGuardKind
   label: string
   remainingRounds: number
+  appliedInRound?: number
   counterDamage?: number
   abilityClasses?: BattleSkillClass[]
   consumeOnTrigger: boolean
@@ -501,7 +509,7 @@ export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | '
 export type SkillEffect =
   | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
   | { type: 'damageFiltered'; power: number; requiresTag: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
-  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; counterSource?: 'actor' | 'target' }
   | { type: 'shieldDamage'; amount: number; tag?: string; target: EffectTarget }
   | { type: 'energyGain'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'energyDrain'; amount: BattleEnergyCost; target: EffectTarget }
@@ -569,6 +577,9 @@ export type PassiveEffect = {
   // Declares that this passive is the visible "home" for a fighter counter
   // (e.g. 'shikigami'). The live count is rendered on this passive's pip.
   counterKey?: string
+  // Optional: reuse another ability's icon for this passive's pip. Useful
+  // when a passive is conceptually a sub-effect of a named skill.
+  iconFromAbilityId?: string
 }
 
 export type TurnPhase =

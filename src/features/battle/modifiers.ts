@@ -246,12 +246,19 @@ export function removeModifiers(modifiers: BattleModifierInstance[], filter: Bat
   return { modifiers: next, removed }
 }
 
-export function tickModifiers(modifiers: BattleModifierInstance[]) {
+export function tickModifiers(modifiers: BattleModifierInstance[], round?: number) {
   const expired: BattleModifierInstance[] = []
   const next: BattleModifierInstance[] = []
 
   modifiers.forEach((modifier) => {
     if (!isRoundModifier(modifier.duration)) {
+      next.push(modifier)
+      return
+    }
+
+    // Skip the first end-of-round tick for disabling statuses so "stun for
+    // N turns" reliably means N victim turns.
+    if (round !== undefined && modifier.appliedInRound === round) {
       next.push(modifier)
       return
     }

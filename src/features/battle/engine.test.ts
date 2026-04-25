@@ -94,9 +94,53 @@ describe('battle engine scenarios', () => {
 
     const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
     const updatedMegumi = getFighter(result.state, 'player', 'megumi')
+    // Base 5 + 4 stacks * 5/stack = 25 damage. Yuji maxHp 104 → 79.
     expect(updatedYuji.hp).toBe(79)
+    // Pack Hunt at ≥4 stacks consumes 2 → 4 - 2 = 2.
     expect(updatedMegumi.stateCounters.shikigami).toBe(2)
     expect(updatedYuji.classStuns.some((stun) => stun.blockedClasses.includes('Physical'))).toBe(true)
+  })
+
+  test('Divine Dogs scales linearly per Shikigami stack (no ≥4 spike)', () => {
+    const state = createChargedBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    megumi.stateCounters.shikigami = 2
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', megumi.instanceId, 'megumi-dogs', yuji.instanceId),
+      'player',
+    )
+    const updatedYuji = getFighter(result.state, 'enemy', 'yuji')
+    const updatedMegumi = getFighter(result.state, 'player', 'megumi')
+    // Base 5 + 2 * 5 = 15 damage. Yuji maxHp 104 → 89.
+    expect(updatedYuji.hp).toBe(89)
+    // Stacks not consumed below the ≥4 threshold.
+    expect(updatedMegumi.stateCounters.shikigami).toBe(2)
+    expect(updatedYuji.classStuns.length).toBe(0)
+  })
+
+  test('classStun persists through the round it was applied in', () => {
+    const state = createChargedBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    megumi.stateCounters.shikigami = 4
+
+    const afterTurn = resolveTeamTurn(
+      state,
+      queue('player', megumi.instanceId, 'megumi-dogs', yuji.instanceId),
+      'player',
+    )
+    const yujiAfterTurn = getFighter(afterTurn.state, 'enemy', 'yuji')
+    expect(yujiAfterTurn.classStuns.some((cs) => cs.blockedClasses.includes('Physical'))).toBe(true)
+
+    // End the same round. Because the class-stun was applied this round,
+    // the end-of-round tick must skip it — the victim still has the seal
+    // for their next turn.
+    const afterRound = endRound(afterTurn.state)
+    const yujiAfterRound = getFighter(afterRound.state, 'enemy', 'yuji')
+    expect(yujiAfterRound.classStuns.some((cs) => cs.blockedClasses.includes('Physical'))).toBe(true)
   })
 
   test('random CE allocation on queued commands is honored during spend', () => {

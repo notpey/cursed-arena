@@ -14,6 +14,14 @@ import type {
   SkillEffect,
 } from '@/features/battle/types'
 
+// Optional battle state for cross-team icon resolution. When provided,
+// pips sourced from an opposing fighter's ability can still show the
+// correct skill art (e.g. Nue's icon on a stunned enemy portrait).
+let activeBattleState: BattleState | null = null
+export function setActiveBattleStateForPips(state: BattleState | null) {
+  activeBattleState = state
+}
+
 export type ActivePipTone = 'default' | 'burn' | 'stun' | 'heal' | 'buff' | 'debuff' | 'void'
 
 export type ActiveEffectLine = {
@@ -76,34 +84,83 @@ function modEffectLine(mod: BattleModifierInstance): { line: string; tone: Activ
 
 // ── Icon resolution ───────────────────────────────────────────────────────────
 
-function resolveSourceIcon(fighter: BattleFighterState, sourceAbilityId: string): BattleAbilityIcon | null {
+function findAbilityOnFighter(fighter: BattleFighterState, abilityId: string): BattleAbilityTemplate | null {
   const allAbilities = [...fighter.abilities, fighter.ultimate]
-  const ability = allAbilities.find((a) => a.id === sourceAbilityId)
-  if (ability) return ability.icon
-
+  const ability = allAbilities.find((a) => a.id === abilityId)
+  if (ability) return ability
   for (const delta of fighter.abilityState) {
-    if (delta.mode === 'replace' && delta.replacement.id === sourceAbilityId) return delta.replacement.icon
-    if (delta.mode === 'grant' && delta.grantedAbility.id === sourceAbilityId) return delta.grantedAbility.icon
+    if (delta.mode === 'replace' && delta.replacement.id === abilityId) return delta.replacement
+    if (delta.mode === 'grant' && delta.grantedAbility.id === abilityId) return delta.grantedAbility
+  }
+  return null
+}
+
+function findAbilityAnywhere(abilityId: string): BattleAbilityTemplate | null {
+  if (!activeBattleState) return null
+  for (const team of [activeBattleState.playerTeam, activeBattleState.enemyTeam]) {
+    for (const fighter of team) {
+      const ability = findAbilityOnFighter(fighter, abilityId)
+      if (ability) return ability
+    }
+  }
+  return null
+}
+
+function findPassiveAnywhere(passiveId: string): PassiveEffect | null {
+  if (!activeBattleState) return null
+  for (const team of [activeBattleState.playerTeam, activeBattleState.enemyTeam]) {
+    for (const fighter of team) {
+      const passive = fighter.passiveEffects?.find((p) => p.id === passiveId)
+      if (passive) return passive
+    }
+  }
+  return null
+}
+
+function resolveSourceIcon(fighter: BattleFighterState, sourceAbilityId: string): BattleAbilityIcon | null {
+  const local = findAbilityOnFighter(fighter, sourceAbilityId)
+  if (local) return local.icon
+
+  const passiveLocal = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
+  if (passiveLocal) {
+    if (passiveLocal.icon?.src) return passiveLocal.icon
+    if (passiveLocal.iconFromAbilityId) {
+      const ref = findAbilityOnFighter(fighter, passiveLocal.iconFromAbilityId) ?? findAbilityAnywhere(passiveLocal.iconFromAbilityId)
+      if (ref) return ref.icon
+    }
+    if (passiveLocal.icon) return passiveLocal.icon
   }
 
-  const passive = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
-  if (passive?.icon) return passive.icon
+  // Fall back to cross-team lookup — statuses inflicted by an opposing
+  // fighter should still render with the correct skill/passive art.
+  const remoteAbility = findAbilityAnywhere(sourceAbilityId)
+  if (remoteAbility) return remoteAbility.icon
+
+  const remotePassive = findPassiveAnywhere(sourceAbilityId)
+  if (remotePassive) {
+    if (remotePassive.icon?.src) return remotePassive.icon
+    if (remotePassive.iconFromAbilityId) {
+      const ref = findAbilityAnywhere(remotePassive.iconFromAbilityId)
+      if (ref) return ref.icon
+    }
+    if (remotePassive.icon) return remotePassive.icon
+  }
 
   return null
 }
 
 function resolveSourceName(fighter: BattleFighterState, sourceAbilityId: string): string {
-  const allAbilities = [...fighter.abilities, fighter.ultimate]
-  const ability = allAbilities.find((a) => a.id === sourceAbilityId)
-  if (ability) return ability.name
+  const local = findAbilityOnFighter(fighter, sourceAbilityId)
+  if (local) return local.name
 
-  for (const delta of fighter.abilityState) {
-    if (delta.mode === 'replace' && delta.replacement.id === sourceAbilityId) return delta.replacement.name
-    if (delta.mode === 'grant' && delta.grantedAbility.id === sourceAbilityId) return delta.grantedAbility.name
-  }
+  const passiveLocal = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
+  if (passiveLocal) return passiveLocal.label
 
-  const passive = fighter.passiveEffects?.find((p) => p.id === sourceAbilityId)
-  if (passive) return passive.label
+  const remoteAbility = findAbilityAnywhere(sourceAbilityId)
+  if (remoteAbility) return remoteAbility.name
+
+  const remotePassive = findPassiveAnywhere(sourceAbilityId)
+  if (remotePassive) return remotePassive.label
 
   return sourceAbilityId
 }

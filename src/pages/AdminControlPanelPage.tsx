@@ -1470,6 +1470,51 @@ export function AdminControlPanelPage() {
                                     />
                                   ) : null}
                                 </div>
+                                <div className="grid gap-3 md:grid-cols-[1fr_1fr] items-start">
+                                  <AssetField
+                                    fieldId={`passive-icon-${index}`}
+                                    label="Passive Icon"
+                                    value={selectedPassive.icon?.src ?? ''}
+                                    onChange={(value) => updateSelectedPassive((p) => {
+                                      const current = p.icon ?? { label: (p.label?.slice(0, 2) || 'P').toUpperCase(), tone: 'teal' as const }
+                                      p.icon = { ...current, src: value || undefined }
+                                    })}
+                                    onImport={(file) => handleImageImport((value) => updateSelectedPassive((p) => {
+                                      const current = p.icon ?? { label: (p.label?.slice(0, 2) || 'P').toUpperCase(), tone: 'teal' as const }
+                                      p.icon = { ...current, src: value || undefined }
+                                    }), file, 'PASSIVE ICON UPDATED', `passive-icons/${selectedFighter?.id ?? 'passive'}-${index}`)}
+                                    helper="Square. Recommended 256x256. Leave empty to borrow from a linked skill below."
+                                  />
+                                  <SelectField
+                                    label="Borrow Icon From Skill"
+                                    value={selectedPassive.iconFromAbilityId ?? ''}
+                                    options={[
+                                      { value: '', label: 'NONE' },
+                                      ...[...(selectedFighter?.abilities ?? []), selectedFighter?.ultimate]
+                                        .filter((ability): ability is BattleAbilityTemplate => Boolean(ability))
+                                        .map((ability) => ({ value: ability.id, label: ability.name.toUpperCase() })),
+                                    ]}
+                                    onChange={(value) => updateSelectedPassive((p) => { p.iconFromAbilityId = value || undefined })}
+                                  />
+                                </div>
+                                <div className="grid gap-3 md:grid-cols-2 items-start">
+                                  <label className="flex items-center gap-2 rounded-[8px] border border-white/8 bg-[rgba(11,11,18,0.55)] px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(selectedPassive.hidden)}
+                                      onChange={(event) => updateSelectedPassive((p) => { p.hidden = event.target.checked ? true : undefined })}
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="ca-mono-label text-[0.42rem] text-ca-text-3">HIDDEN (SUB-EFFECT)</p>
+                                      <p className="mt-1 text-xs leading-5 text-ca-text-3">Runs in the engine but doesn't render as its own passive card. Use for rules already covered by a skill's copy.</p>
+                                    </div>
+                                  </label>
+                                  <InputField
+                                    label="Counter Key"
+                                    value={selectedPassive.counterKey ?? ''}
+                                    onChange={(value) => updateSelectedPassive((p) => { p.counterKey = value.trim() || undefined })}
+                                  />
+                                </div>
                                 <div className="rounded-[8px] border border-ca-teal/18 bg-ca-teal-wash px-3 py-2">
                                   <p className="ca-mono-label text-[0.38rem] text-ca-teal">Trigger Notes</p>
                                   <p className="mt-1 text-sm leading-6 text-ca-text-2">{passiveTriggerMeta[selectedPassive.trigger].hint}</p>

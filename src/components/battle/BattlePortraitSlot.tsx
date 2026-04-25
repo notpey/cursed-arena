@@ -42,12 +42,12 @@ function pipToneBadge(tone: ActivePipTone): string {
   }
 }
 
-// ── Icon tone → fallback bg ───────────────────────────────────────────────────
+// ── Icon tone → fallback bg (kept subtle so skill art reads through) ─────────
 function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardAccent): string {
-  if (tone === 'teal')  return 'bg-[rgba(5,216,189,0.18)]'
-  if (tone === 'red')   return 'bg-[rgba(250,39,66,0.18)]'
-  if (tone === 'gold')  return 'bg-[rgba(252,211,77,0.18)]'
-  return 'bg-[rgba(200,210,230,0.10)]'
+  if (tone === 'teal')  return 'bg-[rgba(5,216,189,0.06)]'
+  if (tone === 'red')   return 'bg-[rgba(250,39,66,0.06)]'
+  if (tone === 'gold')  return 'bg-[rgba(252,211,77,0.06)]'
+  return 'bg-[rgba(200,210,230,0.04)]'
 }
 
 function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; tooltipDown?: boolean }) {
@@ -312,7 +312,9 @@ export function BattlePortraitSlot({
       ? 'STUN'
       : hasStatus(fighter.statuses, 'invincible')
         ? 'VOID'
-        : null
+        : fighter.classStuns.length > 0
+          ? 'SEAL'
+          : null
 
   return (
     <button
