@@ -52,6 +52,19 @@ export function cloneSkillEffect(effect: SkillEffect): SkillEffect {
         ...effect,
         effects: effect.effects.map(cloneSkillEffect),
       }
+    case 'conditional':
+      return {
+        ...effect,
+        conditions: effect.conditions.map(cloneReactionCondition),
+        effects: effect.effects.map(cloneSkillEffect),
+        elseEffects: effect.elseEffects?.map(cloneSkillEffect),
+      }
+    case 'reaction':
+      return {
+        ...effect,
+        abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined,
+        effects: effect.effects.map(cloneSkillEffect),
+      }
     case 'replaceAbility':
       return {
         ...effect,
@@ -116,6 +129,10 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `self has ${condition.status}`
     case 'targetHasStatus':
       return `target has ${condition.status}`
+    case 'actorHasModifierTag':
+      return `self has ${condition.tag}`
+    case 'targetHasModifierTag':
+      return `target has ${condition.tag}`
     case 'abilityId':
       return `using ${condition.abilityId}`
     case 'abilityClass':
@@ -136,4 +153,3 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return 'using an ultimate'
   }
 }
-

@@ -72,6 +72,7 @@ import type {
   BattleModifierTemplate,
   BattleReactionCondition,
   BattleReactionGuardState,
+  BattleReactionTrigger,
   BattleResolutionResult,
   BattleResourceKey,
   BattleShieldState,
@@ -160,6 +161,8 @@ function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     reactionGuards: fighter.reactionGuards.map((guard) => ({
       ...guard,
       abilityClasses: guard.abilityClasses ? [...guard.abilityClasses] : undefined,
+      triggeredRounds: guard.triggeredRounds ? [...guard.triggeredRounds] : undefined,
+      effects: guard.effects ? guard.effects.map(cloneEffect) : undefined,
     })),
     lastAttackerId: fighter.lastAttackerId,
   }
@@ -261,7 +264,7 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         costModifiers: [],
         effectImmunities: [],
         stateFlags: {},
-        stateCounters: {},
+        stateCounters: { ...(template.initialStateCounters ?? {}) },
         lastUsedAbilityId: null,
         classStuns: [],
         reactionGuards: [],
@@ -387,18 +390,23 @@ function createClassStunState(
 function createReactionGuardState(
   actor: BattleFighterState,
   abilityId: string | undefined,
-  effect: Extract<SkillEffect, { type: 'counter' | 'reflect' }>,
+  effect: Extract<SkillEffect, { type: 'counter' | 'reflect' | 'reaction' }>,
   round: number,
 ): BattleReactionGuardState {
   return {
     id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
-    kind: effect.type,
-    label: effect.type === 'counter' ? 'Counter' : 'Reflect',
+    kind: effect.type === 'reaction' ? 'effect' : effect.type,
+    label: effect.type === 'counter' ? 'Counter' : effect.type === 'reflect' ? 'Reflect' : effect.label,
     remainingRounds: effect.duration,
     appliedInRound: round,
     counterDamage: effect.type === 'counter' ? effect.counterDamage : undefined,
     abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined,
     consumeOnTrigger: effect.consumeOnTrigger ?? true,
+    trigger: effect.type === 'reaction' ? effect.trigger : undefined,
+    harmfulOnly: effect.type === 'reaction' ? effect.harmfulOnly : undefined,
+    oncePerRound: effect.type === 'reaction' ? effect.oncePerRound : undefined,
+    triggeredRounds: effect.type === 'reaction' ? [] : undefined,
+    effects: effect.type === 'reaction' ? effect.effects.map(cloneEffect) : undefined,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,
   }
@@ -759,6 +767,70 @@ function triggerMarkedSkillUseReactions(
     if (!source || !isAlive(source)) continue
     adjustFighterCounter(source, 'sukuna_bonus_hp', 5)
     emitCounterChange(ctx, state.round, source, 'sukuna_bonus_hp', source.stateCounters.sukuna_bonus_hp ?? 0, source.instanceId, modifier.sourceAbilityId ?? ability.id)
+  }
+}
+
+function runEffectReactionGuards(
+  state: BattleState,
+  ctx: ResolutionContext,
+  observed: BattleFighterState,
+  trigger: BattleReactionTrigger,
+  source: BattleFighterState | null,
+  ability?: BattleAbilityTemplate,
+) {
+  const guards = [...observed.reactionGuards].filter((guard) => guard.kind === 'effect' && guard.trigger === trigger && guard.remainingRounds > 0)
+  if (guards.length === 0) return
+
+  if (source) {
+    observed.lastAttackerId = source.instanceId
+  }
+
+  for (const guard of guards) {
+    if (!observed.reactionGuards.some((active) => active.id === guard.id)) continue
+    if (guard.harmfulOnly && (!ability || !isHarmfulAbility(ability))) continue
+    if (ability && !guardMatchesAbility(guard, ability)) continue
+    if (guard.oncePerRound && guard.triggeredRounds?.includes(state.round)) continue
+
+    const reactionActor = guard.sourceActorId ? getFighterById(state, guard.sourceActorId) : null
+    const effectActor = reactionActor && isAlive(reactionActor) ? reactionActor : observed
+    const effects = guard.effects?.map(cloneEffect) ?? []
+    if (effects.length === 0) continue
+    if (source) {
+      effectActor.lastAttackerId = source.instanceId
+    }
+
+    if (guard.oncePerRound) {
+      const liveGuard = observed.reactionGuards.find((active) => active.id === guard.id)
+      if (liveGuard) {
+        liveGuard.triggeredRounds = [...(liveGuard.triggeredRounds ?? []), state.round]
+      }
+    }
+
+    if (guard.consumeOnTrigger) {
+      consumeReactionGuard(observed, guard.id)
+    }
+
+    resolveEffects(
+      state,
+      ctx,
+      effectActor,
+      observed,
+      effects,
+      guard.sourceAbilityId ?? ability?.id,
+      ability?.classes,
+    )
+
+    makeEvent(
+      ctx,
+      state.round,
+      'status',
+      'teal',
+      `${observed.shortName} triggered ${guard.label}.`,
+      effectActor.instanceId,
+      observed.instanceId,
+      undefined,
+      guard.sourceAbilityId ?? ability?.id,
+    )
   }
 }
 export function coinFlip(seed = 'default-battle-seed'): BattleTeamId {
@@ -1250,6 +1322,10 @@ function matchesReactionCondition(
       return hasModifierStatus(actor.modifiers, condition.status)
     case 'targetHasStatus':
       return Boolean(context.target && hasModifierStatus(context.target.modifiers, condition.status))
+    case 'actorHasModifierTag':
+      return actor.modifiers.some((modifier) => modifier.tags.includes(condition.tag))
+    case 'targetHasModifierTag':
+      return Boolean(context.target && context.target.modifiers.some((modifier) => modifier.tags.includes(condition.tag)))
     case 'abilityId':
       return context.ability?.id === condition.abilityId
     case 'abilityClass':
@@ -1392,6 +1468,15 @@ function cloneEffect(effect: SkillEffect): SkillEffect {
   switch (effect.type) {
     case 'schedule':
       return { ...effect, effects: effect.effects.map(cloneEffect) }
+    case 'conditional':
+      return {
+        ...effect,
+        conditions: effect.conditions.map((condition) => ({ ...condition })),
+        effects: effect.effects.map(cloneEffect),
+        elseEffects: effect.elseEffects?.map(cloneEffect),
+      }
+    case 'reaction':
+      return { ...effect, abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined, effects: effect.effects.map(cloneEffect) }
     case 'replaceAbility':
       return { ...effect, ability: cloneAbilityTemplate(effect.ability) }
     case 'replaceAbilities':
@@ -1975,6 +2060,10 @@ function applyDefeat(
     abilityId: ability?.id,
     tags: ability?.classes,
   })
+  runEffectReactionGuards(state, ctx, defeated, 'onDefeat', source, ability)
+  if (source) {
+    runEffectReactionGuards(state, ctx, source, 'onDefeatEnemy', defeated, ability)
+  }
   firePassives(state, ctx, defeated, source, 'onDefeat', ability)
   if (source) {
     firePassives(state, ctx, source, defeated, 'onDefeatEnemy', ability)
@@ -2002,6 +2091,7 @@ function applyDamagePacket(
   })
 
   if (hasModifierBoolean(state, target, 'isInvulnerable', true, { statusKind: 'invincible' }) && !packet.flags.ignoresInvulnerability) {
+    const packetAbility = actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
     if (target.modifiers.some((modifier) => modifier.tags.includes('yuji-sukuna-bonus-on-blocked-damage'))) {
       adjustFighterCounter(target, 'sukuna_bonus_hp', 5)
       emitCounterChange(ctx, state.round, target, 'sukuna_bonus_hp', target.stateCounters.sukuna_bonus_hp ?? 0, actor?.instanceId, packet.abilityId)
@@ -2017,6 +2107,7 @@ function applyDamagePacket(
       packet,
       meta: { blockedByInvincible: true },
     })
+    runEffectReactionGuards(state, ctx, target, 'onDamageBlocked', actor, packetAbility)
     return 0
   }
 
@@ -2054,6 +2145,14 @@ function applyDamagePacket(
         absorbed,
         { brokenShieldTags: brokenShield.tags },
       )
+      runEffectReactionGuards(
+        state,
+        ctx,
+        target,
+        'onShieldBroken',
+        actor,
+        actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
+      )
     }
   }
 
@@ -2069,6 +2168,14 @@ function applyDamagePacket(
       packet: { ...packet, amount: 0 },
       meta: { blockedByShield: true },
     })
+    runEffectReactionGuards(
+      state,
+      ctx,
+      target,
+      'onDamageBlocked',
+      actor,
+      actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
+    )
     return 0
   }
 
@@ -2085,6 +2192,14 @@ function applyDamagePacket(
     tags: packet.tags,
     packet: { ...packet, amount: remainingDamage },
   })
+  runEffectReactionGuards(
+    state,
+    ctx,
+    target,
+    'onDamageApplied',
+    actor,
+    actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
+  )
 
   if (actor) {
     const ability = packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
@@ -2818,6 +2933,14 @@ function resolveEffects(
               brokenShield.amount,
               { brokenShieldTags: brokenShield.tags },
             )
+            runEffectReactionGuards(
+              state,
+              ctx,
+              effectTarget,
+              'onShieldBroken',
+              effectActor,
+              abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined,
+            )
           }
           makeEvent(
             ctx,
@@ -2874,6 +2997,14 @@ function resolveEffects(
             effect,
             brokenShield.amount,
             { brokenShieldTags: brokenShield.tags },
+          )
+          runEffectReactionGuards(
+            state,
+            ctx,
+            effectTarget,
+            'onShieldBroken',
+            effectActor,
+            abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined,
           )
           makeEvent(
             ctx,
@@ -2936,6 +3067,32 @@ function resolveEffects(
           )
           break
         }
+        case 'reaction': {
+          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
+          t.reactionGuards = t.reactionGuards.filter(
+            (existing) => !(existing.kind === 'effect' && existing.label === guard.label && existing.sourceActorId === guard.sourceActorId),
+          )
+          t.reactionGuards.push(guard)
+          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
+            actorId: actor.instanceId,
+            targetId: t.instanceId,
+            team: t.team,
+            abilityId,
+            meta: { label: guard.label, stat: 'reaction', mode: 'set', scope: 'fighter', status: null },
+          })
+          makeEvent(
+            ctx,
+            state.round,
+            'status',
+            'teal',
+            `${t.shortName} is affected by ${guard.label} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`,
+            actor.instanceId,
+            t.instanceId,
+            undefined,
+            abilityId,
+          )
+          break
+        }
         case 'setFlag':
           setFighterFlag(t, effect.key, effect.value)
           emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
@@ -2943,7 +3100,15 @@ function resolveEffects(
         case 'adjustCounter':
           if (effect.requiresTag && !getFighterModifierPool(state, t).some((modifier) => modifier.tags.includes(effect.requiresTag!))) break
           adjustFighterCounter(t, effect.key, effect.amount)
+          if (effect.min != null || effect.max != null) {
+            const current = t.stateCounters[effect.key] ?? 0
+            t.stateCounters[effect.key] = Math.min(effect.max ?? current, Math.max(effect.min ?? current, current))
+          }
           emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          break
+        case 'setCounter':
+          t.stateCounters[effect.key] = effect.value
+          emitCounterChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
           break
         case 'adjustSourceCounter': {
           const source = getModifierSourceFighter(state, { sourceActorId: t.modifiers.find((modifier) => modifier.sourceActorId === actor.instanceId)?.sourceActorId }) ?? actor
@@ -2963,6 +3128,20 @@ function resolveEffects(
           t.stateCounters[effect.key] = 0
           emitCounterChange(ctx, state.round, t, effect.key, 0, actor.instanceId, abilityId)
           break
+        case 'conditional': {
+          const conditionAbility = abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined
+          const passed = effect.conditions.every((condition) => matchesReactionCondition(effectActor, condition, {
+            target: effectTarget,
+            ability: conditionAbility,
+            amount: triggerAmount,
+            isUltimate: abilityClasses?.includes('Ultimate'),
+          }))
+          const branch = passed ? effect.effects : effect.elseEffects ?? []
+          if (branch.length > 0) {
+            resolveEffects(state, ctx, effectActor, effectTarget, branch, abilityId, abilityClasses, reactionResult, triggerAmount)
+          }
+          break
+        }
         case 'cooldownReduction':
         case 'damageBoost':
           break
@@ -3141,7 +3320,11 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
 
   tryTriggerCursedNails(state, ctx, actor, ability)
   triggerMarkedSkillUseReactions(state, ctx, actor, ability)
+  runEffectReactionGuards(state, ctx, actor, 'onAbilityUse', actor, ability)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
+  for (const tgt of allTargeted) {
+    runEffectReactionGuards(state, ctx, tgt, 'onBeingTargeted', actor, ability)
+  }
   const preDamageReaction = runPreDamageReactionWindow(state, ctx, actor, ability, allTargeted)
   if (!preDamageReaction.cancelAction && isAlive(actor)) {
     resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.classes, preDamageReaction)

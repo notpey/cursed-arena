@@ -157,6 +157,7 @@ export type BattleFighterTemplate = {
   portraitFrame?: BattlePortraitFrame
   boardPortraitFrame?: BattlePortraitFrame
   maxHp: number
+  initialStateCounters?: Record<string, number>
   passiveEffects?: PassiveEffect[]
   abilities: BattleAbilityTemplate[]
   ultimate: BattleAbilityTemplate
@@ -264,7 +265,16 @@ export type BattleClassStunState = {
   sourceAbilityId?: string
 }
 
-export type BattleReactionGuardKind = 'counter' | 'reflect'
+export type BattleReactionGuardKind = 'counter' | 'reflect' | 'effect'
+
+export type BattleReactionTrigger =
+  | 'onAbilityUse'
+  | 'onBeingTargeted'
+  | 'onDamageApplied'
+  | 'onDamageBlocked'
+  | 'onShieldBroken'
+  | 'onDefeat'
+  | 'onDefeatEnemy'
 
 export type BattleReactionGuardState = {
   id: string
@@ -275,6 +285,11 @@ export type BattleReactionGuardState = {
   counterDamage?: number
   abilityClasses?: BattleSkillClass[]
   consumeOnTrigger: boolean
+  trigger?: BattleReactionTrigger
+  harmfulOnly?: boolean
+  oncePerRound?: boolean
+  triggeredRounds?: number[]
+  effects?: SkillEffect[]
   sourceActorId?: string
   sourceAbilityId?: string
 }
@@ -284,6 +299,8 @@ export type BattleReactionCondition =
   | { type: 'targetHpBelow'; threshold: number }
   | { type: 'actorHasStatus'; status: BattleStatusKind }
   | { type: 'targetHasStatus'; status: BattleStatusKind }
+  | { type: 'actorHasModifierTag'; tag: string }
+  | { type: 'targetHasModifierTag'; tag: string }
   | { type: 'abilityId'; abilityId: string }
   | { type: 'abilityClass'; class: BattleSkillClass }
   | { type: 'fighterFlag'; key: string; value: boolean }
@@ -535,7 +552,8 @@ export type SkillEffect =
   | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
   | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
   | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
-  | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; target: EffectTarget }
+  | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; min?: number; max?: number; target: EffectTarget }
+  | { type: 'setCounter'; key: string; value: number; target: EffectTarget }
   | { type: 'adjustSourceCounter'; key: string; amount: number; target: EffectTarget }
   | { type: 'adjustCounterByTriggerAmount'; key: string; target: EffectTarget }
   | { type: 'resetCounter'; key: string; target: EffectTarget }
@@ -544,12 +562,14 @@ export type SkillEffect =
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
   | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
+  | { type: 'conditional'; conditions: BattleReactionCondition[]; effects: SkillEffect[]; elseEffects?: SkillEffect[]; target: EffectTarget }
   | { type: 'randomEnemyDamageOverTime'; power: number; duration: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
   | { type: 'randomEnemyDamageTick'; power: number; historyKey: string; repeatCounterKey?: string; repeatCounterAmount?: number; target: EffectTarget }
   | { type: 'replaceAbility'; duration: number; slotAbilityId: string; ability: BattleAbilityTemplate; target: EffectTarget }
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
   | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
+  | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; target: EffectTarget }
   | { type: 'overhealToShield'; power: number; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
   | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
 

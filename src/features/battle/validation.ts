@@ -68,6 +68,10 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
         pushIssue(issues, scope, `unsupported status "${condition.status}"`)
       }
       return
+    case 'actorHasModifierTag':
+    case 'targetHasModifierTag':
+      if (!condition.tag.trim()) pushIssue(issues, scope, `${condition.type} tag is required`)
+      return
     case 'abilityId':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'abilityId is required')
       return
@@ -154,6 +158,15 @@ function validateSkillEffect(
       if (effect.counterDamage < 0) pushIssue(issues, scope, 'counterDamage cannot be negative')
       if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'counter abilityClasses cannot be an empty list')
       return
+    case 'reaction':
+      if (!effect.label.trim()) pushIssue(issues, scope, 'reaction label is required')
+      if (effect.duration <= 0) pushIssue(issues, scope, 'reaction duration must be positive')
+      if (effect.effects.length === 0) pushIssue(issues, scope, 'reaction must include nested effects')
+      if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'reaction abilityClasses cannot be an empty list')
+      effect.effects.forEach((nestedEffect, index) =>
+        validateSkillEffect(`${scope} reaction effect ${index + 1}`, nestedEffect, issues, context),
+      )
+      return
     case 'attackUp':
       if (effect.amount <= 0) pushIssue(issues, scope, 'damage bonus amount must be positive')
       if (effect.duration <= 0) pushIssue(issues, scope, 'damage bonus duration must be positive')
@@ -209,6 +222,13 @@ function validateSkillEffect(
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounter key is required')
       if (effect.amount === 0) pushIssue(issues, scope, 'adjustCounter amount cannot be zero')
       if (effect.requiresTag != null && !effect.requiresTag.trim()) pushIssue(issues, scope, 'adjustCounter requiresTag cannot be empty')
+      if (effect.min != null && !Number.isFinite(effect.min)) pushIssue(issues, scope, 'adjustCounter min must be finite')
+      if (effect.max != null && !Number.isFinite(effect.max)) pushIssue(issues, scope, 'adjustCounter max must be finite')
+      if (effect.min != null && effect.max != null && effect.min > effect.max) pushIssue(issues, scope, 'adjustCounter min cannot exceed max')
+      return
+    case 'setCounter':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'setCounter key is required')
+      if (!Number.isFinite(effect.value)) pushIssue(issues, scope, 'setCounter value must be finite')
       return
     case 'adjustSourceCounter':
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustSourceCounter key is required')
@@ -245,6 +265,17 @@ function validateSkillEffect(
       if (effect.effects.length === 0) pushIssue(issues, scope, 'schedule must include nested effects')
       effect.effects.forEach((nestedEffect, index) =>
         validateSkillEffect(`${scope} nested effect ${index + 1}`, nestedEffect, issues, context),
+      )
+      return
+    case 'conditional':
+      if (effect.conditions.length === 0) pushIssue(issues, scope, 'conditional requires at least one condition')
+      if (effect.effects.length === 0 && (effect.elseEffects?.length ?? 0) === 0) pushIssue(issues, scope, 'conditional requires then or else effects')
+      effect.conditions.forEach((condition, index) => validateCondition(`${scope} conditional condition ${index + 1}`, condition, issues))
+      effect.effects.forEach((nestedEffect, index) =>
+        validateSkillEffect(`${scope} conditional effect ${index + 1}`, nestedEffect, issues, context),
+      )
+      effect.elseEffects?.forEach((nestedEffect, index) =>
+        validateSkillEffect(`${scope} conditional else effect ${index + 1}`, nestedEffect, issues, context),
       )
       return
     case 'randomEnemyDamageOverTime':

@@ -683,6 +683,146 @@ describe('battle engine scenarios', () => {
     expect(getFighter(result.state, 'enemy', 'yuji').stateFlags.executed).toBe(true)
   })
 
+  test('reaction effects can punish a target the next time they use a skill', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['hanami', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const hanami = getFighter(state, 'player', 'hanami')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    hanami.hp = 60
+
+    const seeded = resolveTeamTurn(
+      state,
+      queue('player', hanami.instanceId, 'hanami-cursed-bud-growth', enemyYuji.instanceId),
+      'player',
+    )
+
+    const markedYuji = getFighter(seeded.state, 'enemy', 'yuji')
+    markedYuji.abilities[0].energyCost = {}
+
+    const triggered = resolveTeamTurn(
+      seeded.state,
+      queue('enemy', markedYuji.instanceId, markedYuji.abilities[0].id, getFighter(seeded.state, 'player', 'hanami').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(triggered.state, 'enemy', 'yuji').hp).toBe(65)
+    expect(getFighter(triggered.state, 'player', 'hanami').hp).toBe(50)
+  })
+
+  test('reaction effects can respond to shield breaks and target the attacker', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['yaga', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const yaga = getFighter(state, 'player', 'yaga')
+    const allyYuji = getFighter(state, 'player', 'yuji')
+
+    const guarded = resolveTeamTurn(
+      state,
+      queue('player', yaga.instanceId, 'yaga-cursed-corpse-substitute', allyYuji.instanceId),
+      'player',
+    )
+
+    const attacker = getFighter(guarded.state, 'enemy', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    attacker.abilities[0].effects = [{ type: 'damage', power: 50, target: 'inherit' }]
+
+    const broken = resolveTeamTurn(
+      guarded.state,
+      queue('enemy', attacker.instanceId, attacker.abilities[0].id, getFighter(guarded.state, 'player', 'yuji').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(broken.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(broken.state, 'player', 'yuji').shield).toBeNull()
+  })
+
+  test('reaction effects can add damage the next time a target takes damage', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['momo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const momo = getFighter(state, 'player', 'momo')
+    const allyYuji = getFighter(state, 'player', 'yuji')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+
+    const marked = resolveTeamTurn(
+      state,
+      queue('player', momo.instanceId, 'momo-coordinated-assault', enemyYuji.instanceId),
+      'player',
+    )
+    expect(getFighter(marked.state, 'enemy', 'yuji').hp).toBe(100)
+
+    const attacker = getFighter(marked.state, 'player', 'yuji')
+    attacker.abilities[0].energyCost = {}
+
+    const triggered = resolveTeamTurn(
+      marked.state,
+      queue('player', attacker.instanceId, allyYuji.abilities[0].id, getFighter(marked.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+
+    expect(getFighter(triggered.state, 'enemy', 'yuji').hp).toBe(60)
+  })
+
+  test('conditional effects can branch on actor counters and spend capped ammo', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['mai', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const mai = getFighter(state, 'player', 'mai')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+
+    expect(mai.stateCounters.cursed_bullet).toBe(2)
+
+    const fired = resolveTeamTurn(
+      state,
+      queue('player', mai.instanceId, 'mai-cursed-bullet', enemyYuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(fired.state, 'enemy', 'yuji').hp).toBe(70)
+    expect(getFighter(fired.state, 'player', 'mai').stateCounters.cursed_bullet).toBe(1)
+  })
+
+  test('counter clamps prevent ammo from exceeding authored maximums', () => {
+    let state = createChargedBattleState({
+      playerTeamIds: ['mai', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    let mai = getFighter(state, 'player', 'mai')
+    mai.stateCounters.cursed_bullet = 3
+
+    state = resolveTeamTurn(
+      state,
+      queue('player', mai.instanceId, 'mai-steady-aim', mai.instanceId),
+      'player',
+    ).state
+
+    expect(getFighter(state, 'player', 'mai').stateCounters.cursed_bullet).toBe(3)
+  })
+
+  test('conditional else effects can fire when counters are empty', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['mai', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const mai = getFighter(state, 'player', 'mai')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    mai.stateCounters.cursed_bullet = 0
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', mai.instanceId, 'mai-suppressing-fire', enemyYuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
+  })
+
   test('battle content validation no longer requires renderSrc', () => {
     const report = validateBattleContent([JSON.parse(JSON.stringify(battleRoster[0]))])
 

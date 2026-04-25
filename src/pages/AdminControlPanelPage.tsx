@@ -30,6 +30,7 @@ import type {
   BattleModifierScope,
   BattleModifierStat,
   BattleReactionCondition,
+  BattleReactionTrigger,
   BattleScheduledPhase,
   BattleStatusKind,
   BattleTargetRule,
@@ -42,9 +43,10 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onHeal', 'onShieldBroken', 'onShieldGain', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
-const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
+const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'setCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'reaction', 'conditional', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
+const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'actorHasModifierTag', 'targetHasModifierTag', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'targetCounterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'other-enemies', 'attacker', 'random-enemy']
+const reactionTriggers: BattleReactionTrigger[] = ['onAbilityUse', 'onBeingTargeted', 'onDamageApplied', 'onDamageBlocked', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const modifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
@@ -75,11 +77,13 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   breakShield: { label: 'Break Shield', hint: 'Instantly shatter a target shield, optionally by tag.' },
   counter: { label: 'Counter Guard', hint: 'Sets a pre-damage counter reaction against harmful skills.' },
   reflect: { label: 'Reflect Guard', hint: 'Sets a pre-damage reflect reaction against harmful skills.' },
+  reaction: { label: 'Event Reaction', hint: 'Sets a temporary trigger that resolves nested effects when a battle event occurs.' },
   modifyAbilityCost: { label: 'Cost Modifier', hint: 'Temporarily rewrite or reduce a technique cost.' },
   effectImmunity: { label: 'Effect Immunity', hint: 'Ignore selected non-damage effect types for a duration.' },
   removeEffectImmunity: { label: 'Remove Effect Immunity', hint: 'Strip an active effect immunity by label or tag.' },
   setFlag: { label: 'Set Flag', hint: 'Flip a named fighter state flag on or off.' },
   adjustCounter: { label: 'Adjust Counter', hint: 'Increment or decrement a named fighter state counter.' },
+  setCounter: { label: 'Set Counter', hint: 'Set a named fighter state counter to an exact value.' },
   adjustSourceCounter: { label: 'Adjust Source Counter', hint: 'Increment or decrement a named counter on a linked source fighter.' },
   adjustCounterByTriggerAmount: { label: 'Adjust Counter by Event Amount', hint: 'Increments a counter by the numeric amount of the triggering event (e.g. HP healed, shield gained).' },
   resetCounter: { label: 'Reset Counter', hint: 'Sets a named fighter state counter back to zero.' },
@@ -87,6 +91,7 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   removeModifier: { label: 'Remove Modifier', hint: 'Strip modifiers by filter instead of hardcoding dispels.' },
   modifyAbilityState: { label: 'Ability State', hint: 'Grant, lock, or replace abilities using the generalized runtime model.' },
   schedule: { label: 'Delayed Effect', hint: 'Queue nested effects for a future round start or end.' },
+  conditional: { label: 'Conditional Effects', hint: 'Resolve nested effects only when authored conditions are met.' },
   randomEnemyDamageOverTime: { label: 'Random Enemy Damage Over Time', hint: 'Schedule repeated random enemy hits with repeat tracking.' },
   randomEnemyDamageTick: { label: 'Random Enemy Damage Tick', hint: 'Resolve one tracked random enemy hit.' },
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
@@ -277,6 +282,16 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'counter', duration: 1, counterDamage: 20, consumeOnTrigger: true, target: 'self' }
     case 'reflect':
       return { type: 'reflect', duration: 1, consumeOnTrigger: true, target: 'self' }
+    case 'reaction':
+      return {
+        type: 'reaction',
+        label: 'Event Reaction',
+        trigger: 'onAbilityUse',
+        duration: 1,
+        consumeOnTrigger: true,
+        target: 'inherit',
+        effects: [{ type: 'damage', power: 10, target: 'inherit' }],
+      }
     case 'modifyAbilityCost':
       return {
         type: 'modifyAbilityCost',
@@ -301,6 +316,8 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'setFlag', key: 'state-flag', value: true, target: 'self' }
     case 'adjustCounter':
       return { type: 'adjustCounter', key: 'state-counter', amount: 1, target: 'self' }
+    case 'setCounter':
+      return { type: 'setCounter', key: 'state-counter', value: 1, target: 'self' }
     case 'adjustSourceCounter':
       return { type: 'adjustSourceCounter', key: 'state-counter', amount: 1, target: 'inherit' }
     case 'adjustCounterByTriggerAmount':
@@ -337,6 +354,13 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       }
     case 'schedule':
       return { type: 'schedule', delay: 1, phase: 'roundStart', target: 'inherit', effects: [{ type: 'damage', power: 12, target: 'inherit' }] }
+    case 'conditional':
+      return {
+        type: 'conditional',
+        target: 'inherit',
+        conditions: [{ type: 'targetCounterAtLeast', key: 'state-counter', value: 1 }],
+        effects: [{ type: 'damage', power: 10, target: 'inherit' }],
+      }
     case 'randomEnemyDamageOverTime':
       return { type: 'randomEnemyDamageOverTime', power: 10, duration: 3, historyKey: 'random-hit', target: 'self' }
     case 'randomEnemyDamageTick':
@@ -407,6 +431,10 @@ function createReactionCondition(type: BattleReactionCondition['type']): BattleR
       return { type: 'actorHasStatus', status: 'stun' }
     case 'targetHasStatus':
       return { type: 'targetHasStatus', status: 'stun' }
+    case 'actorHasModifierTag':
+      return { type: 'actorHasModifierTag', tag: 'modifier-tag' }
+    case 'targetHasModifierTag':
+      return { type: 'targetHasModifierTag', tag: 'modifier-tag' }
     case 'abilityId':
       return { type: 'abilityId', abilityId: 'ability-id' }
     case 'abilityClass':
@@ -438,6 +466,10 @@ function describeCondition(condition: BattleReactionCondition) {
       return `self has ${condition.status}`
     case 'targetHasStatus':
       return `target has ${condition.status}`
+    case 'actorHasModifierTag':
+      return `self has ${condition.tag}`
+    case 'targetHasModifierTag':
+      return `target has ${condition.tag}`
     case 'abilityId':
       return `ability is ${condition.abilityId}`
     case 'abilityClass':
@@ -503,6 +535,8 @@ function describeEffect(effect: SkillEffect) {
       return `Sets a counter guard on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'} (counter damage ${effect.counterDamage}${effect.abilityClasses?.length ? `, classes: ${effect.abilityClasses.join('/')}` : ''}${effect.consumeOnTrigger === false ? ', triggers repeatedly' : ', first trigger only'}).`
     case 'reflect':
       return `Sets a reflect guard on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}${effect.abilityClasses?.length ? ` for ${effect.abilityClasses.join('/')}` : ''}${effect.consumeOnTrigger === false ? ', triggers repeatedly' : ', first trigger only'}.`
+    case 'reaction':
+      return `Sets ${effect.label} on ${formatEffectTarget(effect.target)} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}; triggers ${effect.trigger} and resolves ${effect.effects.length} nested effect${effect.effects.length === 1 ? '' : 's'}.`
     case 'modifyAbilityCost':
       return `${effect.modifier.label} changes costs for ${formatEffectTarget(effect.target)} using ${effect.modifier.mode}.`
     case 'effectImmunity':
@@ -517,6 +551,8 @@ function describeEffect(effect: SkillEffect) {
       return `Set ${effect.key} to ${effect.value ? 'true' : 'false'} on ${formatEffectTarget(effect.target)}.`
     case 'adjustCounter':
       return `Adjust ${effect.key} by ${effect.amount} on ${formatEffectTarget(effect.target)}.`
+    case 'setCounter':
+      return `Set ${effect.key} to ${effect.value} on ${formatEffectTarget(effect.target)}.`
     case 'adjustSourceCounter':
       return `Adjust ${effect.key} by ${effect.amount} on the linked source fighter.`
     case 'adjustCounterByTriggerAmount':
@@ -527,6 +563,8 @@ function describeEffect(effect: SkillEffect) {
       return `Apply ${effect.modifier.label} to ${formatEffectTarget(effect.target)} using ${effect.modifier.stat} ${effect.modifier.mode}.`
     case 'removeModifier':
       return `Remove modifiers from ${formatEffectTarget(effect.target)} matching ${effect.filter.statusKind ?? effect.filter.stat ?? effect.filter.label ?? 'the authored filter'}.`
+    case 'conditional':
+      return `If ${effect.conditions.length} condition${effect.conditions.length === 1 ? '' : 's'} pass, resolve ${effect.effects.length} nested effect${effect.effects.length === 1 ? '' : 's'}${effect.elseEffects?.length ? `; otherwise resolve ${effect.elseEffects.length}` : ''}.`
     case 'modifyAbilityState':
       return effect.delta.mode === 'replace'
         ? `Replace ${effect.delta.slotAbilityId} on ${formatEffectTarget(effect.target)} with ${effect.delta.replacement.name} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
@@ -2355,12 +2393,17 @@ function ConditionRowEditor({
         {(condition.type === 'actorHasStatus' || condition.type === 'targetHasStatus') ? (
           <SelectField label="Status" value={condition.status} options={modifierStatusKinds.filter(Boolean).map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...condition, status: value as BattleStatusKind })} />
         ) : null}
+        {(condition.type === 'actorHasModifierTag' || condition.type === 'targetHasModifierTag') ? (
+          <InputField label="Modifier Tag" value={condition.tag} onChange={(value) => onChange({ ...condition, tag: value })} />
+        ) : null}
         {condition.type === 'abilityId' ? <InputField label="Ability ID" value={condition.abilityId} onChange={(value) => onChange({ ...condition, abilityId: value })} /> : null}
         {condition.type === 'abilityClass' ? <SelectField label="Ability Class" value={condition.class} options={battleSkillClassOptions.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...condition, class: value as BattleSkillClass })} /> : null}
         {condition.type === 'fighterFlag' ? <InputField label="Flag Key" value={condition.key} onChange={(value) => onChange({ ...condition, key: value })} /> : null}
         {condition.type === 'fighterFlag' ? <SelectField label="Value" value={String(condition.value)} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...condition, value: value === 'true' })} /> : null}
         {condition.type === 'counterAtLeast' ? <InputField label="Counter Key" value={condition.key} onChange={(value) => onChange({ ...condition, key: value })} /> : null}
         {condition.type === 'counterAtLeast' ? <NumberField label="At Least" value={condition.value} onChange={(value) => onChange({ ...condition, value })} /> : null}
+        {condition.type === 'targetCounterAtLeast' ? <InputField label="Counter Key" value={condition.key} onChange={(value) => onChange({ ...condition, key: value })} /> : null}
+        {condition.type === 'targetCounterAtLeast' ? <NumberField label="At Least" value={condition.value} onChange={(value) => onChange({ ...condition, value })} /> : null}
         {condition.type === 'usedAbilityLastTurn' ? <InputField label="Ability ID" value={condition.abilityId} onChange={(value) => onChange({ ...condition, abilityId: value })} /> : null}
         {condition.type === 'shieldActive' ? <InputField label="Shield Tag" value={condition.tag ?? ''} onChange={(value) => onChange({ ...condition, tag: value || undefined })} /> : null}
         {condition.type === 'brokenShieldTag' ? <InputField label="Shield Tag" value={condition.tag} onChange={(value) => onChange({ ...condition, tag: value })} /> : null}
@@ -2405,6 +2448,13 @@ function EffectRowEditor({
         {effect.type === 'reflect' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
         {effect.type === 'reflect' ? <InputField label="Class Filter CSV" value={formatCsvList(effect.abilityClasses)} onChange={(value) => { const parsed = parseCsvList(value) as BattleSkillClass[]; onChange({ ...effect, abilityClasses: parsed.length > 0 ? parsed : undefined }) }} /> : null}
         {effect.type === 'reflect' ? <SelectField label="Consume On Trigger" value={effect.consumeOnTrigger === false ? 'false' : 'true'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, consumeOnTrigger: value === 'true' })} /> : null}
+        {effect.type === 'reaction' ? <InputField label="Label" value={effect.label} onChange={(value) => onChange({ ...effect, label: value })} /> : null}
+        {effect.type === 'reaction' ? <SelectField label="Trigger" value={effect.trigger} options={reactionTriggers.map((value) => ({ value, label: value.toUpperCase() }))} onChange={(value) => onChange({ ...effect, trigger: value as BattleReactionTrigger })} /> : null}
+        {effect.type === 'reaction' ? <NumberField label="Duration" value={effect.duration} onChange={(value) => onChange({ ...effect, duration: value })} /> : null}
+        {effect.type === 'reaction' ? <InputField label="Class Filter CSV" value={formatCsvList(effect.abilityClasses)} onChange={(value) => { const parsed = parseCsvList(value) as BattleSkillClass[]; onChange({ ...effect, abilityClasses: parsed.length > 0 ? parsed : undefined }) }} /> : null}
+        {effect.type === 'reaction' ? <SelectField label="Harmful Only" value={effect.harmfulOnly ? 'true' : 'false'} options={[{ value: 'false', label: 'FALSE' }, { value: 'true', label: 'TRUE' }]} onChange={(value) => onChange({ ...effect, harmfulOnly: value === 'true' })} /> : null}
+        {effect.type === 'reaction' ? <SelectField label="Consume On Trigger" value={effect.consumeOnTrigger === false ? 'false' : 'true'} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, consumeOnTrigger: value === 'true' })} /> : null}
+        {effect.type === 'reaction' ? <SelectField label="Once Per Round" value={effect.oncePerRound ? 'true' : 'false'} options={[{ value: 'false', label: 'FALSE' }, { value: 'true', label: 'TRUE' }]} onChange={(value) => onChange({ ...effect, oncePerRound: value === 'true' })} /> : null}
         {effect.type === 'cooldownReduction' ? <NumberField label="Cooldowns Reduced" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
         {effect.type === 'cooldownAdjust' ? <NumberField label="Cooldown Delta" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
         {effect.type === 'cooldownAdjust' ? <InputField label="Ability ID (Optional)" value={effect.abilityId ?? ''} onChange={(value) => onChange({ ...effect, abilityId: value || undefined })} /> : null}
@@ -2467,6 +2517,10 @@ function EffectRowEditor({
         {effect.type === 'setFlag' ? <SelectField label="Value" value={String(effect.value)} options={[{ value: 'true', label: 'TRUE' }, { value: 'false', label: 'FALSE' }]} onChange={(value) => onChange({ ...effect, value: value === 'true' })} /> : null}
         {effect.type === 'adjustCounter' ? <InputField label="Key" value={effect.key} onChange={(value) => onChange({ ...effect, key: value })} /> : null}
         {effect.type === 'adjustCounter' ? <NumberField label="Amount" value={effect.amount} onChange={(value) => onChange({ ...effect, amount: value })} /> : null}
+        {effect.type === 'adjustCounter' ? <NumberField label="Min Clamp" value={effect.min ?? 0} onChange={(value) => onChange({ ...effect, min: value })} /> : null}
+        {effect.type === 'adjustCounter' ? <NumberField label="Max Clamp" value={effect.max ?? 0} onChange={(value) => onChange({ ...effect, max: value > 0 ? value : undefined })} /> : null}
+        {effect.type === 'setCounter' ? <InputField label="Key" value={effect.key} onChange={(value) => onChange({ ...effect, key: value })} /> : null}
+        {effect.type === 'setCounter' ? <NumberField label="Value" value={effect.value} onChange={(value) => onChange({ ...effect, value })} /> : null}
         {effect.type === 'adjustCounterByTriggerAmount' ? <InputField label="Key" value={effect.key} onChange={(value) => onChange({ ...effect, key: value })} /> : null}
         {effect.type === 'resetCounter' ? <InputField label="Key" value={effect.key} onChange={(value) => onChange({ ...effect, key: value })} /> : null}
         {effect.type === 'addModifier' ? <InputField label="Modifier Label" value={effect.modifier.label} onChange={(value) => onChange({ ...effect, modifier: { ...effect.modifier, label: value } })} /> : null}
