@@ -70,6 +70,15 @@ type BattleTimelineFocus = {
   tone: 'red' | 'teal' | 'gold' | 'frost'
 }
 
+type PracticeTurnLogEntry = {
+  id: string
+  round: number
+  label: string
+  summary: string
+  detail?: string
+  tone: 'red' | 'teal' | 'gold' | 'frost'
+}
+
 const timelineEventPriority: BattleRuntimeEvent['type'][] = [
   'fighter_defeated',
   'damage_applied',
@@ -168,6 +177,206 @@ function createTimelineFocus(step: BattleTimelineStep): BattleTimelineFocus | nu
     label: lastEvent.message.toUpperCase(),
     tone: lastEvent.tone,
   }
+}
+
+function humanizeKey(value: string) {
+  return value.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function counterLabel(key: string) {
+  if (key === 'sukuna_bonus_hp') return 'Transformation health bonus'
+  if (key === 'shikigami') return 'Shikigami'
+  if (key === 'straw_doll_damage_taken') return 'Straw Doll vulnerability'
+  return humanizeKey(key)
+}
+
+function findFighterName(state: BattleState, fighterId?: string) {
+  if (!fighterId) return null
+  const fighter = getFighterById(state, fighterId)
+  return fighter?.shortName ?? fighter?.name ?? null
+}
+
+function findAbilityName(state: BattleState, actorId?: string, abilityId?: string) {
+  if (!actorId || !abilityId) return abilityId ? humanizeKey(abilityId) : null
+  const actor = getFighterById(state, actorId)
+  const ability = actor ? getAbilityById(actor, abilityId) : null
+  return ability?.name ?? humanizeKey(abilityId)
+}
+
+function formatResourceAmounts(amounts: Partial<Record<string, number>>) {
+  return Object.entries(amounts)
+    .filter(([, amount]) => (amount ?? 0) !== 0)
+    .map(([key, amount]) => `${Math.abs(amount ?? 0)} ${humanizeKey(key)}`)
+    .join(', ')
+}
+
+function formatRuntimeEventForPracticeLog(event: BattleRuntimeEvent, state: BattleState): PracticeTurnLogEntry | null {
+  const actor = findFighterName(state, event.actorId)
+  const target = findFighterName(state, event.targetId)
+  const ability = findAbilityName(state, event.actorId, event.abilityId)
+  const metaLabel = typeof event.meta?.label === 'string' ? event.meta.label : null
+  const status = typeof event.meta?.status === 'string' ? humanizeKey(event.meta.status) : null
+
+  switch (event.type) {
+    case 'ability_used':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'ACTION',
+        summary: `${actor ?? 'A fighter'} used ${ability ?? 'a technique'}${target ? ` on ${target}` : ''}.`,
+        tone: event.team === 'enemy' ? 'red' : 'teal',
+      }
+    case 'damage_applied':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'DAMAGE',
+        summary: `${target ?? 'Target'} took ${event.amount ?? 0} damage${actor ? ` from ${actor}` : ''}.`,
+        detail: ability ? `Source: ${ability}` : undefined,
+        tone: 'red',
+      }
+    case 'damage_blocked':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'BLOCKED',
+        summary: `${target ?? 'Target'} blocked ${event.amount ?? 0} damage.`,
+        detail: event.meta?.blockedByShield ? 'Shield absorbed the hit.' : event.meta?.blockedByInvincible ? 'Invulnerability prevented the hit.' : undefined,
+        tone: 'gold',
+      }
+    case 'heal_applied':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'HEAL',
+        summary: `${target ?? 'Target'} recovered ${event.amount ?? 0} HP${actor ? ` from ${actor}` : ''}.`,
+        detail: ability ? `Source: ${ability}` : undefined,
+        tone: 'teal',
+      }
+    case 'resource_changed': {
+      const packet = event.packet?.kind === 'resource' ? event.packet : null
+      const mode = packet?.mode ? humanizeKey(packet.mode) : 'Changed'
+      const amounts = packet ? formatResourceAmounts(packet.amounts) : `${event.amount ?? 0} energy`
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'ENERGY',
+        summary: `${humanizeKey(event.team ?? packet?.targetTeam ?? 'team')} energy ${mode.toLowerCase()}: ${amounts}.`,
+        detail: ability ? `Source: ${ability}` : undefined,
+        tone: 'gold',
+      }
+    }
+    case 'modifier_applied':
+    case 'status_applied':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'STATUS',
+        summary: `${target ?? 'Target'} gained ${status ?? metaLabel ?? 'an effect'}.`,
+        detail: typeof event.meta?.duration === 'number' ? `${event.meta.duration} turn${event.meta.duration === 1 ? '' : 's'} remaining.` : undefined,
+        tone: event.tags?.includes('burn') || event.tags?.includes('mark') ? 'red' : 'gold',
+      }
+    case 'modifier_removed':
+    case 'status_removed':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'REMOVED',
+        summary: `${target ?? 'Target'} lost ${status ?? metaLabel ?? 'an effect'}.`,
+        tone: 'frost',
+      }
+    case 'shield_applied':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'SHIELD',
+        summary: `${target ?? 'Target'} gained ${event.amount ?? 0} shield.`,
+        detail: metaLabel ?? undefined,
+        tone: 'teal',
+      }
+    case 'shield_damaged':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'SHIELD',
+        summary: `${target ?? 'Target'} shield took ${event.amount ?? 0} damage.`,
+        tone: 'gold',
+      }
+    case 'shield_broken':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'SHIELD',
+        summary: `${target ?? 'Target'} shield broke.`,
+        tone: 'red',
+      }
+    case 'counter_changed': {
+      const key = typeof event.meta?.key === 'string' ? event.meta.key : 'counter'
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'TRACKER',
+        summary: `${target ?? actor ?? 'Fighter'} ${counterLabel(key)} is now ${event.amount ?? event.meta?.value ?? 0}.`,
+        tone: 'teal',
+      }
+    }
+    case 'fighter_flag_changed':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'STATE',
+        summary: `${target ?? 'Target'} ${humanizeKey(String(event.meta?.key ?? 'state'))} is now ${String(event.meta?.value ?? false)}.`,
+        tone: 'frost',
+      }
+    case 'effect_ignored':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'IGNORED',
+        summary: `${target ?? 'Target'} ignored an effect.`,
+        detail: ability ? `Source: ${ability}` : undefined,
+        tone: 'frost',
+      }
+    case 'fighter_defeated':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'DEFEAT',
+        summary: `${target ?? 'A fighter'} was defeated${actor ? ` by ${actor}` : ''}.`,
+        tone: 'red',
+      }
+    case 'scheduled_effect_created':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'DELAYED',
+        summary: `${actor ?? 'A fighter'} created a delayed effect.`,
+        detail: `Resolves round ${event.meta?.dueRound ?? '?'}, ${humanizeKey(String(event.meta?.phase ?? 'phase'))}.`,
+        tone: 'gold',
+      }
+    case 'scheduled_effect_resolved':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'DELAYED',
+        summary: `${actor ?? 'A delayed effect'} resolved${target ? ` on ${target}` : ''}.`,
+        tone: 'gold',
+      }
+    case 'round_ended':
+      return { id: event.id, round: event.round, label: 'ROUND', summary: `Round ${event.round} ended.`, tone: 'frost' }
+    case 'round_started':
+      return { id: event.id, round: event.round, label: 'ROUND', summary: `Round ${event.round} started.`, tone: 'frost' }
+    default:
+      return null
+  }
+}
+
+function buildPracticeTurnLogEntries(steps: BattleTimelineStep[]) {
+  return steps.flatMap((step) =>
+    step.runtimeEvents
+      .map((event) => formatRuntimeEventForPracticeLog(event, step.state))
+      .filter((entry): entry is PracticeTurnLogEntry => entry !== null),
+  )
 }
 
 function getNextActorId(
@@ -353,6 +562,69 @@ function UtilityRail({
     </aside>
   )
 }
+
+function practiceLogToneClasses(tone: PracticeTurnLogEntry['tone']) {
+  if (tone === 'red') return 'border-ca-red/24 bg-ca-red-wash'
+  if (tone === 'teal') return 'border-ca-teal/24 bg-ca-teal-wash'
+  if (tone === 'gold') return 'border-amber-300/25 bg-amber-300/10'
+  return 'border-white/10 bg-white/[0.035]'
+}
+
+function PracticeTurnLogPanel({
+  entries,
+  eventCount,
+}: {
+  entries: PracticeTurnLogEntry[]
+  eventCount: number
+}) {
+  const displayEntries = [...entries].reverse()
+  const latestRound = displayEntries[0]?.round ?? 1
+
+  return (
+    <aside className="flex h-[14rem] min-h-0 flex-col rounded-[0.3rem] border border-ca-teal/18 bg-[linear-gradient(180deg,rgba(30,28,36,0.96),rgba(13,12,17,0.98))] p-3 shadow-[0_16px_34px_rgba(0,0,0,0.28)] lg:h-auto">
+      <div className="flex items-center justify-between gap-2 border-b border-white/8 pb-2">
+        <div>
+          <p className="ca-mono-label text-[0.58rem] text-ca-teal">PRACTICE ONLY</p>
+          <p className="ca-display mt-1 text-[1rem] leading-none text-ca-text">TURN LOG</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="ca-mono-label rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[0.56rem] text-ca-text-3">
+            R{latestRound}
+          </span>
+          <span className="ca-mono-label rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[0.56rem] text-ca-text-3">
+            {entries.length || eventCount}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+        {displayEntries.length > 0 ? (
+          displayEntries.map((entry, index) => (
+            <div
+              key={entry.id}
+              className={['rounded-[0.32rem] border px-2.5 py-2 animate-ca-slide-up', practiceLogToneClasses(entry.tone)].join(' ')}
+              style={{ animationDelay: `${Math.min(index, 4) * 18}ms` }}
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="ca-mono-label text-[0.56rem] text-ca-text-3">R{entry.round}</span>
+                <span className="rounded-full border border-white/10 bg-black/18 px-1.5 py-0.5 ca-mono-label text-[0.5rem] text-ca-text-2">
+                  {entry.label}
+                </span>
+              </div>
+              <p className="text-[0.72rem] leading-5 text-ca-text-2">{entry.summary}</p>
+              {entry.detail ? <p className="mt-1 text-[0.64rem] leading-4 text-ca-text-3">{entry.detail}</p> : null}
+            </div>
+          ))
+        ) : (
+          <div className="rounded-[0.3rem] border border-dashed border-white/10 bg-white/[0.02] px-3 py-4">
+            <p className="text-[0.72rem] leading-5 text-ca-text-3">Commit a practice turn to see each resolved action, status, tracker, shield, and resource change.</p>
+          </div>
+        )}
+      </div>
+    </aside>
+  )
+}
+
 export function BattlePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
@@ -365,13 +637,15 @@ export function BattlePage() {
 
   const [stagedSession] = useState(() => readStagedBattleSession())
   const practiceOptions = stagedSession?.practiceOptions ?? null
+  const isPracticeBattle = stagedSession?.mode === 'practice'
   const aiEnabled = practiceOptions ? practiceOptions.aiEnabled : true
   const [initialBattle] = useState(createNewBattle)
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
   const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
-  const [, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
+  const [battleLog, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
+  const [practiceTurnLog, setPracticeTurnLog] = useState<PracticeTurnLogEntry[]>([])
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
   const [lastRecordedResultId, setLastRecordedResultId] = useState<string | null>(null)
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
@@ -515,6 +789,12 @@ export function BattlePage() {
     if (events.length > 0) {
       setBattleLog((current) => [...current, ...events].slice(-36))
     }
+    if (isPracticeBattle) {
+      const entries = buildPracticeTurnLogEntries(steps)
+      if (entries.length > 0) {
+        setPracticeTurnLog((current) => [...current, ...entries].slice(-140))
+      }
+    }
 
     const finalFocus = [...steps].reverse().map(createTimelineFocus).find(Boolean) ?? null
     setTimelineFocus(finalFocus ?? { label: 'TURN RESOLVED', tone: 'frost' })
@@ -526,7 +806,7 @@ export function BattlePage() {
 
     setTimelineFocus(null)
     return true
-  }, [])
+  }, [isPracticeBattle])
 
   useEffect(() => {
     if (!multiplayer || !multiplayerBattleState || !multiplayerAutoCommands || !multiplayerLatestResolution) return
@@ -953,6 +1233,7 @@ export function BattlePage() {
     setSelectedTargetId(null)
     setHoveredAbility(null)
     setBattleLog(initialEvents)
+    setPracticeTurnLog([])
     setTurnSecondsLeft(60)
     setRecordedResult(null)
     setLastRecordedResultId(null)
@@ -1002,9 +1283,13 @@ export function BattlePage() {
               timelineFocus={timelineFocus}
             />
 
-            <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
+            <div className={isPracticeBattle
+              ? 'grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)_20rem]'
+              : 'grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]'
+            }>
               <UtilityRail onSurrender={handleSurrender} />
               <BattleInfoPanel state={battle.state} queued={battle.queued} actor={inspectedActor} ability={inspectedAbility} />
+              {isPracticeBattle ? <PracticeTurnLogPanel entries={practiceTurnLog} eventCount={battleLog.length} /> : null}
             </div>
           </div>
         </div>

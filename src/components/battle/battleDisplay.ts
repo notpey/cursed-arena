@@ -78,7 +78,20 @@ function modEffectLine(mod: BattleModifierInstance): { line: string; tone: Activ
   if (mod.stat === 'isInvulnerable') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
   if (mod.stat === 'canAct' && mod.value === false) return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
   if (mod.stat === 'canAct' && mod.value === true) return { line: 'Immune to stun effects', tone: 'buff', turnsLeft }
-  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: mod.label, tone: 'heal', turnsLeft }
+  if ((mod.stat === 'healDone' || mod.stat === 'healTaken') && typeof mod.value === 'number') {
+    const target = mod.stat === 'healDone' ? 'Healing done' : 'Healing received'
+    if (mod.mode === 'flat') {
+      const line = mod.value < 0
+        ? `${target} reduced by ${Math.abs(mod.value)}`
+        : `${target} increased by ${mod.value}`
+      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft }
+    }
+    if (mod.mode === 'percentAdd') {
+      const line = `${target} ${mod.value > 0 ? '+' : ''}${mod.value}%`
+      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft }
+    }
+  }
+  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: 'Healing altered', tone: 'heal', turnsLeft }
   return { line: mod.label, tone: 'default', turnsLeft }
 }
 
@@ -405,6 +418,21 @@ function counterKeyVariants(counterKey: string): string[] {
   return [...variants].filter(Boolean)
 }
 
+function describeCounterLine(key: string, value: number, fighter: BattleFighterState): string | null {
+  if (key === 'sukuna_bonus_hp') {
+    return `Transformation bonus: +${value} HP. If Sukuna manifests now, Yuji returns at ${Math.min(fighter.maxHp, 10 + value)} HP`
+  }
+  if (key === 'shikigami') {
+    return value >= 3
+      ? `${value} Shikigami gathered. Enhanced techniques are ready`
+      : `${value} Shikigami gathered`
+  }
+  if (key === 'straw_doll_damage_taken') {
+    return `Straw Doll damage vulnerability: +${value * 5}`
+  }
+  return null
+}
+
   // ── Visible modifiers grouped by sourceAbilityId ─────────────────────────
   for (const mod of fighter.modifiers) {
     if (!mod.visible) continue
@@ -531,6 +559,8 @@ function counterKeyVariants(counterKey: string): string[] {
       const owner = groups.get(explicitGroupId)
       if (owner) {
         owner.stackCount = value
+        const counterLine = describeCounterLine(key, value, fighter)
+        if (counterLine) owner.lines.unshift({ text: counterLine, turnsLeft: null })
         continue
       }
     }
@@ -567,7 +597,11 @@ function counterKeyVariants(counterKey: string): string[] {
       }
     }
 
-    if (ownerGroup) ownerGroup.stackCount = value
+    if (ownerGroup) {
+      ownerGroup.stackCount = value
+      const counterLine = describeCounterLine(key, value, fighter)
+      if (counterLine) ownerGroup.lines.unshift({ text: counterLine, turnsLeft: null })
+    }
   }
 
   return [...groups.values()].map((g) => ({

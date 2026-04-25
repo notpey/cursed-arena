@@ -52,23 +52,58 @@ function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardA
 
 function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; tooltipDown?: boolean }) {
   const border = pipToneBorder(pip.tone)
+  const badgeCls = pipToneBadge(pip.tone)
+  const hasMeta = pip.turnsLeft !== null || (pip.stackCount !== null && pip.stackCount > 0)
+
   return (
     <div className={cn(
-      'pointer-events-none rounded-[0.45rem] border px-3 py-2.5 shadow-[0_16px_30px_rgba(0,0,0,0.48)] backdrop-blur-md',
+      'pointer-events-none rounded-[0.55rem] border p-3 shadow-[0_22px_46px_rgba(0,0,0,0.62)] backdrop-blur-md',
       border,
-      'bg-[linear-gradient(180deg,rgba(13,12,20,0.98),rgba(8,7,14,0.99))]',
+      'bg-[radial-gradient(circle_at_10%_0%,rgba(5,216,189,0.1),transparent_42%),linear-gradient(180deg,rgba(18,16,28,0.99),rgba(8,7,14,0.99))]',
     )}>
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="ca-display text-[0.86rem] leading-none tracking-[0.06em] text-ca-text">{pip.label.toUpperCase()}</p>
+      <div className="flex items-start gap-2.5">
+        <div className={cn('relative h-10 w-10 shrink-0 overflow-hidden rounded-[0.24rem] border', border)}>
+          {pip.iconSrc ? (
+            <img src={pip.iconSrc} alt="" className="h-full w-full object-cover" draggable={false} />
+          ) : (
+            <div className={cn('grid h-full w-full place-items-center', iconToneFallbackBg(pip.iconTone))}>
+              <span className="ca-mono-label text-[0.62rem] font-bold text-white/80">{pip.iconLabel}</span>
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 h-3 bg-[linear-gradient(transparent,rgba(0,0,0,0.72))]" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="ca-display text-[1rem] leading-none tracking-[0.06em] text-ca-text">{pip.label.toUpperCase()}</p>
+            {hasMeta ? (
+              <div className="flex shrink-0 items-center gap-1">
+                {pip.stackCount !== null && pip.stackCount > 0 ? (
+                  <span className={cn('rounded-[0.18rem] px-1.5 py-0.5 ca-mono-label text-[0.52rem] leading-none', badgeCls)}>
+                    {pip.stackCount} STACK{pip.stackCount === 1 ? '' : 'S'}
+                  </span>
+                ) : null}
+                {pip.turnsLeft !== null ? (
+                  <span className="rounded-[0.18rem] border border-white/12 bg-white/7 px-1.5 py-0.5 ca-mono-label text-[0.52rem] leading-none text-ca-text-2">
+                    {pip.turnsLeft} TURN{pip.turnsLeft === 1 ? '' : 'S'}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <ul className="mt-2 space-y-1.5">
+            {pip.lines.map((line, i) => (
+              <li key={i} className="rounded-[0.24rem] border border-white/8 bg-white/[0.035] px-2 py-1.5 text-[0.72rem] leading-snug text-ca-text-2">
+                {line.text}{line.turnsLeft !== null ? (
+                  <span className="ml-1 text-ca-text-3">({line.turnsLeft} turn{line.turnsLeft === 1 ? '' : 's'} left)</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-      <ul className="space-y-1">
-        {pip.lines.map((line, i) => (
-          <li key={i} className="text-[0.66rem] leading-snug text-ca-text-2">
-            {`- ${line.text.toUpperCase()}${line.turnsLeft !== null ? ` (${line.turnsLeft} TURN${line.turnsLeft === 1 ? '' : 'S'} LEFT)` : ''}`}
-          </li>
-        ))}
-      </ul>
-      {/* Caret arrow — top when opening downward, bottom when opening upward */}
+
       <div className={cn(
         'absolute left-1/2 h-3 w-3 -translate-x-1/2',
         tooltipDown
@@ -138,7 +173,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
       {/* Tooltip — opens downward for player strips, upward for enemies */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute z-[100] w-72',
+          'pointer-events-none absolute z-[100] w-80 max-w-[calc(100vw-2rem)]',
           tooltipDown
             ? 'top-[calc(100%+5px)]'
             : 'bottom-[calc(100%+5px)]',
