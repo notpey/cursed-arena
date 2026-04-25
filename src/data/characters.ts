@@ -29,7 +29,9 @@ type BaseCharacterSeed = {
   name: string
   rarity: CharacterRarity
   archetypes: Archetype[]
-  renderSrc: string
+  // Optional: chars without a stored render still appear in the roster with
+  // a placeholder until a portrait/render is uploaded through the ACP.
+  renderSrc?: string
   obtainedOrder: number
   portraitFrame?: CharacterRosterCard['portraitFrame']
   detailRenderFrame?: CharacterDetailProfile['detailRenderFrame']
@@ -155,6 +157,34 @@ const baseOwnedCharacterSeeds: BaseCharacterSeed[] = [
     obtainedOrder: 0,
     portraitFrame: { scale: 1.8, y: '14%' },
     detailRenderFrame: { scale: 0.94, x: '4%', y: '6%', maxWidth: '34rem' },
+  },
+  {
+    id: 'hanami',
+    name: 'Hanami',
+    rarity: 'SR',
+    archetypes: ['GUARDIAN', 'RESTORER'],
+    obtainedOrder: 12,
+  },
+  {
+    id: 'junpei',
+    name: 'Junpei Yoshino',
+    rarity: 'R',
+    archetypes: ['DISRUPTOR'],
+    obtainedOrder: 13,
+  },
+  {
+    id: 'mahito',
+    name: 'Mahito',
+    rarity: 'SSR',
+    archetypes: ['STRIKER', 'AMPLIFIER'],
+    obtainedOrder: 14,
+  },
+  {
+    id: 'ijichi',
+    name: 'Kiyotaka Ijichi',
+    rarity: 'R',
+    archetypes: ['GUARDIAN', 'AMPLIFIER'],
+    obtainedOrder: 15,
   },
 ]
 

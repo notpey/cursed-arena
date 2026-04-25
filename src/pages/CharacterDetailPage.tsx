@@ -319,16 +319,24 @@ function CharacterDisplayPanel({
           }}
         >
           <div className="animate-ca-float">
-            <img
-              src={profile.renderSrc}
-              alt={profile.name}
-              className="block h-auto w-full object-contain object-top select-none"
-              draggable={false}
-              style={{
-                filter:
-                  'drop-shadow(0 24px 28px rgba(0,0,0,0.28)) drop-shadow(0 -4px 20px rgba(228,230,239,0.12)) drop-shadow(0 0 24px rgba(228,230,239,0.07))',
-              }}
-            />
+            {profile.renderSrc ? (
+              <img
+                src={profile.renderSrc}
+                alt={profile.name}
+                className="block h-auto w-full object-contain object-top select-none"
+                draggable={false}
+                style={{
+                  filter:
+                    'drop-shadow(0 24px 28px rgba(0,0,0,0.28)) drop-shadow(0 -4px 20px rgba(228,230,239,0.12)) drop-shadow(0 0 24px rgba(228,230,239,0.07))',
+                }}
+              />
+            ) : (
+              <div className="grid aspect-[3/4] w-full place-items-center rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.85),rgba(8,8,12,0.95))]">
+                <span className="ca-display select-none text-[5rem] leading-none text-white/20">
+                  {profile.name[0]?.toUpperCase() ?? '?'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
