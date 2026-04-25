@@ -43,11 +43,19 @@ import type { MatchRow } from '@/features/multiplayer/types'
 import { useAuth } from '@/features/auth/useAuth'
 import type { CharacterRarity } from '@/types/characters'
 
-type PrepSortKey = 'NAME' | 'RARITY' | 'ROLE'
+type PrepSortKey = 'LORE' | 'NAME' | 'RARITY'
 
 type PrepRoleFilter = 'ALL' | (string & {})
 
-const sortOptions: PrepSortKey[] = ['NAME', 'RARITY', 'ROLE']
+const loreOrderIds = [
+  'yuji', 'megumi', 'nobara', 'junpei', 'maki', 'panda', 'toge',
+  'todo', 'miwa', 'mai', 'momo', 'noritoshi',
+  'nanami', 'gojo', 'yaga', 'shoko', 'ijichi',
+  'sukuna', 'mahito', 'jogo', 'hanami',
+  'mechamaru',
+]
+
+const sortOptions: PrepSortKey[] = ['LORE', 'NAME', 'RARITY']
 const roleOptions = ['ALL', ...Array.from(new Set(battlePrepRoster.map((entry) => entry.role)))] as PrepRoleFilter[]
 
 const rarityRank: Record<CharacterRarity, number> = {
@@ -165,7 +173,7 @@ export function BattlePrepPage() {
   const navigate = useNavigate()
   const { user, profile: authProfile } = useAuth()
   const [searchValue, setSearchValue] = useState('')
-  const [sortBy, setSortBy] = useState<PrepSortKey>('NAME')
+  const [sortBy, setSortBy] = useState<PrepSortKey>('LORE')
   const [roleFilter, setRoleFilter] = useState<PrepRoleFilter>('ALL')
   const [teamIds, setTeamIds] = useState<Array<string | null>>(() => {
     const initial = readPrepSelection()
@@ -260,11 +268,12 @@ export function BattlePrepPage() {
           return left.name.localeCompare(right.name)
         }
 
-        if (sortBy === 'ROLE') {
-          if (left.role !== right.role) {
-            return left.role.localeCompare(right.role)
-          }
-          return left.name.localeCompare(right.name)
+        if (sortBy === 'LORE') {
+          const li = loreOrderIds.indexOf(left.id)
+          const ri = loreOrderIds.indexOf(right.id)
+          const lrank = li === -1 ? loreOrderIds.length : li
+          const rrank = ri === -1 ? loreOrderIds.length : ri
+          return lrank - rrank
         }
 
         return left.name.localeCompare(right.name)
