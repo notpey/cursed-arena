@@ -400,13 +400,6 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     if (group.tone === 'default') group.tone = tone
   }
 
-function isBaselinePassiveVisible(passive: PassiveEffect): boolean {
-  // Hidden passives (conditional sub-effects already described in skill copy) are
-  // engine-only. Everything else — the signature passive identity — is shown.
-  if (passive.hidden) return false
-  return true
-}
-
 function normalizeCounterKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
@@ -525,18 +518,15 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     mergeTurns(group, guard.remainingRounds)
   }
 
-  // ── Passive abilities ─────────────────────────────────────────────────────
-  // Built before counters so the counter pass can attach to passive pips.
-  const seenPassiveRoots = new Set<string>()
+  // Active passive trackers. Passive ownership alone does not create a pip;
+  // only a live counter/state that the player needs to track does.
   const counterKeyToGroupId = new Map<string, string>()
   for (const passive of fighter.passiveEffects ?? []) {
-    if (!isBaselinePassiveVisible(passive)) continue
+    if (passive.hidden || !passive.counterKey || (fighter.stateCounters[passive.counterKey] ?? 0) <= 0) continue
     const root = passive.label.split(':')[0].trim()
-    if (seenPassiveRoots.has(root)) continue
-    seenPassiveRoots.add(root)
     const sourceId = `passive-${passive.id ?? root}`
     if (groups.has(sourceId)) continue
-    if (passive.counterKey) counterKeyToGroupId.set(passive.counterKey, sourceId)
+    counterKeyToGroupId.set(passive.counterKey, sourceId)
     groups.set(sourceId, {
       key: sourceId,
       label: passive.label,
@@ -549,7 +539,6 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       stackCount: null,
     })
   }
-
   // ── Counters: attach to their owning passive (or best-match source group) ──
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue

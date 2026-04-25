@@ -94,15 +94,20 @@ describe('battle content validation', () => {
     clearPublishedBattleContent()
   })
 
-  test('active passive pips prefer authored player-facing descriptions', () => {
+  test('passive tracker pips only appear when their counter is active', () => {
     const state = createInitialBattleState()
     const yuji = state.playerTeam.find((fighter) => fighter.templateId === 'yuji')
     expect(yuji).toBeDefined()
 
+    expect(getActivePips(yuji!).some((pip) => pip.label === "Sukuna's Vessel")).toBe(false)
+
+    yuji!.stateCounters.sukuna_bonus_hp = 10
     const pips = getActivePips(yuji!)
 
     const vessel = pips.find((pip) => pip.label === "Sukuna's Vessel")
-    expect(vessel?.lines.map((line) => line.text)).toEqual([yuji!.passiveEffects?.[0]?.description])
+    expect(vessel?.stackCount).toBe(10)
+    expect(vessel?.lines.some((line) => line.text.includes('Transformation bonus: +10 HP'))).toBe(true)
+    expect(vessel?.lines.some((line) => line.text === yuji!.passiveEffects?.[0]?.description)).toBe(true)
     expect(vessel?.lines.some((line) => line.text.includes('sukuna_vessel_used'))).toBe(false)
     expect(vessel?.lines.some((line) => line.text.includes('Unknown effect'))).toBe(false)
   })
