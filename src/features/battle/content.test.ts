@@ -2,6 +2,13 @@ import { describe, expect, test } from 'vitest'
 import { battleRoster, defaultBattleSetup } from '@/features/battle/data'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import { validateBattleContent } from '@/features/battle/validation'
+import {
+  CONTENT_SCHEMA_VERSION,
+  createContentSnapshot,
+  clearPublishedBattleContent,
+  readPublishedBattleContent,
+  savePublishedBattleContent,
+} from '@/features/battle/contentSnapshot'
 import type { BattleFighterTemplate } from '@/features/battle/types'
 
 describe('battle content validation', () => {
@@ -69,5 +76,19 @@ describe('battle content validation', () => {
     expect(report.errors.some((error) => error.includes('default setup contains duplicate fighter ids'))).toBe(true)
     expect(report.errors.some((error) => error.includes('unknown fighter id'))).toBe(true)
     expect(report.errors.some((error) => error.includes('must contain exactly 3 fighters'))).toBe(true)
+  })
+
+  test('published content storage preserves schema version across normalization', () => {
+    const fallback = createContentSnapshot(battleRoster, defaultBattleSetup)
+    clearPublishedBattleContent()
+
+    const saved = savePublishedBattleContent(fallback)
+    const read = readPublishedBattleContent(fallback)
+
+    expect(saved.schemaVersion).toBe(CONTENT_SCHEMA_VERSION)
+    expect(read.schemaVersion).toBe(CONTENT_SCHEMA_VERSION)
+    expect(read.updatedAt).toBe(saved.updatedAt)
+
+    clearPublishedBattleContent()
   })
 })

@@ -193,6 +193,7 @@ function normalizeSnapshot(rawSnapshot: unknown): BattleContentSnapshot | null {
         : [],
     },
     updatedAt: typeof snapshot.updatedAt === 'number' ? snapshot.updatedAt : Date.now(),
+    schemaVersion: typeof snapshot.schemaVersion === 'number' ? snapshot.schemaVersion : undefined,
   }
 }
 
