@@ -207,6 +207,8 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
       return `${effect.amount < 0 ? 'Reduce' : 'Increase'} cooldowns by ${Math.abs(effect.amount)}`
     case 'heal':
       return `Restore ${effect.power} HP`
+    case 'setHpFromCounter':
+      return `Set HP to ${effect.base} plus ${effect.counterKey} bonuses`
     case 'stun':
       return `Stun for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
     case 'invulnerable':
@@ -259,11 +261,83 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
       return 'Remove matching immunity'
     case 'schedule':
       return `Schedule ${effect.effects.length} delayed effect${effect.effects.length === 1 ? '' : 's'}`
+    case 'randomEnemyDamageOverTime':
+      return `Hit random enemies for ${effect.power} damage over ${effect.duration} turns`
+    case 'randomEnemyDamageTick':
+      return `Hit a random enemy for ${effect.power} damage`
     case 'overhealToShield':
       return `Convert overheal to shield (${effect.power})`
     default:
       return 'Unknown effect'
   }
+}
+
+// ── Passive display helpers ──────────────────────────────────────────────────
+
+function passiveTriggerLabel(passive: PassiveEffect): string {
+  switch (passive.trigger) {
+    case 'whileAlive':
+      return 'While alive'
+    case 'onRoundStart':
+      return 'Round start'
+    case 'onRoundEnd':
+      return 'Round end'
+    case 'onAbilityUse':
+      return 'On ability use'
+    case 'onAbilityResolve':
+      return 'On ability resolve'
+    case 'onDealDamage':
+      return 'On dealing damage'
+    case 'onTakeDamage':
+      return 'On taking damage'
+    case 'onShieldBroken':
+      return 'On shield break'
+    case 'onHeal':
+      return 'On heal'
+    case 'onShieldGain':
+      return 'On shield gain'
+    case 'onDefeat':
+      return 'On defeat'
+    case 'onDefeatEnemy':
+      return 'On defeating an enemy'
+    case 'onBeingTargeted':
+      return 'When targeted'
+    case 'onTargetBelow':
+      return passive.threshold != null ? `Target below ${Math.round(passive.threshold * 100)}% HP` : 'Execute window'
+  }
+}
+
+function describePassiveGeneratedLines(passive: PassiveEffect): ActiveEffectLine[] {
+  const prefix = passiveTriggerLabel(passive)
+  const conditionText =
+    passive.conditions && passive.conditions.length > 0
+      ? `, if ${passive.conditions.map(describeReactionCondition).join(', ')}`
+      : ''
+  if (passive.effects.length > 0) {
+    return passive.effects.map((effect) => ({
+      text: `${prefix}${conditionText}: ${describeSkillEffectForUi(effect)}`,
+      turnsLeft: getSkillEffectDuration(effect),
+    }))
+  }
+  return [{ text: `${prefix}${conditionText}: no passive effects configured`, turnsLeft: null }]
+}
+
+export function describePassiveForUi(passive: PassiveEffect): string {
+  const description = passive.description?.trim()
+  if (description) return description
+
+  const generated = describePassiveGeneratedLines(passive)
+    .map((line) => line.text.trim())
+    .filter(Boolean)
+    .join('; ')
+
+  return generated || passive.label
+}
+
+function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
+  const description = passive.description?.trim()
+  if (description) return [{ text: description, turnsLeft: null }]
+  return describePassiveGeneratedLines(passive)
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -309,60 +383,9 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     else group.turnsLeft = Math.max(group.turnsLeft, turns)
   }
 
-function mergeTone(group: Group, tone: ActivePipTone) {
-  if (group.tone === 'default') group.tone = tone
-}
-
-function passiveTriggerLabel(passive: PassiveEffect): string {
-  switch (passive.trigger) {
-    case 'whileAlive':
-      return 'While alive'
-    case 'onRoundStart':
-      return 'Round start'
-    case 'onRoundEnd':
-      return 'Round end'
-    case 'onAbilityUse':
-      return 'On ability use'
-    case 'onAbilityResolve':
-      return 'On ability resolve'
-    case 'onDealDamage':
-      return 'On dealing damage'
-    case 'onTakeDamage':
-      return 'On taking damage'
-    case 'onShieldBroken':
-      return 'On shield break'
-    case 'onHeal':
-      return 'On heal'
-    case 'onShieldGain':
-      return 'On shield gain'
-    case 'onDefeat':
-      return 'On defeat'
-    case 'onDefeatEnemy':
-      return 'On defeating an enemy'
-    case 'onBeingTargeted':
-      return 'When targeted'
-    case 'onTargetBelow':
-      return passive.threshold != null ? `Target below ${Math.round(passive.threshold * 100)}% HP` : 'Execute window'
+  function mergeTone(group: Group, tone: ActivePipTone) {
+    if (group.tone === 'default') group.tone = tone
   }
-}
-
-function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
-  const prefix = passiveTriggerLabel(passive)
-  const conditionText =
-    passive.conditions && passive.conditions.length > 0
-      ? `, if ${passive.conditions.map(describeReactionCondition).join(', ')}`
-      : ''
-  if (passive.effects.length > 0) {
-    return passive.effects.map((effect) => ({
-      text: `${prefix}${conditionText}: ${describeSkillEffectForUi(effect)}`,
-      turnsLeft: getSkillEffectDuration(effect),
-    }))
-  }
-  if (passive.description?.trim()) {
-    return [{ text: `${prefix}${conditionText}: ${passive.description.trim()}`, turnsLeft: null }]
-  }
-  return [{ text: `${prefix}${conditionText}: no passive effects configured`, turnsLeft: null }]
-}
 
 function isBaselinePassiveVisible(passive: PassiveEffect): boolean {
   // Hidden passives (conditional sub-effects already described in skill copy) are

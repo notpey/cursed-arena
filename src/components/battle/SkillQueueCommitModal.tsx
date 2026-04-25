@@ -1,5 +1,5 @@
 import { type DragEvent, type TouchEvent, useRef, useState } from 'react'
-import { describeSkillEffectForUi, getCommandSummary } from '@/components/battle/battleDisplay'
+import { describePassiveForUi, getCommandSummary } from '@/components/battle/battleDisplay'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import {
@@ -25,8 +25,7 @@ function buildRoundStartPreview(team: BattleFighterState[]): Array<{ fighter: Ba
     for (const passive of fighter.passiveEffects ?? []) {
       if (passive.trigger !== 'onRoundStart') continue
       if (passive.hidden) continue
-      const effectText = passive.effects.map(describeSkillEffectForUi).join(', ')
-      rows.push({ fighter, passive, text: effectText || passive.description || passive.label })
+      rows.push({ fighter, passive, text: describePassiveForUi(passive) })
     }
   }
   return rows

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest'
+import { getActivePips } from '@/components/battle/battleDisplay'
 import { battleRoster, defaultBattleSetup } from '@/features/battle/data'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
+import { createInitialBattleState } from '@/features/battle/engine'
 import { validateBattleContent } from '@/features/battle/validation'
 import {
   CONTENT_SCHEMA_VERSION,
@@ -90,5 +92,18 @@ describe('battle content validation', () => {
     expect(read.updatedAt).toBe(saved.updatedAt)
 
     clearPublishedBattleContent()
+  })
+
+  test('active passive pips prefer authored player-facing descriptions', () => {
+    const state = createInitialBattleState()
+    const yuji = state.playerTeam.find((fighter) => fighter.templateId === 'yuji')
+    expect(yuji).toBeDefined()
+
+    const pips = getActivePips(yuji!)
+
+    const vessel = pips.find((pip) => pip.label === "Sukuna's Vessel")
+    expect(vessel?.lines.map((line) => line.text)).toEqual([yuji!.passiveEffects?.[0]?.description])
+    expect(vessel?.lines.some((line) => line.text.includes('sukuna_vessel_used'))).toBe(false)
+    expect(vessel?.lines.some((line) => line.text.includes('Unknown effect'))).toBe(false)
   })
 })
