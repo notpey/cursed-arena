@@ -158,6 +158,7 @@ export type BattleFighterTemplate = {
   boardPortraitFrame?: BattlePortraitFrame
   maxHp: number
   initialStateCounters?: Record<string, number>
+  initialStateModes?: Record<string, string>
   passiveEffects?: PassiveEffect[]
   abilities: BattleAbilityTemplate[]
   ultimate: BattleAbilityTemplate
@@ -304,9 +305,14 @@ export type BattleReactionCondition =
   | { type: 'abilityId'; abilityId: string }
   | { type: 'abilityClass'; class: BattleSkillClass }
   | { type: 'fighterFlag'; key: string; value: boolean }
+  | { type: 'actorModeIs'; key: string; value: string }
+  | { type: 'targetModeIs'; key: string; value: string }
   | { type: 'counterAtLeast'; key: string; value: number }
   | { type: 'targetCounterAtLeast'; key: string; value: number }
   | { type: 'usedAbilityLastTurn'; abilityId: string }
+  | { type: 'usedDifferentAbilityLastTurn'; abilityId: string }
+  | { type: 'usedAbilityWithinRounds'; abilityId: string; rounds: number }
+  | { type: 'usedAbilityOnTarget'; abilityId: string }
   | { type: 'shieldActive'; tag?: string }
   | { type: 'brokenShieldTag'; tag: string }
   | { type: 'isUltimate' }
@@ -357,7 +363,10 @@ export type BattleFighterState = {
   effectImmunities: BattleEffectImmunityState[]
   stateFlags: Record<string, boolean>
   stateCounters: Record<string, number>
+  stateModes: Record<string, string>
   lastUsedAbilityId: string | null
+  previousUsedAbilityId: string | null
+  abilityHistory: Array<{ abilityId: string; round: number; targetId?: string | null }>
   classStuns: BattleClassStunState[]
   reactionGuards: BattleReactionGuardState[]
   lastAttackerId: string | null
@@ -427,6 +436,7 @@ export type BattleDamagePacket = {
     isUltimate?: boolean
     isStatusTick?: boolean
     ignoresInvulnerability?: boolean
+    ignoresShield?: boolean
     isPiercing?: boolean
     cannotBeCountered?: boolean
     cannotBeReflected?: boolean
@@ -528,9 +538,9 @@ export type BattleTimelineResult = {
 export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'other-enemies' | 'attacker' | 'random-enemy'
 
 export type SkillEffect =
-  | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
-  | { type: 'damageFiltered'; power: number; requiresTag: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
-  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; requiresTag?: string; target: EffectTarget; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; counterSource?: 'actor' | 'target' }
+  | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'damageFiltered'; power: number; requiresTag: string; target: EffectTarget; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
+  | { type: 'damageScaledByCounter'; counterKey: string; powerPerStack: number; consumeStacks: boolean; modifierTag?: string; requiresTag?: string; target: EffectTarget; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean; counterSource?: 'actor' | 'target' }
   | { type: 'shieldDamage'; amount: number; tag?: string; target: EffectTarget }
   | { type: 'energyGain'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'energyDrain'; amount: BattleEnergyCost; target: EffectTarget }
@@ -552,6 +562,8 @@ export type SkillEffect =
   | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
   | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
   | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
+  | { type: 'setMode'; key: string; value: string; target: EffectTarget }
+  | { type: 'clearMode'; key: string; target: EffectTarget }
   | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; min?: number; max?: number; target: EffectTarget }
   | { type: 'setCounter'; key: string; value: number; target: EffectTarget }
   | { type: 'adjustSourceCounter'; key: string; amount: number; target: EffectTarget }
@@ -571,7 +583,7 @@ export type SkillEffect =
   | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
   | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; target: EffectTarget }
   | { type: 'overhealToShield'; power: number; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
-  | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
+  | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
 
 export type PassiveTrigger =
   | 'onDealDamage'

@@ -139,12 +139,22 @@ export function describeReactionCondition(condition: BattleReactionCondition) {
       return `using a ${condition.class} technique`
     case 'fighterFlag':
       return `${condition.key} is ${condition.value ? 'true' : 'false'}`
+    case 'actorModeIs':
+      return `self ${condition.key} is ${condition.value}`
+    case 'targetModeIs':
+      return `target ${condition.key} is ${condition.value}`
     case 'counterAtLeast':
       return `${condition.key} at least ${condition.value}`
     case 'targetCounterAtLeast':
       return `target ${condition.key} at least ${condition.value}`
     case 'usedAbilityLastTurn':
       return `last used ${condition.abilityId}`
+    case 'usedDifferentAbilityLastTurn':
+      return `last used a different skill than ${condition.abilityId}`
+    case 'usedAbilityWithinRounds':
+      return `used ${condition.abilityId} within ${condition.rounds} rounds`
+    case 'usedAbilityOnTarget':
+      return `used ${condition.abilityId} on this target`
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'any shield active'
     case 'brokenShieldTag':

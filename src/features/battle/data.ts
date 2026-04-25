@@ -1924,6 +1924,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         ],
         effects: [
           { type: 'setFlag', key: 'panda_gorilla_mode', value: true, target: 'self' },
+          { type: 'setMode', key: 'form', value: 'gorilla', target: 'self' },
           { type: 'heal', power: 15, target: 'self' },
           modifierEffect('Gorilla Mode', 'damageDealt', 20, 'permanent', 'self', ['gorilla-mode']),
         ],
@@ -1945,7 +1946,12 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         power: 20,
         effects: [
           { type: 'damage', power: 20, target: 'inherit' },
-          { type: 'damageFiltered', power: 20, requiresTag: 'gorilla-mode', target: 'inherit' },
+          {
+            type: 'conditional',
+            target: 'inherit',
+            conditions: [{ type: 'actorModeIs', key: 'form', value: 'gorilla' }],
+            effects: [{ type: 'damage', power: 20, target: 'inherit' }],
+          },
         ],
       }),
       skill({
@@ -1975,8 +1981,15 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         power: 30,
         effects: [
           { type: 'damage', power: 30, target: 'inherit' },
-          { type: 'damageFiltered', power: 30, requiresTag: 'gorilla-mode', target: 'inherit' },
-          { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Energy', 'Affliction', 'Melee', 'Ranged', 'Mental', 'Special'], target: 'inherit' },
+          {
+            type: 'conditional',
+            target: 'inherit',
+            conditions: [{ type: 'actorModeIs', key: 'form', value: 'gorilla' }],
+            effects: [
+              { type: 'damage', power: 30, target: 'inherit' },
+              { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Energy', 'Affliction', 'Melee', 'Ranged', 'Mental', 'Special'], target: 'inherit' },
+            ],
+          },
         ],
       }),
     ],
@@ -1991,7 +2004,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
       energyCost: {},
       effects: [
         { type: 'invulnerable', duration: 1, target: 'self' },
-        markerEffect('Gorilla Mode', 1, 'self', ['gorilla-mode']),
+        { type: 'setMode', key: 'form', value: 'gorilla', target: 'self' },
       ],
     }),
   }),
@@ -2106,6 +2119,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         effects: [
           { type: 'damage', power: 20, target: 'inherit' },
           markerEffect('Pulled', 2, 'inherit', ['pulled']),
+          { type: 'adjustCounter', key: 'limitless_blue', amount: 1, min: 0, max: 1, target: 'self' },
         ],
       }),
       skill({
@@ -2123,6 +2137,7 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
           { type: 'damageFiltered', power: 15, requiresTag: 'pulled', target: 'inherit' },
           { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Energy', 'Affliction', 'Melee', 'Ranged', 'Mental', 'Special'], target: 'inherit' },
           { type: 'removeModifier', filter: { tags: ['pulled'] }, target: 'inherit' },
+          { type: 'adjustCounter', key: 'limitless_red', amount: 1, min: 0, max: 1, target: 'self' },
         ],
       }),
       skill({
@@ -2135,7 +2150,10 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
         cooldown: 3,
         energyCost: { physical: 1, mental: 1, technique: 1 },
         power: 30,
-        effects: [{ type: 'damage', power: 30, target: 'all-enemies', piercing: true }],
+        effects: [
+          { type: 'damage', power: 30, target: 'all-enemies', piercing: true },
+          { type: 'damageScaledByCounter', counterKey: 'limitless_red', counterSource: 'actor', powerPerStack: 15, consumeStacks: false, target: 'all-enemies', piercing: true, ignoresInvulnerability: true, ignoresShield: true },
+        ],
       }),
     ],
     ultimate: defendSkill({

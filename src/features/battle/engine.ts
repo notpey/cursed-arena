@@ -100,6 +100,7 @@ type ReactionContext = {
   amount?: number
   isUltimate?: boolean
   brokenShieldTags?: string[]
+  round?: number
 }
 
 type ResolutionContext = {
@@ -156,7 +157,10 @@ function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     effectImmunities: fighter.effectImmunities.map(cloneEffectImmunity),
     stateFlags: { ...fighter.stateFlags },
     stateCounters: { ...fighter.stateCounters },
+    stateModes: { ...fighter.stateModes },
     lastUsedAbilityId: fighter.lastUsedAbilityId,
+    previousUsedAbilityId: fighter.previousUsedAbilityId,
+    abilityHistory: fighter.abilityHistory.map((entry) => ({ ...entry })),
     classStuns: fighter.classStuns.map((cs) => ({ ...cs, blockedClasses: [...cs.blockedClasses] })),
     reactionGuards: fighter.reactionGuards.map((guard) => ({
       ...guard,
@@ -265,7 +269,10 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         effectImmunities: [],
         stateFlags: {},
         stateCounters: { ...(template.initialStateCounters ?? {}) },
+        stateModes: { ...(template.initialStateModes ?? {}) },
         lastUsedAbilityId: null,
+        previousUsedAbilityId: null,
+        abilityHistory: [],
         classStuns: [],
         reactionGuards: [],
         lastAttackerId: null,
@@ -1332,12 +1339,24 @@ function matchesReactionCondition(
       return Boolean(context.ability?.classes.includes(condition.class))
     case 'fighterFlag':
       return (actor.stateFlags[condition.key] ?? false) === condition.value
+    case 'actorModeIs':
+      return actor.stateModes[condition.key] === condition.value
+    case 'targetModeIs':
+      return context.target?.stateModes[condition.key] === condition.value
     case 'counterAtLeast':
       return (actor.stateCounters[condition.key] ?? 0) >= condition.value
     case 'targetCounterAtLeast':
       return Boolean(context.target && (context.target.stateCounters[condition.key] ?? 0) >= condition.value)
     case 'usedAbilityLastTurn':
       return actor.lastUsedAbilityId === condition.abilityId
+    case 'usedDifferentAbilityLastTurn':
+      return actor.lastUsedAbilityId !== null && actor.lastUsedAbilityId !== condition.abilityId
+    case 'usedAbilityWithinRounds':
+      return actor.lastUsedAbilityId === condition.abilityId ||
+        actor.previousUsedAbilityId === condition.abilityId ||
+        actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.round >= Math.max(1, context.round ?? 0) - condition.rounds)
+    case 'usedAbilityOnTarget':
+      return Boolean(context.target && actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.targetId === context.target?.instanceId))
     case 'shieldActive':
       return Boolean(actor.shield && (!condition.tag || actor.shield.tags.includes(condition.tag)))
     case 'brokenShieldTag':
@@ -1377,6 +1396,7 @@ function firePassives(
     effect,
     amount,
     isUltimate: ability?.classes.includes('Ultimate') ?? false,
+    round: state.round,
     ...extraContext,
   }
 
@@ -2112,7 +2132,7 @@ function applyDamagePacket(
   }
 
   let remainingDamage = packet.amount
-  if (target.shield && target.shield.amount > 0) {
+  if (target.shield && target.shield.amount > 0 && !packet.flags.ignoresShield) {
     const absorbed = Math.min(target.shield.amount, remainingDamage)
     target.shield.amount -= absorbed
     remainingDamage -= absorbed
@@ -2464,6 +2484,8 @@ function resolveEffects(
             tags: abilityClasses ?? [],
             flags: {
               isUltimate: isUlt,
+              ignoresInvulnerability: effect.ignoresInvulnerability,
+              ignoresShield: effect.ignoresShield,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -2484,10 +2506,12 @@ function resolveEffects(
             abilityId,
             baseAmount: effect.power,
             amount,
-            damageType: 'normal',
+            damageType: effect.damageType ?? 'normal',
             tags: abilityClasses ?? [],
             flags: {
               isUltimate: isUlt,
+              ignoresInvulnerability: effect.ignoresInvulnerability,
+              ignoresShield: effect.ignoresShield,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -2616,10 +2640,12 @@ function resolveEffects(
             abilityId,
             baseAmount: shieldAmount,
             amount: deAmount,
-            damageType: 'normal',
+            damageType: effect.damageType ?? 'normal',
             tags: abilityClasses ?? [],
             flags: {
               isUltimate: isUlt,
+              ignoresInvulnerability: effect.ignoresInvulnerability,
+              ignoresShield: effect.ignoresShield,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -3097,6 +3123,28 @@ function resolveEffects(
           setFighterFlag(t, effect.key, effect.value)
           emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
           break
+        case 'setMode':
+          t.stateModes[effect.key] = effect.value
+          makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
+            actorId: actor.instanceId,
+            targetId: t.instanceId,
+            team: t.team,
+            abilityId,
+            meta: { key: effect.key, value: effect.value },
+          })
+          makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} entered ${effect.value}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          break
+        case 'clearMode':
+          delete t.stateModes[effect.key]
+          makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
+            actorId: actor.instanceId,
+            targetId: t.instanceId,
+            team: t.team,
+            abilityId,
+            meta: { key: effect.key, value: null },
+          })
+          makeEvent(ctx, state.round, 'status', 'frost', `${t.shortName} left ${effect.key}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          break
         case 'adjustCounter':
           if (effect.requiresTag && !getFighterModifierPool(state, t).some((modifier) => modifier.tags.includes(effect.requiresTag!))) break
           adjustFighterCounter(t, effect.key, effect.amount)
@@ -3135,6 +3183,7 @@ function resolveEffects(
             ability: conditionAbility,
             amount: triggerAmount,
             isUltimate: abilityClasses?.includes('Ultimate'),
+            round: state.round,
           }))
           const branch = passed ? effect.effects : effect.elseEffects ?? []
           if (branch.length > 0) {
@@ -3335,7 +3384,12 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
     firePassives(state, ctx, tgt, actor, 'onBeingTargeted', ability)
   }
 
+  actor.previousUsedAbilityId = actor.lastUsedAbilityId
   actor.lastUsedAbilityId = ability.id
+  actor.abilityHistory = [
+    ...actor.abilityHistory,
+    { abilityId: ability.id, round: state.round, targetId: singleTarget?.instanceId ?? null },
+  ].slice(-12)
   makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
     actorId: actor.instanceId,
     targetId: singleTarget?.instanceId,

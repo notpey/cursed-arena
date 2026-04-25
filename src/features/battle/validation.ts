@@ -78,6 +78,11 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
     case 'fighterFlag':
       if (!condition.key.trim()) pushIssue(issues, scope, 'fighterFlag key is required')
       return
+    case 'actorModeIs':
+    case 'targetModeIs':
+      if (!condition.key.trim()) pushIssue(issues, scope, `${condition.type} key is required`)
+      if (!condition.value.trim()) pushIssue(issues, scope, `${condition.type} value is required`)
+      return
     case 'counterAtLeast':
       if (!condition.key.trim()) pushIssue(issues, scope, 'counterAtLeast key is required')
       if (!Number.isFinite(condition.value)) pushIssue(issues, scope, 'counterAtLeast value must be finite')
@@ -88,6 +93,16 @@ function validateCondition(scope: string, condition: BattleReactionCondition, is
       return
     case 'usedAbilityLastTurn':
       if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityLastTurn abilityId is required')
+      return
+    case 'usedDifferentAbilityLastTurn':
+      if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedDifferentAbilityLastTurn abilityId is required')
+      return
+    case 'usedAbilityWithinRounds':
+      if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityWithinRounds abilityId is required')
+      if (condition.rounds <= 0) pushIssue(issues, scope, 'usedAbilityWithinRounds rounds must be positive')
+      return
+    case 'usedAbilityOnTarget':
+      if (!condition.abilityId.trim()) pushIssue(issues, scope, 'usedAbilityOnTarget abilityId is required')
       return
     case 'shieldActive':
       return
@@ -217,6 +232,13 @@ function validateSkillEffect(
       return
     case 'setFlag':
       if (!effect.key.trim()) pushIssue(issues, scope, 'setFlag key is required')
+      return
+    case 'setMode':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'setMode key is required')
+      if (!effect.value.trim()) pushIssue(issues, scope, 'setMode value is required')
+      return
+    case 'clearMode':
+      if (!effect.key.trim()) pushIssue(issues, scope, 'clearMode key is required')
       return
     case 'adjustCounter':
       if (!effect.key.trim()) pushIssue(issues, scope, 'adjustCounter key is required')
@@ -397,11 +419,18 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   }
 
   const damageEffectTypes = ['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick'] as const
-  if (ability.kind === 'attack' && !effects.some((effect) => (damageEffectTypes as readonly string[]).includes(effect.type))) {
+  const containsEffectType = (sourceEffects: SkillEffect[], types: readonly string[]): boolean =>
+    sourceEffects.some((effect) => {
+      if (types.includes(effect.type)) return true
+      if (effect.type === 'conditional') return containsEffectType(effect.effects, types) || containsEffectType(effect.elseEffects ?? [], types)
+      if (effect.type === 'reaction' || effect.type === 'schedule') return containsEffectType(effect.effects, types)
+      return false
+    })
+  if (ability.kind === 'attack' && !containsEffectType(effects, damageEffectTypes)) {
     pushIssue(issues, scope, 'attack abilities require at least one damage effect')
   }
   const healEffectTypes = ['heal', 'overhealToShield'] as const
-  if (ability.kind === 'heal' && !effects.some((effect) => (healEffectTypes as readonly string[]).includes(effect.type))) {
+  if (ability.kind === 'heal' && !containsEffectType(effects, healEffectTypes)) {
     pushIssue(issues, scope, 'heal abilities require at least one heal effect')
   }
   if (ability.kind !== 'pass' && effects.length === 0) {

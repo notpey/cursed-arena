@@ -423,6 +423,12 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   if (key === 'straw_doll_damage_taken') {
     return `Straw Doll damage vulnerability: +${value * 5}`
   }
+  if (key === 'cursed_bullet') {
+    return `${value} Cursed Bullet use${value === 1 ? '' : 's'} remaining`
+  }
+  if (key === 'scorched') {
+    return `${value} Scorched stack${value === 1 ? '' : 's'}`
+  }
   return null
 }
 
@@ -477,6 +483,16 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     mergeTone(group, 'buff')
   }
 
+  for (const [key, value] of Object.entries(fighter.stateModes)) {
+    if (!value) continue
+    const group = ensureGroup(`mode-${key}`)
+    group.label = value
+    group.iconLabel = value.slice(0, 2).toUpperCase()
+    group.iconTone = 'gold'
+    group.lines.push({ text: `${key}: ${value}`, turnsLeft: null })
+    mergeTone(group, 'buff')
+  }
+
   // ── Effect immunities ─────────────────────────────────────────────────────
   for (const immunity of fighter.effectImmunities) {
     const sourceId = immunity.sourceAbilityId ?? '__immunity__'
@@ -508,9 +524,15 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'stun')
-    } else {
+    } else if (guard.kind === 'reflect') {
       group.lines.push({
         text: `If this character uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected`,
+        turnsLeft: guard.remainingRounds,
+      })
+      mergeTone(group, 'buff')
+    } else {
+      group.lines.push({
+        text: `${guard.label} will trigger on ${guard.trigger ?? 'the next event'}`,
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'buff')

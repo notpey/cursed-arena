@@ -43,8 +43,8 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onHeal', 'onShieldBroken', 'onShieldGain', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'setCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'reaction', 'conditional', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
-const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'actorHasModifierTag', 'targetHasModifierTag', 'abilityId', 'abilityClass', 'fighterFlag', 'counterAtLeast', 'targetCounterAtLeast', 'usedAbilityLastTurn', 'shieldActive', 'brokenShieldTag', 'isUltimate']
+const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'setCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'reaction', 'conditional', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'setMode', 'clearMode', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
+const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'actorHasModifierTag', 'targetHasModifierTag', 'abilityId', 'abilityClass', 'fighterFlag', 'actorModeIs', 'targetModeIs', 'counterAtLeast', 'targetCounterAtLeast', 'usedAbilityLastTurn', 'usedDifferentAbilityLastTurn', 'usedAbilityWithinRounds', 'usedAbilityOnTarget', 'shieldActive', 'brokenShieldTag', 'isUltimate']
 const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'other-enemies', 'attacker', 'random-enemy']
 const reactionTriggers: BattleReactionTrigger[] = ['onAbilityUse', 'onBeingTargeted', 'onDamageApplied', 'onDamageBlocked', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
@@ -82,6 +82,8 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   effectImmunity: { label: 'Effect Immunity', hint: 'Ignore selected non-damage effect types for a duration.' },
   removeEffectImmunity: { label: 'Remove Effect Immunity', hint: 'Strip an active effect immunity by label or tag.' },
   setFlag: { label: 'Set Flag', hint: 'Flip a named fighter state flag on or off.' },
+  setMode: { label: 'Set Mode', hint: 'Set a named fighter form or mode.' },
+  clearMode: { label: 'Clear Mode', hint: 'Clear a named fighter form or mode.' },
   adjustCounter: { label: 'Adjust Counter', hint: 'Increment or decrement a named fighter state counter.' },
   setCounter: { label: 'Set Counter', hint: 'Set a named fighter state counter to an exact value.' },
   adjustSourceCounter: { label: 'Adjust Source Counter', hint: 'Increment or decrement a named counter on a linked source fighter.' },
@@ -314,6 +316,10 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'removeEffectImmunity', filter: { label: 'immunity-label' }, target: 'self' }
     case 'setFlag':
       return { type: 'setFlag', key: 'state-flag', value: true, target: 'self' }
+    case 'setMode':
+      return { type: 'setMode', key: 'form', value: 'active', target: 'self' }
+    case 'clearMode':
+      return { type: 'clearMode', key: 'form', target: 'self' }
     case 'adjustCounter':
       return { type: 'adjustCounter', key: 'state-counter', amount: 1, target: 'self' }
     case 'setCounter':
@@ -441,12 +447,22 @@ function createReactionCondition(type: BattleReactionCondition['type']): BattleR
       return { type: 'abilityClass', class: 'Unique' }
     case 'fighterFlag':
       return { type: 'fighterFlag', key: 'state-flag', value: true }
+    case 'actorModeIs':
+      return { type: 'actorModeIs', key: 'form', value: 'active' }
+    case 'targetModeIs':
+      return { type: 'targetModeIs', key: 'form', value: 'active' }
     case 'counterAtLeast':
       return { type: 'counterAtLeast', key: 'state-counter', value: 1 }
     case 'targetCounterAtLeast':
       return { type: 'targetCounterAtLeast', key: 'state-counter', value: 1 }
     case 'usedAbilityLastTurn':
       return { type: 'usedAbilityLastTurn', abilityId: 'ability-id' }
+    case 'usedDifferentAbilityLastTurn':
+      return { type: 'usedDifferentAbilityLastTurn', abilityId: 'ability-id' }
+    case 'usedAbilityWithinRounds':
+      return { type: 'usedAbilityWithinRounds', abilityId: 'ability-id', rounds: 3 }
+    case 'usedAbilityOnTarget':
+      return { type: 'usedAbilityOnTarget', abilityId: 'ability-id' }
     case 'shieldActive':
       return { type: 'shieldActive', tag: 'shield-tag' }
     case 'brokenShieldTag':
@@ -476,12 +492,22 @@ function describeCondition(condition: BattleReactionCondition) {
       return `ability has ${condition.class}`
     case 'fighterFlag':
       return `${condition.key} is ${condition.value ? 'true' : 'false'}`
+    case 'actorModeIs':
+      return `self ${condition.key} is ${condition.value}`
+    case 'targetModeIs':
+      return `target ${condition.key} is ${condition.value}`
     case 'counterAtLeast':
       return `${condition.key} >= ${condition.value}`
     case 'targetCounterAtLeast':
       return `target ${condition.key} >= ${condition.value}`
     case 'usedAbilityLastTurn':
       return `last ability was ${condition.abilityId}`
+    case 'usedDifferentAbilityLastTurn':
+      return `last ability was not ${condition.abilityId}`
+    case 'usedAbilityWithinRounds':
+      return `used ${condition.abilityId} within ${condition.rounds} rounds`
+    case 'usedAbilityOnTarget':
+      return `used ${condition.abilityId} on this target`
     case 'shieldActive':
       return condition.tag ? `shield ${condition.tag} active` : 'shield active'
     case 'brokenShieldTag':
@@ -549,6 +575,10 @@ function describeEffect(effect: SkillEffect) {
       return `Remove effect immunity from ${formatEffectTarget(effect.target)} matching ${effect.filter.label ? `label "${effect.filter.label}"` : ''}${effect.filter.tag ? ` tag "${effect.filter.tag}"` : ''}.`
     case 'setFlag':
       return `Set ${effect.key} to ${effect.value ? 'true' : 'false'} on ${formatEffectTarget(effect.target)}.`
+    case 'setMode':
+      return `Set ${effect.key} to ${effect.value} on ${formatEffectTarget(effect.target)}.`
+    case 'clearMode':
+      return `Clear ${effect.key} on ${formatEffectTarget(effect.target)}.`
     case 'adjustCounter':
       return `Adjust ${effect.key} by ${effect.amount} on ${formatEffectTarget(effect.target)}.`
     case 'setCounter':

@@ -823,6 +823,48 @@ describe('battle engine scenarios', () => {
     expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
   })
 
+  test('counter conditions can upgrade Gojo Hollow Purple', () => {
+    let state = createChargedBattleState({
+      playerTeamIds: ['gojo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const gojo = getFighter(state, 'player', 'gojo')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    gojo.abilities.forEach((ability) => {
+      ability.energyCost = {}
+    })
+
+    state = resolveTeamTurn(state, queue('player', gojo.instanceId, 'gojo-lapse-blue', enemyYuji.instanceId), 'player').state
+    state = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'gojo').instanceId, 'gojo-reversal-red', getFighter(state, 'enemy', 'yuji').instanceId), 'player').state
+    expect(getFighter(state, 'player', 'gojo').abilityHistory.map((entry) => entry.abilityId)).toEqual(['gojo-lapse-blue', 'gojo-reversal-red'])
+    expect(getFighter(state, 'player', 'gojo').stateCounters.limitless_blue).toBe(1)
+    expect(getFighter(state, 'player', 'gojo').stateCounters.limitless_red).toBe(1)
+    expect(getFighter(state, 'player', 'gojo').abilities.find((ability) => ability.id === 'gojo-hollow-purple')?.effects?.[1]?.type).toBe('damageScaledByCounter')
+    state = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'gojo').instanceId, 'gojo-hollow-purple', null), 'player').state
+
+    expect(getFighter(state, 'enemy', 'yuji').hp).toBe(1)
+    expect(getFighter(state, 'enemy', 'nobara').hp).toBe(55)
+    expect(getFighter(state, 'enemy', 'megumi').hp).toBe(51)
+  })
+
+  test('fighter modes can drive Panda Gorilla Mode branches', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['panda', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const panda = getFighter(state, 'player', 'panda')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    panda.stateModes.form = 'gorilla'
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', panda.instanceId, 'panda-punch', enemyYuji.instanceId),
+      'player',
+    )
+
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(60)
+  })
+
   test('battle content validation no longer requires renderSrc', () => {
     const report = validateBattleContent([JSON.parse(JSON.stringify(battleRoster[0]))])
 

@@ -30,16 +30,36 @@ Implementation notes for next pass:
 
 ## Milestone 3: Damage Filters, Skill History, and Modes
 
+Status: partially implemented.
+
+Implemented in the current pass:
+
+- Added fighter `stateModes` plus `initialStateModes`.
+- Added `setMode` and `clearMode` effects.
+- Added mode conditions: `actorModeIs` and `targetModeIs`.
+- Added ability history storage on fighter state:
+  - `previousUsedAbilityId`
+  - rolling `abilityHistory`
+- Added history conditions:
+  - `usedDifferentAbilityLastTurn`
+  - `usedAbilityWithinRounds`
+  - `usedAbilityOnTarget`
+- Added damage flags on authored damage effects:
+  - `ignoresInvulnerability`
+  - `ignoresShield`
+  - optional packet `damageType`
+- Added pip display for active fighter modes and more readable Cursed Bullet / Scorched counters.
+- Converted Panda Gorilla Mode branches to use mode conditions.
+- Tightened Gojo Hollow Purple using Limitless counters and shield/invulnerability bypass flags.
+- Added tests for Panda mode branches and Gojo enhanced Hollow Purple.
+
+Remaining Milestone 3 work:
+
 - Add damage filters for direct, affliction, fatigue, piercing, non-affliction, non-mental, and skill-class-specific damage.
 - Add prevention filters for direct-damage death versus affliction/debuff death.
-- Add skill history predicates:
-  - used ability last turn.
-  - used two different skills consecutively.
-  - used ability on this target.
-  - first interaction with each enemy.
-  - used both named abilities within N turns.
-- Add a first-class fighter mode/form system for durable states:
-  - Panda Balanced/Gorilla Mode.
+- Add first-interaction-with-each-enemy history predicates.
+- Add first-class mode duration/expiry. Current modes persist until cleared.
+- Convert durable states to modes:
   - Nanami Overtime.
   - Gojo Infinity active/collapsed.
   - Maki Weapon Mastery.
@@ -47,6 +67,14 @@ Implementation notes for next pass:
 - Add tests for Gojo Blue/Red/Purple, Kamo sequencing, Panda form upgrades, Shoko death prevention, and Toge strain.
 
 ## Milestone 4: Roster Fidelity and UI Polish
+
+Status: started.
+
+- Pips now show fighter modes.
+- Reaction pips now describe generic event reactions instead of treating all non-counter guards as reflect.
+- Counter pips now include readable Cursed Bullet and Scorched lines.
+
+Remaining Milestone 4 work:
 
 - Replace approximation effects in the authored roster with exact engine-backed behavior.
 - Review every character against source screenshots and add one focused test per signature mechanic.
