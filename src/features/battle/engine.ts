@@ -18,6 +18,11 @@ import {
   cloneState,
 } from '@/features/battle/engine/clone.ts'
 import {
+  getWinner,
+  getVictoryTone,
+  getVictoryMessage,
+} from '@/features/battle/engine/victory.ts'
+import {
   battleEnergyExchangeCost,
   battleEnergyOrder,
   canExchangeEnergy,
@@ -3335,27 +3340,6 @@ function applyFatigue(state: BattleState, ctx: ResolutionContext) {
   })
 }
 
-
-function getWinner(state: BattleState): BattleState['winner'] {
-  const playerAlive = state.playerTeam.some(isAlive)
-  const enemyAlive = state.enemyTeam.some(isAlive)
-  if (playerAlive && enemyAlive) return null
-  if (playerAlive) return 'player'
-  if (enemyAlive) return 'enemy'
-  return 'draw'
-}
-
-function getVictoryTone(winner: BattleState['winner']): BattleEventTone {
-  if (winner === 'player') return 'teal'
-  if (winner === 'enemy') return 'red'
-  return 'gold'
-}
-
-function getVictoryMessage(winner: BattleState['winner']) {
-  if (winner === 'player') return 'Your squad controls the battlefield.'
-  if (winner === 'enemy') return 'The enemy team overwhelmed your formation.'
-  return 'Both squads collapsed before either side could claim control.'
-}
 
 export function buildEnemyCommands(state: BattleState): Record<string, QueuedBattleAction> {
   const commands: Record<string, QueuedBattleAction> = {}
