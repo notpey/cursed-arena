@@ -642,7 +642,10 @@ export type TurnPhase =
   | 'roundEnd'
   | 'finished'
 
+export const BATTLE_STATE_SCHEMA_VERSION = 1
+
 export type BattleState = {
+  stateSchemaVersion: number
   battleSeed: string
   round: number
   phase: TurnPhase
@@ -658,6 +661,7 @@ export type BattleState = {
   battlefieldModifiers: BattleModifierInstance[]
   scheduledEffects: BattleScheduledEffect[]
   winner: BattleTeamId | null
+  randomTickCount: number
 }
 
 

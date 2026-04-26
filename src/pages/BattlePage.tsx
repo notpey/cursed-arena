@@ -839,7 +839,6 @@ export function BattlePage() {
     clearPendingSelection()
     setHoveredAbility(null)
 
-    // Lock interactions immediately, then reveal the resolved state all at once.
     setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
 
     const events = steps.flatMap((step) => step.events)
@@ -853,13 +852,16 @@ export function BattlePage() {
       }
     }
 
-    const finalFocus = [...steps].reverse().map(createTimelineFocus).find(Boolean) ?? null
-    setTimelineFocus(finalFocus ?? { label: 'TURN RESOLVED', tone: 'frost' })
-    await wait(260)
+    for (const step of steps) {
+      if (timelineRunRef.current !== runId) return false
 
-    if (timelineRunRef.current !== runId) {
-      return false
+      const focus = createTimelineFocus(step) ?? { label: 'RESOLVING', tone: 'frost' as const }
+      setBattle((current) => ({ ...current, state: step.state }))
+      setTimelineFocus(focus)
+      await wait(260)
     }
+
+    if (timelineRunRef.current !== runId) return false
 
     setTimelineFocus(null)
     return true
@@ -894,7 +896,7 @@ export function BattlePage() {
   }, [multiplayer, multiplayerAutoCommands, multiplayerBattleState, multiplayerIsMyTurn, multiplayerLatestResolution, playTimelineSteps])
 
   const onTurnTimeout = useEffectEvent(() => {
-    if (battle.state.phase === 'finished' || timelineLocked || !isDocumentVisible) return
+    if (battle.state.phase === 'finished' || timelineLocked) return
     handleTurnTimeout()
   })
 
@@ -917,8 +919,9 @@ export function BattlePage() {
 
   useEffect(() => {
     if (turnSecondsLeft > 0) return
+    if (!isDocumentVisible) return
     onTurnTimeout()
-  }, [turnSecondsLeft])
+  }, [turnSecondsLeft, isDocumentVisible])
 
   // ── Opponent disconnect detection ─────────────────────────────────────────
   // If it's opponent's turn in an online match and we haven't received a

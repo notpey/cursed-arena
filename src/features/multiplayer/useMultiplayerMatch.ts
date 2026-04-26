@@ -19,6 +19,7 @@ import {
   createAutoCommands,
 } from '@/features/battle/engine'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
+import { BATTLE_STATE_SCHEMA_VERSION } from '@/features/battle/types'
 import type {
   BattleState,
   BattleTeamId,
@@ -220,6 +221,9 @@ export function useMultiplayerMatch(
       }
 
       const canon = data.battle_state
+      if (canon.stateSchemaVersion !== BATTLE_STATE_SCHEMA_VERSION) {
+        console.warn(`[multiplayer] state schema mismatch on load: got ${canon.stateSchemaVersion}, expected ${BATTLE_STATE_SCHEMA_VERSION}`)
+      }
       canonicalRef.current = canon
       setCanonical(canon)
 
@@ -255,6 +259,9 @@ export function useMultiplayerMatch(
       }
 
       const canon = updatedRow.battle_state
+      if (canon.stateSchemaVersion !== BATTLE_STATE_SCHEMA_VERSION) {
+        console.warn(`[multiplayer] state schema mismatch on realtime update: got ${canon.stateSchemaVersion}, expected ${BATTLE_STATE_SCHEMA_VERSION}`)
+      }
       canonicalRef.current = canon
       setCanonical(canon)
 

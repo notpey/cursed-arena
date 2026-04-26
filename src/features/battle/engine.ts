@@ -54,6 +54,7 @@ import {
   cloneStatuses,
   createStatuses,
 } from '@/features/battle/statuses.ts'
+import { BATTLE_STATE_SCHEMA_VERSION } from '@/features/battle/types.ts'
 import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
@@ -539,10 +540,6 @@ function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: 
   fighter.stateCounters[key] = (fighter.stateCounters[key] ?? 0) + amount
 }
 
-const NOBARA_CURSED_NAILS_PENDING_TAG = 'nobara-cursed-nails-pending'
-const NOBARA_CURSED_NAILS_APPLIED_TAG = 'nobara-cursed-nails-applied'
-const NOBARA_STRAW_EFFIGY_TAG = 'nobara-straw-effigy'
-const YUJI_SUKUNA_BONUS_ON_HARMFUL_SKILL_TAG = 'yuji-sukuna-bonus-on-harmful-skill'
 
 function isHarmfulAbility(ability: BattleAbilityTemplate) {
   if (ability.id === PASS_ABILITY_ID) return false
@@ -697,89 +694,6 @@ function runPreDamageReactionWindow(
   return result
 }
 
-function tryTriggerCursedNails(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  ability: BattleAbilityTemplate,
-) {
-  if (!isHarmfulAbility(ability)) return
-
-  const removed = removeModifiersFromFighter(
-    state,
-    ctx,
-    actor,
-    { tags: [NOBARA_CURSED_NAILS_PENDING_TAG] },
-    actor.instanceId,
-    ability.id,
-  )
-
-  if (removed.length === 0) return
-
-  applyModifierToFighter(
-    state,
-    ctx,
-    actor,
-    {
-      label: 'Cursed Nails was applied to this character for 1 turn.',
-      stat: 'cooldownTick',
-      mode: 'flat',
-      value: 0,
-      duration: { kind: 'rounds', rounds: 1 },
-      tags: [NOBARA_CURSED_NAILS_APPLIED_TAG],
-      visible: true,
-      stacking: 'replace',
-    },
-    removed[0]?.sourceActorId,
-    removed[0]?.sourceAbilityId ?? ability.id,
-  )
-
-  makeEvent(
-    ctx,
-    state.round,
-    'status',
-    'red',
-    `${actor.shortName} triggered Cursed Nails.`,
-    removed[0]?.sourceActorId ?? actor.instanceId,
-    actor.instanceId,
-    undefined,
-    removed[0]?.sourceAbilityId ?? ability.id,
-  )
-}
-
-function triggerMarkedSkillUseReactions(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  ability: BattleAbilityTemplate,
-) {
-  const strawEffigy = actor.modifiers.filter((modifier) => modifier.tags.includes(NOBARA_STRAW_EFFIGY_TAG))
-  for (const modifier of strawEffigy) {
-    const source = getModifierSourceFighter(state, modifier)
-    if (!source || !isAlive(source)) continue
-    applyDamagePacket(state, ctx, source, actor, {
-      kind: 'damage',
-      sourceActorId: source.instanceId,
-      targetId: actor.instanceId,
-      abilityId: modifier.sourceAbilityId ?? ability.id,
-      baseAmount: 5,
-      amount: calculateDamage(state, source, actor, 5, false, false, modifier.sourceAbilityId, ['Physical', 'Instant']),
-      damageType: 'normal',
-      tags: [NOBARA_STRAW_EFFIGY_TAG],
-      flags: { cannotBeCountered: true, cannotBeReflected: true },
-    })
-  }
-
-  if (!isHarmfulAbility(ability)) return
-
-  const sukunaBonusMarkers = actor.modifiers.filter((modifier) => modifier.tags.includes(YUJI_SUKUNA_BONUS_ON_HARMFUL_SKILL_TAG))
-  for (const modifier of sukunaBonusMarkers) {
-    const source = getModifierSourceFighter(state, modifier)
-    if (!source || !isAlive(source)) continue
-    adjustFighterCounter(source, 'sukuna_bonus_hp', 5)
-    emitCounterChange(ctx, state.round, source, 'sukuna_bonus_hp', source.stateCounters.sukuna_bonus_hp ?? 0, source.instanceId, modifier.sourceAbilityId ?? ability.id)
-  }
-}
 
 function runEffectReactionGuards(
   state: BattleState,
@@ -872,6 +786,7 @@ export function createInitialBattleState(setupOverrides?: BattleStateSetup): Bat
   const first = coinFlip(`${setup.battleSeed}:initiative`)
 
   return {
+    stateSchemaVersion: BATTLE_STATE_SCHEMA_VERSION,
     battleSeed: setup.battleSeed,
     round: 1,
     phase: 'firstPlayerCommand',
@@ -887,6 +802,7 @@ export function createInitialBattleState(setupOverrides?: BattleStateSetup): Bat
     battlefieldModifiers: createModifiers(),
     scheduledEffects: [],
     winner: null,
+    randomTickCount: 0,
   }
 }
 
@@ -1568,7 +1484,8 @@ function resolveRandomEnemyDamageTick(
 
   const unhitEnemies = aliveEnemies.filter((enemy) => (actor.stateCounters[`${effect.historyKey}:${enemy.templateId}`] ?? 0) <= 0)
   const candidates = unhitEnemies.length > 0 ? unhitEnemies : aliveEnemies
-  const rng = createSeededRandom(`${state.battleSeed}:${effect.historyKey}:${state.round}:${ctx.runtimeEvents.length}`)
+  state.randomTickCount = (state.randomTickCount ?? 0) + 1
+  const rng = createSeededRandom(`${state.battleSeed}:${effect.historyKey}:${state.round}:${state.randomTickCount}`)
   const target = candidates[Math.floor(rng() * candidates.length)] ?? candidates[0]
   if (!target) return
 
@@ -3254,8 +3171,8 @@ function resolveEffects(
   }
 }
 
-function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
-  state.playerTeam.concat(state.enemyTeam).forEach((fighter) => {
+function tickTeamTurn(state: BattleState, ctx: ResolutionContext, team: BattleTeamId) {
+  getTeam(state, team).forEach((fighter) => {
     if (!isAlive(fighter)) return
 
     const cooldownTick = 1 + getNumericModifierTotal(state, fighter, 'cooldownTick', 'flat', { target: null })
@@ -3283,7 +3200,9 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
     tickReactionGuards(fighter, state.round)
     tickStateModes(fighter, state.round, ctx)
   })
+}
 
+function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
   ;(['player', 'enemy'] as BattleTeamId[]).forEach((team) => {
     const ticked = tickModifiers(getTeamModifierBucket(state, team))
     setTeamModifierBucket(state, team, ticked.modifiers)
@@ -3394,8 +3313,6 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       ? getTeam(state, actor.team).filter(isAlive)
       : singleTarget && isAlive(singleTarget) ? [singleTarget] : []
 
-  tryTriggerCursedNails(state, ctx, actor, ability)
-  triggerMarkedSkillUseReactions(state, ctx, actor, ability)
   runEffectReactionGuards(state, ctx, actor, 'onAbilityUse', actor, ability)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
   for (const tgt of allTargeted) {
@@ -3573,7 +3490,7 @@ function getWinner(state: BattleState): BattleTeamId | null {
   if (playerAlive && enemyAlive) return null
   if (playerAlive) return 'player'
   if (enemyAlive) return 'enemy'
-  return 'enemy'
+  return 'player'
 }
 
 export function buildEnemyCommands(state: BattleState): Record<string, QueuedBattleAction> {
@@ -3594,6 +3511,14 @@ export function buildEnemyCommands(state: BattleState): Record<string, QueuedBat
     const sorted = availableAbilities
       .map((ability) => {
         let score = ability.power ?? ability.healPower ?? ability.attackBuffAmount ?? 0
+
+        const effects = ability.effects ?? []
+        for (const effect of effects) {
+          if (effect.type === 'invulnerable') score += 20
+          else if (effect.type === 'counter') score += effect.counterDamage
+          else if (effect.type === 'reaction') score += 15
+        }
+
         if (ability.classes.includes('Ultimate') && state.round >= 3) score += 28
         if (ability.kind === 'heal' && lowHpAlly && lowHpAlly.hp / lowHpAlly.maxHp < 0.5) score += 40
         if (ability.kind === 'defend' && fighter.hp / fighter.maxHp < 0.35) score += 26
@@ -3680,6 +3605,8 @@ export function resolveTeamTurn(
     state.phase = 'finished'
     state.winner = winner
     makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+  } else {
+    tickTeamTurn(state, ctx, team)
   }
 
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
@@ -3740,6 +3667,14 @@ export function resolveTeamTurnTimeline(
     if (winner) {
       break
     }
+  }
+
+  if (!state.winner) {
+    const prevEventCount = ctx.events.length
+    const prevRuntimeCount = ctx.runtimeEvents.length
+    tickTeamTurn(state, ctx, team)
+    const tickStep = createTimelineStep('action', state, ctx, prevEventCount, prevRuntimeCount)
+    if (tickStep) steps.push(tickStep)
   }
 
   return { state, steps }
@@ -3828,6 +3763,7 @@ export function endRound(previousState: BattleState): BattleResolutionResult {
     if (!isAlive(fighter)) return
     firePassives(state, ctx, fighter, null, 'onRoundEnd')
   })
+  tickTeamTurn(state, ctx, getSecondPlayer(state.firstPlayer))
   tickRoundEnd(state, ctx)
 
   const winner = getWinner(state)
@@ -3858,6 +3794,7 @@ export function endRoundTimeline(previousState: BattleState): BattleTimelineResu
     if (!isAlive(fighter)) return
     firePassives(state, ctx, fighter, null, 'onRoundEnd')
   })
+  tickTeamTurn(state, ctx, getSecondPlayer(state.firstPlayer))
   tickRoundEnd(state, ctx)
 
   const winner = getWinner(state)
@@ -3924,6 +3861,8 @@ export function resolveRound(
     return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
   }
 
+  tickTeamTurn(state, ctx, firstTeam)
+
   getTeam(state, secondTeam).filter(isAlive).sort((a, b) => a.slot - b.slot).forEach((fighter) => {
     const command = secondCommands[fighter.instanceId]
     if (!command) {
@@ -3940,6 +3879,7 @@ export function resolveRound(
     if (!isAlive(fighter)) return
     firePassives(state, ctx, fighter, null, 'onRoundEnd')
   })
+  tickTeamTurn(state, ctx, secondTeam)
   tickRoundEnd(state, ctx)
 
   winner = getWinner(state)
