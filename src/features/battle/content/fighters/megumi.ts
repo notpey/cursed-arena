@@ -1,0 +1,123 @@
+import { definePassive, defendSkill, healSkill } from '@/features/battle/content.ts'
+import { fighter, skill } from './_helpers.ts'
+
+export const megumi = fighter({
+  id: 'megumi',
+  name: 'Megumi Fushiguro',
+  shortName: 'Megumi',
+  rarity: 'SSR',
+  role: 'Controller / Setup',
+  portraitFrame: { scale: 2.14, y: '-14%' },
+  maxHp: 96,
+  passiveEffects: [
+    definePassive({
+      id: 'megumi-ten-shadows-strategist',
+      trigger: 'onRoundStart',
+      effects: [{ type: 'adjustCounter', key: 'shikigami', amount: 1, target: 'self' }],
+      label: 'Ten Shadows Strategist',
+      description: 'At the start of each turn, Megumi gains 1 Shikigami. His Divine Dogs, Nue, and Shadow Recall skills empower or consume Shikigami when used at 3 or more stacks.',
+      icon: { label: 'TS', tone: 'teal' },
+      counterKey: 'shikigami',
+    }),
+    definePassive({
+      id: 'megumi-divine-dogs-pack',
+      trigger: 'onAbilityResolve',
+      conditions: [
+        { type: 'abilityId', abilityId: 'megumi-dogs' },
+        { type: 'counterAtLeast', key: 'shikigami', value: 4 },
+      ],
+      effects: [
+        { type: 'damage', power: 15, target: 'inherit' },
+        { type: 'classStun', duration: 1, blockedClasses: ['Physical'], target: 'inherit' },
+        { type: 'adjustCounter', key: 'shikigami', amount: -2, target: 'self' },
+      ],
+      label: 'Divine Dogs Pack Hunt',
+      description: 'With more than 3 Shikigami, Divine Dogs also seals Physical skills for 1 turn and consumes 2 Shikigami.',
+      hidden: true,
+    }),
+    definePassive({
+      id: 'megumi-nue-overhead-drop',
+      trigger: 'onAbilityResolve',
+      conditions: [
+        { type: 'abilityId', abilityId: 'megumi-nue' },
+        { type: 'counterAtLeast', key: 'shikigami', value: 4 },
+      ],
+      effects: [
+        { type: 'damage', power: 10, target: 'inherit' },
+        { type: 'stun', duration: 1, target: 'inherit' },
+        { type: 'adjustCounter', key: 'shikigami', amount: -3, target: 'self' },
+      ],
+      label: 'Nue Overhead Drop',
+      description: 'With more than 3 Shikigami, Nue deals 10 additional damage, fully stuns the target for 1 turn, and consumes 3 Shikigami.',
+      hidden: true,
+    }),
+    definePassive({
+      id: 'megumi-shadow-recall-surge',
+      trigger: 'onAbilityResolve',
+      conditions: [
+        { type: 'abilityId', abilityId: 'megumi-shadow-recall' },
+        { type: 'counterAtLeast', key: 'shikigami', value: 3 },
+      ],
+      effects: [
+        { type: 'heal', power: 10, target: 'self' },
+        { type: 'adjustCounter', key: 'shikigami', amount: -3, target: 'self' },
+      ],
+      label: 'Shadow Recall Surge',
+      description: 'If Megumi has 3 or more Shikigami, Shadow Recall heals 10 additional health and consumes 3 Shikigami.',
+      hidden: true,
+    }),
+  ],
+  abilities: [
+    skill({
+      id: 'megumi-dogs',
+      name: 'Divine Dogs: Pursuit',
+      description: 'Deals 5 damage to one enemy. If Megumi has more than 3 Shikigami, this skill deals 15 additional damage, seals Physical skills for 1 turn, and consumes 2 Shikigami.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Melee', 'Physical', 'Instant'],
+      cooldown: 0,
+      energyCost: { physical: 1 },
+      power: 5,
+      effects: [{ type: 'damage', power: 5, target: 'inherit' }],
+    }),
+    skill({
+      id: 'megumi-nue',
+      name: 'Nue: Electric Drop',
+      description: 'Deals 25 damage to one enemy and seals their non-Mental skills for 1 turn. If Megumi has more than 3 Shikigami, this skill deals 10 additional damage, fully stuns the target for 1 turn, and consumes 3 Shikigami.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Ranged', 'Energy', 'Instant'],
+      cooldown: 2,
+      energyCost: { technique: 1, random: 1 },
+      power: 25,
+      effects: [
+        { type: 'damage', power: 25, target: 'inherit' },
+        { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Energy', 'Affliction', 'Melee', 'Ranged', 'Unique'], target: 'inherit' },
+      ],
+    }),
+    healSkill({
+      id: 'megumi-shadow-recall',
+      name: 'Shadow Recall',
+      description: 'Megumi recovers 15 health. If Megumi has 3 or more Shikigami, he heals 10 additional health and consumes 3 Shikigami.',
+      targetRule: 'self',
+      classes: ['Unique', 'Mental', 'Instant'],
+      cooldown: 0,
+      energyCost: { random: 1 },
+      healPower: 15,
+    }),
+  ],
+  ultimate: defendSkill({
+    id: 'megumi-toad',
+    name: 'Toad: Shadow Rescue',
+    description: 'Makes Megumi or one ally invulnerable for 1 turn. Megumi gains 1 Shikigami.',
+    targetRule: 'ally-single',
+    classes: ['Unique', 'Mental', 'Instant', 'Ultimate'],
+    cooldown: 4,
+    duration: 1,
+    energyCost: { random: 1 },
+    effects: [
+      { type: 'invulnerable', duration: 1, target: 'inherit' },
+      { type: 'adjustCounter', key: 'shikigami', amount: 1, target: 'self' },
+    ],
+  }),
+})

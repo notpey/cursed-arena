@@ -1,0 +1,137 @@
+import { definePassive, defendSkill } from '@/features/battle/content.ts'
+import { fighter, skill, markerEffect } from './_helpers.ts'
+
+export const jogo = fighter({
+  id: 'jogo',
+  name: 'Jogo',
+  shortName: 'Jogo',
+  rarity: 'SSR',
+  role: 'Affliction / Field Damage',
+  portraitFrame: { scale: 2.1, y: '-10%' },
+  maxHp: 100,
+  initialStateCounters: { jogo_damage_taken: 0 },
+  passiveEffects: [
+    definePassive({
+      id: 'jogo-disaster-heat',
+      trigger: 'onRoundStart',
+      effects: [{ type: 'damageScaledByCounter', counterKey: 'scorched', powerPerStack: 5, consumeStacks: false, target: 'all-enemies' }],
+      label: 'Disaster Heat',
+      description: 'Each turn, all enemies affected by Scorched take 5 affliction damage for each stack of Scorched they have. Additionally, whenever Jogo loses 25 health, Ember Insects will trigger on all enemies.',
+      icon: { label: 'DH', tone: 'red' },
+      counterKey: 'scorched',
+    }),
+    definePassive({
+      id: 'jogo-disaster-heat-trigger',
+      trigger: 'onTakeDamage',
+      effects: [
+        { type: 'adjustCounterByTriggerAmount', key: 'jogo_damage_taken', target: 'self' },
+        {
+          type: 'conditional',
+          target: 'self',
+          conditions: [{ type: 'counterAtLeast', key: 'jogo_damage_taken', value: 25 }],
+          effects: [
+            { type: 'setCounter', key: 'jogo_damage_taken', value: 0, target: 'self' },
+            { type: 'adjustCounter', key: 'scorched', amount: 1, target: 'all-enemies' },
+            markerEffect('Scorched', 5, 'all-enemies', ['scorched']),
+          ],
+        },
+      ],
+      label: 'Disaster Heat Trigger',
+      hidden: true,
+    }),
+  ],
+  abilities: [
+    skill({
+      id: 'jogo-ember-insects',
+      name: 'Ember Insects',
+      description: 'This skill grants Jogo 10 destructible defense for 1 turn and targets one enemy. They will be "Scorched" for 5 turns; this effect stacks. If this destructible defense is broken, the enemy who broke it will have this skill applied to them.',
+      kind: 'utility',
+      targetRule: 'enemy-single',
+      classes: ['Affliction', 'Ranged', 'Instant'],
+      cooldown: 1,
+      energyCost: { mental: 1 },
+      effects: [
+        { type: 'shield', amount: 10, label: 'Ember Insects', tags: ['ember-insects'], target: 'self' },
+        {
+          type: 'reaction',
+          label: 'Ember Insects',
+          trigger: 'onShieldBroken',
+          duration: 1,
+          consumeOnTrigger: true,
+          target: 'self',
+          effects: [
+            { type: 'adjustCounter', key: 'scorched', amount: 1, target: 'attacker' },
+            markerEffect('Scorched', 5, 'attacker', ['scorched']),
+          ],
+        },
+        { type: 'adjustCounter', key: 'scorched', amount: 1, target: 'inherit' },
+        markerEffect('Scorched', 5, 'inherit', ['scorched']),
+      ],
+    }),
+    skill({
+      id: 'jogo-volcanic-infestation',
+      name: 'Volcanic Infestation',
+      description: 'This skill targets all enemies. For one turn, any enemy that uses a new harmful skill will be "Scorched" for 5 turns; this effect stacks. This skill is invisible.',
+      kind: 'utility',
+      targetRule: 'enemy-all',
+      classes: ['Affliction', 'Ranged', 'Instant'],
+      cooldown: 1,
+      energyCost: { technique: 2 },
+      effects: [
+        {
+          type: 'reaction',
+          label: 'Volcanic Infestation',
+          trigger: 'onAbilityUse',
+          duration: 1,
+          harmfulOnly: true,
+          consumeOnTrigger: false,
+          target: 'all-enemies',
+          effects: [
+            { type: 'adjustCounter', key: 'scorched', amount: 1, target: 'inherit' },
+            markerEffect('Scorched', 5, 'inherit', ['scorched']),
+          ],
+        },
+      ],
+    }),
+    skill({
+      id: 'jogo-cataclysmic-eruption',
+      name: 'Cataclysmic Eruption',
+      description: 'This skill targets all enemies, dealing 5 affliction damage to the target for each stack of Scorched on the target. This skill will remove all stacks of "Scorched" from the target.',
+      kind: 'attack',
+      targetRule: 'enemy-all',
+      classes: ['Affliction', 'Ranged', 'Instant'],
+      cooldown: 2,
+      energyCost: { mental: 3 },
+      effects: [
+        { type: 'damageScaledByCounter', counterKey: 'scorched', powerPerStack: 5, consumeStacks: true, target: 'all-enemies' },
+        { type: 'removeModifier', filter: { tags: ['scorched'] }, target: 'all-enemies' },
+      ],
+    }),
+  ],
+  ultimate: defendSkill({
+    id: 'jogo-molten-husk',
+    name: 'Molten Husk',
+    description: 'This skill makes Jogo invulnerable for 1 turn. While he is invulnerable, whenever Jogo is targeted by a skill, all enemies gain 1 stack of "Scorched."',
+    targetRule: 'self',
+    classes: ['Strategic', 'Instant', 'Ultimate'],
+    cooldown: 4,
+    duration: 1,
+    energyCost: { mental: 1 },
+    effects: [
+      { type: 'invulnerable', duration: 1, target: 'self' },
+      {
+        type: 'reaction',
+        label: 'Molten Husk',
+        trigger: 'onBeingTargeted',
+        duration: 1,
+        harmfulOnly: false,
+        consumeOnTrigger: false,
+        target: 'self',
+        effects: [
+          { type: 'adjustCounter', key: 'scorched', amount: 1, target: 'all-enemies' },
+          markerEffect('Scorched', 5, 'all-enemies', ['scorched']),
+        ],
+      },
+    ],
+  }),
+})

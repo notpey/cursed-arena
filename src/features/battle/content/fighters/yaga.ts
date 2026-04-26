@@ -1,0 +1,91 @@
+import { definePassive, defendSkill } from '@/features/battle/content.ts'
+import { fighter, skill, modifierEffect } from './_helpers.ts'
+
+export const yaga = fighter({
+  id: 'yaga',
+  name: 'Masamichi Yaga',
+  shortName: 'Yaga',
+  rarity: 'R',
+  role: 'Shield Support',
+  portraitFrame: { scale: 2, y: '-10%' },
+  maxHp: 100,
+  passiveEffects: [
+    definePassive({
+      id: 'yaga-cursed-corpses',
+      trigger: 'onShieldBroken',
+      conditions: [{ type: 'brokenShieldTag', tag: 'cursed-corpse' }],
+      effects: [{ type: 'heal', power: 10, target: 'self' }],
+      label: 'Cursed Corpses',
+      description: "When destructible defense from Yaga's cursed corpses is destroyed, that ally heals 10 health.",
+      icon: { label: 'CC', tone: 'teal' },
+    }),
+  ],
+  abilities: [
+    skill({
+      id: 'yaga-cursed-corpse-substitute',
+      name: 'Cursed Corpse: Substitute',
+      description: 'One ally gains 30 destructible defense for 2 turns and takes 10 less damage while it remains.',
+      kind: 'utility',
+      targetRule: 'ally-single',
+      classes: ['Strategic', 'Ranged', 'Instant', 'Physical'],
+      cooldown: 2,
+      energyCost: { physical: 1 },
+      effects: [
+        { type: 'shield', amount: 30, label: 'Cursed Corpse: Substitute', tags: ['cursed-corpse'], target: 'inherit' },
+        {
+          type: 'reaction',
+          label: 'Cursed Corpse: Substitute',
+          trigger: 'onShieldBroken',
+          duration: 2,
+          consumeOnTrigger: true,
+          target: 'inherit',
+          effects: [{ type: 'damage', power: 20, target: 'attacker' }],
+        },
+        modifierEffect('Cursed Corpse: Substitute', 'damageTaken', -10, 2, 'inherit', ['cursed-corpse']),
+      ],
+    }),
+    skill({
+      id: 'yaga-cursed-corpse-intercept',
+      name: 'Cursed Corpse: Intercept',
+      description: 'Yaga guards one ally for 1 turn, reducing damage he takes and countering attackers.',
+      kind: 'utility',
+      targetRule: 'ally-single',
+      classes: ['Strategic', 'Ranged', 'Instant', 'Physical'],
+      cooldown: 2,
+      energyCost: { technique: 1 },
+      effects: [
+        modifierEffect('Cursed Corpse: Intercept', 'damageTaken', -15, 1, 'self', ['cursed-corpse-intercept']),
+        { type: 'counter', duration: 1, counterDamage: 10, consumeOnTrigger: false, target: 'inherit' },
+      ],
+    }),
+    skill({
+      id: 'yaga-cursed-corpse-release',
+      name: 'Cursed Corpse: Release',
+      description: 'Deals 15 damage to one enemy. If any ally currently has destructible defense, this deals 15 additional piercing damage.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Physical', 'Ranged', 'Instant'],
+      cooldown: 1,
+      energyCost: { physical: 1 },
+      power: 15,
+      effects: [
+        { type: 'damage', power: 15, target: 'inherit' },
+        { type: 'damage', power: 15, target: 'inherit', piercing: true },
+      ],
+    }),
+  ],
+  ultimate: defendSkill({
+    id: 'yaga-emergency-substitute',
+    name: 'Emergency Substitute',
+    description: 'Yaga becomes invulnerable for 1 turn and gains 25 destructible defense.',
+    targetRule: 'self',
+    classes: ['Strategic', 'Instant', 'Ultimate'],
+    cooldown: 4,
+    duration: 1,
+    energyCost: { random: 1 },
+    effects: [
+      { type: 'invulnerable', duration: 1, target: 'self' },
+      { type: 'shield', amount: 25, label: 'Emergency Substitute', tags: ['cursed-corpse'], target: 'self' },
+    ],
+  }),
+})

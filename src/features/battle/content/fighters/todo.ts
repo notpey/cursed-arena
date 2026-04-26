@@ -1,0 +1,112 @@
+import { definePassive, defendSkill } from '@/features/battle/content.ts'
+import { fighter, skill, modifierEffect, markerEffect } from './_helpers.ts'
+
+export const todo = fighter({
+  id: 'todo',
+  name: 'Aoi Todo',
+  shortName: 'Todo',
+  rarity: 'SR',
+  role: 'Physical Disruptor',
+  portraitFrame: { scale: 2.1, y: '-12%' },
+  maxHp: 100,
+  passiveEffects: [
+    definePassive({
+      id: 'todo-besto-friendo',
+      trigger: 'onAbilityResolve',
+      effects: [
+        markerEffect('Type', 2, 'inherit', ['todo-type']),
+        modifierEffect("Todo's Type Bonus", 'damageTaken', 5, 2, 'inherit', ['todo-type-damage']),
+      ],
+      label: 'Besto Friendo',
+      description: "When Todo targets an enemy, he marks them as his \"Type\" for 2 turns. Todo's skills will deal +5 damage to his \"Type\" and if his \"Type\" is stunned, they will take 5 additional damage from all sources for 1 turn.",
+      icon: { label: 'BF', tone: 'teal' },
+    }),
+    definePassive({
+      id: 'todo-besto-friendo-stun',
+      trigger: 'onBeingTargeted',
+      conditions: [{ type: 'actorHasModifierTag', tag: 'todo-type' }, { type: 'actorHasStatus', status: 'stun' }],
+      effects: [modifierEffect('Type Stunned', 'damageTaken', 5, 1, 'attacker', ['todo-type-stunned'])],
+      label: 'Besto Friendo Stun',
+      hidden: true,
+    }),
+  ],
+  abilities: [
+    skill({
+      id: 'todo-brutal-swing',
+      name: 'Brutal Swing',
+      description: 'This skill targets one enemy, dealing 30 damage to them. If the target is affected by Boogie Woogie, this skill will deal 10 additional damage.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Physical', 'Melee', 'Instant'],
+      cooldown: 1,
+      energyCost: { technique: 1, random: 1 },
+      power: 30,
+      effects: [
+        { type: 'damage', power: 30, target: 'inherit' },
+        { type: 'damageFiltered', power: 10, requiresTag: 'boogie-woogie', target: 'inherit' },
+      ],
+    }),
+    skill({
+      id: 'todo-boogie-woogie',
+      name: 'Boogie Woogie',
+      description: 'This skill targets one enemy. Their skills will deal 10 less damage and they cannot become invulnerable. Additionally, for 1 turn if Todo is targeted by a harmful skill, he will become invulnerable and reflect 10 damage to the attacker.',
+      kind: 'utility',
+      targetRule: 'enemy-single',
+      classes: ['Physical', 'Ranged', 'Instant'],
+      cooldown: 2,
+      energyCost: { random: 1 },
+      effects: [
+        modifierEffect('Boogie Woogie', 'damageDealt', -10, 1, 'inherit', ['boogie-woogie']),
+        modifierEffect('Boogie Woogie', 'canGainInvulnerable', false, 1, 'inherit', ['boogie-woogie']),
+        {
+          type: 'reaction',
+          label: 'Boogie Woogie Guard',
+          trigger: 'onBeingTargeted',
+          duration: 1,
+          harmfulOnly: true,
+          consumeOnTrigger: true,
+          target: 'self',
+          effects: [
+            { type: 'invulnerable', duration: 1, target: 'self' },
+            { type: 'reflect', duration: 1, consumeOnTrigger: true, target: 'self' },
+          ],
+        },
+      ],
+    }),
+    skill({
+      id: 'todo-follow-up-assault',
+      name: 'Follow-Up Assault',
+      description: 'This skill targets one enemy, dealing 20 damage to them. If the target is affected by Boogie Woogie, this skill will deal 15 additional damage and stun the target\'s physical skills for 1 turn.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Physical', 'Melee', 'Instant'],
+      cooldown: 2,
+      energyCost: { physical: 1, vow: 1 },
+      power: 20,
+      effects: [
+        { type: 'damage', power: 20, target: 'inherit' },
+        { type: 'damageFiltered', power: 15, requiresTag: 'boogie-woogie', target: 'inherit' },
+        {
+          type: 'conditional',
+          target: 'inherit',
+          conditions: [{ type: 'targetHasModifierTag', tag: 'boogie-woogie' }],
+          effects: [{ type: 'classStun', duration: 1, blockedClasses: ['Physical'], target: 'inherit' }],
+        },
+      ],
+    }),
+  ],
+  ultimate: defendSkill({
+    id: 'todo-unshakable-confidence',
+    name: 'Unshakable Confidence',
+    description: "This skill makes Todo invulnerable for 1 turn. Additionally, for 1 turn, Todo's skills will deal +10 damage.",
+    targetRule: 'self',
+    classes: ['Strategic', 'Instant', 'Ultimate'],
+    cooldown: 4,
+    duration: 1,
+    energyCost: { mental: 1 },
+    effects: [
+      { type: 'invulnerable', duration: 1, target: 'self' },
+      modifierEffect('Unshakable Confidence', 'damageDealt', 10, 1, 'self', ['unshakable-confidence']),
+    ],
+  }),
+})

@@ -1,0 +1,90 @@
+import { definePassive, defendSkill } from '@/features/battle/content.ts'
+import { fighter, skill, markerEffect } from './_helpers.ts'
+
+export const gojo = fighter({
+  id: 'gojo',
+  name: 'Satoru Gojo',
+  shortName: 'Gojo',
+  rarity: 'SSR',
+  role: 'Limitless Controller',
+  portraitFrame: { scale: 2.08, y: '-12%' },
+  maxHp: 100,
+  passiveEffects: [
+    definePassive({
+      id: 'gojo-infinity',
+      trigger: 'onRoundStart',
+      effects: [
+        { type: 'effectImmunity', label: 'Infinity', blocks: ['nonDamage'], duration: 1, tags: ['infinity'], target: 'self' },
+        { type: 'invulnerable', duration: 1, target: 'self' },
+      ],
+      label: 'Infinity',
+      description: 'Gojo resists non-affliction damage and non-damage effects until Infinity is pressured.',
+      icon: { label: 'IN', tone: 'teal' },
+    }),
+  ],
+  abilities: [
+    skill({
+      id: 'gojo-lapse-blue',
+      name: 'Lapse: Blue',
+      description: 'Deals 20 damage and Pulls the target for 2 turns. Repeated use refreshes the pull.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Energy', 'Ranged', 'Instant'],
+      cooldown: 1,
+      energyCost: { mental: 1 },
+      power: 20,
+      effects: [
+        { type: 'damage', power: 20, target: 'inherit' },
+        markerEffect('Pulled', 2, 'inherit', ['pulled']),
+        { type: 'adjustCounter', key: 'limitless_blue', amount: 1, min: 0, max: 1, target: 'self' },
+      ],
+    }),
+    skill({
+      id: 'gojo-reversal-red',
+      name: 'Reversal: Red',
+      description: 'Deals 25 damage. Pulled targets take additional damage and are stunned.',
+      kind: 'attack',
+      targetRule: 'enemy-single',
+      classes: ['Energy', 'Ranged', 'Instant'],
+      cooldown: 1,
+      energyCost: { physical: 1 },
+      power: 25,
+      effects: [
+        { type: 'damage', power: 25, target: 'inherit' },
+        { type: 'damageFiltered', power: 15, requiresTag: 'pulled', target: 'inherit' },
+        { type: 'classStun', duration: 1, blockedClasses: ['Physical', 'Energy', 'Affliction', 'Melee', 'Ranged', 'Mental', 'Special'], target: 'inherit' },
+        { type: 'removeModifier', filter: { tags: ['pulled'] }, target: 'inherit' },
+        { type: 'adjustCounter', key: 'limitless_red', amount: 1, min: 0, max: 1, target: 'self' },
+      ],
+    }),
+    skill({
+      id: 'gojo-hollow-purple',
+      name: 'Hollow Purple',
+      description: 'Deals piercing damage to all enemies.',
+      kind: 'attack',
+      targetRule: 'enemy-all',
+      classes: ['Energy', 'Ranged', 'Instant'],
+      cooldown: 3,
+      energyCost: { physical: 1, mental: 1, technique: 1 },
+      power: 30,
+      effects: [
+        { type: 'damage', power: 30, target: 'all-enemies', piercing: true },
+        { type: 'damageScaledByCounter', counterKey: 'limitless_red', counterSource: 'actor', powerPerStack: 15, consumeStacks: false, target: 'all-enemies', piercing: true, ignoresInvulnerability: true, ignoresShield: true },
+      ],
+    }),
+  ],
+  ultimate: defendSkill({
+    id: 'gojo-six-eyes-focus',
+    name: 'Six Eyes Focus',
+    description: "Gojo becomes invulnerable for 1 turn and his next skill's random cost is reduced.",
+    targetRule: 'self',
+    classes: ['Strategic', 'Instant', 'Ultimate'],
+    cooldown: 4,
+    duration: 1,
+    energyCost: { random: 1 },
+    effects: [
+      { type: 'invulnerable', duration: 1, target: 'self' },
+      { type: 'modifyAbilityCost', target: 'self', modifier: { mode: 'reduceRandom', amount: 99, duration: 1, uses: 1, label: 'Six Eyes Focus' } },
+    ],
+  }),
+})
