@@ -36,6 +36,11 @@ import {
   makeRuntimeEvent,
 } from '@/features/battle/engine/events.ts'
 import {
+  consumeCostModifiers,
+  createCostModifierState,
+  getResolvedAbilityEnergyCost,
+} from '@/features/battle/engine/costModifier.ts'
+import {
   getWinner,
   getVictoryTone,
   getVictoryMessage,
@@ -90,8 +95,6 @@ import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
   BattleClassStunState,
-  BattleCostModifierState,
-  BattleCostModifierTemplate,
   BattleDamagePacket,
   BattleEffectImmunityState,
   BattleFighterState,
@@ -311,83 +314,6 @@ function isAbilityClassStunned(fighter: BattleFighterState, ability: BattleAbili
   return fighter.classStuns.some((cs) =>
     cs.remainingRounds > 0 && ability.classes.some((cls) => cs.blockedClasses.includes(cls)),
   )
-}
-
-function createCostModifierState(
-  actor: BattleFighterState,
-  abilityId: string | undefined,
-  template: BattleCostModifierTemplate,
-): BattleCostModifierState {
-  return {
-    ...template,
-    id: `cost-${actor.instanceId}-${abilityId ?? 'passive'}-${actor.costModifiers.length}`,
-    cost: template.cost ? { ...template.cost } : undefined,
-    remainingRounds: template.duration,
-    remainingUses: template.uses == null ? null : Math.max(0, template.uses),
-    sourceActorId: actor.instanceId,
-    sourceAbilityId: abilityId,
-  }
-}
-
-function matchesCostModifier(modifier: BattleCostModifierState, ability: BattleAbilityTemplate) {
-  if (modifier.abilityId && modifier.abilityId !== ability.id) return false
-  if (modifier.abilityClass && !ability.classes.includes(modifier.abilityClass)) return false
-  return true
-}
-
-function applyCostModifier(cost: BattleEnergyCost, modifier: BattleCostModifierState): BattleEnergyCost {
-  if (modifier.mode === 'set') {
-    return { ...(modifier.cost ?? {}) }
-  }
-
-  if (modifier.mode === 'reduceRandom') {
-    return {
-      ...cost,
-      random: Math.max(0, (cost.random ?? 0) - Math.max(0, modifier.amount ?? 0)),
-    }
-  }
-
-  if (modifier.mode === 'increaseRandom') {
-    return {
-      ...cost,
-      random: (cost.random ?? 0) + Math.max(0, modifier.amount ?? 0),
-    }
-  }
-
-  if (modifier.mode === 'increaseTyped') {
-    const next = { ...cost }
-    battleEnergyOrder.forEach((type) => {
-      if ((next[type] ?? 0) > 0) {
-        next[type] = (next[type] ?? 0) + Math.max(0, modifier.amount ?? 0)
-      }
-    })
-    return next
-  }
-
-  const next = { ...cost }
-  battleEnergyOrder.forEach((type) => {
-    next[type] = Math.max(0, (next[type] ?? 0) - Math.max(0, modifier.amount ?? 0))
-  })
-  return next
-}
-
-export function getResolvedAbilityEnergyCost(
-  fighter: BattleFighterState,
-  ability: BattleAbilityTemplate,
-) {
-  const base = { ...getAbilityEnergyCost(ability) }
-  const applied = fighter.costModifiers.filter((modifier) => matchesCostModifier(modifier, ability))
-  const cost = applied.reduce((current, modifier) => applyCostModifier(current, modifier), base)
-  return { cost, applied }
-}
-
-function consumeCostModifiers(fighter: BattleFighterState, ability: BattleAbilityTemplate) {
-  fighter.costModifiers = fighter.costModifiers
-    .map((modifier) => {
-      if (!matchesCostModifier(modifier, ability) || modifier.remainingUses == null) return modifier
-      return { ...modifier, remainingUses: Math.max(0, modifier.remainingUses - 1) }
-    })
-    .filter((modifier) => modifier.remainingRounds > 0 && (modifier.remainingUses == null || modifier.remainingUses > 0))
 }
 
 function createEffectImmunityState(
@@ -642,6 +568,7 @@ function runEffectReactionGuards(
   }
 }
 export { getCooldown, getFighterById, getOpposingTeam, getTeam, isAlive, getAbilityById } from '@/features/battle/engine/selectors.ts'
+export { getResolvedAbilityEnergyCost } from '@/features/battle/engine/costModifier.ts'
 
 export function coinFlip(seed = 'default-battle-seed'): BattleTeamId {
   return createSeededRandom(seed)() < 0.5 ? 'player' : 'enemy'
