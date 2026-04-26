@@ -665,5 +665,8 @@ export type BattleState = {
   randomTickCount: number
 }
 
-
+export type ResolutionContext = {
+  events: BattleEvent[]
+  runtimeEvents: BattleRuntimeEvent[]
+}
 
