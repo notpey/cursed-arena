@@ -41,6 +41,23 @@ import {
 } from '@/features/battle/engine/costModifier.ts'
 import { buildEnemyCommands } from '@/features/battle/engine/ai.ts'
 import {
+  abilityCanBeCountered,
+  abilityCanBeReflected,
+  canEffectBeReflected,
+  consumeReactionGuard,
+  guardMatchesAbility,
+  isEffectBlocked,
+  isHarmfulAbility,
+} from '@/features/battle/engine/reactionPredicates.ts'
+import {
+  addAbilityStateDelta,
+  createClassStunState,
+  createEffectImmunityState,
+  createReactionGuardState,
+  hasBaseAbility,
+  isAbilityClassStunned,
+} from '@/features/battle/engine/stateFactory.ts'
+import {
   getWinner,
   getVictoryTone,
   getVictoryMessage,
@@ -89,9 +106,7 @@ import { BATTLE_STATE_SCHEMA_VERSION } from '@/features/battle/types.ts'
 import type {
   BattleAbilityStateDelta,
   BattleAbilityTemplate,
-  BattleClassStunState,
   BattleDamagePacket,
-  BattleEffectImmunityState,
   BattleFighterState,
   BattleHealPacket,
   BattleModifierFilter,
@@ -99,7 +114,6 @@ import type {
   BattleModifierStat,
   BattleModifierTemplate,
   BattleReactionCondition,
-  BattleReactionGuardState,
   BattleReactionTrigger,
   BattleResolutionResult,
   BattleResourceKey,
@@ -228,113 +242,6 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
     .filter(Boolean) as BattleFighterState[]
 }
 
-function hasBaseAbility(fighter: BattleFighterState, slotAbilityId: string) {
-  return fighter.abilities.some((ability) => ability.id === slotAbilityId) || fighter.ultimate.id === slotAbilityId
-}
-
-function ensureCooldownEntry(fighter: BattleFighterState, abilityId: string) {
-  if (!(abilityId in fighter.cooldowns)) {
-    fighter.cooldowns[abilityId] = 0
-  }
-}
-
-function addAbilityStateDelta(fighter: BattleFighterState, delta: BattleAbilityStateDelta) {
-  switch (delta.mode) {
-    case 'replace':
-      fighter.abilityState = fighter.abilityState.filter(
-        (current) => !(current.mode === 'replace' && current.slotAbilityId === delta.slotAbilityId),
-      )
-      fighter.abilityState.push({ ...delta, replacement: cloneAbilityTemplate(delta.replacement) })
-      ensureCooldownEntry(fighter, delta.replacement.id)
-      return
-    case 'grant':
-      fighter.abilityState = fighter.abilityState.filter(
-        (current) => !(current.mode === 'grant' && current.grantedAbility.id === delta.grantedAbility.id),
-      )
-      fighter.abilityState.push({ ...delta, grantedAbility: cloneAbilityTemplate(delta.grantedAbility) })
-      ensureCooldownEntry(fighter, delta.grantedAbility.id)
-      return
-    case 'lock':
-      fighter.abilityState = fighter.abilityState.filter(
-        (current) => !(current.mode === 'lock' && current.slotAbilityId === delta.slotAbilityId),
-      )
-      fighter.abilityState.push({ ...delta })
-      return
-  }
-}
-
-function createClassStunState(
-  actor: BattleFighterState,
-  abilityId: string | undefined,
-  effect: Extract<SkillEffect, { type: 'classStun' }>,
-  round: number,
-): BattleClassStunState {
-  return {
-    id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
-    label: `Class Stun (${effect.blockedClasses.join(', ')})`,
-    blockedClasses: [...effect.blockedClasses],
-    remainingRounds: effect.duration,
-    appliedInRound: round,
-    sourceActorId: actor.instanceId,
-    sourceAbilityId: abilityId,
-  }
-}
-
-function createReactionGuardState(
-  actor: BattleFighterState,
-  abilityId: string | undefined,
-  effect: Extract<SkillEffect, { type: 'counter' | 'reflect' | 'reaction' }>,
-  round: number,
-): BattleReactionGuardState {
-  return {
-    id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
-    kind: effect.type === 'reaction' ? 'effect' : effect.type,
-    label: effect.type === 'counter' ? 'Counter' : effect.type === 'reflect' ? 'Reflect' : effect.label,
-    remainingRounds: effect.duration,
-    appliedInRound: round,
-    counterDamage: effect.type === 'counter' ? effect.counterDamage : undefined,
-    abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined,
-    consumeOnTrigger: effect.consumeOnTrigger ?? true,
-    trigger: effect.type === 'reaction' ? effect.trigger : undefined,
-    harmfulOnly: effect.type === 'reaction' ? effect.harmfulOnly : undefined,
-    oncePerRound: effect.type === 'reaction' ? effect.oncePerRound : undefined,
-    triggeredRounds: effect.type === 'reaction' ? [] : undefined,
-    effects: effect.type === 'reaction' ? effect.effects.map(cloneEffect) : undefined,
-    sourceActorId: actor.instanceId,
-    sourceAbilityId: abilityId,
-  }
-}
-
-function isAbilityClassStunned(fighter: BattleFighterState, ability: BattleAbilityTemplate): boolean {
-  return fighter.classStuns.some((cs) =>
-    cs.remainingRounds > 0 && ability.classes.some((cls) => cs.blockedClasses.includes(cls)),
-  )
-}
-
-function createEffectImmunityState(
-  actor: BattleFighterState,
-  abilityId: string | undefined,
-  effect: Extract<SkillEffect, { type: 'effectImmunity' }>,
-): BattleEffectImmunityState {
-  return {
-    id: `immunity-${actor.instanceId}-${abilityId ?? 'passive'}-${actor.effectImmunities.length}`,
-    label: effect.label,
-    blocks: [...effect.blocks],
-    remainingRounds: effect.duration,
-    tags: effect.tags ? [...effect.tags] : undefined,
-    sourceActorId: actor.instanceId,
-    sourceAbilityId: abilityId,
-  }
-}
-
-const damageEffectTypes = new Set(['damage', 'damageScaledByCounter', 'damageFiltered', 'damageEqualToActorShield'])
-
-function isEffectBlocked(target: BattleFighterState, effect: SkillEffect) {
-  return target.effectImmunities.some((immunity) =>
-    (immunity.blocks as string[]).includes(effect.type)
-    || (!damageEffectTypes.has(effect.type) && immunity.blocks.includes('nonDamage')),
-  )
-}
 
 function setFighterFlag(fighter: BattleFighterState, key: string, value: boolean) {
   fighter.stateFlags[key] = value
@@ -345,12 +252,6 @@ function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: 
 }
 
 
-function isHarmfulAbility(ability: BattleAbilityTemplate) {
-  if (ability.id === PASS_ABILITY_ID) return false
-  const targetsEnemy = ability.targetRule === 'enemy-single' || ability.targetRule === 'enemy-all'
-  if (!targetsEnemy) return false
-  return ability.kind !== 'heal' && ability.kind !== 'defend' && ability.kind !== 'buff' && ability.kind !== 'pass'
-}
 
 function getModifierSourceFighter(state: BattleState, modifier: { sourceActorId?: string }) {
   return modifier.sourceActorId ? getFighterById(state, modifier.sourceActorId) : null
@@ -362,58 +263,6 @@ function targetHasRequiredTags(state: BattleState, target: BattleFighterState, a
   return requiredTags.every((tag) => getFighterModifierPool(state, target).some((modifier) => modifier.tags.includes(tag)))
 }
 
-function isEffectReflectable(effect: SkillEffect) {
-  switch (effect.type) {
-    case 'damage':
-    case 'damageScaledByCounter':
-    case 'stun':
-    case 'classStun':
-    case 'mark':
-    case 'burn':
-    case 'breakShield':
-    case 'shieldDamage':
-    case 'energyDrain':
-    case 'energySteal':
-      return true
-    case 'cooldownAdjust':
-      return effect.amount > 0
-    default:
-      return false
-  }
-}
-
-function canEffectBeReflected(ability: BattleAbilityTemplate, effect: SkillEffect) {
-  if (ability.cannotBeReflected) return false
-  if (!isEffectReflectable(effect)) return false
-  if ((effect.type === 'damage' || effect.type === 'damageScaledByCounter') && effect.cannotBeReflected) return false
-  return true
-}
-
-function abilityCanBeCountered(ability: BattleAbilityTemplate) {
-  if (ability.cannotBeCountered) return false
-  const damageEffects = (ability.effects ?? []).filter(
-    (effect): effect is Extract<SkillEffect, { type: 'damage' | 'damageScaledByCounter' }> =>
-      effect.type === 'damage' || effect.type === 'damageScaledByCounter',
-  )
-  if (damageEffects.length === 0) return true
-  return damageEffects.some((effect) => !effect.cannotBeCountered)
-}
-
-function abilityCanBeReflected(ability: BattleAbilityTemplate) {
-  return (ability.effects ?? []).some((effect) => canEffectBeReflected(ability, effect))
-}
-
-function guardMatchesAbility(guard: BattleReactionGuardState, ability: BattleAbilityTemplate) {
-  if (!guard.abilityClasses || guard.abilityClasses.length === 0) return true
-  return ability.classes.some((cls) => guard.abilityClasses?.includes(cls))
-}
-
-function consumeReactionGuard(target: BattleFighterState, guardId: string) {
-  const index = target.reactionGuards.findIndex((guard) => guard.id === guardId)
-  if (index === -1) return null
-  const [removed] = target.reactionGuards.splice(index, 1)
-  return removed ?? null
-}
 
 function runPreDamageReactionWindow(
   state: BattleState,
