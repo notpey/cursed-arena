@@ -1,5 +1,5 @@
 import { definePassive, defendSkill } from '@/features/battle/content.ts'
-import { fighter, skill, modifierEffect, markerEffect } from './_helpers.ts'
+import { fighter, skill } from './_helpers.ts'
 
 export const nobara = fighter({
   id: 'nobara',
