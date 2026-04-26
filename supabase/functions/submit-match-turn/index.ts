@@ -5,6 +5,7 @@ import { endRoundTimeline, getAbilityById, resolveTeamTurnTimeline, transitionTo
 import type { BattleFighterState, BattleState, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types.ts'
 
 type BattleTeamId = 'player' | 'enemy'
+type BattleWinner = BattleTeamId | 'draw'
 type MatchStatus = 'waiting' | 'in_progress' | 'finished' | 'abandoned'
 type MatchRow = {
   id: string
@@ -18,7 +19,7 @@ type MatchRow = {
   match_revision: number
   resolution_id: string | null
   resolution_steps: unknown
-  winner: BattleTeamId | null
+  winner: BattleWinner | null
   last_submission_id: string | null
   last_submission_player_id: string | null
 }

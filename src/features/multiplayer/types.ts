@@ -1,4 +1,4 @@
-import type { BattleState, BattleTeamId, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleState, BattleTeamId, BattleTimelineStep, BattleWinner, QueuedBattleAction } from '@/features/battle/types'
 import type { BattleMatchMode } from '@/features/battle/matches'
 
 // ── Roles ────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ export type MatchRow = {
   current_phase: string
   current_round: number
   active_player: BattleTeamId
-  winner: BattleTeamId | null
+  winner: BattleWinner | null
   match_revision: number
   resolution_id: string | null
   resolution_steps: BattleTimelineStep[] | null

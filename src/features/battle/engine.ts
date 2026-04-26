@@ -766,10 +766,6 @@ function getSecondPlayer(first: BattleTeamId): BattleTeamId {
   return first === 'player' ? 'enemy' : 'player'
 }
 
-function advanceRoundInitiative(state: BattleState) {
-  state.firstPlayer = getSecondPlayer(state.firstPlayer)
-}
-
 type BattleStateSetup = Partial<typeof defaultBattleSetup> & {
   battleSeed?: string
 }
@@ -1718,11 +1714,7 @@ function applyModifierToFighter(
     targetId: target.instanceId,
     nextIndex: target.modifiers.length,
   })
-  // Stamp the round for disabling statuses so their first end-of-round tick
-  // is skipped (so "stun for N turns" means N victim turns, not N-1).
-  if (next.statusKind === 'stun' || next.stat === 'canAct') {
-    next.appliedInRound = state.round
-  }
+  next.appliedInRound = state.round
   target.modifiers = upsertModifier(target.modifiers, next)
   syncFighterStatusesFromModifiers(target)
   emitModifierApplied(ctx, state.round, target, next, actorId, abilityId)
@@ -3484,13 +3476,25 @@ function applyFatigue(state: BattleState, ctx: ResolutionContext) {
 }
 
 
-function getWinner(state: BattleState): BattleTeamId | null {
+function getWinner(state: BattleState): BattleState['winner'] {
   const playerAlive = state.playerTeam.some(isAlive)
   const enemyAlive = state.enemyTeam.some(isAlive)
   if (playerAlive && enemyAlive) return null
   if (playerAlive) return 'player'
   if (enemyAlive) return 'enemy'
-  return 'player'
+  return 'draw'
+}
+
+function getVictoryTone(winner: BattleState['winner']): BattleEventTone {
+  if (winner === 'player') return 'teal'
+  if (winner === 'enemy') return 'red'
+  return 'gold'
+}
+
+function getVictoryMessage(winner: BattleState['winner']) {
+  if (winner === 'player') return 'Your squad controls the battlefield.'
+  if (winner === 'enemy') return 'The enemy team overwhelmed your formation.'
+  return 'Both squads collapsed before either side could claim control.'
 }
 
 export function buildEnemyCommands(state: BattleState): Record<string, QueuedBattleAction> {
@@ -3604,7 +3608,7 @@ export function resolveTeamTurn(
   if (winner) {
     state.phase = 'finished'
     state.winner = winner
-    makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+    makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
   } else {
     tickTeamTurn(state, ctx, team)
   }
@@ -3648,8 +3652,8 @@ export function resolveTeamTurnTimeline(
         ctx,
         state.round,
         'victory',
-        winner === 'player' ? 'teal' : 'red',
-        winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.',
+        getVictoryTone(winner),
+        getVictoryMessage(winner),
       )
     }
 
@@ -3684,7 +3688,6 @@ export function beginNewRound(previousState: BattleState): BattleResolutionResul
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
 
-  advanceRoundInitiative(state)
   state.round += 1
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
@@ -3695,7 +3698,7 @@ export function beginNewRound(previousState: BattleState): BattleResolutionResul
   if (winner) {
     state.phase = 'finished'
     state.winner = winner
-    makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+    makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
     return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
   }
 
@@ -3711,7 +3714,6 @@ export function beginNewRoundTimeline(previousState: BattleState): BattleTimelin
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
   const steps: BattleTimelineStep[] = []
 
-  advanceRoundInitiative(state)
   state.round += 1
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
@@ -3726,8 +3728,8 @@ export function beginNewRoundTimeline(previousState: BattleState): BattleTimelin
       ctx,
       state.round,
       'victory',
-      winner === 'player' ? 'teal' : 'red',
-      winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.',
+      getVictoryTone(winner),
+      getVictoryMessage(winner),
     )
   } else {
     applyRoundEnergyGeneration(state, ctx)
@@ -3770,7 +3772,7 @@ export function endRound(previousState: BattleState): BattleResolutionResult {
   if (winner) {
     state.phase = 'finished'
     state.winner = winner
-    makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+    makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
     return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
   }
 
@@ -3805,8 +3807,8 @@ export function endRoundTimeline(previousState: BattleState): BattleTimelineResu
       ctx,
       state.round,
       'victory',
-      winner === 'player' ? 'teal' : 'red',
-      winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.',
+      getVictoryTone(winner),
+      getVictoryMessage(winner),
     )
   }
 
@@ -3857,7 +3859,7 @@ export function resolveRound(
   if (winner) {
     state.phase = 'finished'
     state.winner = winner
-    makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+    makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
     return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
   }
 
@@ -3886,9 +3888,8 @@ export function resolveRound(
   if (winner) {
     state.phase = 'finished'
     state.winner = winner
-    makeEvent(ctx, state.round, 'victory', winner === 'player' ? 'teal' : 'red', winner === 'player' ? 'Your squad controls the battlefield.' : 'The enemy team overwhelmed your formation.')
+    makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
   } else {
-    advanceRoundInitiative(state)
     state.round += 1
     makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id, legacy: true } })
     applyRoundStartEffects(state, ctx)

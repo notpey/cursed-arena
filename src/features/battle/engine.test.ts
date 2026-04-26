@@ -49,20 +49,37 @@ describe('battle engine scenarios', () => {
     expect(secondTotal).toBe(3)
   })
 
-  test('round initiative alternates each new round', () => {
+  test('round opener remains stable after the initial coin flip', () => {
     const state = createChargedBattleState({ battleSeed: 'initiative-alternates' })
     state.firstPlayer = 'player'
     state.activePlayer = 'player'
 
     const firstAdvance = beginNewRound(state)
-    expect(firstAdvance.state.firstPlayer).toBe('enemy')
-    expect(firstAdvance.state.activePlayer).toBe('enemy')
+    expect(firstAdvance.state.firstPlayer).toBe('player')
+    expect(firstAdvance.state.activePlayer).toBe('player')
     expect(firstAdvance.state.phase).toBe('firstPlayerCommand')
 
     const secondAdvance = beginNewRound(firstAdvance.state)
     expect(secondAdvance.state.firstPlayer).toBe('player')
     expect(secondAdvance.state.activePlayer).toBe('player')
     expect(secondAdvance.state.phase).toBe('firstPlayerCommand')
+  })
+
+  test('simultaneous team defeat produces a draw instead of a player win', () => {
+    const state = createChargedBattleState()
+    state.playerTeam.forEach((fighter) => {
+      fighter.hp = 1
+    })
+    state.enemyTeam.forEach((fighter) => {
+      fighter.hp = 1
+    })
+    state.battlefield.fatigueStartsRound = state.round
+
+    const result = endRound(state)
+
+    expect(result.state.phase).toBe('finished')
+    expect(result.state.winner).toBe('draw')
+    expect(result.events.some((event) => event.kind === 'victory' && event.tone === 'gold')).toBe(true)
   })
 
   test('Megumi spends Shikigami to empower Divine Dogs', () => {
@@ -185,8 +202,8 @@ describe('battle engine scenarios', () => {
 
     const updatedYuji = getFighter(state, 'player', 'yuji')
     const target = getFighter(state, 'enemy', 'yuji')
-    expect(target.hp).toBe(70)
-    expect(updatedYuji.stateCounters.sukuna_bonus_hp).toBe(10)
+    expect(target.hp).toBe(60)
+    expect(updatedYuji.stateCounters.sukuna_bonus_hp).toBe(5)
   })
 
   test('Yuji Black Flash damages the primary target and only splashes other enemies', () => {
@@ -294,11 +311,9 @@ describe('battle engine scenarios', () => {
       'player',
     )
 
-    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(85)
     expect(getFighter(result.state, 'enemy', 'megumi').hp).toBe(81)
     expect(getFighter(result.state, 'enemy', 'nobara').hp).toBe(100)
-    expect(getFighter(result.state, 'enemy', 'yuji').stateCounters.straw_doll_damage_taken).toBe(2)
-    expect(getFighter(result.state, 'enemy', 'megumi').stateCounters.straw_doll_damage_taken).toBe(1)
   })
 
   test('Nobara Straw Effigy punishes enemies when they use a skill', () => {
@@ -322,7 +337,7 @@ describe('battle engine scenarios', () => {
     )
 
     expect(beforeSkillHp).toBe(80)
-    expect(getFighter(punished.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getFighter(punished.state, 'enemy', 'yuji').hp).toBe(70)
   })
 
   test('resolveTeamTurn emits runtime events and packets for a damaging ability', () => {
@@ -804,7 +819,7 @@ describe('battle engine scenarios', () => {
     expect(getFighter(state, 'player', 'mai').stateCounters.cursed_bullet).toBe(3)
   })
 
-  test('conditional else effects can fire when counters are empty', () => {
+  test('conditional effects do not fire when counters are empty', () => {
     const state = createChargedBattleState({
       playerTeamIds: ['mai', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
@@ -819,8 +834,8 @@ describe('battle engine scenarios', () => {
       'player',
     )
 
-    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(75)
-    expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(85)
+    expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(0)
   })
 
   test('counter conditions can upgrade Gojo Hollow Purple', () => {
@@ -892,15 +907,16 @@ describe('battle engine scenarios', () => {
     expect(r1Fighter.stateModes.form).toBe('powered')
     expect(r1Fighter.stateModeDurations.form?.remainingRounds).toBe(2)
 
-    // next end-of-round should decrement
-    const afterRound2 = endRound(afterRound1.state)
-    const r2Fighter = getFighter(afterRound2.state, 'player', 'yuji')
+    // next owner turn should decrement
+    const afterTurn2 = resolveTeamTurn(afterRound1.state, {}, 'player')
+    const r2Fighter = getFighter(afterTurn2.state, 'player', 'yuji')
     expect(r2Fighter.stateModes.form).toBe('powered')
     expect(r2Fighter.stateModeDurations.form?.remainingRounds).toBe(1)
 
-    // last tick expires the mode
-    const afterRound3 = endRound(afterRound2.state)
-    const r3Fighter = getFighter(afterRound3.state, 'player', 'yuji')
+    // last owner-turn tick expires the mode
+    const afterRound2 = endRound(afterTurn2.state)
+    const afterTurn3 = resolveTeamTurn(afterRound2.state, {}, 'player')
+    const r3Fighter = getFighter(afterTurn3.state, 'player', 'yuji')
     expect(r3Fighter.stateModes.form).toBeUndefined()
     expect(r3Fighter.stateModeDurations.form).toBeUndefined()
   })

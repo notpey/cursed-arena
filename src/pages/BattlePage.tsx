@@ -434,33 +434,9 @@ function countCommittedPlayerActions(queued: Record<string, QueuedBattleAction>)
 
 function buildTimeoutQueuedActions(
   state: BattleState,
-  queued: Record<string, QueuedBattleAction>,
+  _queued: Record<string, QueuedBattleAction>,
 ): Record<string, QueuedBattleAction> {
-  const timeoutCommands = buildTimeoutCommands(state)
-  for (const [actorId, command] of Object.entries(queued)) {
-    if (!hasCommittedPlayerAction(command)) continue
-    timeoutCommands[actorId] = command
-  }
-  return timeoutCommands
-}
-
-function buildCommittedActionOrder(
-  actionOrder: string[],
-  queued: Record<string, QueuedBattleAction>,
-): string[] | undefined {
-  const committedActorIds = new Set(
-    Object.values(queued)
-      .filter((command) => hasCommittedPlayerAction(command))
-      .map((command) => command.actorId),
-  )
-
-  if (committedActorIds.size === 0) return undefined
-
-  const ordered = actionOrder.filter((actorId) => committedActorIds.has(actorId))
-  for (const actorId of committedActorIds) {
-    if (!ordered.includes(actorId)) ordered.push(actorId)
-  }
-  return ordered
+  return buildTimeoutCommands(state)
 }
 
 function applyRandomAllocationToQueuedActions(
@@ -503,12 +479,10 @@ function createTimeoutEvent(
 ): BattleEvent {
   let message = 'Turn timer expired. The turn was passed automatically.'
 
-  if (committedCount > 0 && autoPassedCount > 0) {
-    message = `Turn timer expired. ${committedCount} queued action${committedCount === 1 ? '' : 's'} locked in; ${autoPassedCount} fighter${autoPassedCount === 1 ? '' : 's'} auto-passed.`
-  } else if (committedCount > 0) {
-    message = `Turn timer expired. ${committedCount} queued action${committedCount === 1 ? '' : 's'} locked in.`
-  } else if (hadUnconfirmedActions) {
+  if (hadUnconfirmedActions || committedCount > 0) {
     message = 'Turn timer expired. Unconfirmed actions were canceled and the turn was passed.'
+  } else if (autoPassedCount > 0) {
+    message = 'Turn timer expired. The turn was passed automatically.'
   }
 
   return {
@@ -517,6 +491,16 @@ function createTimeoutEvent(
     kind: 'system',
     tone: 'red',
     message,
+  }
+}
+
+function createPassTurnEvent(round: number): BattleEvent {
+  return {
+    id: `pass-turn-${round}-${Date.now()}`,
+    round,
+    kind: 'system',
+    tone: 'frost',
+    message: 'No actions were queued. The turn was passed.',
   }
 }
 
@@ -944,11 +928,12 @@ export function BattlePage() {
 
   useEffect(() => {
     if (battle.state.phase !== 'finished' || !battle.state.winner) return
+    const winner = battle.state.winner
 
     const resultId =
       String(battle.state.round) +
       '-' +
-      battle.state.winner +
+      winner +
       '-' +
       battle.state.playerTeam.map((fighter) => fighter.templateId).join('-') +
       '-' +
@@ -961,12 +946,14 @@ export function BattlePage() {
 
     if (multiplayer && matchId) {
       // Online match — settle LP on the server then record locally
-      const won = battle.state.winner === 'player'
+      const won = winner === 'player'
+      const draw = winner === 'draw'
       const playerTeamIds = battle.state.playerTeam.map((f) => f.templateId)
       const enemyTeamIds  = battle.state.enemyTeam.map((f) => f.templateId)
       const mode = multiplayer.matchRow?.mode ?? 'private'
 
-      settleMatchLp(matchId).then(({ data: settle }) => {
+      const settlePromise = draw ? Promise.resolve({ data: null }) : settleMatchLp(matchId)
+      settlePromise.then(({ data: settle }) => {
         // Compute LP delta from server response; fall back to 0 if non-ranked or error
         let lpDelta = 0
         let lpBefore = readBattleProfileStats().lpCurrent
@@ -981,7 +968,7 @@ export function BattlePage() {
         }
 
         const result = recordOnlineCompletedBattle({
-          won,
+          winner,
           rounds: battle.state.round,
           playerTeamIds,
           enemyTeamIds,
@@ -1022,7 +1009,7 @@ export function BattlePage() {
 
     // Local AI match
     const result = recordCompletedBattle({
-      winner: battle.state.winner,
+      winner,
       rounds: battle.state.round,
       playerTeamIds: battle.state.playerTeam.map((fighter) => fighter.templateId),
       enemyTeamIds: battle.state.enemyTeam.map((fighter) => fighter.templateId),
@@ -1248,27 +1235,35 @@ export function BattlePage() {
     if (multiplayer && !multiplayer.isMyTurn) return
 
     const hadUnconfirmedActions = queueDialogOpen || hasPendingTargetSelection
+    const queuedActionCount = countCommittedPlayerActions(battle.queued)
     const timeoutQueued = buildTimeoutQueuedActions(battle.state, battle.queued)
-    const committedCount = countCommittedPlayerActions(timeoutQueued)
-    const autoPassedCount = Math.max(0, getCommandablePlayerUnits(battle.state).length - committedCount)
-    const committedOrder = buildCommittedActionOrder(battle.actionOrder, timeoutQueued)
+    const autoPassedCount = getCommandablePlayerUnits(battle.state).length
 
     setQueueDialogOpen(false)
     resolveQueuedRound(
       timeoutQueued,
       [
         createTimeoutEvent(battle.state.round, {
-          committedCount,
+          committedCount: queuedActionCount,
           autoPassedCount,
-          hadUnconfirmedActions,
+          hadUnconfirmedActions: hadUnconfirmedActions || queuedActionCount > 0,
         }),
       ],
-      committedOrder,
+      undefined,
     )
   }
 
   function resolveCommittedRound() {
     if (!commitReady || battle.state.phase === 'finished') return
+    if (committedActionCount === 0) {
+      setQueueDialogOpen(false)
+      resolveQueuedRound(
+        buildTimeoutQueuedActions(battle.state, battle.queued),
+        [createPassTurnEvent(battle.state.round)],
+        undefined,
+      )
+      return
+    }
     setQueueDialogOpen(true)
   }
 
@@ -1412,12 +1407,14 @@ function BattleResultOverlay({
   onReturnHome: () => void
 }) {
   const win = winner === 'player'
+  const draw = winner === 'draw'
+  const title = draw ? 'Draw' : win ? 'Victory' : 'Defeat'
 
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.72)] backdrop-blur-sm">
       <div className="w-full max-w-xl rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
         <p className="ca-mono-label text-[0.52rem] text-ca-text-3">Match Concluded</p>
-        <h2 className={['ca-display mt-3 text-5xl', win ? 'text-ca-teal' : 'text-ca-red'].join(' ')}>{win ? 'Victory' : 'Defeat'}</h2>
+        <h2 className={['ca-display mt-3 text-5xl', draw ? 'text-ca-gold' : win ? 'text-ca-teal' : 'text-ca-red'].join(' ')}>{title}</h2>
         <p className="mt-3 text-sm text-ca-text-2">
           {recordedResult ? getModeLabel(recordedResult.mode) + ' vs ' + recordedResult.opponentName : 'Battle result recorded.'}
         </p>

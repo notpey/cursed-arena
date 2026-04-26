@@ -56,8 +56,8 @@ function swapPerspective(state: BattleState): BattleState {
     enemyEnergy:  state.playerEnergy,
     playerTeamModifiers:    state.enemyTeamModifiers,
     enemyTeamModifiers:     state.playerTeamModifiers,
-    winner: state.winner === null
-      ? null
+    winner: state.winner === null || state.winner === 'draw'
+      ? state.winner
       : state.winner === 'player' ? 'enemy' : 'player',
   }
 }
@@ -435,4 +435,3 @@ export function buildTimeoutCommands(
   // Pass for every commandable unit on the local player's team
   return buildPassCommands(localState, 'player')
 }
-

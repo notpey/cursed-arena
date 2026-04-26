@@ -180,8 +180,13 @@ export function NarutoQueueCommitModal({
 }) {
   const [order, setOrder] = useState<string[]>(() => {
     const aliveIds = new Set(state.playerTeam.filter((fighter) => fighter.hp > 0).map((fighter) => fighter.instanceId))
-    const ordered = initialOrder.filter((id) => aliveIds.has(id))
-    const remaining = [...aliveIds].filter((id) => !ordered.includes(id))
+    const queuedIds = new Set(
+      Object.values(queued)
+        .filter((command) => command.team === 'player' && command.abilityId !== PASS_ABILITY_ID)
+        .map((command) => command.actorId),
+    )
+    const ordered = initialOrder.filter((id) => aliveIds.has(id) && queuedIds.has(id))
+    const remaining = [...queuedIds].filter((id) => aliveIds.has(id) && !ordered.includes(id))
     return [...ordered, ...remaining]
   })
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -190,19 +195,20 @@ export function NarutoQueueCommitModal({
 
   const rows = useMemo(() => {
     const rowMap = new Map(
-      state.playerTeam.map((fighter) => {
+      state.playerTeam.flatMap((fighter) => {
         const command = queued[fighter.instanceId]
         const ability = command ? getAbilityById(fighter, command.abilityId) : null
         const isPass = !ability || ability.id === PASS_ABILITY_ID
+        if (isPass) return []
 
-        return [fighter.instanceId, {
+        return [[fighter.instanceId, {
           fighter,
-          abilityName: ability?.name ?? 'Pass',
-          iconSrc: ability?.icon.src,
-          cost: ability ? getAbilityEnergyCost(ability) : {},
+          abilityName: ability.name,
+          iconSrc: ability.icon.src,
+          cost: getAbilityEnergyCost(ability),
           isPass,
           summary: getCommandSummary(state, command),
-        } satisfies QueueRow]
+        } satisfies QueueRow]]
       }),
     )
 

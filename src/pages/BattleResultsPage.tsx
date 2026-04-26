@@ -60,6 +60,7 @@ export function BattleResultsPage() {
   }
 
   const won = result.result === 'WIN'
+  const draw = result.result === 'DRAW'
 
   return (
     <section className="py-4 sm:py-6">
@@ -69,7 +70,7 @@ export function BattleResultsPage() {
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Battle Results</p>
             <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h1 className={`ca-display text-5xl ${won ? 'text-ca-teal' : 'text-ca-red'}`}>{won ? 'Victory' : 'Defeat'}</h1>
+                <h1 className={`ca-display text-5xl ${draw ? 'text-ca-gold' : won ? 'text-ca-teal' : 'text-ca-red'}`}>{draw ? 'Draw' : won ? 'Victory' : 'Defeat'}</h1>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.46rem] text-ca-text-2">
                     {getModeLabel(result.mode)}
@@ -131,11 +132,12 @@ export function BattleResultsPage() {
             <div className="mt-4 space-y-2.5">
               {recentHistory.map((match) => {
                 const matchWon = match.result === 'WIN'
+                const matchDraw = match.result === 'DRAW'
                 return (
                   <div key={match.id} className="rounded-[10px] border border-white/7 bg-[rgba(16,17,22,0.16)] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={`ca-mono-label text-[0.46rem] ${matchWon ? 'text-ca-teal' : 'text-ca-red'}`}>{match.result}</span>
+                        <span className={`ca-mono-label text-[0.46rem] ${matchDraw ? 'text-ca-gold' : matchWon ? 'text-ca-teal' : 'text-ca-red'}`}>{match.result}</span>
                         <span className="ca-mono-label text-[0.44rem] text-ca-text-2">{getModeLabel(match.mode)}</span>
                         <span className="ca-mono-label text-[0.44rem] text-ca-text-3">VS {match.opponentName}</span>
                         <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{match.rounds} ROUNDS</span>

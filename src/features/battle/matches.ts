@@ -1,5 +1,6 @@
 import { defaultBattleSetup } from '@/features/battle/data'
 import { createBattleSeed, pickSeededIndex } from '@/features/battle/random'
+import type { BattleWinner } from '@/features/battle/types'
 import { readPlayerProfile } from '@/features/player/store'
 import { trackBattleCompleted } from '@/features/missions/store'
 
@@ -16,7 +17,7 @@ export type PracticeOptions = {
   aiEnabled: boolean
   enemyTeamIds: string[]
 }
-export type BattleMatchResult = 'WIN' | 'LOSS'
+export type BattleMatchResult = 'WIN' | 'LOSS' | 'DRAW'
 export type BattleRankShift = 'promoted' | 'demoted' | 'steady'
 
 export type BattleProfileStats = {
@@ -69,7 +70,7 @@ export type LastBattleResult = {
   id: string
   result: BattleMatchResult
   mode: BattleMatchMode
-  winner: 'player' | 'enemy'
+  winner: BattleWinner
   rounds: number
   opponentName: string
   opponentTitle: string
@@ -463,7 +464,7 @@ export function recordCompletedBattle({
   enemyTeamIds,
   session,
 }: {
-  winner: 'player' | 'enemy'
+  winner: BattleWinner
   rounds: number
   playerTeamIds: string[]
   enemyTeamIds: string[]
@@ -482,7 +483,8 @@ export function recordCompletedBattle({
 
   const current = readBattleProfileStats()
   const won = winner === 'player'
-  const lpDelta = activeSession.mode === 'ranked' ? (won ? 24 : -18) : 0
+  const draw = winner === 'draw'
+  const lpDelta = activeSession.mode === 'ranked' && !draw ? (won ? 24 : -18) : 0
   const lpBefore = current.lpCurrent
   const rankBefore = current.rank
   const lpCurrent = Math.max(0, current.lpCurrent + lpDelta)
@@ -492,9 +494,9 @@ export function recordCompletedBattle({
   const nextStats: BattleProfileStats = {
     ...current,
     wins: current.wins + (won ? 1 : 0),
-    losses: current.losses + (won ? 0 : 1),
+    losses: current.losses + (!won && !draw ? 1 : 0),
     matchesPlayed: current.matchesPlayed + 1,
-    currentStreak: won ? current.currentStreak + 1 : 0,
+    currentStreak: won ? current.currentStreak + 1 : draw ? current.currentStreak : 0,
     bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
     lpCurrent,
     lpToNext: rankTier.next ?? lpCurrent,
@@ -506,7 +508,7 @@ export function recordCompletedBattle({
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-${Date.now()}`,
-    result: won ? 'WIN' : 'LOSS',
+    result: draw ? 'DRAW' : won ? 'WIN' : 'LOSS',
     mode: activeSession.mode,
     opponentName: activeSession.opponentName,
     opponentTitle: activeSession.opponentTitle,
@@ -559,7 +561,7 @@ export function recordCompletedBattle({
  * rather than being computed locally.
  */
 export function recordOnlineCompletedBattle({
-  won,
+  winner,
   rounds,
   playerTeamIds,
   enemyTeamIds,
@@ -568,7 +570,7 @@ export function recordOnlineCompletedBattle({
   lpDelta,
   lpBefore,
 }: {
-  won: boolean
+  winner: BattleWinner
   rounds: number
   playerTeamIds: string[]
   enemyTeamIds: string[]
@@ -579,6 +581,8 @@ export function recordOnlineCompletedBattle({
 }): LastBattleResult {
   const current = readBattleProfileStats()
   const rankBefore = current.rank
+  const won = winner === 'player'
+  const draw = winner === 'draw'
   const lpCurrent = Math.max(0, lpBefore + lpDelta)
   const peakLp = Math.max(current.peakLp, lpCurrent)
   const rankTier = getRankTier(lpCurrent)
@@ -587,9 +591,9 @@ export function recordOnlineCompletedBattle({
   const nextStats: BattleProfileStats = {
     ...current,
     wins: current.wins + (won ? 1 : 0),
-    losses: current.losses + (won ? 0 : 1),
+    losses: current.losses + (!won && !draw ? 1 : 0),
     matchesPlayed: current.matchesPlayed + 1,
-    currentStreak: won ? current.currentStreak + 1 : 0,
+    currentStreak: won ? current.currentStreak + 1 : draw ? current.currentStreak : 0,
     bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
     lpCurrent,
     lpToNext: rankTier.next ?? lpCurrent,
@@ -602,7 +606,7 @@ export function recordOnlineCompletedBattle({
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-online-${Date.now()}`,
-    result: won ? 'WIN' : 'LOSS',
+    result: draw ? 'DRAW' : won ? 'WIN' : 'LOSS',
     mode,
     opponentName,
     opponentTitle: 'Online Match',
@@ -619,7 +623,7 @@ export function recordOnlineCompletedBattle({
     id: historyEntry.id,
     result: historyEntry.result,
     mode,
-    winner: won ? 'player' : 'enemy',
+    winner,
     rounds,
     opponentName,
     opponentTitle: 'Online Match',

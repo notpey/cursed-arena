@@ -530,7 +530,7 @@ function HeroPlayPanel({
                 <span
                   className={[
                     'ca-mono-label text-[0.46rem]',
-                    activeMatch.result === 'WIN' ? 'text-ca-teal' : 'text-ca-red',
+                    activeMatch.result === 'DRAW' ? 'text-ca-gold' : activeMatch.result === 'WIN' ? 'text-ca-teal' : 'text-ca-red',
                   ].join(' ')}
                 >
                   {activeMatch.result}

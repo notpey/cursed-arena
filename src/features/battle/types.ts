@@ -1,6 +1,7 @@
 import type { BattleEnergyPool, BattleEnergyCost, BattleEnergyType } from '@/features/battle/energy.ts'
 
 export type BattleTeamId = 'player' | 'enemy'
+export type BattleWinner = BattleTeamId | 'draw'
 
 export type BattleBoardAccent = 'teal' | 'red' | 'gold' | 'frost'
 
@@ -660,7 +661,7 @@ export type BattleState = {
   enemyTeamModifiers: BattleModifierInstance[]
   battlefieldModifiers: BattleModifierInstance[]
   scheduledEffects: BattleScheduledEffect[]
-  winner: BattleTeamId | null
+  winner: BattleWinner | null
   randomTickCount: number
 }
 
