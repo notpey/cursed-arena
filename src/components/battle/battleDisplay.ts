@@ -356,6 +356,29 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
   return describePassiveGeneratedLines(passive)
 }
 
+// ── Reaction trigger → plain English phrase ───────────────────────────────────
+
+function reactionTriggerPhrase(trigger: string | undefined, firstOrAny: string): string {
+  switch (trigger) {
+    case 'onAbilityUse':
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character uses a skill`
+    case 'onBeingTargeted':
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character is targeted by a skill`
+    case 'onDamageApplied':
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character takes damage`
+    case 'onDamageBlocked':
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character blocks damage`
+    case 'onShieldBroken':
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character's shield is broken`
+    case 'onDefeat':
+      return 'When this character is defeated'
+    case 'onDefeatEnemy':
+      return 'When this character defeats an enemy'
+    default:
+      return 'On the next triggering event'
+  }
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 // Priority buckets (lower = higher priority, shown first and kept when limiting)
@@ -577,27 +600,43 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     const sourceId = guard.sourceAbilityId ?? `__reaction-${guard.kind}__`
     const group = ensureGroup(sourceId)
     const classScope = guard.abilityClasses && guard.abilityClasses.length > 0
-      ? `${guard.abilityClasses.join('/')} harmful skill`
-      : 'harmful skill'
-    const triggerScope = guard.consumeOnTrigger ? 'the first' : 'any'
+      ? `${guard.abilityClasses.join('/')} skill`
+      : 'skill'
+    const firstOrAny = guard.consumeOnTrigger ? 'the next time' : 'each time'
     if (guard.kind === 'counter') {
+      const harmfulClause = guard.harmfulOnly !== false ? 'harmful ' : ''
       group.lines.push({
-        text: `If an enemy uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage`,
+        text: `If an enemy uses a ${harmfulClause}${classScope} on this character, they will take ${guard.counterDamage ?? 0} damage`,
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'stun')
     } else if (guard.kind === 'reflect') {
+      const harmfulClause = guard.harmfulOnly !== false ? 'harmful ' : ''
       group.lines.push({
-        text: `If an enemy uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected back`,
+        text: `If an enemy uses a ${harmfulClause}${classScope} on this character, its harmful effects are reflected back at them`,
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'buff')
     } else {
-      group.lines.push({
-        text: `${guard.label} will trigger on ${guard.trigger ?? 'the next event'}`,
-        turnsLeft: guard.remainingRounds,
-      })
-      mergeTone(group, 'buff')
+      // 'effect' kind — translate trigger + effects into plain English
+      const triggerPhrase = reactionTriggerPhrase(guard.trigger, firstOrAny)
+      if (guard.effects && guard.effects.length > 0) {
+        // Lower-case and join sub-effect descriptions naturally
+        const parts = guard.effects.map((e) => {
+          const raw = describeSkillEffectForUi(e)
+          return raw.charAt(0).toLowerCase() + raw.slice(1)
+        })
+        const effectSummary = parts.length === 1
+          ? parts[0]
+          : parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1]
+        group.lines.push({
+          text: `${triggerPhrase}, they will ${effectSummary}`,
+          turnsLeft: guard.remainingRounds,
+        })
+      } else {
+        group.lines.push({ text: triggerPhrase, turnsLeft: guard.remainingRounds })
+      }
+      mergeTone(group, 'debuff')
     }
     mergeTurns(group, guard.remainingRounds)
     mergePriority(group, 2)
