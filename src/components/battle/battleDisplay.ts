@@ -6,6 +6,7 @@ import type {
   BattleAbilityIcon,
   BattleAbilityTemplate,
   BattleBoardAccent,
+  BattleEffectImmunityBlock,
   BattleFighterState,
   BattleModifierInstance,
   BattleState,
@@ -361,6 +362,29 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
   return describePassiveGeneratedLines(passive)
 }
 
+// ── Effect immunity description ───────────────────────────────────────────────
+
+function describeImmunityBlocks(blocks: BattleEffectImmunityBlock[]): string {
+  if (blocks.includes('nonDamage') && blocks.includes('damage')) return 'This character is immune to all effects and damage'
+  if (blocks.includes('nonDamage')) return 'This character is immune to all non-damage effects'
+  const labels: string[] = []
+  if (blocks.includes('damage') || blocks.includes('damageScaledByCounter')) labels.push('damage')
+  if (blocks.includes('stun')) labels.push('stun')
+  if (blocks.includes('classStun')) labels.push('technique seals')
+  if (blocks.includes('mark')) labels.push('mark')
+  if (blocks.includes('burn')) labels.push('affliction damage')
+  if (blocks.includes('shieldDamage')) labels.push('shield damage')
+  if (blocks.includes('breakShield')) labels.push('shield break')
+  if (blocks.includes('energyDrain') || blocks.includes('energySteal')) labels.push('energy drain')
+  if (blocks.includes('heal')) labels.push('healing')
+  if (blocks.includes('invulnerable')) labels.push('invulnerability effects')
+  if (blocks.includes('attackUp')) labels.push('attack buffs')
+  if (blocks.includes('cooldownAdjust') || blocks.includes('cooldownReduction')) labels.push('cooldown effects')
+  if (labels.length === 0) return 'This character is immune to certain effects'
+  if (labels.length === 1) return `This character is immune to ${labels[0]}`
+  return `This character is immune to ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
+}
+
 // ── Reaction trigger → plain English phrase ───────────────────────────────────
 
 function reactionTriggerPhrase(trigger: string | undefined, firstOrAny: string): string {
@@ -585,7 +609,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   for (const immunity of fighter.effectImmunities) {
     const sourceId = immunity.sourceAbilityId ?? '__immunity__'
     const group = ensureGroup(sourceId)
-    group.lines.push({ text: `This character is immune to ${immunity.label.toLowerCase()}`, turnsLeft: immunity.remainingRounds })
+    group.lines.push({ text: describeImmunityBlocks(immunity.blocks), turnsLeft: immunity.remainingRounds })
     mergeTurns(group, immunity.remainingRounds)
     mergeTone(group, 'void')
     mergePriority(group, 6)
