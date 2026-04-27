@@ -50,10 +50,19 @@ function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardA
   return 'bg-[rgba(200,210,230,0.04)]'
 }
 
+function lineDurationLabel(line: ActiveEffectLine): { text: string; cls: string } | null {
+  if (line.permanent) return { text: 'INFINITE', cls: 'text-ca-text-3' }
+  if (line.turnsLeft === null) return null
+  if (line.turnsLeft <= 1) return { text: 'ENDS THIS TURN', cls: 'text-ca-red' }
+  return { text: `${line.turnsLeft} TURNS LEFT`, cls: 'text-ca-text-3' }
+}
+
 function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; tooltipDown?: boolean }) {
   const border = pipToneBorder(pip.tone)
   const badgeCls = pipToneBadge(pip.tone)
-  const hasMeta = pip.turnsLeft !== null || (pip.stackCount !== null && pip.stackCount > 0)
+
+  // Show stack badge in header; omit turn count since each line shows its own duration
+  const hasStackMeta = pip.stackCount !== null && pip.stackCount > 0
 
   return (
     <div className={cn(
@@ -76,31 +85,32 @@ function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; toolti
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <p className="ca-display text-[1rem] leading-none tracking-[0.06em] text-ca-text">{pip.label.toUpperCase()}</p>
-            {hasMeta ? (
-              <div className="flex shrink-0 items-center gap-1">
-                {pip.stackCount !== null && pip.stackCount > 0 ? (
-                  <span className={cn('rounded-[0.18rem] px-1.5 py-0.5 ca-mono-label text-[0.52rem] leading-none', badgeCls)}>
-                    {pip.stackCount} STACK{pip.stackCount === 1 ? '' : 'S'}
-                  </span>
-                ) : null}
-                {pip.turnsLeft !== null ? (
-                  <span className="rounded-[0.18rem] border border-white/12 bg-white/7 px-1.5 py-0.5 ca-mono-label text-[0.52rem] leading-none text-ca-text-2">
-                    {pip.turnsLeft} TURN{pip.turnsLeft === 1 ? '' : 'S'}
-                  </span>
-                ) : null}
-              </div>
+            {hasStackMeta ? (
+              <span className={cn('rounded-[0.18rem] px-1.5 py-0.5 ca-mono-label text-[0.52rem] leading-none shrink-0', badgeCls)}>
+                {pip.stackCount} STACK{pip.stackCount === 1 ? '' : 'S'}
+              </span>
             ) : null}
           </div>
 
-          <ul className="mt-2 space-y-1.5">
-            {pip.lines.map((line, i) => (
-              <li key={i} className="rounded-[0.24rem] border border-white/8 bg-white/[0.035] px-2 py-1.5 text-[0.72rem] leading-snug text-ca-text-2">
-                {line.text}{line.turnsLeft !== null ? (
-                  <span className="ml-1 text-ca-text-3">({line.turnsLeft} turn{line.turnsLeft === 1 ? '' : 's'} left)</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          {pip.lines.length > 0 ? (
+            <ul className="mt-2 space-y-2">
+              {pip.lines.map((line, i) => {
+                const dur = lineDurationLabel(line)
+                return (
+                  <li key={i}>
+                    <p className="text-[0.72rem] leading-snug text-ca-text-2">
+                      {'- '}{line.text}
+                    </p>
+                    {dur ? (
+                      <p className={cn('mt-0.5 ca-mono-label text-[0.55rem] leading-none', dur.cls)}>
+                        {dur.text}
+                      </p>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ul>
+          ) : null}
         </div>
       </div>
 

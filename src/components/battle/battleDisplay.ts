@@ -27,6 +27,7 @@ export type ActivePipTone = 'default' | 'burn' | 'stun' | 'heal' | 'buff' | 'deb
 export type ActiveEffectLine = {
   text: string
   turnsLeft: number | null
+  permanent?: boolean  // true = "INFINITE", false/undefined = uses turnsLeft
 }
 
 export type ActiveEffectPip = {
@@ -43,57 +44,58 @@ export type ActiveEffectPip = {
 
 // ── Duration helpers ──────────────────────────────────────────────────────────
 
-function modDuration(mod: BattleModifierInstance): number | null {
-  if (mod.duration.kind === 'rounds') return mod.duration.remaining
-  return null
+function modDuration(mod: BattleModifierInstance): { turnsLeft: number | null; permanent: boolean } {
+  if (mod.duration.kind === 'rounds') return { turnsLeft: mod.duration.remaining, permanent: false }
+  if (mod.duration.kind === 'permanent' || mod.duration.kind === 'untilRemoved') return { turnsLeft: null, permanent: true }
+  return { turnsLeft: null, permanent: false }
 }
 
 // ── Per-modifier effect line ──────────────────────────────────────────────────
 
-function modEffectLine(mod: BattleModifierInstance): { line: string; tone: ActivePipTone; turnsLeft: number | null } {
-  const turnsLeft = modDuration(mod)
-  if (mod.statusKind === 'stun') return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
-  if (mod.statusKind === 'invincible') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
-  if (mod.statusKind === 'burn' && typeof mod.value === 'number') return { line: `Taking ${mod.value} affliction damage each turn`, tone: 'burn', turnsLeft }
-  if (mod.statusKind === 'mark' && typeof mod.value === 'number') return { line: `Marked — next hit deals +${mod.value} bonus damage`, tone: 'debuff', turnsLeft }
-  if (mod.statusKind === 'attackUp' && typeof mod.value === 'number') return { line: `All damage increased by ${mod.value}`, tone: 'buff', turnsLeft }
+function modEffectLine(mod: BattleModifierInstance): { line: string; tone: ActivePipTone; turnsLeft: number | null; permanent: boolean } {
+  const { turnsLeft, permanent } = modDuration(mod)
+  if (mod.statusKind === 'stun') return { line: 'Cannot use abilities', tone: 'stun', turnsLeft, permanent }
+  if (mod.statusKind === 'invincible') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft, permanent }
+  if (mod.statusKind === 'burn' && typeof mod.value === 'number') return { line: `This character will take ${mod.value} affliction damage`, tone: 'burn', turnsLeft, permanent }
+  if (mod.statusKind === 'mark' && typeof mod.value === 'number') return { line: `This character will take ${mod.value} additional damage`, tone: 'debuff', turnsLeft, permanent }
+  if (mod.statusKind === 'attackUp' && typeof mod.value === 'number') return { line: `This character deals ${mod.value} additional damage`, tone: 'buff', turnsLeft, permanent }
 
   if (mod.stat === 'damageTaken' && typeof mod.value === 'number') {
     if (mod.mode === 'flat') {
       const line = mod.value < 0
-        ? `Damage taken reduced by ${Math.abs(mod.value)}`
-        : `Damage taken increased by ${mod.value}`
-      return { line, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft }
+        ? `This character takes ${Math.abs(mod.value)} less damage`
+        : `This character takes ${mod.value} additional damage`
+      return { line, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft, permanent }
     }
     if (mod.mode === 'percentAdd') {
-      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%`, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft }
+      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%`, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft, permanent }
     }
   }
   if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
-    const dir = mod.value > 0 ? `increased by ${mod.value}` : `reduced by ${Math.abs(mod.value)}`
-    return { line: `Damage dealt ${dir}`, tone: mod.value > 0 ? 'buff' : 'debuff', turnsLeft }
+    const dir = mod.value > 0 ? `deals ${mod.value} additional damage` : `deals ${Math.abs(mod.value)} less damage`
+    return { line: `This character ${dir}`, tone: mod.value > 0 ? 'buff' : 'debuff', turnsLeft, permanent }
   }
-  if (mod.stat === 'canReduceDamageTaken' && mod.value === false) return { line: 'Cannot reduce damage taken', tone: 'debuff', turnsLeft }
-  if (mod.stat === 'canGainInvulnerable' && mod.value === false) return { line: 'Cannot become invulnerable', tone: 'debuff', turnsLeft }
-  if (mod.stat === 'isInvulnerable') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
-  if (mod.stat === 'isUndying') return { line: 'Cannot be reduced below 1 HP', tone: 'buff', turnsLeft }
-  if (mod.stat === 'canAct' && mod.value === false) return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
-  if (mod.stat === 'canAct' && mod.value === true) return { line: 'Immune to stun effects', tone: 'buff', turnsLeft }
+  if (mod.stat === 'canReduceDamageTaken' && mod.value === false) return { line: 'This character cannot reduce damage taken', tone: 'debuff', turnsLeft, permanent }
+  if (mod.stat === 'canGainInvulnerable' && mod.value === false) return { line: 'This character cannot become invulnerable', tone: 'debuff', turnsLeft, permanent }
+  if (mod.stat === 'isInvulnerable') return { line: 'This character is invulnerable to all enemy skills', tone: 'void', turnsLeft, permanent }
+  if (mod.stat === 'isUndying') return { line: 'This character cannot be reduced below 1 HP', tone: 'buff', turnsLeft, permanent }
+  if (mod.stat === 'canAct' && mod.value === false) return { line: 'This character cannot use abilities', tone: 'stun', turnsLeft, permanent }
+  if (mod.stat === 'canAct' && mod.value === true) return { line: 'This character is immune to stun effects', tone: 'buff', turnsLeft, permanent }
   if ((mod.stat === 'healDone' || mod.stat === 'healTaken') && typeof mod.value === 'number') {
-    const target = mod.stat === 'healDone' ? 'Healing done' : 'Healing received'
+    const target = mod.stat === 'healDone' ? 'healing done by' : 'healing received by'
     if (mod.mode === 'flat') {
       const line = mod.value < 0
-        ? `${target} reduced by ${Math.abs(mod.value)}`
-        : `${target} increased by ${mod.value}`
-      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft }
+        ? `The ${target} this character is reduced by ${Math.abs(mod.value)}`
+        : `The ${target} this character is increased by ${mod.value}`
+      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft, permanent }
     }
     if (mod.mode === 'percentAdd') {
-      const line = `${target} ${mod.value > 0 ? '+' : ''}${mod.value}%`
-      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft }
+      const line = `Healing ${mod.stat === 'healDone' ? 'done' : 'received'} ${mod.value > 0 ? '+' : ''}${mod.value}%`
+      return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft, permanent }
     }
   }
-  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: 'Healing altered', tone: 'heal', turnsLeft }
-  return { line: mod.label, tone: 'default', turnsLeft }
+  if (mod.stat === 'healDone' || mod.stat === 'healTaken') return { line: 'Healing altered', tone: 'heal', turnsLeft, permanent }
+  return { line: mod.label, tone: 'default', turnsLeft, permanent }
 }
 
 // ── Icon resolution ───────────────────────────────────────────────────────────
@@ -476,8 +478,8 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     if (!mod.visible) continue
     const sourceId = mod.sourceAbilityId ?? '__engine__'
     const group = ensureGroup(sourceId)
-    const { line, tone, turnsLeft } = modEffectLine(mod)
-    group.lines.push({ text: line, turnsLeft })
+    const { line, tone, turnsLeft, permanent } = modEffectLine(mod)
+    group.lines.push({ text: line, turnsLeft, permanent })
     mergeTurns(group, turnsLeft)
     mergeTone(group, tone)
     // Stun/cannot-act and invulnerable/undying get highest priority
