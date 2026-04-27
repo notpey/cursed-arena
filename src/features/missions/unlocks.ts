@@ -17,6 +17,8 @@ export type UnlockMissionDef = {
   id: string
   name: string
   description: string
+  /** Category grouping shown on the missions index page */
+  section: string
   objective: UnlockObjective
   reward: { fighterId: string }
   /** Mission id that must be completed before this one is visible */
@@ -44,6 +46,7 @@ export const UNLOCK_MISSION_DEFS: UnlockMissionDef[] = [
     id: 'unlock-todo',
     name: 'Divergent Fist',
     description: 'Win 3 matches using Yuji Itadori. Todo only fights alongside someone worth his time.',
+    section: 'Starter Missions',
     objective: { type: 'win_with_fighter', fighterId: 'yuji', count: 3 },
     reward: { fighterId: 'todo' },
   },
@@ -183,5 +186,21 @@ export function getObjectiveProgressLabel(def: UnlockMissionDef, progress: Unloc
       return `${Math.min(progress.progress, def.objective.count)}/${def.objective.count} streak`
     case 'reach_lp':
       return `${progress.progress}/${def.objective.lp} LP`
+  }
+}
+
+/** Human-readable mission goal line, e.g. "Win 3 matches with Yuji Itadori (3/3)" */
+export function getObjectiveGoalLine(def: UnlockMissionDef, progress: UnlockMissionProgress): string {
+  switch (def.objective.type) {
+    case 'win_with_fighter': {
+      const done = Math.min(progress.progress, def.objective.count)
+      return `Win ${def.objective.count} matches with ${def.objective.fighterId.charAt(0).toUpperCase() + def.objective.fighterId.slice(1)} (${done}/${def.objective.count})`
+    }
+    case 'win_streak': {
+      const done = Math.min(progress.progress, def.objective.count)
+      return `Achieve a ${def.objective.count}-win streak (${done}/${def.objective.count})`
+    }
+    case 'reach_lp':
+      return `Reach ${def.objective.lp} LP (${progress.progress}/${def.objective.lp})`
   }
 }
