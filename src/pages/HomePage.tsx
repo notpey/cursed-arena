@@ -264,22 +264,26 @@ function BattlePassCard() {
 
 function StoryContinueCard() {
   return (
-    <Link to="/story" className="block">
+    <Link to="/missions" className="block">
       <SurfaceCard className="overflow-hidden border-white/10 bg-[rgba(15,15,21,0.26)] shadow-[0_10px_24px_rgba(0,0,0,0.2)] transition duration-150 hover:border-white/16 hover:shadow-[0_14px_30px_rgba(0,0,0,0.24)]">
         <div className="relative p-4">
           <div className="absolute inset-0 bg-[radial-gradient(80%_120%_at_80%_20%,rgba(5,216,189,0.06),transparent_60%),linear-gradient(115deg,#0f1018_10%,#301315_58%,#0f1018_100%)]" />
           <div className="absolute inset-0 opacity-35 [background:linear-gradient(135deg,rgba(255,255,255,0.06),transparent_25%,rgba(250,39,66,0.08)_55%,transparent_80%)]" />
           <div className="relative grid grid-cols-[auto_1fr_auto] items-center gap-4">
             <div className="grid h-16 w-16 place-items-center rounded-lg border border-ca-teal/30 bg-ca-teal-wash">
-              <span className="ca-display text-3xl text-ca-teal">CH3</span>
+              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 12l2 2 4-4" className="stroke-ca-teal" />
+                <rect x="4" y="4" width="16" height="16" rx="2" className="stroke-ca-teal" />
+                <path d="M4 9h16" className="stroke-ca-teal" />
+              </svg>
             </div>
             <div className="min-w-0">
-              <p className="ca-mono-label text-[0.52rem] text-ca-teal">Continue Story</p>
+              <p className="ca-mono-label text-[0.52rem] text-ca-teal">Unlock Missions</p>
               <p className="ca-display mt-1 truncate text-3xl text-ca-text sm:text-[2.2rem]">
-                Chapter 3 - Cursed Womb
+                Missions
               </p>
               <p className="mt-1 text-xs text-ca-text-3">
-                Juvenile Detention Center Arc - 3 stages remaining
+                Complete missions to unlock new fighters
               </p>
             </div>
             <div className="grid h-9 w-9 place-items-center rounded-full border border-ca-border bg-ca-overlay/70 text-ca-text-2 transition duration-150 group-hover:border-ca-border-strong group-hover:text-ca-text">

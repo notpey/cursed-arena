@@ -15,7 +15,7 @@ const routeIdentity: Record<string, RouteIdentity> = {
   '/battle/prep': { section: 'Battle', page: 'Arena Lobby' },
   '/battle': { section: 'Battle', page: 'Match' },
   '/battle/results': { section: 'Battle', page: 'Results' },
-  '/story': { section: 'Story', page: 'Campaign' },
+  '/missions': { section: 'Missions', page: 'Unlock Missions' },
   '/profile': { section: 'Profile', page: 'Player Card' },
   '/settings': { section: 'Settings', page: 'System' },
   '/admin': { section: 'Settings', page: 'Admin Control Panel' },

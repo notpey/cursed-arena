@@ -16,7 +16,7 @@ type SidebarItem = {
 const primaryNavItems: SidebarItem[] = [
   { key: 'home', label: 'Home', to: '/' },
   { key: 'battle', label: 'Battle', to: '/battle/prep' },
-  { key: 'story', label: 'Story', to: '/story' },
+  { key: 'missions', label: 'Missions', to: '/missions' },
   { key: 'profile', label: 'Profile', to: '/profile' },
 ]
 
@@ -110,11 +110,12 @@ function SidebarGlyph({ kind }: { kind: NavItemKey }) {
           <path d="M17 7L6 18" />
         </svg>
       )
-    case 'story':
+    case 'missions':
       return (
         <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
-          <rect x="5" y="4" width="14" height="16" rx="2" />
-          <path d="M9 8h6M9 12h6M9 16h4" />
+          <path d="M9 12l2 2 4-4" />
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          <path d="M4 9h16" />
         </svg>
       )
     case 'settings':

@@ -6,7 +6,7 @@ import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 export type NavItemKey =
   | 'home'
   | 'battle'
-  | 'story'
+  | 'missions'
   | 'profile'
   | 'settings'
   | 'admin'

@@ -4,7 +4,7 @@ import { AppShell, type NavItemKey } from '@/components/layout/AppShell'
 const pathToNav: Record<string, NavItemKey> = {
   '/': 'home',
   '/battle/prep': 'battle',
-  '/story': 'story',
+  '/missions': 'missions',
   '/profile': 'profile',
   '/settings': 'settings',
   '/admin': 'admin',
@@ -19,8 +19,8 @@ export function ShellLayout() {
       ? 'battle'
       : pathname.startsWith('/profile')
         ? 'profile'
-        : pathname.startsWith('/story')
-          ? 'story'
+        : pathname.startsWith('/missions')
+          ? 'missions'
           : pathname.startsWith('/settings')
             ? 'settings'
             : pathname.startsWith('/admin')
