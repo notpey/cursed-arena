@@ -684,8 +684,14 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
           group.label = ability.name
         }
       }
-      const effectSummary = scheduled.effects.map(describeSkillEffectForUi).join(', ')
-      group.lines.push({ text: `Incoming: ${effectSummary}`, turnsLeft })
+      const parts = scheduled.effects.map((e) => {
+        const raw = describeSkillEffectForUi(e)
+        return raw.charAt(0).toLowerCase() + raw.slice(1)
+      })
+      const effectSummary = parts.length === 1
+        ? parts[0]
+        : parts.slice(0, -1).join(', ') + ', and ' + parts[parts.length - 1]
+      group.lines.push({ text: `This character will ${effectSummary}`, turnsLeft })
       mergeTurns(group, turnsLeft)
       mergeTone(group, 'debuff')
       mergePriority(group, 5)
