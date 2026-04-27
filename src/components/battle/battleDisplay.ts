@@ -202,140 +202,145 @@ export function getSkillEffectDuration(effect: SkillEffect): number | null {
 }
 
 export function describeSkillEffectForUi(effect: SkillEffect): string {
+  const t = (n: number) => `${n} turn${n === 1 ? '' : 's'}`
   switch (effect.type) {
     case 'damage':
-      return `Deal ${effect.power} damage`
+      return `take ${effect.power} damage`
     case 'damageFiltered':
-      return `Deal ${effect.power} damage to ${effect.requiresTag} targets`
+      return `take ${effect.power} damage`
     case 'damageScaledByCounter':
-      return `Deal ${effect.powerPerStack} damage per ${effect.counterKey} stack`
+      return `take damage for each stack`
     case 'damageEqualToActorShield':
-      return 'Deal damage equal to actor shield'
+      return `take damage equal to the attacker's shield`
     case 'shieldDamage':
-      return `Damage shield for ${effect.amount}`
+      return `lose ${effect.amount} shield`
     case 'energyGain':
-      return 'Gain cursed energy'
+      return `gain cursed energy`
     case 'energyDrain':
-      return 'Drain enemy energy'
+      return `lose cursed energy`
     case 'energySteal':
-      return 'Steal enemy energy'
+      return `have cursed energy stolen`
     case 'cooldownAdjust':
-      return `${effect.amount < 0 ? 'Reduce' : 'Increase'} cooldowns by ${Math.abs(effect.amount)}`
+      return effect.amount < 0
+        ? `have cooldowns reduced by ${Math.abs(effect.amount)}`
+        : `have cooldowns increased by ${effect.amount}`
     case 'heal':
-      return `Restore ${effect.power} HP`
+      return `restore ${effect.power} HP`
     case 'setHpFromCounter':
-      return `Set HP to ${effect.base} plus ${effect.counterKey} bonuses`
+      return `have HP set to a fixed value`
     case 'stun':
-      return `Stun for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `be stunned for ${t(effect.duration)}`
     case 'invulnerable':
-      return `Gain invulnerability for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `become invulnerable for ${t(effect.duration)}`
     case 'attackUp':
-      return `Gain +${effect.amount} damage for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `deal ${effect.amount} additional damage for ${t(effect.duration)}`
     case 'mark':
-      return `Apply mark (+${effect.bonus} damage) for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `take ${effect.bonus} additional damage for ${t(effect.duration)}`
     case 'burn':
-      return `Apply burn (${effect.damage}/turn) for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `take ${effect.damage} affliction damage each turn for ${t(effect.duration)}`
     case 'cooldownReduction':
-      return `Reduce cooldowns by ${effect.amount} extra each round`
+      return `have cooldowns reduced by ${effect.amount} extra each round`
     case 'damageBoost':
-      return `Gain ${Math.round(effect.amount * 100)}% bonus damage`
+      return `deal ${Math.round(effect.amount * 100)}% bonus damage`
     case 'classStun':
-      return `Seal ${effect.blockedClasses.join('/')} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `have ${effect.blockedClasses.join('/')} techniques sealed for ${t(effect.duration)}`
     case 'classStunScaledByCounter':
-      return `Seal ${effect.blockedClasses.join('/')} scaled by ${effect.counterKey}`
+      return `have ${effect.blockedClasses.join('/')} techniques sealed`
     case 'counter':
-      return `Counter for ${effect.counterDamage} damage (${effect.duration} turn${effect.duration === 1 ? '' : 's'})`
+      return `counter enemies for ${effect.counterDamage} damage for ${t(effect.duration)}`
     case 'reflect':
-      return `Reflect harmful effects for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `reflect harmful effects for ${t(effect.duration)}`
     case 'adjustCounter':
-      return `Adjust ${effect.key} by ${effect.amount}`
+      return effect.amount > 0 ? `gain ${effect.amount} stack` : `lose ${Math.abs(effect.amount)} stack`
     case 'adjustCounterByTriggerAmount':
-      return `Adjust ${effect.key} by trigger amount`
+      return `gain stacks equal to the trigger amount`
     case 'resetCounter':
-      return `Reset ${effect.key}`
+      return `have stacks reset`
     case 'setFlag':
-      return `Set ${effect.key} to ${effect.value ? 'true' : 'false'}`
+      return effect.value ? `have an ability enabled` : `have an ability disabled`
     case 'modifyAbilityCost':
-      return `Modify ability cost (${effect.modifier.label})`
+      return `have an ability cost modified`
     case 'replaceAbility':
-      return `Replace ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}`
+      return `have an ability replaced with ${effect.ability.name} for ${t(effect.duration)}`
     case 'replaceAbilities':
-      return `Replace ${effect.replacements.length} abilities`
+      return `have abilities replaced`
     case 'modifyAbilityState':
-      return `Apply ${effect.delta.mode} ability state`
+      return `have an ability state change applied`
     case 'addModifier':
-      return `Apply modifier: ${effect.modifier.label}`
+      return `have ${effect.modifier.label.toLowerCase()} applied`
     case 'removeModifier':
-      return 'Remove matching modifier'
+      return `have a modifier removed`
     case 'shield':
-      return `Gain ${effect.amount} shield`
+      return `gain ${effect.amount} shield`
     case 'breakShield':
-      return 'Break shield'
+      return `have their shield broken`
     case 'effectImmunity':
-      return `Gain immunity: ${effect.label}`
+      return `gain immunity to ${effect.label.toLowerCase()}`
     case 'removeEffectImmunity':
-      return 'Remove matching immunity'
+      return `lose an effect immunity`
     case 'schedule':
-      return `Schedule ${effect.effects.length} delayed effect${effect.effects.length === 1 ? '' : 's'}`
+      return `have ${effect.effects.length} delayed effect${effect.effects.length === 1 ? '' : 's'} applied later`
     case 'randomEnemyDamageOverTime':
-      return `Hit random enemies for ${effect.power} damage over ${effect.duration} turns`
+      return `take ${effect.power} damage each turn for ${t(effect.duration)}`
     case 'randomEnemyDamageTick':
-      return `Hit a random enemy for ${effect.power} damage`
+      return `take ${effect.power} damage`
     case 'overhealToShield':
-      return `Convert overheal to shield (${effect.power})`
+      return `convert overhealing into shield`
     default:
-      return 'Unknown effect'
+      return 'be affected'
   }
 }
 
 // ── Passive display helpers ──────────────────────────────────────────────────
 
-function passiveTriggerLabel(passive: PassiveEffect): string {
+function passiveTriggerPhrase(passive: PassiveEffect): string {
   switch (passive.trigger) {
     case 'whileAlive':
-      return 'While alive'
+      return 'While this character is alive'
     case 'onRoundStart':
-      return 'Round start'
+      return 'At the start of each round'
     case 'onRoundEnd':
-      return 'Round end'
+      return 'At the end of each round'
     case 'onAbilityUse':
-      return 'On ability use'
+      return 'Each time this character uses a skill'
     case 'onAbilityResolve':
-      return 'On ability resolve'
+      return 'Each time this character\'s skill resolves'
     case 'onDealDamage':
-      return 'On dealing damage'
+      return 'Each time this character deals damage'
     case 'onTakeDamage':
-      return 'On taking damage'
+      return 'Each time this character takes damage'
     case 'onShieldBroken':
-      return 'On shield break'
+      return 'When this character\'s shield is broken'
     case 'onHeal':
-      return 'On heal'
+      return 'Each time this character is healed'
     case 'onShieldGain':
-      return 'On shield gain'
+      return 'Each time this character gains a shield'
     case 'onDefeat':
-      return 'On defeat'
+      return 'When this character is defeated'
     case 'onDefeatEnemy':
-      return 'On defeating an enemy'
+      return 'When this character defeats an enemy'
     case 'onBeingTargeted':
-      return 'When targeted'
+      return 'When this character is targeted'
     case 'onTargetBelow':
-      return passive.threshold != null ? `Target below ${Math.round(passive.threshold * 100)}% HP` : 'Execute window'
+      return passive.threshold != null
+        ? `When the target is below ${Math.round(passive.threshold * 100)}% HP`
+        : 'When the target is near defeat'
   }
 }
 
 function describePassiveGeneratedLines(passive: PassiveEffect): ActiveEffectLine[] {
-  const prefix = passiveTriggerLabel(passive)
+  const prefix = passiveTriggerPhrase(passive)
   const conditionText =
     passive.conditions && passive.conditions.length > 0
       ? `, if ${passive.conditions.map(describeReactionCondition).join(', ')}`
       : ''
   if (passive.effects.length > 0) {
     return passive.effects.map((effect) => ({
-      text: `${prefix}${conditionText}: ${describeSkillEffectForUi(effect)}`,
+      text: `${prefix}${conditionText}, this character will ${describeSkillEffectForUi(effect)}`,
       turnsLeft: getSkillEffectDuration(effect),
     }))
   }
-  return [{ text: `${prefix}${conditionText}: no passive effects configured`, turnsLeft: null }]
+  return [{ text: `${prefix}${conditionText}`, turnsLeft: null }]
 }
 
 export function describePassiveForUi(passive: PassiveEffect): string {
@@ -529,7 +534,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       group.iconLabel = delta.replacement.icon.label
       group.iconTone = delta.replacement.icon.tone
       group.label = delta.replacement.name
-      group.lines.push({ text: 'Active replacement', turnsLeft: delta.duration })
+      group.lines.push({ text: `This character's ability has been replaced with ${delta.replacement.name}`, turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergePriority(group, 5)
     } else if (delta.mode === 'grant') {
@@ -539,7 +544,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       group.iconLabel = delta.grantedAbility.icon.label
       group.iconTone = delta.grantedAbility.icon.tone
       group.label = delta.grantedAbility.name
-      group.lines.push({ text: 'Granted ability', turnsLeft: delta.duration })
+      group.lines.push({ text: `This character has been granted ${delta.grantedAbility.name}`, turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'buff')
       mergePriority(group, 5)
@@ -547,7 +552,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       const sourceId = `lock-${delta.slotAbilityId}`
       const group = ensureGroup(sourceId)
       group.label = 'Ability Locked'
-      group.lines.push({ text: 'Locked ability slot', turnsLeft: delta.duration })
+      group.lines.push({ text: 'This character cannot use one of their abilities', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'stun')
       mergePriority(group, 0)
@@ -558,7 +563,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   if (fighter.shield && fighter.shield.amount > 0) {
     const sourceId = fighter.shield.sourceAbilityId ?? '__shield__'
     const group = ensureGroup(sourceId)
-    group.lines.push({ text: `${fighter.shield.label}: ${fighter.shield.amount} shield remaining`, turnsLeft: null })
+    group.lines.push({ text: `This character has ${fighter.shield.amount} shield remaining`, turnsLeft: null })
     mergeTone(group, 'buff')
     mergePriority(group, 1)
   }
@@ -570,7 +575,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.iconLabel = value.slice(0, 2).toUpperCase()
     group.iconTone = 'gold'
     const modeDuration = fighter.stateModeDurations?.[key]?.remainingRounds ?? null
-    group.lines.push({ text: `${key}: ${value}`, turnsLeft: modeDuration })
+    group.lines.push({ text: `This character is in ${value} state`, turnsLeft: modeDuration })
     mergeTurns(group, modeDuration)
     mergeTone(group, 'buff')
     mergePriority(group, 5)
@@ -580,7 +585,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   for (const immunity of fighter.effectImmunities) {
     const sourceId = immunity.sourceAbilityId ?? '__immunity__'
     const group = ensureGroup(sourceId)
-    group.lines.push({ text: immunity.label, turnsLeft: immunity.remainingRounds })
+    group.lines.push({ text: `This character is immune to ${immunity.label.toLowerCase()}`, turnsLeft: immunity.remainingRounds })
     mergeTurns(group, immunity.remainingRounds)
     mergeTone(group, 'void')
     mergePriority(group, 6)
@@ -590,7 +595,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   for (const cs of fighter.classStuns) {
     const sourceId = cs.sourceAbilityId ?? '__classstun__'
     const group = ensureGroup(sourceId)
-    group.lines.push({ text: `${cs.blockedClasses.join('/')} techniques sealed`, turnsLeft: cs.remainingRounds })
+    group.lines.push({ text: `This character cannot use ${cs.blockedClasses.join('/')} techniques`, turnsLeft: cs.remainingRounds })
     mergeTurns(group, cs.remainingRounds)
     mergeTone(group, 'stun')
     mergePriority(group, 0)
