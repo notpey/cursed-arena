@@ -64,11 +64,9 @@ type SectionSummary = {
 
 function SectionIndexRow({
   summary,
-  allProgress,
   onClick,
 }: {
   summary: SectionSummary
-  allProgress: Record<string, UnlockMissionProgress>
   onClick: () => void
 }) {
   const previewFighters = summary.defs
@@ -169,7 +167,6 @@ function IndexView({
           <SectionIndexRow
             key={s.section}
             summary={s}
-            allProgress={allProgress}
             onClick={() => onNavigate({ level: 'section', section: s.section })}
           />
         ))}
