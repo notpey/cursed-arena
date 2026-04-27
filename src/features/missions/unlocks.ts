@@ -42,6 +42,7 @@ export const STARTER_FIGHTER_IDS: readonly string[] = ['yuji', 'megumi', 'nobara
 // ── Mission Definitions ───────────────────────────────────────────────────────
 
 export const UNLOCK_MISSION_DEFS: UnlockMissionDef[] = [
+  // ── Starter Missions ─────────────────────────────────────────────────────────
   {
     id: 'unlock-todo',
     name: 'Divergent Fist',
@@ -49,6 +50,169 @@ export const UNLOCK_MISSION_DEFS: UnlockMissionDef[] = [
     section: 'Starter Missions',
     objective: { type: 'win_with_fighter', fighterId: 'yuji', count: 3 },
     reward: { fighterId: 'todo' },
+  },
+  {
+    id: 'unlock-junpei',
+    name: 'Moon Dregs',
+    description: 'Win 3 matches using Nobara Kugisaki. Junpei gravitated toward those who saw the world differently.',
+    section: 'Starter Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'nobara', count: 3 },
+    reward: { fighterId: 'junpei' },
+  },
+  {
+    id: 'unlock-miwa',
+    name: 'Simple Domain',
+    description: 'Win 3 matches using Megumi Fushiguro. Miwa respects sorcerers who fight with what they have.',
+    section: 'Starter Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'megumi', count: 3 },
+    reward: { fighterId: 'miwa' },
+  },
+
+  // ── Tokyo Campus Missions ─────────────────────────────────────────────────────
+  {
+    id: 'unlock-nanami',
+    name: '7:3 Ratio',
+    description: 'Achieve a 3-win streak. Nanami only invests his time where the odds are in his favor.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'win_streak', count: 3 },
+    reward: { fighterId: 'nanami' },
+  },
+  {
+    id: 'unlock-maki',
+    name: 'No Cursed Energy Required',
+    description: 'Win 5 matches using Megumi Fushiguro. Maki admires those who work around their limitations.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'megumi', count: 5 },
+    reward: { fighterId: 'maki' },
+    requires: 'unlock-miwa',
+  },
+  {
+    id: 'unlock-toge',
+    name: 'Cursed Speech',
+    description: 'Win 5 matches using Yuji Itadori. Inumaki keeps his words for those who can keep up.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'yuji', count: 5 },
+    reward: { fighterId: 'toge' },
+    requires: 'unlock-todo',
+  },
+  {
+    id: 'unlock-panda',
+    name: 'Three Cores',
+    description: 'Win 5 matches using Nobara Kugisaki. Panda respects grit above all else.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'nobara', count: 5 },
+    reward: { fighterId: 'panda' },
+    requires: 'unlock-junpei',
+  },
+  {
+    id: 'unlock-shoko',
+    name: 'Reverse Cursed Technique',
+    description: 'Achieve a 5-win streak. Shoko only heals those who prove they can stay alive long enough.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'win_streak', count: 5 },
+    reward: { fighterId: 'shoko' },
+    requires: 'unlock-nanami',
+  },
+  {
+    id: 'unlock-yaga',
+    name: 'Cursed Corpse Commander',
+    description: 'Reach 500 LP. Yaga only opens his workshop to sorcerers who have proven themselves on the ranked ladder.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'reach_lp', lp: 500 },
+    reward: { fighterId: 'yaga' },
+  },
+  {
+    id: 'unlock-ijichi',
+    name: 'Curtain Call',
+    description: 'Reach 800 LP. Ijichi maintains barriers for those who have demonstrated they deserve protection.',
+    section: 'Tokyo Campus Missions',
+    objective: { type: 'reach_lp', lp: 800 },
+    reward: { fighterId: 'ijichi' },
+    requires: 'unlock-yaga',
+  },
+
+  // ── Kyoto Campus Missions ─────────────────────────────────────────────────────
+  {
+    id: 'unlock-noritoshi',
+    name: 'Piercing Blood',
+    description: 'Win 5 matches using Todo. Noritoshi values precision and discipline in an ally.',
+    section: 'Kyoto Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'todo', count: 5 },
+    reward: { fighterId: 'noritoshi' },
+    requires: 'unlock-todo',
+  },
+  {
+    id: 'unlock-momo',
+    name: 'Aerial Support',
+    description: 'Win 5 matches using Miwa. Momo fights for those who fight for their own reasons.',
+    section: 'Kyoto Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'miwa', count: 5 },
+    reward: { fighterId: 'momo' },
+    requires: 'unlock-miwa',
+  },
+  {
+    id: 'unlock-mai',
+    name: 'Reserved Fire',
+    description: 'Win 5 matches using Maki. Mai would rather die than admit she was impressed — but she was.',
+    section: 'Kyoto Campus Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'maki', count: 5 },
+    reward: { fighterId: 'mai' },
+    requires: 'unlock-maki',
+  },
+  {
+    id: 'unlock-mechamaru',
+    name: 'Remote Artillery',
+    description: 'Achieve a 7-win streak. Mechamaru watched every match from afar. He has finally seen enough.',
+    section: 'Kyoto Campus Missions',
+    objective: { type: 'win_streak', count: 7 },
+    reward: { fighterId: 'mechamaru' },
+  },
+
+  // ── Special Grade Missions ────────────────────────────────────────────────────
+  {
+    id: 'unlock-gojo',
+    name: 'The Honored One',
+    description: 'Reach 1500 LP. Gojo only acknowledges sorcerers who have genuinely climbed.',
+    section: 'Special Grade Missions',
+    objective: { type: 'reach_lp', lp: 1500 },
+    reward: { fighterId: 'gojo' },
+  },
+  {
+    id: 'unlock-sukuna',
+    name: 'King of Curses',
+    description: 'Reach 2500 LP. The King of Curses surfaces for no one — until you become someone worth consuming.',
+    section: 'Special Grade Missions',
+    objective: { type: 'reach_lp', lp: 2500 },
+    reward: { fighterId: 'sukuna' },
+    requires: 'unlock-gojo',
+  },
+
+  // ── Disaster Curse Missions ───────────────────────────────────────────────────
+  {
+    id: 'unlock-jogo',
+    name: 'Volcanic Curse',
+    description: 'Win 5 matches using Sukuna. Only those who carry the King\'s power earn Jogo\'s respect.',
+    section: 'Disaster Curse Missions',
+    objective: { type: 'win_with_fighter', fighterId: 'sukuna', count: 5 },
+    reward: { fighterId: 'jogo' },
+    requires: 'unlock-sukuna',
+  },
+  {
+    id: 'unlock-hanami',
+    name: 'Root and Branch',
+    description: 'Achieve a 10-win streak. Hanami has been watching. The strong endure.',
+    section: 'Disaster Curse Missions',
+    objective: { type: 'win_streak', count: 10 },
+    reward: { fighterId: 'hanami' },
+  },
+  {
+    id: 'unlock-mahito',
+    name: 'Idle Transfiguration',
+    description: 'Reach 3500 LP. Mahito finds humans most interesting when they have truly suffered for something.',
+    section: 'Disaster Curse Missions',
+    objective: { type: 'reach_lp', lp: 3500 },
+    reward: { fighterId: 'mahito' },
+    requires: 'unlock-sukuna',
   },
 ]
 
@@ -189,12 +353,41 @@ export function getObjectiveProgressLabel(def: UnlockMissionDef, progress: Unloc
   }
 }
 
+const FIGHTER_DISPLAY_NAMES: Record<string, string> = {
+  yuji: 'Yuji Itadori',
+  megumi: 'Megumi Fushiguro',
+  nobara: 'Nobara Kugisaki',
+  todo: 'Aoi Todo',
+  nanami: 'Kento Nanami',
+  maki: 'Maki Zen\'in',
+  toge: 'Toge Inumaki',
+  panda: 'Panda',
+  shoko: 'Shoko Ieiri',
+  yaga: 'Masamichi Yaga',
+  ijichi: 'Kiyotaka Ijichi',
+  miwa: 'Kasumi Miwa',
+  momo: 'Momo Nishimiya',
+  mai: 'Mai Zen\'in',
+  noritoshi: 'Noritoshi Kamo',
+  mechamaru: 'Mechamaru',
+  junpei: 'Junpei Yoshino',
+  gojo: 'Satoru Gojo',
+  sukuna: 'Ryomen Sukuna',
+  jogo: 'Jogo',
+  hanami: 'Hanami',
+  mahito: 'Mahito',
+}
+
+function fighterDisplayName(id: string): string {
+  return FIGHTER_DISPLAY_NAMES[id] ?? (id.charAt(0).toUpperCase() + id.slice(1))
+}
+
 /** Human-readable mission goal line, e.g. "Win 3 matches with Yuji Itadori (3/3)" */
 export function getObjectiveGoalLine(def: UnlockMissionDef, progress: UnlockMissionProgress): string {
   switch (def.objective.type) {
     case 'win_with_fighter': {
       const done = Math.min(progress.progress, def.objective.count)
-      return `Win ${def.objective.count} matches with ${def.objective.fighterId.charAt(0).toUpperCase() + def.objective.fighterId.slice(1)} (${done}/${def.objective.count})`
+      return `Win ${def.objective.count} matches with ${fighterDisplayName(def.objective.fighterId)} (${done}/${def.objective.count})`
     }
     case 'win_streak': {
       const done = Math.min(progress.progress, def.objective.count)
