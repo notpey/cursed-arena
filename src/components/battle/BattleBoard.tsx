@@ -152,7 +152,13 @@ export function BattleBoard({
                   >
                     <div className="flex items-start gap-2">
                       {/* Pip column to the LEFT of the portrait so the stack can stretch */}
-                      <ActiveEffectPips fighter={enemy} mirrored column className="pt-0.5" />
+                      <ActiveEffectPips
+                        fighter={enemy}
+                        mirrored
+                        column
+                        className="pt-0.5"
+                        hidden={Boolean(selectedAbility)}
+                      />
 
                       <BattlePortraitSlot
                         fighter={enemy}

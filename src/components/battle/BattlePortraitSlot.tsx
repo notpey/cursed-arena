@@ -191,6 +191,7 @@ export function ActiveEffectPips({
   mirrored = false,
   tooltipDown = false,
   column = false,
+  hidden = false,
   className,
 }: {
   fighter: BattleFighterState
@@ -198,9 +199,19 @@ export function ActiveEffectPips({
   tooltipDown?: boolean
   /** Stack pips vertically instead of wrapping horizontally */
   column?: boolean
+  /** Suppress all pips (e.g. during skill/target selection) */
+  hidden?: boolean
   className?: string
 }) {
   const pips = getActivePips(fighter)
+
+  if (hidden) {
+    // Reserve column space so the layout doesn't jump during targeting
+    if (column) {
+      return <div className={cn('flex flex-col gap-1', mirrored ? 'items-end' : 'items-start', className)} />
+    }
+    return null
+  }
 
   if (column) {
     return (

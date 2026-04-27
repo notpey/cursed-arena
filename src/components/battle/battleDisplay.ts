@@ -76,6 +76,7 @@ function modEffectLine(mod: BattleModifierInstance): { line: string; tone: Activ
   if (mod.stat === 'canReduceDamageTaken' && mod.value === false) return { line: 'Cannot reduce damage taken', tone: 'debuff', turnsLeft }
   if (mod.stat === 'canGainInvulnerable' && mod.value === false) return { line: 'Cannot become invulnerable', tone: 'debuff', turnsLeft }
   if (mod.stat === 'isInvulnerable') return { line: 'Invulnerable to all enemy skills', tone: 'void', turnsLeft }
+  if (mod.stat === 'isUndying') return { line: 'Cannot be reduced below 1 HP', tone: 'buff', turnsLeft }
   if (mod.stat === 'canAct' && mod.value === false) return { line: 'Cannot use abilities', tone: 'stun', turnsLeft }
   if (mod.stat === 'canAct' && mod.value === true) return { line: 'Immune to stun effects', tone: 'buff', turnsLeft }
   if ((mod.stat === 'healDone' || mod.stat === 'healTaken') && typeof mod.value === 'number') {
@@ -355,8 +356,31 @@ function describePassiveLines(passive: PassiveEffect): ActiveEffectLine[] {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+// Priority buckets (lower = higher priority, shown first and kept when limiting)
+// 0: stun / cannot act
+// 1: invulnerable / shield / undying
+// 2: counter / reflect / reaction guards
+// 3: damage over time / punishment effects (burn, mark)
+// 4: marks / vulnerability
+// 5: setup / transformation / ability state changes / scheduled effects
+// 6: minor buffs / debuffs / immunities / cost modifiers
+// 7: passive counters
+const MAX_PIPS = 5
+
+function pipPriorityFromTone(tone: ActivePipTone): number {
+  switch (tone) {
+    case 'stun':   return 0
+    case 'void':   return 1
+    case 'burn':   return 3
+    case 'debuff': return 4
+    case 'buff':   return 5
+    case 'heal':   return 6
+    default:       return 6
+  }
+}
+
 export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
-  // Groups: sourceAbilityId → { lines, minTurns, tone, icon, stackCount }
+  // Groups: sourceAbilityId → { lines, minTurns, tone, icon, stackCount, priority }
   type Group = {
     key: string
     label: string
@@ -367,6 +391,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
     iconLabel: string
     iconTone: BattleBoardAccent
     stackCount: number | null
+    priority: number
   }
 
   const groups = new Map<string, Group>()
@@ -385,6 +410,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
       iconLabel: icon?.label ?? name.slice(0, 2).toUpperCase(),
       iconTone: icon?.tone ?? 'teal',
       stackCount: null,
+      priority: 6,
     }
     groups.set(sourceId, group)
     return group
@@ -398,6 +424,10 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
 
   function mergeTone(group: Group, tone: ActivePipTone) {
     if (group.tone === 'default') group.tone = tone
+  }
+
+  function mergePriority(group: Group, priority: number) {
+    if (priority < group.priority) group.priority = priority
   }
 
 function normalizeCounterKey(value: string): string {
@@ -450,6 +480,18 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.lines.push({ text: line, turnsLeft })
     mergeTurns(group, turnsLeft)
     mergeTone(group, tone)
+    // Stun/cannot-act and invulnerable/undying get highest priority
+    if (mod.statusKind === 'stun' || (mod.stat === 'canAct' && mod.value === false)) {
+      mergePriority(group, 0)
+    } else if (mod.statusKind === 'invincible' || mod.stat === 'isInvulnerable' || mod.stat === 'isUndying') {
+      mergePriority(group, 1)
+    } else if (mod.statusKind === 'burn') {
+      mergePriority(group, 3)
+    } else if (mod.statusKind === 'mark') {
+      mergePriority(group, 4)
+    } else {
+      mergePriority(group, pipPriorityFromTone(tone))
+    }
   }
 
   // ── abilityState: replace / grant / lock ──────────────────────────────────
@@ -464,6 +506,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       group.label = delta.replacement.name
       group.lines.push({ text: 'Active replacement', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
+      mergePriority(group, 5)
     } else if (delta.mode === 'grant') {
       const sourceId = `grant-${delta.grantedAbility.id}`
       const group = ensureGroup(sourceId)
@@ -474,6 +517,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       group.lines.push({ text: 'Granted ability', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'buff')
+      mergePriority(group, 5)
     } else if (delta.mode === 'lock') {
       const sourceId = `lock-${delta.slotAbilityId}`
       const group = ensureGroup(sourceId)
@@ -481,6 +525,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       group.lines.push({ text: 'Locked ability slot', turnsLeft: delta.duration })
       mergeTurns(group, delta.duration)
       mergeTone(group, 'stun')
+      mergePriority(group, 0)
     }
   }
 
@@ -490,6 +535,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     const group = ensureGroup(sourceId)
     group.lines.push({ text: `${fighter.shield.label}: ${fighter.shield.amount} shield remaining`, turnsLeft: null })
     mergeTone(group, 'buff')
+    mergePriority(group, 1)
   }
 
   for (const [key, value] of Object.entries(fighter.stateModes)) {
@@ -502,6 +548,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.lines.push({ text: `${key}: ${value}`, turnsLeft: modeDuration })
     mergeTurns(group, modeDuration)
     mergeTone(group, 'buff')
+    mergePriority(group, 5)
   }
 
   // ── Effect immunities ─────────────────────────────────────────────────────
@@ -511,6 +558,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.lines.push({ text: immunity.label, turnsLeft: immunity.remainingRounds })
     mergeTurns(group, immunity.remainingRounds)
     mergeTone(group, 'void')
+    mergePriority(group, 6)
   }
 
   // ── Class stuns ───────────────────────────────────────────────────────────
@@ -520,6 +568,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     group.lines.push({ text: `${cs.blockedClasses.join('/')} techniques sealed`, turnsLeft: cs.remainingRounds })
     mergeTurns(group, cs.remainingRounds)
     mergeTone(group, 'stun')
+    mergePriority(group, 0)
   }
 
   for (const guard of fighter.reactionGuards) {
@@ -531,13 +580,13 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     const triggerScope = guard.consumeOnTrigger ? 'the first' : 'any'
     if (guard.kind === 'counter') {
       group.lines.push({
-        text: `If this character uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage`,
+        text: `If an enemy uses ${triggerScope} ${classScope} on this fighter, they are countered for ${guard.counterDamage ?? 0} damage`,
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'stun')
     } else if (guard.kind === 'reflect') {
       group.lines.push({
-        text: `If this character uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected`,
+        text: `If an enemy uses ${triggerScope} ${classScope} on this fighter, its harmful effects are reflected back`,
         turnsLeft: guard.remainingRounds,
       })
       mergeTone(group, 'buff')
@@ -549,6 +598,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       mergeTone(group, 'buff')
     }
     mergeTurns(group, guard.remainingRounds)
+    mergePriority(group, 2)
   }
 
   // Active passive trackers. Passive ownership alone does not create a pip;
@@ -570,8 +620,37 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       iconLabel: passive.icon?.label ?? root.slice(0, 2).toUpperCase(),
       iconTone: passive.icon?.tone ?? 'teal',
       stackCount: null,
+      priority: 7,
     })
   }
+  // ── Scheduled effects targeting this fighter ─────────────────────────────
+  if (activeBattleState) {
+    const currentRound = activeBattleState.round
+    for (const scheduled of activeBattleState.scheduledEffects) {
+      if (!scheduled.targetIds.includes(fighter.instanceId)) continue
+      const turnsLeft = Math.max(0, scheduled.dueRound - currentRound)
+      // Use a unique key per scheduled entry so they don't collapse into the
+      // source ability's regular pip (which may be on the caster, not target).
+      const groupKey = `__scheduled-${scheduled.id}__`
+      const group = ensureGroup(groupKey)
+      // Prefer the ability icon/name if available
+      if (scheduled.abilityId) {
+        const ability = findAbilityAnywhere(scheduled.abilityId)
+        if (ability) {
+          group.iconSrc = ability.icon.src
+          group.iconLabel = ability.icon.label
+          group.iconTone = ability.icon.tone
+          group.label = ability.name
+        }
+      }
+      const effectSummary = scheduled.effects.map(describeSkillEffectForUi).join(', ')
+      group.lines.push({ text: `Incoming: ${effectSummary}`, turnsLeft })
+      mergeTurns(group, turnsLeft)
+      mergeTone(group, 'debuff')
+      mergePriority(group, 5)
+    }
+  }
+
   // ── Counters: attach to their owning passive (or best-match source group) ──
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue
@@ -626,7 +705,16 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     }
   }
 
-  return [...groups.values()].map((g) => ({
+  const sorted = [...groups.values()].sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority
+    // Within same priority: shorter duration first (more urgent)
+    if (a.turnsLeft === null && b.turnsLeft === null) return 0
+    if (a.turnsLeft === null) return 1
+    if (b.turnsLeft === null) return -1
+    return a.turnsLeft - b.turnsLeft
+  })
+
+  return sorted.slice(0, MAX_PIPS).map((g) => ({
     key: g.key,
     iconSrc: g.iconSrc,
     iconLabel: g.iconLabel,

@@ -198,7 +198,7 @@ export function BattleAbilityStrip({
 
       <div className="flex min-w-0 flex-1 flex-col justify-end gap-1 pb-0.5">
         <div className="flex min-h-[1.55rem] items-end px-1.5 sm:px-2">
-          <ActiveEffectPips fighter={fighter} tooltipDown />
+          <ActiveEffectPips fighter={fighter} tooltipDown hidden={Boolean(pendingAbilityId)} />
         </div>
 
         <div
