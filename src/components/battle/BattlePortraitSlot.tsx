@@ -3,7 +3,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { isAlive } from '@/features/battle/engine'
 import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
-import { cn, getAccentStyles, getActivePips, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
+import { cn, getAccentStyles, getActivePips, type ActiveEffectLine, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
 
 // ── Tone → border/glow ───────────────────────────────────────────────────────
 function pipToneBorder(tone: ActivePipTone): string {
