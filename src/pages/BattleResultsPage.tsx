@@ -6,6 +6,7 @@ import {
   readLastBattleResult,
   readRecentMatchHistory,
 } from '@/features/battle/matches'
+import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 
 function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
   return (
@@ -21,6 +22,33 @@ function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+function UnlockBanner({ missionIds }: { missionIds: string[] }) {
+  if (missionIds.length === 0) return null
+  const fighters = missionIds.flatMap((id) => {
+    const def = UNLOCK_MISSION_DEFS.find((d) => d.id === id)
+    if (!def) return []
+    const fighter = battleRosterById[def.reward.fighterId]
+    return fighter ? [fighter] : []
+  })
+  if (fighters.length === 0) return null
+
+  return (
+    <div className="mt-4 space-y-2">
+      {fighters.map((fighter) => (
+        <div key={fighter.id} className="flex items-center gap-3 rounded-[10px] border border-ca-teal/35 bg-[rgba(5,216,189,0.07)] px-4 py-3 shadow-[0_0_18px_rgba(5,216,189,0.1)]">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-ca-teal">
+            <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <p className="ca-mono-label text-[0.44rem] text-ca-teal">FIGHTER UNLOCKED</p>
+            <p className="ca-display mt-0.5 text-xl text-white">{fighter.name}</p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -97,6 +125,7 @@ export function BattleResultsPage() {
             </div>
 
             <RankShiftBanner shift={result.rankShift} rankBefore={result.rankBefore} rankAfter={result.rankAfter} />
+            <UnlockBanner missionIds={result.newlyUnlockedMissionIds ?? []} />
           </section>
 
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '80ms' }}>

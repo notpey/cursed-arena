@@ -3,6 +3,7 @@ import { createBattleSeed, pickSeededIndex } from '@/features/battle/random'
 import type { BattleWinner } from '@/features/battle/types'
 import { readPlayerProfile } from '@/features/player/store'
 import { trackBattleCompleted } from '@/features/missions/store'
+import { evaluateUnlockMissions } from '@/features/missions/unlocks'
 
 const selectedMatchModeKey = 'ca-battle-match-mode-v1'
 const stagedBattleSessionKey = 'ca-battle-staged-session-v1'
@@ -86,6 +87,7 @@ export type LastBattleResult = {
   roomCode?: string | null
   timestamp: number
   profileSnapshot: BattleProfileStats
+  newlyUnlockedMissionIds: string[]
 }
 
 type RankTier = {
@@ -328,6 +330,7 @@ function normalizeLastResult(result: LastBattleResult | null) {
     rankAfter: result.rankAfter ?? result.profileSnapshot?.rank ?? 'PLACEMENT',
     rankShift: result.rankShift ?? 'steady',
     roomCode: result.roomCode ?? null,
+    newlyUnlockedMissionIds: result.newlyUnlockedMissionIds ?? [],
   }
 }
 
@@ -544,13 +547,23 @@ export function recordCompletedBattle({
     roomCode: activeSession.roomCode ?? null,
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
+    newlyUnlockedMissionIds: [],
   }
 
   writeLocalStorage(battleProfileStatsKey, nextStats)
   writeLocalStorage(battleMatchHistoryKey, history)
-  writeLocalStorage(lastBattleResultKey, lastResult)
 
-  if (activeSession.mode !== 'practice') trackBattleCompleted(activeSession.mode, won)
+  if (activeSession.mode !== 'practice') {
+    trackBattleCompleted(activeSession.mode, won)
+    lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
+      won,
+      teamIds: playerTeamIds,
+      lpAfter: nextStats.lpCurrent,
+      currentStreak: nextStats.currentStreak,
+    })
+  }
+
+  writeLocalStorage(lastBattleResultKey, lastResult)
 
   return lastResult
 }
@@ -637,14 +650,24 @@ export function recordOnlineCompletedBattle({
     rankShift,
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
+    newlyUnlockedMissionIds: [],
   }
 
   const history = normalizeHistory([historyEntry, ...readRecentMatchHistory()])
   writeLocalStorage(battleProfileStatsKey, nextStats)
   writeLocalStorage(battleMatchHistoryKey, history)
-  writeLocalStorage(lastBattleResultKey, lastResult)
 
-  if (mode !== 'practice') trackBattleCompleted(mode, won)
+  if (mode !== 'practice') {
+    trackBattleCompleted(mode, won)
+    lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
+      won,
+      teamIds: playerTeamIds,
+      lpAfter: nextStats.lpCurrent,
+      currentStreak: nextStats.currentStreak,
+    })
+  }
+
+  writeLocalStorage(lastBattleResultKey, lastResult)
 
   return lastResult
 }

@@ -25,6 +25,7 @@ import {
   type BattleMatchMode,
 } from '@/features/battle/matches'
 import { createInitialBattleState } from '@/features/battle/engine'
+import { getUnlockedFighterIds, getUnlockMissionForFighter } from '@/features/missions/unlocks'
 import { createBattleSeed } from '@/features/battle/random'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import {
@@ -280,6 +281,8 @@ export function BattlePrepPage() {
       })
   }, [roleFilter, searchValue, sortBy])
 
+  const unlockedFighterIds = useMemo(() => new Set(getUnlockedFighterIds()), [])
+
   const explicitTeamIds = getExplicitTeamIds(teamIds)
   const teamEntries = teamIds.map((teamId) => (teamId ? battlePrepRosterById[teamId] ?? null : null))
   const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
@@ -345,7 +348,7 @@ export function BattlePrepPage() {
     const rosterId = event.dataTransfer.getData('application/x-cursed-roster-id')
     const sourceSlot = event.dataTransfer.getData('application/x-cursed-team-slot')
 
-    if (rosterId && battlePrepRosterById[rosterId]) {
+    if (rosterId && battlePrepRosterById[rosterId] && unlockedFighterIds.has(rosterId)) {
       setSelectedRosterId(rosterId)
       setSelectedAbilityId(getDefaultAbilityId(battlePrepRosterById[rosterId]))
       setTeamIds((current) => {
@@ -674,16 +677,21 @@ export function BattlePrepPage() {
                 onDrop={handleRosterDrop}
               >
                 <div className="grid auto-rows-max content-start grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-11">
-                  {visibleRoster.map((entry) => (
-                    <RosterTile
-                      key={entry.id}
-                      entry={entry}
-                      active={selectedRosterId === entry.id}
-                      inTeam={teamIds.includes(entry.id)}
-                      onClick={() => handleAssignCharacter(entry.id)}
-                      onDragStart={(event) => handleRosterDragStart(event, entry.id)}
-                    />
-                  ))}
+                  {visibleRoster.map((entry) => {
+                    const isLocked = !unlockedFighterIds.has(entry.id)
+                    return (
+                      <RosterTile
+                        key={entry.id}
+                        entry={entry}
+                        active={selectedRosterId === entry.id}
+                        inTeam={teamIds.includes(entry.id)}
+                        locked={isLocked}
+                        lockMissionName={isLocked ? (getUnlockMissionForFighter(entry.id)?.name ?? null) : null}
+                        onClick={isLocked ? undefined : () => handleAssignCharacter(entry.id)}
+                        onDragStart={(event) => handleRosterDragStart(event, entry.id)}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             </div>
@@ -1323,13 +1331,17 @@ function RosterTile({
   entry,
   active,
   inTeam,
+  locked = false,
+  lockMissionName = null,
   onClick,
   onDragStart,
 }: {
   entry: BattlePrepRosterEntry
   active: boolean
   inTeam: boolean
-  onClick: () => void
+  locked?: boolean
+  lockMissionName?: string | null
+  onClick?: () => void
   onDragStart: (event: DragEvent) => void
 }) {
   const style = rarityStyles[entry.rarity]
@@ -1337,22 +1349,33 @@ function RosterTile({
   return (
     <button
       type="button"
-      onClick={onClick}
-      draggable
-      onDragStart={onDragStart}
+      onClick={locked ? undefined : onClick}
+      draggable={!locked}
+      onDragStart={locked ? undefined : onDragStart}
+      disabled={locked}
+      title={locked && lockMissionName ? `Locked — complete mission: ${lockMissionName}` : undefined}
       className="group relative overflow-hidden rounded-[4px] border bg-[rgba(18,18,26,0.72)] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
       style={{
-        borderColor: active ? style.border : inTeam ? 'rgba(5,216,189,0.34)' : 'rgba(228,230,239,0.1)',
-        boxShadow: active ? `0 0 0 1px ${style.border}, 0 10px 18px rgba(0,0,0,0.18)` : undefined,
+        borderColor: locked ? 'rgba(228,230,239,0.06)' : active ? style.border : inTeam ? 'rgba(5,216,189,0.34)' : 'rgba(228,230,239,0.1)',
+        boxShadow: active && !locked ? `0 0 0 1px ${style.border}, 0 10px 18px rgba(0,0,0,0.18)` : undefined,
       }}
     >
-      <PortraitThumb entry={entry} sizeClass="aspect-square w-full" labelClass="text-[0.3rem]" bordered={false} showLabel />
-      {inTeam ? (
+      <div className={locked ? 'opacity-30 grayscale' : undefined}>
+        <PortraitThumb entry={entry} sizeClass="aspect-square w-full" labelClass="text-[0.3rem]" bordered={false} showLabel />
+      </div>
+      {locked ? (
+        <div className="absolute inset-0 grid place-items-center bg-[rgba(0,0,0,0.35)]">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-[1.1rem] w-[1.1rem] text-white/40">
+            <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
+          </svg>
+        </div>
+      ) : null}
+      {!locked && inTeam ? (
         <span className="absolute right-1 top-1 rounded-[2px] border border-ca-teal/35 bg-[rgba(5,216,189,0.16)] px-1 py-0.5 ca-mono-label text-[0.34rem] text-ca-teal shadow-[0_0_10px_rgba(5,216,189,0.22)]">
           IN
         </span>
       ) : null}
-      {active ? <span className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: style.text }} /> : null}
+      {active && !locked ? <span className="absolute inset-x-0 bottom-0 h-[2px]" style={{ background: style.text }} /> : null}
     </button>
   )
 }
