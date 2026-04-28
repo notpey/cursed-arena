@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom'
 import { battleRosterById } from '@/features/battle/data'
 import {
+  type LastBattleResult,
   formatMatchTimestamp,
   getModeLabel,
   readLastBattleResult,
   readRecentMatchHistory,
 } from '@/features/battle/matches'
+import { MISSION_DEFS } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 
 function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
@@ -49,6 +51,92 @@ function UnlockBanner({ missionIds }: { missionIds: string[] }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Receipt row atoms ─────────────────────────────────────────────────────────
+
+function ReceiptRow({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'positive' | 'negative' | 'neutral' | 'muted' }) {
+  const valueClass =
+    tone === 'positive' ? 'text-ca-teal' :
+    tone === 'negative' ? 'text-ca-red' :
+    tone === 'muted' ? 'text-ca-text-3' :
+    'text-ca-text-2'
+
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1.5 border-b border-white/5 last:border-0">
+      <span className="ca-mono-label text-[0.42rem] text-ca-text-3 shrink-0">{label}</span>
+      <span className={`ca-mono-label text-[0.46rem] text-right ${valueClass}`}>{value}</span>
+    </div>
+  )
+}
+
+function ProgressReceipt({ result }: { result: LastBattleResult }) {
+  const won = result.result === 'WIN'
+  const draw = result.result === 'DRAW'
+  const streakAfter = result.profileSnapshot.currentStreak
+  const streakBefore = result.streakBefore ?? 0
+
+  // LP row
+  const lpRow = result.mode === 'ranked'
+    ? { label: 'LP CHANGE', value: result.lpDelta >= 0 ? `+${result.lpDelta} LP` : `${result.lpDelta} LP`, tone: (result.lpDelta >= 0 ? 'positive' : 'negative') as 'positive' | 'negative' }
+    : { label: 'LP CHANGE', value: 'No ranked LP at stake', tone: 'muted' as const }
+
+  // Streak row
+  let streakValue: string
+  let streakTone: 'positive' | 'negative' | 'neutral' | 'muted'
+  if (draw) {
+    streakValue = `${streakBefore} (unchanged)`
+    streakTone = 'neutral'
+  } else if (won) {
+    streakValue = streakAfter === 1 ? `${streakAfter} win streak started` : `${streakAfter} win streak (+1)`
+    streakTone = 'positive'
+  } else if (streakBefore > 0) {
+    streakValue = `${streakBefore}-win streak broken`
+    streakTone = 'negative'
+  } else {
+    streakValue = 'No streak to break'
+    streakTone = 'muted'
+  }
+
+  // Quest rows
+  const questRows = result.newlyCompletedQuestIds?.map((qid) => {
+    const def = MISSION_DEFS.find((d) => d.id === qid)
+    if (!def) return null
+    return { label: `QUEST COMPLETED — ${def.type.toUpperCase()}`, value: `${def.label}  +${def.reward} CC` }
+  }).filter(Boolean) as { label: string; value: string }[] | undefined
+
+  // Unlock rows
+  const unlockRows = (result.newlyUnlockedMissionIds ?? []).map((mid) => {
+    const def = UNLOCK_MISSION_DEFS.find((d) => d.id === mid)
+    if (!def) return null
+    const fighter = battleRosterById[def.reward.fighterId]
+    return { name: fighter?.name ?? def.reward.fighterId }
+  }).filter(Boolean) as { name: string }[]
+
+  return (
+    <div className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-3">
+      <p className="ca-mono-label text-[0.44rem] text-ca-text-3 mb-2">PROGRESS EARNED</p>
+
+      <ReceiptRow label={lpRow.label} value={lpRow.value} tone={lpRow.tone} />
+      <ReceiptRow
+        label="RESULT"
+        value={draw ? 'Draw' : won ? 'Win' : 'Loss'}
+        tone={draw ? 'neutral' : won ? 'positive' : 'negative'}
+      />
+      <ReceiptRow label="MATCHES PLAYED" value={`+1  →  ${result.profileSnapshot.matchesPlayed}`} tone="neutral" />
+      <ReceiptRow label="STREAK" value={streakValue} tone={streakTone} />
+
+      {questRows && questRows.map((q, i) => (
+        <ReceiptRow key={i} label={q.label} value={q.value} tone="positive" />
+      ))}
+
+      {unlockRows.length > 0 && unlockRows.map((u, i) => (
+        <ReceiptRow key={i} label="FIGHTER UNLOCKED" value={u.name} tone="positive" />
+      ))}
+
+      <ReceiptRow label="MATCH HISTORY" value="Match added to history" tone="muted" />
     </div>
   )
 }
@@ -126,6 +214,7 @@ export function BattleResultsPage() {
 
             <RankShiftBanner shift={result.rankShift} rankBefore={result.rankBefore} rankAfter={result.rankAfter} />
             <UnlockBanner missionIds={result.newlyUnlockedMissionIds ?? []} />
+            <ProgressReceipt result={result} />
           </section>
 
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '80ms' }}>

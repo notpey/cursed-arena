@@ -148,12 +148,17 @@ export function getMissionsWithProgress(): MissionWithProgress[] {
   })
 }
 
+export type BattleTrackResult = {
+  coinsEarned: number
+  newlyCompletedQuestIds: string[]
+}
+
 /**
  * Track a battle completion event.
  * - mode: 'ranked' | 'quick' | 'private'
  * - won: whether this player won
  */
-export function trackBattleCompleted(mode: 'ranked' | 'quick' | 'private', won: boolean) {
+export function trackBattleCompleted(mode: 'ranked' | 'quick' | 'private', won: boolean): BattleTrackResult {
   const data = readWithReset()
 
   const tracks: MissionTrack[] = ['battle_complete']
@@ -162,6 +167,7 @@ export function trackBattleCompleted(mode: 'ranked' | 'quick' | 'private', won: 
   if (mode === 'ranked' && won) tracks.push('ranked_win')
 
   let coinsEarned = 0
+  const newlyCompletedQuestIds: string[] = []
 
   for (const def of MISSION_DEFS) {
     if (!tracks.includes(def.track)) continue
@@ -176,6 +182,7 @@ export function trackBattleCompleted(mode: 'ranked' | 'quick' | 'private', won: 
       if (newProgress >= def.goal && !period.claimed.includes(def.id)) {
         period.claimed.push(def.id)
         coinsEarned += def.reward
+        newlyCompletedQuestIds.push(def.id)
       }
     }
   }
@@ -183,7 +190,7 @@ export function trackBattleCompleted(mode: 'ranked' | 'quick' | 'private', won: 
   data.coins += coinsEarned
   writeRaw(data)
 
-  return coinsEarned
+  return { coinsEarned, newlyCompletedQuestIds }
 }
 
 /** Manually claim a completed mission reward. */

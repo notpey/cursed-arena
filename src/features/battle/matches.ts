@@ -92,6 +92,13 @@ export type LastBattleResult = {
   timestamp: number
   profileSnapshot: BattleProfileStats
   newlyUnlockedMissionIds: string[]
+  /** Cursed Coins auto-claimed from daily/weekly missions this match */
+  coinsEarned: number
+  /** IDs of daily/weekly missions that were newly completed this match */
+  newlyCompletedQuestIds: string[]
+  /** Streak before this match — lets the UI show streak change without re-reading profile */
+  streakBefore: number
+  matchesPlayedDelta: number
 }
 
 type RankTier = {
@@ -335,6 +342,10 @@ function normalizeLastResult(result: LastBattleResult | null) {
     rankShift: result.rankShift ?? 'steady',
     roomCode: result.roomCode ?? null,
     newlyUnlockedMissionIds: result.newlyUnlockedMissionIds ?? [],
+    coinsEarned: result.coinsEarned ?? 0,
+    newlyCompletedQuestIds: result.newlyCompletedQuestIds ?? [],
+    streakBefore: result.streakBefore ?? 0,
+    matchesPlayedDelta: result.matchesPlayedDelta ?? 1,
   }
 }
 
@@ -597,13 +608,19 @@ export function recordCompletedBattle({
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
     newlyUnlockedMissionIds: [],
+    coinsEarned: 0,
+    newlyCompletedQuestIds: [],
+    streakBefore: current.currentStreak,
+    matchesPlayedDelta: 1,
   }
 
   writeLocalStorage(battleProfileStatsKey, nextStats)
   writeLocalStorage(battleMatchHistoryKey, history)
 
   if (activeSession.mode !== 'practice') {
-    trackBattleCompleted(activeSession.mode, won)
+    const tracked = trackBattleCompleted(activeSession.mode, won)
+    lastResult.coinsEarned = tracked.coinsEarned
+    lastResult.newlyCompletedQuestIds = tracked.newlyCompletedQuestIds
     lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
       won,
       teamIds: playerTeamIds,
@@ -709,6 +726,10 @@ export function recordOnlineCompletedBattle({
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
     newlyUnlockedMissionIds: [],
+    coinsEarned: 0,
+    newlyCompletedQuestIds: [],
+    streakBefore: current.currentStreak,
+    matchesPlayedDelta: 1,
   }
 
   const history = normalizeHistory([historyEntry, ...readRecentMatchHistory()])
@@ -716,7 +737,9 @@ export function recordOnlineCompletedBattle({
   writeLocalStorage(battleMatchHistoryKey, history)
 
   if (mode !== 'practice') {
-    trackBattleCompleted(mode, won)
+    const tracked = trackBattleCompleted(mode, won)
+    lastResult.coinsEarned = tracked.coinsEarned
+    lastResult.newlyCompletedQuestIds = tracked.newlyCompletedQuestIds
     lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
       won,
       teamIds: playerTeamIds,
