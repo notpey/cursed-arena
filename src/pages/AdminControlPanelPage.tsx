@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
+import { LiveOpsPanel } from '@/pages/admin/LiveOpsPanel'
 import {
   authoredBattleContent,
   battleRoster,
@@ -142,6 +143,7 @@ type AdminSelection = {
 }
 
 type EditorTabId = 'identity' | 'skills' | 'passives' | 'advanced' | 'livePreview'
+type StudioSection = 'liveops' | 'content'
 
 function readAdminSelection(): AdminSelection | null {
   if (typeof window === 'undefined') return null
@@ -779,6 +781,7 @@ function sanitizeDefaultSetup(snapshot: BattleContentSnapshot) {
 }
 
 export function AdminControlPanelPage() {
+  const [studioSection, setStudioSection] = useState<StudioSection>('liveops')
   const [draft, setDraft] = useState<BattleContentSnapshot>(() => readDraftBattleContent(liveContent))
   const [selectedFighterId, setSelectedFighterId] = useState(() => {
     const saved = readAdminSelection()
@@ -1234,10 +1237,9 @@ export function AdminControlPanelPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Internal Tools</p>
-              <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">Admin Control Panel</h1>
+              <h1 className="ca-display mt-2 text-4xl text-ca-text sm:text-5xl">Cursed Arena Studio</h1>
               <p className="mt-2 max-w-3xl text-sm text-ca-text-3">
-                Focused content workspace for fighters, techniques, and passives. Changes autosave as a local draft; publish
-                promotes this draft as the live battle content source on reload.
+                Admin and content workspace. Live Ops for user/match management; Content Studio for authoring fighters, skills, and passives.
               </p>
             </div>
             <Link
@@ -1247,8 +1249,35 @@ export function AdminControlPanelPage() {
               Back To Settings
             </Link>
           </div>
+
+          <div className="mt-4 flex gap-2">
+            {([
+              { id: 'liveops', label: 'Live Ops', hint: 'Users · Matches · Missions · Unlocks' },
+              { id: 'content', label: 'Content Studio', hint: 'Fighters · Skills · Passives · Publish' },
+            ] as const).map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => setStudioSection(section.id)}
+                className={[
+                  'rounded-lg border px-4 py-2.5 text-left transition',
+                  studioSection === section.id
+                    ? 'border-ca-teal/28 bg-ca-teal-wash'
+                    : 'border-white/10 bg-[rgba(255,255,255,0.03)] hover:border-white/18',
+                ].join(' ')}
+              >
+                <p className="ca-display text-[1rem] text-ca-text">{section.label}</p>
+                <p className="mt-0.5 text-[0.62rem] text-ca-text-3">{section.hint}</p>
+              </button>
+            ))}
+          </div>
         </header>
 
+        {studioSection === 'liveops' ? (
+          <LiveOpsPanel />
+        ) : null}
+
+        {studioSection === 'content' ? (
         <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="space-y-2">
@@ -1313,6 +1342,7 @@ export function AdminControlPanelPage() {
             </div>
           </div>
         </section>
+        ) : null}
 
         <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5 xl:sticky xl:top-4 self-start">
