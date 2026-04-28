@@ -466,25 +466,40 @@ export function getFeaturedTeamIds() {
 
 /**
  * Stable identifier for a completed match, safe to recompute across remounts.
- * Format: `battleSeed:mode:winner`
+ * battleSeed is already a unique nonce per session; winner is excluded so the
+ * key doesn't vary if winner is evaluated at different call sites.
+ * Format: `battleSeed:mode`
  */
-export function buildCompletionId(battleSeed: string, mode: BattleMatchMode, winner: BattleWinner): string {
-  return `${battleSeed}:${mode}:${winner}`
+export function buildCompletionId(battleSeed: string, mode: BattleMatchMode): string {
+  return `${battleSeed}:${mode}`
 }
 
+type CompletionLookup =
+  | { status: 'new' }
+  | { status: 'found'; result: LastBattleResult }
+  | { status: 'already-recorded' }
+
 /**
- * Check whether a completion id has already been recorded in localStorage.
- * Returns the existing LastBattleResult if found, or null if this is new.
+ * Check whether a completionId has already been written to localStorage.
+ * Three outcomes:
+ *   'new'              — not seen before; caller should record.
+ *   'found'            — lastBattleResult matches; return that result.
+ *   'already-recorded' — found in history but lastBattleResult is a different
+ *                        match; block re-recording but don't return wrong data.
  */
-function findExistingResult(completionId: string): LastBattleResult | null {
+function findExistingResult(completionId: string): CompletionLookup {
   const last = readLocalStorage<LastBattleResult | null>(lastBattleResultKey, null)
-  if (last?.completionId === completionId) return normalizeLastResult(last)
+  if (last?.completionId === completionId) {
+    const normalized = normalizeLastResult(last)
+    return normalized ? { status: 'found', result: normalized } : { status: 'already-recorded' }
+  }
 
   const history = readLocalStorage<MatchHistoryEntry[]>(battleMatchHistoryKey, [])
-  const inHistory = history.some((e) => e.completionId === completionId)
-  if (inHistory) return normalizeLastResult(last)
+  if (history.some((e) => e.completionId === completionId)) {
+    return { status: 'already-recorded' }
+  }
 
-  return null
+  return { status: 'new' }
 }
 
 export function recordCompletedBattle({
@@ -511,9 +526,10 @@ export function recordCompletedBattle({
     roomCode: null,
   }
 
-  const completionId = buildCompletionId(activeSession.battleSeed, activeSession.mode, winner)
-  const existing = findExistingResult(completionId)
-  if (existing) return existing
+  const completionId = buildCompletionId(activeSession.battleSeed, activeSession.mode)
+  const lookup = findExistingResult(completionId)
+  if (lookup.status === 'found') return lookup.result
+  if (lookup.status === 'already-recorded') return readLastBattleResult()!
 
   const current = readBattleProfileStats()
   const won = winner === 'player'
@@ -625,12 +641,12 @@ export function recordOnlineCompletedBattle({
   mode: BattleMatchMode
   lpDelta: number
   lpBefore: number
-  battleSeed?: string
+  battleSeed: string
 }): LastBattleResult {
-  const resolvedSeed = battleSeed ?? [mode, playerTeamIds.join('-'), enemyTeamIds.join('-'), opponentName].join(':')
-  const completionId = buildCompletionId(resolvedSeed, mode, winner)
-  const existing = findExistingResult(completionId)
-  if (existing) return existing
+  const completionId = buildCompletionId(battleSeed, mode)
+  const lookup = findExistingResult(completionId)
+  if (lookup.status === 'found') return lookup.result
+  if (lookup.status === 'already-recorded') return readLastBattleResult()!
 
   const current = readBattleProfileStats()
   const rankBefore = current.rank

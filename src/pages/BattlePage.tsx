@@ -934,8 +934,8 @@ export function BattlePage() {
     // Derive a stable completion id from the session seed so the React guard
     // is consistent with the persistent localStorage idempotency check.
     const resultId = stagedSession
-      ? buildCompletionId(stagedSession.battleSeed, stagedSession.mode, winner)
-      : [String(battle.state.round), winner, ...battle.state.playerTeam.map((f) => f.templateId)].join('-')
+      ? buildCompletionId(stagedSession.battleSeed, stagedSession.mode)
+      : buildCompletionId(battle.state.playerTeam.map((f) => f.templateId).join('-'), 'quick')
 
     if (lastRecordedResultId === resultId) return
 
@@ -974,7 +974,7 @@ export function BattlePage() {
           mode,
           lpDelta,
           lpBefore,
-          battleSeed: stagedSession?.battleSeed,
+          battleSeed: stagedSession?.battleSeed ?? [mode, playerTeamIds.join('-'), enemyTeamIds.join('-')].join(':'),
         })
         setRecordedResult(result)
 
