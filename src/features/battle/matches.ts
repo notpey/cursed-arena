@@ -40,6 +40,8 @@ export type BattleProfileStats = {
 
 export type MatchHistoryEntry = {
   id: string
+  /** Stable key used to prevent double-recording: `battleSeed:mode:winner` */
+  completionId?: string
   result: BattleMatchResult
   mode: BattleMatchMode
   opponentName: string
@@ -69,6 +71,8 @@ export type StagedBattleSession = {
 
 export type LastBattleResult = {
   id: string
+  /** Stable key used to prevent double-recording: `battleSeed:mode:winner` */
+  completionId?: string
   result: BattleMatchResult
   mode: BattleMatchMode
   winner: BattleWinner
@@ -460,6 +464,29 @@ export function getFeaturedTeamIds() {
   return readRecentMatchHistory()[0]?.yourTeam ?? defaultBattleSetup.playerTeamIds.slice()
 }
 
+/**
+ * Stable identifier for a completed match, safe to recompute across remounts.
+ * Format: `battleSeed:mode:winner`
+ */
+export function buildCompletionId(battleSeed: string, mode: BattleMatchMode, winner: BattleWinner): string {
+  return `${battleSeed}:${mode}:${winner}`
+}
+
+/**
+ * Check whether a completion id has already been recorded in localStorage.
+ * Returns the existing LastBattleResult if found, or null if this is new.
+ */
+function findExistingResult(completionId: string): LastBattleResult | null {
+  const last = readLocalStorage<LastBattleResult | null>(lastBattleResultKey, null)
+  if (last?.completionId === completionId) return normalizeLastResult(last)
+
+  const history = readLocalStorage<MatchHistoryEntry[]>(battleMatchHistoryKey, [])
+  const inHistory = history.some((e) => e.completionId === completionId)
+  if (inHistory) return normalizeLastResult(last)
+
+  return null
+}
+
 export function recordCompletedBattle({
   winner,
   rounds,
@@ -483,6 +510,10 @@ export function recordCompletedBattle({
     opponentRankLabel: null,
     roomCode: null,
   }
+
+  const completionId = buildCompletionId(activeSession.battleSeed, activeSession.mode, winner)
+  const existing = findExistingResult(completionId)
+  if (existing) return existing
 
   const current = readBattleProfileStats()
   const won = winner === 'player'
@@ -511,6 +542,7 @@ export function recordCompletedBattle({
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-${Date.now()}`,
+    completionId,
     result: draw ? 'DRAW' : won ? 'WIN' : 'LOSS',
     mode: activeSession.mode,
     opponentName: activeSession.opponentName,
@@ -529,6 +561,7 @@ export function recordCompletedBattle({
   const history = normalizeHistory([historyEntry, ...readRecentMatchHistory()])
   const lastResult: LastBattleResult = {
     id: historyEntry.id,
+    completionId,
     result: historyEntry.result,
     mode: historyEntry.mode,
     winner,
@@ -582,6 +615,7 @@ export function recordOnlineCompletedBattle({
   mode,
   lpDelta,
   lpBefore,
+  battleSeed,
 }: {
   winner: BattleWinner
   rounds: number
@@ -591,7 +625,13 @@ export function recordOnlineCompletedBattle({
   mode: BattleMatchMode
   lpDelta: number
   lpBefore: number
+  battleSeed?: string
 }): LastBattleResult {
+  const resolvedSeed = battleSeed ?? [mode, playerTeamIds.join('-'), enemyTeamIds.join('-'), opponentName].join(':')
+  const completionId = buildCompletionId(resolvedSeed, mode, winner)
+  const existing = findExistingResult(completionId)
+  if (existing) return existing
+
   const current = readBattleProfileStats()
   const rankBefore = current.rank
   const won = winner === 'player'
@@ -619,6 +659,7 @@ export function recordOnlineCompletedBattle({
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-online-${Date.now()}`,
+    completionId,
     result: draw ? 'DRAW' : won ? 'WIN' : 'LOSS',
     mode,
     opponentName,
@@ -634,6 +675,7 @@ export function recordOnlineCompletedBattle({
 
   const lastResult: LastBattleResult = {
     id: historyEntry.id,
+    completionId,
     result: historyEntry.result,
     mode,
     winner,

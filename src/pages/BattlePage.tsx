@@ -9,6 +9,7 @@ import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitMod
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
+  buildCompletionId,
   getModeLabel,
   readBattleProfileStats,
   readStagedBattleSession,
@@ -930,14 +931,11 @@ export function BattlePage() {
     if (battle.state.phase !== 'finished' || !battle.state.winner) return
     const winner = battle.state.winner
 
-    const resultId =
-      String(battle.state.round) +
-      '-' +
-      winner +
-      '-' +
-      battle.state.playerTeam.map((fighter) => fighter.templateId).join('-') +
-      '-' +
-      battle.state.enemyTeam.map((fighter) => fighter.templateId).join('-')
+    // Derive a stable completion id from the session seed so the React guard
+    // is consistent with the persistent localStorage idempotency check.
+    const resultId = stagedSession
+      ? buildCompletionId(stagedSession.battleSeed, stagedSession.mode, winner)
+      : [String(battle.state.round), winner, ...battle.state.playerTeam.map((f) => f.templateId)].join('-')
 
     if (lastRecordedResultId === resultId) return
 
@@ -976,6 +974,7 @@ export function BattlePage() {
           mode,
           lpDelta,
           lpBefore,
+          battleSeed: stagedSession?.battleSeed,
         })
         setRecordedResult(result)
 
