@@ -34,6 +34,7 @@ export type MatchRow = {
   last_submission_id: string | null
   last_submission_player_id: string | null
   room_code: string | null
+  last_activity_at: string
   created_at: string
   updated_at: string
 }

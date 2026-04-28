@@ -430,9 +430,19 @@ export function subscribeToIncomingChallenges(
   }
 }
 
+/** Matches inactive longer than this are considered stale and will not block queueing. */
+export const STALE_MATCH_CUTOFF_MS = 60 * 60 * 1000 // 60 minutes
+
+/** ISO timestamp for the staleness cutoff relative to now. */
+export function staleCutoffIso(nowMs = Date.now()): string {
+  return new Date(nowMs - STALE_MATCH_CUTOFF_MS).toISOString()
+}
+
 /**
  * Look up any active match the current player is already in
  * (handles page refresh mid-game).
+ * Only returns matches active within the last 60 minutes — stale
+ * in_progress rows from crashed or abandoned sessions are ignored.
  */
 export async function fetchActiveMatch(playerId: string): Promise<{ data: MatchRow | null; error: string | null }> {
   const { data, error } = await db()
@@ -440,12 +450,32 @@ export async function fetchActiveMatch(playerId: string): Promise<{ data: MatchR
     .select('*')
     .eq('status', 'in_progress')
     .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
-    .order('created_at', { ascending: false })
+    .gte('last_activity_at', staleCutoffIso())
+    .order('last_activity_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
   if (error) return { data: null, error: error.message }
   return { data: data as MatchRow | null, error: null }
+}
+
+/**
+ * Mark all stale in_progress matches involving this player as 'abandoned'.
+ * Called before queueing so zombie matches cannot block new ladder games.
+ * Sets no winner — abandoned matches do not trigger LP, missions, or profile updates.
+ */
+export async function abandonStaleMatches(playerId: string): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from('matches')
+    .update({
+      status: 'abandoned',
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('status', 'in_progress')
+    .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+    .lt('last_activity_at', staleCutoffIso())
+
+  return { error: error?.message ?? null }
 }
 
 /**

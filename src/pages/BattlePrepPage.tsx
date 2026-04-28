@@ -38,6 +38,7 @@ import {
   leaveMatchmakingQueue,
   findAndCreateQueuedMatch,
   fetchActiveMatch,
+  abandonStaleMatches,
   type ProfileSearchResult,
 } from '@/features/multiplayer/client'
 import type { MatchRow } from '@/features/multiplayer/types'
@@ -437,6 +438,9 @@ export function BattlePrepPage() {
     playerId, mode, teamIds: sanitized, displayName,
   }: { playerId: string; mode: BattleMatchMode; teamIds: string[]; displayName: string }) {
     if (!searchingRef.current) return
+
+    // Clean up any zombie in_progress matches before checking for an active one
+    await abandonStaleMatches(playerId)
 
     // Check if we've already been matched as Player B
     const { data: activeMatch } = await fetchActiveMatch(playerId)
