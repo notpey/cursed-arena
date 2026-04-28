@@ -1,12 +1,18 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { battleRosterById } from '@/features/battle/data'
 import {
   type LastBattleResult,
+  type MatchHistoryEntry,
   formatMatchTimestamp,
   getModeLabel,
   readLastBattleResult,
   readRecentMatchHistory,
 } from '@/features/battle/matches'
+import {
+  readLastBattleResultFromSupabase,
+  readMatchHistoryFromSupabase,
+} from '@/features/battle/persistence'
 import { MISSION_DEFS } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 
@@ -154,8 +160,21 @@ function RankShiftBanner({ shift, rankBefore, rankAfter }: { shift: 'promoted' |
 }
 
 export function BattleResultsPage() {
-  const result = readLastBattleResult()
-  const recentHistory = readRecentMatchHistory().slice(0, 5)
+  const localResult = readLastBattleResult()
+  const localHistory = readRecentMatchHistory()
+
+  const [result, setResult] = useState<LastBattleResult | null>(localResult)
+  const [recentHistory, setRecentHistory] = useState<MatchHistoryEntry[]>(localHistory.slice(0, 5))
+
+  useEffect(() => {
+    readLastBattleResultFromSupabase(localResult).then((remote) => {
+      if (remote) setResult(remote)
+    })
+    readMatchHistoryFromSupabase(localHistory, 5).then((remote) => {
+      setRecentHistory(remote.slice(0, 5))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!result) {
     return (

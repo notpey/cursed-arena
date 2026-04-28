@@ -4,6 +4,11 @@ import type { BattleWinner } from '@/features/battle/types'
 import { readPlayerProfile } from '@/features/player/store'
 import { trackBattleCompleted } from '@/features/missions/store'
 import { evaluateUnlockMissions } from '@/features/missions/unlocks'
+import {
+  syncBattleProfileToSupabase,
+  syncMatchHistoryEntryToSupabase,
+  syncLastBattleResultToSupabase,
+} from '@/features/battle/persistence'
 
 const selectedMatchModeKey = 'ca-battle-match-mode-v1'
 const stagedBattleSessionKey = 'ca-battle-staged-session-v1'
@@ -631,6 +636,11 @@ export function recordCompletedBattle({
 
   writeLocalStorage(lastBattleResultKey, lastResult)
 
+  // Fire-and-forget — localStorage is already updated; Supabase failure is silent
+  void syncBattleProfileToSupabase(nextStats)
+  void syncMatchHistoryEntryToSupabase(historyEntry)
+  void syncLastBattleResultToSupabase(lastResult)
+
   return lastResult
 }
 
@@ -749,6 +759,11 @@ export function recordOnlineCompletedBattle({
   }
 
   writeLocalStorage(lastBattleResultKey, lastResult)
+
+  // Fire-and-forget — localStorage is already updated; Supabase failure is silent
+  void syncBattleProfileToSupabase(nextStats)
+  void syncMatchHistoryEntryToSupabase(historyEntry)
+  void syncLastBattleResultToSupabase(lastResult)
 
   return lastResult
 }
