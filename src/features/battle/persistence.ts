@@ -191,6 +191,22 @@ export async function readBattleProfileStatsFromSupabase(
   }
 }
 
+// ── Freshness guard ───────────────────────────────────────────────────────────
+
+/**
+ * Returns true when local history is newer than the most recent remote row.
+ * Used to prevent fire-and-forget sync lag from hiding a just-completed match.
+ * Exported for unit testing without a live Supabase connection.
+ */
+export function localHistoryIsNewer(
+  localFallback: MatchHistoryEntry[],
+  remoteNewestPlayedAt: string,
+): boolean {
+  const localNewest = localFallback[0]?.timestamp ?? 0
+  const remoteNewest = new Date(remoteNewestPlayedAt).getTime()
+  return localNewest > remoteNewest
+}
+
 // ── Read: match history ───────────────────────────────────────────────────────
 
 export async function readMatchHistoryFromSupabase(
@@ -212,6 +228,8 @@ export async function readMatchHistoryFromSupabase(
       .limit(limit)
 
     if (error || !data || data.length === 0) return localFallback
+
+    if (localHistoryIsNewer(localFallback, data[0].played_at as string)) return localFallback
 
     const entries: MatchHistoryEntry[] = data.map((row) => ({
       id: row.id as string,

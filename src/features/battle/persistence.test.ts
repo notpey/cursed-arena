@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import {
+  localHistoryIsNewer,
   readBattleProfileStatsFromSupabase,
   readMatchHistoryFromSupabase,
   readLastBattleResultFromSupabase,
@@ -151,5 +152,37 @@ describe('persistence — local recording unaffected by Supabase sync', () => {
     await syncBattleProfileToSupabase(mockStats)
     await syncBattleProfileToSupabase({ ...mockStats, wins: 11 })
     // No assertions needed — just verify no unhandled rejections
+  })
+})
+
+// ── localHistoryIsNewer — freshness guard ─────────────────────────────────────
+
+describe('localHistoryIsNewer', () => {
+  const remoteTs = new Date('2025-01-01T12:00:00Z')
+  const remoteIso = remoteTs.toISOString()
+  const remoteMs = remoteTs.getTime()
+
+  test('returns true when local newest is more recent than remote newest', () => {
+    const localEntry = { ...mockEntry, timestamp: remoteMs + 5000 }
+    expect(localHistoryIsNewer([localEntry], remoteIso)).toBe(true)
+  })
+
+  test('returns false when remote newest equals local newest', () => {
+    const localEntry = { ...mockEntry, timestamp: remoteMs }
+    expect(localHistoryIsNewer([localEntry], remoteIso)).toBe(false)
+  })
+
+  test('returns false when remote newest is more recent than local newest', () => {
+    const localEntry = { ...mockEntry, timestamp: remoteMs - 5000 }
+    expect(localHistoryIsNewer([localEntry], remoteIso)).toBe(false)
+  })
+
+  test('returns false when local history is empty (no local newest)', () => {
+    expect(localHistoryIsNewer([], remoteIso)).toBe(false)
+  })
+
+  test('returns true when local has a match but remote iso is far in the past', () => {
+    const localEntry = { ...mockEntry, timestamp: Date.now() }
+    expect(localHistoryIsNewer([localEntry], new Date('2020-01-01').toISOString())).toBe(true)
   })
 })
