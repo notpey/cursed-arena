@@ -10,7 +10,10 @@ import { BattleTopBar } from '@/components/battle/BattleTopBar'
 import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   buildCompletionId,
+  cacheLastBattleResult,
+  cacheMatchHistoryEntry,
   getModeLabel,
+  lastBattleResultFromHistoryEntry,
   readBattleProfileStats,
   readStagedBattleSession,
   recordCompletedBattle,
@@ -18,7 +21,7 @@ import {
   type LastBattleResult,
 } from '@/features/battle/matches'
 import { settleMatchLp } from '@/features/ranking/client'
-import { saveMatchHistory } from '@/features/multiplayer/client'
+import { fetchMatchHistoryEntryForPlayer, surrenderMatch } from '@/features/multiplayer/client'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
@@ -696,6 +699,9 @@ export function BattlePage() {
   const [recordedResult, setRecordedResult] = useState<LastBattleResult | null>(null)
   const [queueDialogOpen, setQueueDialogOpen] = useState(false)
   const [opponentDisconnected, setOpponentDisconnected] = useState(false)
+  const [surrenderConfirmOpen, setSurrenderConfirmOpen] = useState(false)
+  const [surrenderPending, setSurrenderPending] = useState(false)
+  const [surrenderError, setSurrenderError] = useState<string | null>(null)
   const [timelineLocked, setTimelineLocked] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
   const [boardRevealKey, setBoardRevealKey] = useState(0)
@@ -950,6 +956,24 @@ export function BattlePage() {
     onTurnTimeout()
   }, [turnSecondsLeft, isDocumentVisible])
 
+  useEffect(() => {
+    const activeRankedOnlineMatch =
+      Boolean(matchId && multiplayer?.matchRow?.mode === 'ranked') &&
+      battle.state.phase !== 'finished' &&
+      multiplayer?.status !== 'abandoned' &&
+      multiplayer?.status !== 'finished'
+
+    if (!activeRankedOnlineMatch) return undefined
+
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = 'Leaving this ladder match may count as a surrender.'
+    }
+
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [battle.state.phase, matchId, multiplayer?.matchRow?.mode, multiplayer?.status])
+
   // ── Opponent disconnect detection ─────────────────────────────────────────
   // If it's opponent's turn in an online match and we haven't received a
   // Realtime update in 90 seconds, they may have left.
@@ -971,7 +995,11 @@ export function BattlePage() {
 
   useEffect(() => {
     if (battle.state.phase !== 'finished' || !battle.state.winner) return
-    const winner = battle.state.winner
+    void finalizeCountedBattleResult(battle.state.winner)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battle.state, stagedSession, lastRecordedResultId, multiplayer, matchId, currentUserId])
+
+  async function finalizeCountedBattleResult(winner: NonNullable<typeof battle.state.winner>) {
 
     // Derive a stable completion id from the session seed so the React guard
     // is consistent with the persistent localStorage idempotency check.
@@ -979,7 +1007,7 @@ export function BattlePage() {
       ? buildCompletionId(stagedSession.battleSeed, stagedSession.mode)
       : buildCompletionId(battle.state.playerTeam.map((f) => f.templateId).join('-'), 'quick')
 
-    if (lastRecordedResultId === resultId) return
+    if (lastRecordedResultId === resultId) return null
 
     // Claim the slot immediately to prevent double-recording across re-renders
     setLastRecordedResultId(resultId)
@@ -992,8 +1020,8 @@ export function BattlePage() {
       const enemyTeamIds  = battle.state.enemyTeam.map((f) => f.templateId)
       const mode = multiplayer.matchRow?.mode ?? 'private'
 
-      const settlePromise = draw ? Promise.resolve({ data: null }) : settleMatchLp(matchId)
-      settlePromise.then(({ data: settle }) => {
+      const settlePromise = draw ? Promise.resolve({ data: null, error: null }) : settleMatchLp(matchId)
+      return settlePromise.then(async ({ data: settle, error: settleError }) => {
         // Compute experience delta from server response (settle_match_lp values are treated
         // as experience until the RPC is migrated to settle_match_experience).
         // TODO: once settle_match_experience RPC exists, read experienceGain/experienceLoss directly.
@@ -1006,6 +1034,18 @@ export function BattlePage() {
           } else {
             lpDelta  = -(settle.experienceLoss ?? 0)
             lpBefore = (settle.loserExperience ?? lpBefore) - lpDelta
+          }
+        }
+
+        if (!settleError && !settle?.error && currentUserId) {
+          const serverResult = await fetchMatchHistoryEntryForPlayer(matchId, currentUserId)
+          if (serverResult.data) {
+            cacheMatchHistoryEntry(serverResult.data)
+            const authoritativeResult = cacheLastBattleResult(lastBattleResultFromHistoryEntry(serverResult.data))
+            if (authoritativeResult) {
+              setRecordedResult(authoritativeResult)
+              return authoritativeResult
+            }
           }
         }
 
@@ -1022,38 +1062,12 @@ export function BattlePage() {
         })
         setRecordedResult(result)
 
-        // Persist to server-side match history (fire-and-forget)
-        if (currentUserId) {
-          const historyEntry = result.id
-            ? {
-                id: result.id,
-                result: result.result,
-                mode: result.mode,
-                opponentName: result.opponentName,
-                opponentTitle: result.opponentTitle,
-                opponentRankLabel: result.opponentRankLabel ?? null,
-                yourTeam: result.yourTeam,
-                theirTeam: result.theirTeam,
-                timestamp: result.timestamp,
-                rounds: result.rounds,
-                experienceDelta: result.experienceDelta,
-                experienceBefore: result.experienceBefore,
-                experienceAfter: result.experienceAfter,
-                levelBefore: result.levelBefore,
-                levelAfter: result.levelAfter,
-                rankTitleBefore: result.rankTitleBefore,
-                rankTitleAfter: result.rankTitleAfter,
-                ladderRankBefore: result.ladderRankBefore ?? null,
-                ladderRankAfter: result.ladderRankAfter ?? null,
-                roomCode: result.roomCode ?? null,
-              }
-            : null
-          if (historyEntry) {
-            void saveMatchHistory(currentUserId, historyEntry)
-          }
-        }
+        return result
       })
-      return
+    }
+
+    if (stagedSession?.mode === 'practice') {
+      return null
     }
 
     // Local AI match
@@ -1066,7 +1080,8 @@ export function BattlePage() {
     })
 
     setRecordedResult(result)
-  }, [battle.state, stagedSession, lastRecordedResultId, multiplayer, matchId, currentUserId])
+    return result
+  }
 
   function clearPendingSelection() {
     setSelectedAbilityId(null)
@@ -1329,20 +1344,54 @@ export function BattlePage() {
   }
 
   function handleSurrender() {
-    timelineRunRef.current += 1
-    lastPlayedMultiplayerResolutionRef.current = null
-    const { viewState, initialEvents } = createNewBattle()
-    setBattle(viewState)
-    setSelectedAbilityId(null)
-    setSelectedTargetId(null)
-    setHoveredAbility(null)
-    setBattleLog(initialEvents)
-    setPracticeTurnLog([])
-    setTurnSecondsLeft(60)
-    setRecordedResult(null)
-    setLastRecordedResultId(null)
-    setTimelineLocked(false)
-    setTimelineFocus(null)
+    setSurrenderError(null)
+    setSurrenderConfirmOpen(true)
+  }
+
+  async function confirmSurrender() {
+    if (surrenderPending) return
+    setSurrenderPending(true)
+    setSurrenderError(null)
+
+    if (multiplayer && matchId) {
+      if (!currentUserId) {
+        setSurrenderPending(false)
+        setSurrenderError('You must be signed in to surrender an online match.')
+        return
+      }
+
+      const result = await surrenderMatch(matchId, currentUserId)
+      if (result.error) {
+        setSurrenderPending(false)
+        setSurrenderError(result.error)
+        return
+      }
+
+      await finalizeCountedBattleResult('enemy')
+      setSurrenderPending(false)
+      setSurrenderConfirmOpen(false)
+      navigate('/battle/results')
+      return
+    }
+
+    if (stagedSession?.mode === 'practice') {
+      setSurrenderPending(false)
+      setSurrenderConfirmOpen(false)
+      navigate('/battle/prep')
+      return
+    }
+
+    const result = recordCompletedBattle({
+      winner: 'enemy',
+      rounds: battle.state.round,
+      playerTeamIds: battle.state.playerTeam.map((fighter) => fighter.templateId),
+      enemyTeamIds: battle.state.enemyTeam.map((fighter) => fighter.templateId),
+      session: stagedSession,
+    })
+    setRecordedResult(result)
+    setSurrenderPending(false)
+    setSurrenderConfirmOpen(false)
+    navigate('/battle/results')
   }
 
   if (matchId && (!multiplayer || !multiplayerBattleState)) {
@@ -1444,6 +1493,21 @@ export function BattlePage() {
               setOpponentDisconnected(false)
             }}
             onDismiss={() => setOpponentDisconnected(false)}
+          />
+        ) : null}
+
+        {surrenderConfirmOpen ? (
+          <SurrenderConfirmOverlay
+            counted={Boolean(multiplayer || stagedSession?.mode === 'ranked')}
+            practice={stagedSession?.mode === 'practice'}
+            pending={surrenderPending}
+            error={surrenderError}
+            onConfirm={() => { void confirmSurrender() }}
+            onCancel={() => {
+              if (surrenderPending) return
+              setSurrenderConfirmOpen(false)
+              setSurrenderError(null)
+            }}
           />
         ) : null}
 
@@ -1623,6 +1687,57 @@ function OpponentDisconnectedOverlay({
 }
 
 // Per-action random CE allocation: maps actorId → Record<BattleEnergyType, number>
+function SurrenderConfirmOverlay({
+  counted,
+  practice,
+  pending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  counted: boolean
+  practice: boolean
+  pending: boolean
+  error: string | null
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="absolute inset-0 z-30 grid place-items-center bg-[rgba(5,6,10,0.78)] backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-[14px] border border-ca-red/24 bg-[linear-gradient(180deg,rgba(24,14,18,0.98),rgba(10,9,14,0.99))] p-6 text-center shadow-[0_22px_54px_rgba(0,0,0,0.45)]">
+        <p className="ca-mono-label text-[0.52rem] text-ca-red">SURRENDER</p>
+        <h2 className="ca-display mt-3 text-3xl text-ca-text">Forfeit Match?</h2>
+        <p className="mt-2 text-sm text-ca-text-2">
+          {practice
+            ? 'Practice surrender returns to battle prep and does not count as a ladder result.'
+            : counted
+              ? 'Surrender this match? This will count as a ladder loss.'
+              : 'Surrender this match? This will end the battle.'}
+        </p>
+        {error ? <p className="mt-3 text-sm text-ca-red">{error}</p> : null}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onCancel}
+            className="ca-display rounded-lg border border-white/12 bg-[rgba(255,255,255,0.04)] px-4 py-2.5 text-[1rem] text-ca-text-2 disabled:opacity-45"
+          >
+            Stay
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onConfirm}
+            className="ca-display rounded-lg border border-ca-red/35 bg-ca-red px-4 py-2.5 text-[1rem] text-white disabled:opacity-45"
+          >
+            {pending ? 'Finalizing' : 'Surrender'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
 
 function buildDefaultRandomAllocation(

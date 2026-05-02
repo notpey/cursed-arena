@@ -9,7 +9,7 @@ import { getSupabaseClient } from '@/lib/supabase'
 import type { BattleState, BattleTeamId, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types'
 import type { BattleMatchMode, MatchHistoryEntry } from '@/features/battle/matches'
 import type { SubmitMatchTurnRequest, SubmitMatchTurnResponse } from '@/features/multiplayer/protocol'
-import type { MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
+import type { MatchFinishReason, MatchRow, QueueRow, MultiplayerRole } from '@/features/multiplayer/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -313,7 +313,12 @@ export async function acceptChallenge({
 export async function declineChallenge(matchId: string): Promise<{ error: string | null }> {
   const { error } = await db()
     .from('matches')
-    .update({ status: 'abandoned' })
+    .update({
+      status: 'abandoned',
+      winner: null,
+      abandoned_reason: 'cancelled_waiting_room',
+      settlement_status: 'not_counted',
+    })
     .eq('id', matchId)
     .eq('status', 'waiting')
 
@@ -356,6 +361,9 @@ export async function commitMatchState({
       active_player: newState.activePlayer ?? 'player',
       winner: newState.winner ?? null,
       status: newState.phase === 'finished' ? 'finished' : 'in_progress',
+      finished_at: newState.phase === 'finished' ? new Date().toISOString() : null,
+      finish_reason: newState.phase === 'finished' ? 'ko' : null,
+      settlement_status: newState.phase === 'finished' ? 'pending' : null,
       resolution_id: resolutionId ?? null,
       resolution_steps: resolutionSteps ?? null,
       last_activity_at: new Date().toISOString(),
@@ -552,6 +560,8 @@ export async function abandonStaleMatches(playerId: string): Promise<{ error: st
     .update({
       status: 'abandoned',
       winner: null,
+      abandoned_reason: 'stale_cleanup',
+      settlement_status: 'not_counted',
       last_activity_at: new Date().toISOString(),
     })
     .eq('status', 'in_progress')
@@ -576,7 +586,13 @@ export async function cleanupMatchmakingStateForPlayer(
   if (options.abandonActive) {
     let req = client
       .from('matches')
-      .update({ status: 'abandoned', winner: null, last_activity_at: new Date().toISOString() })
+      .update({
+        status: 'abandoned',
+        winner: null,
+        abandoned_reason: options.mode ? 'admin_reset' : 'stale_cleanup',
+        settlement_status: 'not_counted',
+        last_activity_at: new Date().toISOString(),
+      })
       .in('status', ['waiting', 'in_progress'])
       .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
 
@@ -604,14 +620,129 @@ export function getMyRole(match: MatchRow, playerId: string): MultiplayerRole | 
 /**
  * Surrender / abandon a match.
  */
-export async function abandonMatch(matchId: string, losingTeam: BattleTeamId): Promise<{ error: string | null }> {
-  const winner: BattleTeamId = losingTeam === 'player' ? 'enemy' : 'player'
+export async function abandonMatchForCleanup(
+  matchId: string,
+  reason: 'stale_cleanup' | 'admin_reset' | 'cancelled_waiting_room' = 'stale_cleanup',
+): Promise<{ error: string | null }> {
   const { error } = await db()
     .from('matches')
-    .update({ status: 'abandoned', winner, last_activity_at: new Date().toISOString() })
+    .update({
+      status: 'abandoned',
+      winner: null,
+      abandoned_reason: reason,
+      settlement_status: 'not_counted',
+      last_activity_at: new Date().toISOString(),
+    })
     .eq('id', matchId)
+    .in('status', ['waiting', 'in_progress'])
 
   return { error: error?.message ?? null }
+}
+
+/**
+ * @deprecated Cleanup-only abandon is not surrender. Use surrenderMatch() for
+ * counted forfeits, or abandonMatchForCleanup() for no-contest cleanup.
+ */
+export async function abandonMatch(matchId: string, losingTeam: BattleTeamId): Promise<{ error: string | null }> {
+  void losingTeam
+  return abandonMatchForCleanup(matchId, 'stale_cleanup')
+}
+
+export async function surrenderMatch(
+  matchId: string,
+  surrenderingPlayerId: string,
+): Promise<{ data: MatchRow | null; error: string | null }> {
+  const client = db()
+  const { data, error: fetchError } = await client
+    .from('matches')
+    .select('*')
+    .eq('id', matchId)
+    .single()
+
+  if (fetchError || !data) return { data: null, error: fetchError?.message ?? 'Match not found.' }
+
+  const match = data as MatchRow
+  if (match.status === 'abandoned') return { data: null, error: 'This match is no longer active.' }
+  if (match.status === 'finished') return { data: match, error: null }
+
+  const surrenderingRole = getMyRole(match, surrenderingPlayerId)
+  if (!surrenderingRole) return { data: null, error: 'You are not a participant in this match.' }
+
+  const winner: BattleTeamId = surrenderingRole === 'a' ? 'enemy' : 'player'
+  const finishedState = match.battle_state
+    ? {
+        ...match.battle_state,
+        phase: 'finished' as const,
+        winner,
+      }
+    : null
+
+  const { data: updated, error } = await client
+    .from('matches')
+    .update({
+      status: 'finished',
+      winner,
+      battle_state: finishedState,
+      current_phase: 'finished',
+      active_player: winner,
+      finished_at: new Date().toISOString(),
+      finish_reason: 'surrender',
+      surrendered_by: surrenderingPlayerId,
+      settlement_status: 'pending',
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', matchId)
+    .in('status', ['waiting', 'in_progress'])
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data: updated as MatchRow, error: null }
+}
+
+export async function forceFinishMatchForWinner(
+  matchId: string,
+  winner: BattleTeamId,
+  finishReason: MatchFinishReason = 'admin_award',
+): Promise<{ data: MatchRow | null; error: string | null }> {
+  const client = db()
+  const { data: matchData, error: fetchError } = await client
+    .from('matches')
+    .select('*')
+    .eq('id', matchId)
+    .single()
+
+  if (fetchError || !matchData) return { data: null, error: fetchError?.message ?? 'Match not found.' }
+  const match = matchData as MatchRow
+  const finishedState = match.battle_state
+    ? { ...match.battle_state, phase: 'finished' as const, winner }
+    : null
+
+  const { data, error } = await client
+    .from('matches')
+    .update({
+      status: 'finished',
+      winner,
+      battle_state: finishedState,
+      current_phase: 'finished',
+      active_player: winner,
+      finished_at: new Date().toISOString(),
+      finish_reason: finishReason,
+      settlement_status: 'pending',
+      last_activity_at: new Date().toISOString(),
+    })
+    .eq('id', matchId)
+    .in('status', ['waiting', 'in_progress'])
+    .select()
+    .single()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data as MatchRow, error: null }
+}
+
+export async function forfeitMatch(matchId: string, losingTeam: BattleTeamId): Promise<{ data: MatchRow | null; error: string | null }> {
+  const winner: BattleTeamId = losingTeam === 'player' ? 'enemy' : 'player'
+  return forceFinishMatchForWinner(matchId, winner, 'surrender')
 }
 
 /**
@@ -624,20 +755,74 @@ export async function claimVictoryDueToDisconnect(
 ): Promise<{ error: string | null }> {
   // Canonical: role 'a' = 'player', role 'b' = 'enemy'
   const winner: BattleTeamId = claimingRole === 'a' ? 'player' : 'enemy'
-  const { error } = await db()
-    .from('matches')
-    .update({ status: 'abandoned', winner, last_activity_at: new Date().toISOString() })
-    .eq('id', matchId)
-    .eq('status', 'in_progress')
-
-  return { error: error?.message ?? null }
+  const { error } = await forceFinishMatchForWinner(matchId, winner, 'disconnect_claim')
+  return { error }
 }
 
 // ── Match history ─────────────────────────────────────────────────────────────
 
+type MatchHistoryRow = {
+  id: string
+  match_id?: string | null
+  player_id: string
+  result: 'WIN' | 'LOSS' | 'DRAW'
+  mode: BattleMatchMode
+  opponent_name: string
+  opponent_title?: string | null
+  opponent_rank_label?: string | null
+  your_team: string[]
+  their_team: string[]
+  rounds: number
+  lp_delta?: number | null
+  experience_delta?: number | null
+  experience_before?: number | null
+  experience_after?: number | null
+  level_before?: number | null
+  level_after?: number | null
+  rank_before?: string | null
+  rank_after?: string | null
+  rank_title_before?: string | null
+  rank_title_after?: string | null
+  finish_reason?: string | null
+  room_code?: string | null
+  played_at: string
+}
+
+function mapMatchHistoryRow(row: MatchHistoryRow): MatchHistoryEntry {
+  const experienceDelta = typeof row.experience_delta === 'number'
+    ? row.experience_delta
+    : row.lp_delta ?? 0
+
+  return {
+    id: row.id,
+    matchId: row.match_id ?? null,
+    completionId: row.match_id ?? row.id,
+    result: row.result,
+    mode: row.mode,
+    opponentName: row.opponent_name,
+    opponentTitle: row.opponent_title ?? 'Online Match',
+    opponentRankLabel: row.opponent_rank_label ?? null,
+    yourTeam: row.your_team ?? [],
+    theirTeam: row.their_team ?? [],
+    timestamp: new Date(row.played_at).getTime(),
+    rounds: row.rounds ?? 0,
+    experienceDelta,
+    experienceBefore: row.experience_before ?? 0,
+    experienceAfter: row.experience_after ?? Math.max(0, (row.experience_before ?? 0) + experienceDelta),
+    levelBefore: row.level_before ?? 1,
+    levelAfter: row.level_after ?? 1,
+    rankTitleBefore: row.rank_title_before ?? row.rank_before ?? '',
+    rankTitleAfter: row.rank_title_after ?? row.rank_after ?? '',
+    ladderRankBefore: null,
+    ladderRankAfter: null,
+    finishReason: row.finish_reason ?? null,
+    roomCode: row.room_code ?? null,
+  }
+}
+
 /**
- * Persist a completed match result to the server-side match_history table.
- * Fire-and-forget: callers don't need to await this for the game to continue.
+ * @deprecated Online matches are written by settle_match_lp for both players.
+ * Keep this only for legacy/offline compatibility surfaces.
  */
 export async function saveMatchHistory(
   playerId: string,
@@ -669,6 +854,36 @@ export async function saveMatchHistory(
   return { error: error?.message ?? null }
 }
 
+export async function fetchMatchHistoryEntryForPlayer(
+  matchId: string,
+  playerId: string,
+): Promise<{ data: MatchHistoryEntry | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('match_history')
+    .select('*')
+    .eq('match_id', matchId)
+    .eq('player_id', playerId)
+    .maybeSingle()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data ? mapMatchHistoryRow(data as MatchHistoryRow) : null, error: null }
+}
+
+export async function fetchLatestMatchHistoryEntryForPlayer(
+  playerId: string,
+): Promise<{ data: MatchHistoryEntry | null; error: string | null }> {
+  const { data, error } = await db()
+    .from('match_history')
+    .select('*')
+    .eq('player_id', playerId)
+    .order('played_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) return { data: null, error: error.message }
+  return { data: data ? mapMatchHistoryRow(data as MatchHistoryRow) : null, error: null }
+}
+
 /**
  * Fetch a player's recent match history from the server.
  * Returns null on error so the caller can fall back to localStorage.
@@ -686,33 +901,7 @@ export async function fetchPlayerMatchHistory(
 
   if (error) return { data: null, error: error.message }
 
-  const entries: MatchHistoryEntry[] = (data ?? []).map((row) => {
-    const experienceDelta = typeof row.experience_delta === 'number'
-      ? row.experience_delta
-      : (row.lp_delta as number) ?? 0
-    return {
-      id: row.id as string,
-      result: row.result as 'WIN' | 'LOSS',
-      mode: row.mode as BattleMatchMode,
-      opponentName: row.opponent_name as string,
-      opponentTitle: row.opponent_title as string,
-      opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
-      yourTeam: row.your_team as string[],
-      theirTeam: row.their_team as string[],
-      timestamp: new Date(row.played_at as string).getTime(),
-      rounds: row.rounds as number,
-      experienceDelta,
-      experienceBefore: 0,
-      experienceAfter: 0,
-      levelBefore: 0,
-      levelAfter: 0,
-      rankTitleBefore: (row.rank_before as string) ?? '',
-      rankTitleAfter: (row.rank_after as string) ?? '',
-      ladderRankBefore: null,
-      ladderRankAfter: null,
-      roomCode: (row.room_code as string | null) ?? null,
-    }
-  })
+  const entries: MatchHistoryEntry[] = (data ?? []).map((row) => mapMatchHistoryRow(row as MatchHistoryRow))
 
   return { data: entries, error: null }
 }

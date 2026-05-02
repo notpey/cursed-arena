@@ -59,6 +59,7 @@ export type BattleProfileStats = {
 
 export type MatchHistoryEntry = {
   id: string
+  matchId?: string | null
   /** Stable key used to prevent double-recording: `battleSeed:mode:winner` */
   completionId?: string
   result: BattleMatchResult
@@ -80,6 +81,7 @@ export type MatchHistoryEntry = {
   rankTitleAfter: string
   ladderRankBefore?: number | null
   ladderRankAfter?: number | null
+  finishReason?: string | null
   roomCode?: string | null
 }
 
@@ -99,6 +101,7 @@ export type StagedBattleSession = {
 
 export type LastBattleResult = {
   id: string
+  matchId?: string | null
   /** Stable key used to prevent double-recording: `battleSeed:mode:winner` */
   completionId?: string
   result: BattleMatchResult
@@ -121,6 +124,7 @@ export type LastBattleResult = {
   rankShift: BattleRankShift
   ladderRankBefore?: number | null
   ladderRankAfter?: number | null
+  finishReason?: string | null
   roomCode?: string | null
   timestamp: number
   profileSnapshot: BattleProfileStats
@@ -312,6 +316,7 @@ function migrateHistoryEntry(raw: Record<string, unknown>): MatchHistoryEntry {
 
   return {
     id: (raw.id as string) ?? `migrated-${Date.now()}`,
+    matchId: (raw.matchId as string | null | undefined) ?? null,
     completionId: raw.completionId as string | undefined,
     result: (raw.result as BattleMatchResult) ?? 'LOSS',
     mode: (raw.mode as BattleMatchMode) ?? 'quick',
@@ -331,6 +336,7 @@ function migrateHistoryEntry(raw: Record<string, unknown>): MatchHistoryEntry {
     rankTitleAfter,
     ladderRankBefore: (raw.ladderRankBefore as number | null | undefined) ?? null,
     ladderRankAfter: (raw.ladderRankAfter as number | null | undefined) ?? null,
+    finishReason: (raw.finishReason as string | null | undefined) ?? null,
     roomCode: (raw.roomCode as string | null | undefined) ?? null,
   }
 }
@@ -346,6 +352,7 @@ function normalizeHistoryEntry(entry: MatchHistoryEntry): MatchHistoryEntry {
     levelAfter: entry.levelAfter ?? 1,
     rankTitleBefore: entry.rankTitleBefore ?? entry.rankTitleAfter ?? 'Jujutsu Student',
     rankTitleAfter: entry.rankTitleAfter ?? entry.rankTitleBefore ?? 'Jujutsu Student',
+    finishReason: entry.finishReason ?? null,
     roomCode: entry.roomCode ?? null,
   }
 }
@@ -389,6 +396,7 @@ function normalizeLastResult(result: LastBattleResult | null) {
       ?? (result as unknown as Record<string, unknown>).rankAfter as string
       ?? getLadderRankTitle({ level: levelAfter, ladderRank: null }),
     rankShift: result.rankShift ?? 'steady',
+    finishReason: result.finishReason ?? null,
     roomCode: result.roomCode ?? null,
     newlyUnlockedMissionIds: result.newlyUnlockedMissionIds ?? [],
     coinsEarned: result.coinsEarned ?? 0,
@@ -496,6 +504,71 @@ export function readRecentMatchHistory() {
 
 export function readLastBattleResult() {
   return normalizeLastResult(readLocalStorage<LastBattleResult | null>(lastBattleResultKey, null))
+}
+
+export function cacheLastBattleResult(result: LastBattleResult) {
+  const normalized = normalizeLastResult(result)
+  if (!normalized) return null
+  writeLocalStorage(lastBattleResultKey, normalized)
+  return normalized
+}
+
+export function cacheMatchHistoryEntry(entry: MatchHistoryEntry) {
+  const history = normalizeHistory([entry, ...readRecentMatchHistory()])
+  writeLocalStorage(battleMatchHistoryKey, history)
+  return history
+}
+
+export function lastBattleResultFromHistoryEntry(entry: MatchHistoryEntry): LastBattleResult {
+  const normalizedEntry = normalizeHistoryEntry(entry)
+  const current = readBattleProfileStats()
+  const won = normalizedEntry.result === 'WIN'
+  const draw = normalizedEntry.result === 'DRAW'
+  const profileSnapshot: BattleProfileStats = {
+    ...current,
+    experience: normalizedEntry.experienceAfter,
+    level: normalizedEntry.levelAfter,
+    rankTitle: normalizedEntry.rankTitleAfter,
+    wins: current.wins + (won ? 1 : 0),
+    losses: current.losses + (!won && !draw ? 1 : 0),
+    matchesPlayed: current.matchesPlayed + 1,
+    currentStreak: won ? current.currentStreak + 1 : draw ? current.currentStreak : 0,
+    bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
+  }
+
+  return {
+    id: normalizedEntry.id,
+    matchId: normalizedEntry.matchId ?? null,
+    completionId: normalizedEntry.completionId ?? normalizedEntry.matchId ?? normalizedEntry.id,
+    result: normalizedEntry.result,
+    mode: normalizedEntry.mode,
+    winner: draw ? 'draw' : won ? 'player' : 'enemy',
+    rounds: normalizedEntry.rounds,
+    opponentName: normalizedEntry.opponentName,
+    opponentTitle: normalizedEntry.opponentTitle,
+    opponentRankLabel: normalizedEntry.opponentRankLabel ?? null,
+    yourTeam: normalizedEntry.yourTeam.slice(),
+    theirTeam: normalizedEntry.theirTeam.slice(),
+    experienceDelta: normalizedEntry.experienceDelta,
+    experienceBefore: normalizedEntry.experienceBefore,
+    experienceAfter: normalizedEntry.experienceAfter,
+    levelBefore: normalizedEntry.levelBefore,
+    levelAfter: normalizedEntry.levelAfter,
+    rankTitleBefore: normalizedEntry.rankTitleBefore,
+    rankTitleAfter: normalizedEntry.rankTitleAfter,
+    rankShift: getLevelShift(normalizedEntry.levelBefore, normalizedEntry.levelAfter),
+    ladderRankBefore: normalizedEntry.ladderRankBefore ?? null,
+    ladderRankAfter: normalizedEntry.ladderRankAfter ?? null,
+    finishReason: normalizedEntry.finishReason ?? null,
+    roomCode: normalizedEntry.roomCode ?? null,
+    timestamp: normalizedEntry.timestamp,
+    profileSnapshot,
+    newlyUnlockedMissionIds: [],
+    coinsEarned: 0,
+    newlyCompletedQuestIds: [],
+    streakBefore: current.currentStreak,
+    matchesPlayedDelta: 1,
+  }
 }
 
 export function formatMatchTimestamp(timestamp: number) {

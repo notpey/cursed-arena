@@ -12,6 +12,8 @@ export function roleToTeam(role: MultiplayerRole): BattleTeamId {
 }
 
 // ── DB row shapes (match what Supabase returns) ───────────────────────────────
+export type MatchFinishReason = 'ko' | 'surrender' | 'disconnect_claim' | 'admin_forfeit' | 'admin_award' | 'admin_abandon' | 'stale_cleanup' | 'cancelled_waiting_room'
+
 export type MatchRow = {
   id: string
   mode: BattleMatchMode
@@ -34,6 +36,12 @@ export type MatchRow = {
   last_submission_id: string | null
   last_submission_player_id: string | null
   room_code: string | null
+  finished_at?: string | null
+  finish_reason?: MatchFinishReason | string | null
+  settled_at?: string | null
+  settlement_status?: 'pending' | 'settled' | 'not_counted' | string | null
+  surrendered_by?: string | null
+  abandoned_reason?: string | null
   last_activity_at: string
   created_at: string
   updated_at: string

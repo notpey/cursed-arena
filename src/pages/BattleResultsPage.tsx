@@ -4,8 +4,11 @@ import { battleRosterById } from '@/features/battle/data'
 import {
   type LastBattleResult,
   type MatchHistoryEntry,
+  cacheLastBattleResult,
+  cacheMatchHistoryEntry,
   formatMatchTimestamp,
   getModeLabel,
+  lastBattleResultFromHistoryEntry,
   readLastBattleResult,
   readRecentMatchHistory,
 } from '@/features/battle/matches'
@@ -16,6 +19,8 @@ import {
 import { MISSION_DEFS } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 import { getLevelProgress } from '@/features/ranking/ladder'
+import { useAuth } from '@/features/auth/useAuth'
+import { fetchLatestMatchHistoryEntryForPlayer, fetchPlayerMatchHistory } from '@/features/multiplayer/client'
 
 function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
   return (
@@ -204,6 +209,7 @@ function LevelShiftBanner({
 }
 
 export function BattleResultsPage() {
+  const { user } = useAuth()
   const localResult = readLastBattleResult()
   const localHistory = readRecentMatchHistory()
 
@@ -211,6 +217,19 @@ export function BattleResultsPage() {
   const [recentHistory, setRecentHistory] = useState<MatchHistoryEntry[]>(localHistory.slice(0, 5))
 
   useEffect(() => {
+    if (user?.id && (!localResult || localResult.matchId)) {
+      fetchLatestMatchHistoryEntryForPlayer(user.id).then((remote) => {
+        if (!remote.data) return
+        cacheMatchHistoryEntry(remote.data)
+        const serverResult = cacheLastBattleResult(lastBattleResultFromHistoryEntry(remote.data))
+        if (serverResult) setResult(serverResult)
+      })
+      fetchPlayerMatchHistory(user.id, 5).then((remote) => {
+        if (remote.data) setRecentHistory(remote.data.slice(0, 5))
+      })
+      return
+    }
+
     readLastBattleResultFromSupabase(localResult).then((remote) => {
       if (remote) setResult(remote)
     })
@@ -218,7 +237,7 @@ export function BattleResultsPage() {
       setRecentHistory(remote.slice(0, 5))
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [user?.id])
 
   if (!result) {
     return (

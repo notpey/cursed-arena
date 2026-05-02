@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 import {
   buildCompletionId,
+  cacheLastBattleResult,
+  cacheMatchHistoryEntry,
+  lastBattleResultFromHistoryEntry,
   readBattleProfileStats,
   readLastBattleResult,
   readRecentMatchHistory,
@@ -87,6 +90,78 @@ describe('buildCompletionId', () => {
 
   test('differs by mode', () => {
     expect(buildCompletionId('seed', 'ranked')).not.toBe(buildCompletionId('seed', 'quick'))
+  })
+})
+
+describe('server-authoritative match history', () => {
+  test('converts a server match_history row into the current player result shape', () => {
+    const entry = {
+      id: 'match-1:user-1',
+      matchId: 'match-1',
+      completionId: 'match-1',
+      result: 'LOSS' as const,
+      mode: 'ranked' as const,
+      opponentName: 'WINNER',
+      opponentTitle: 'Online Match',
+      opponentRankLabel: null,
+      yourTeam: ['yuji', 'megumi', 'nobara'],
+      theirTeam: ['gojo', 'yuji', 'nobara'],
+      timestamp: 1_700_000_000_000,
+      rounds: 4,
+      experienceDelta: -20,
+      experienceBefore: 500,
+      experienceAfter: 480,
+      levelBefore: 3,
+      levelAfter: 3,
+      rankTitleBefore: 'Jujutsu Student',
+      rankTitleAfter: 'Jujutsu Student',
+      ladderRankBefore: null,
+      ladderRankAfter: null,
+      finishReason: 'surrender',
+      roomCode: null,
+    }
+
+    const result = lastBattleResultFromHistoryEntry(entry)
+
+    expect(result.matchId).toBe('match-1')
+    expect(result.result).toBe('LOSS')
+    expect(result.winner).toBe('enemy')
+    expect(result.experienceDelta).toBe(-20)
+    expect(result.finishReason).toBe('surrender')
+  })
+
+  test('server result cache is readable by the results page fallback APIs', () => {
+    const entry = {
+      id: 'match-2:user-1',
+      matchId: 'match-2',
+      completionId: 'match-2',
+      result: 'WIN' as const,
+      mode: 'ranked' as const,
+      opponentName: 'LOSER',
+      opponentTitle: 'Online Match',
+      opponentRankLabel: null,
+      yourTeam: ['yuji'],
+      theirTeam: ['megumi'],
+      timestamp: 1_700_000_000_001,
+      rounds: 2,
+      experienceDelta: 25,
+      experienceBefore: 500,
+      experienceAfter: 525,
+      levelBefore: 3,
+      levelAfter: 3,
+      rankTitleBefore: 'Jujutsu Student',
+      rankTitleAfter: 'Jujutsu Student',
+      ladderRankBefore: null,
+      ladderRankAfter: null,
+      finishReason: 'ko',
+      roomCode: null,
+    }
+
+    cacheMatchHistoryEntry(entry)
+    cacheLastBattleResult(lastBattleResultFromHistoryEntry(entry))
+
+    expect(readRecentMatchHistory()[0]?.matchId).toBe('match-2')
+    expect(readLastBattleResult()?.matchId).toBe('match-2')
   })
 })
 
