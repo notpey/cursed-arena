@@ -13,7 +13,7 @@ export async function uploadPlayerAvatar(userId: string, file: File): Promise<{ 
   const client = getSupabaseClient()
 
   if (!client) {
-    // TODO: Replace mock object URL with Supabase Storage bucket `player-avatars`.
+    // Local/dev fallback only. Logged-in Supabase mode must persist to Storage.
     return { data: { url: localObjectUrl(file), path }, error: null }
   }
 
@@ -23,23 +23,23 @@ export async function uploadPlayerAvatar(userId: string, file: File): Promise<{ 
   })
   if (error) {
     if (isMissingStorageBucketError(error.message)) {
-      // TODO: Create Supabase Storage bucket `player-avatars`; this mock URL keeps avatar UI usable until then.
-      return { data: { url: localObjectUrl(file), path: `mock:${path}` }, error: null }
+      return { data: null, error: 'Storage bucket player-avatars was not found. Run the avatar storage migration before uploading.' }
     }
 
     return { data: null, error: error.message }
   }
 
   const { data } = client.storage.from('player-avatars').getPublicUrl(path)
+  const update = await updatePlayerAvatarUrl(userId, data.publicUrl)
+  if (update.error) return { data: null, error: update.error }
   return { data: { url: data.publicUrl, path }, error: null }
 }
 
 export async function updatePlayerAvatarUrl(userId: string, avatarUrl: string): Promise<{ error: string | null }> {
   const client = getSupabaseClient()
   if (!client) return { error: null }
-  if (avatarUrl.startsWith('blob:')) return { error: null }
+  if (avatarUrl.startsWith('blob:')) return { error: 'Local preview URLs cannot be persisted as profile avatars.' }
 
-  // TODO: Add profiles.avatar_url migration/RLS in Supabase if not present.
   const { error } = await client.from('profiles').update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).eq('id', userId)
   return { error: error?.message ?? null }
 }

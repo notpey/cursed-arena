@@ -2,11 +2,8 @@
  * Supabase DB operations for the experience / ranking system.
  *
  * The visible LP system has been replaced with experience + level + rank titles.
- * The underlying `settle_match_lp` RPC and `profiles.lp` column are still used
- * as the DB transport; returned values are treated as experience numbers.
- *
- * TODO: Create a new `settle_match_experience` RPC with variable XP deltas based
- * on both players' levels, then remove the settle_match_lp compatibility layer.
+ * `profiles.experience` is the canonical server stat. `profiles.lp` remains a
+ * compatibility mirror for older migrations and views.
  */
 
 import { getSupabaseClient } from '@/lib/supabase'
@@ -39,6 +36,15 @@ export type LpSettleResult = {
   error?: string
 }
 
+export type ExperienceSettleResult = {
+  experience_gain: number
+  experience_loss: number
+  winner_experience: number | null
+  loser_experience: number | null
+  already_settled?: boolean
+  error?: string
+}
+
 /** Normalized result after treating LP values as experience. */
 export type LadderSettleResult = {
   experienceGain: number
@@ -50,23 +56,21 @@ export type LadderSettleResult = {
 }
 
 /**
- * Call the `settle_match_lp` Postgres function.
- * Returns experience-normalized values (lp fields mapped to experience).
- * TODO: Rename RPC to settle_match_experience and implement variable XP deltas.
+ * Call the canonical `settle_match_experience` Postgres function.
  */
-export async function settleMatchLp(
+export async function settleMatchExperience(
   matchId: string,
 ): Promise<{ data: LadderSettleResult | null; error: string | null }> {
-  const { data, error } = await db().rpc('settle_match_lp', { p_match_id: matchId })
+  const { data, error } = await db().rpc('settle_match_experience', { p_match_id: matchId })
   if (error) return { data: null, error: error.message }
 
-  const raw = data as LpSettleResult
+  const raw = data as ExperienceSettleResult
   return {
     data: {
-      experienceGain: raw.lp_gain,
-      experienceLoss: raw.lp_loss,
-      winnerExperience: raw.winner_lp,
-      loserExperience: raw.loser_lp,
+      experienceGain: raw.experience_gain,
+      experienceLoss: raw.experience_loss,
+      winnerExperience: raw.winner_experience,
+      loserExperience: raw.loser_experience,
       already_settled: raw.already_settled,
       error: raw.error,
     },
@@ -74,12 +78,15 @@ export async function settleMatchLp(
   }
 }
 
+/** @deprecated Use settleMatchExperience. */
+export const settleMatchLp = settleMatchExperience
+
 // ── Player rank profile ───────────────────────────────────────────────────────
 
 export type PlayerRankProfile = {
   id: string
   display_name: string
-  /** Total experience (sourced from profiles.lp until migration 012 adds profiles.experience). */
+  /** Total experience. */
   experience: number
   level: number
   rankTitle: string
@@ -92,21 +99,20 @@ export type PlayerRankProfile = {
 
 /**
  * Fetch a single player's experience and match stats from the profiles table.
- * TODO: Once migration 012 adds profiles.experience, select that column instead of lp.
  */
 export async function fetchPlayerRankProfile(
   userId: string,
 ): Promise<{ data: PlayerRankProfile | null; error: string | null }> {
   const { data, error } = await db()
     .from('profiles')
-    .select('id, display_name, lp, wins, losses, win_streak, best_streak')
+    .select('id, display_name, experience, lp, wins, losses, win_streak, best_streak')
     .eq('id', userId)
     .single()
 
   if (error) return { data: null, error: error.message }
 
-  const raw = data as { id: string; display_name: string; lp: number; wins: number; losses: number; win_streak: number; best_streak: number }
-  const experience = raw.lp // TODO: map to profiles.experience once column exists
+  const raw = data as { id: string; display_name: string; experience?: number | null; lp: number; wins: number; losses: number; win_streak: number; best_streak: number }
+  const experience = raw.experience && raw.experience > 0 ? raw.experience : raw.lp
   const level = getLevelForExperience(experience)
   const rankTitle = getLadderRankTitle({ level, ladderRank: null })
 
@@ -131,7 +137,8 @@ export async function fetchPlayerRankProfile(
 export type LeaderboardEntry = {
   id: string
   display_name: string
-  /** Total experience (sourced from profiles.lp until migration 012). */
+  /** Total experience. */
+  avatar_url?: string | null
   experience: number
   level: number
   rankTitle: string
@@ -142,7 +149,7 @@ export type LeaderboardEntry = {
 }
 
 /**
- * Fetch the top players ordered by experience (lp) descending.
+ * Fetch the top players ordered by experience descending.
  * Computes ladderRank from array position.
  * Only assigns a ladderRank to entries within the top LADDER_TOP_RANK_LIMIT.
  *
@@ -155,15 +162,15 @@ export async function fetchLeaderboard(
 ): Promise<{ data: LeaderboardEntry[]; error: string | null }> {
   const { data, error } = await db()
     .from('profiles')
-    .select('id, display_name, lp, wins, losses')
-    .order('lp', { ascending: false })
+    .select('id, display_name, avatar_url, experience, lp, wins, losses, win_streak, best_streak')
+    .order('experience', { ascending: false })
     .limit(limit)
 
   if (error) return { data: [], error: error.message }
 
   const entries: LeaderboardEntry[] = (data ?? []).map((row, index) => {
-    const raw = row as { id: string; display_name: string; lp: number; wins: number; losses: number }
-    const experience = raw.lp // TODO: map to profiles.experience once column exists
+    const raw = row as { id: string; display_name: string; avatar_url?: string | null; experience?: number | null; lp: number; wins: number; losses: number; win_streak?: number; best_streak?: number }
+    const experience = raw.experience && raw.experience > 0 ? raw.experience : raw.lp
     const ladderRank = index + 1 <= LADDER_TOP_RANK_LIMIT ? index + 1 : null
     const level = getLevelForExperience(experience)
     const rankTitle = getLadderRankTitle({ level, ladderRank })
@@ -171,11 +178,14 @@ export async function fetchLeaderboard(
     return {
       id: raw.id,
       display_name: raw.display_name,
+      avatar_url: raw.avatar_url ?? null,
       experience,
       level,
       rankTitle,
       wins: raw.wins,
       losses: raw.losses,
+      win_streak: raw.win_streak ?? 0,
+      best_streak: raw.best_streak ?? 0,
       ladderRank,
     }
   })

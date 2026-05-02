@@ -802,9 +802,9 @@ export function recordCompletedBattle({
  * Unlike `recordCompletedBattle`, experience delta comes from the server RPC
  * rather than being computed locally.
  *
- * TODO: The RPC is still named `settle_match_lp` and returns lp_gain/lp_loss/
- * winner_lp/loser_lp. Those values are treated as experience values until the
- * RPC and database are migrated to experience columns. See migration 012_experience.sql.
+ * Local fallback for online results if the server result row cannot be loaded.
+ * Normal logged-in online matches should use settle_match_experience and then
+ * fetch the server-created match_history row for the current player.
  */
 export function recordOnlineCompletedBattle({
   winner,
@@ -813,7 +813,6 @@ export function recordOnlineCompletedBattle({
   enemyTeamIds,
   opponentName,
   mode,
-  // TODO: rename param to experienceDelta once settle_match_lp RPC is migrated
   lpDelta: experienceDelta,
   lpBefore: experienceBefore,
   battleSeed,

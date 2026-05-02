@@ -35,11 +35,10 @@ export async function joinMatchmakingQueue({
   /** Player's total experience, used for matchmaking and XP delta calculations. */
   experience: number
 }) {
-  // TODO: Once migration 012 adds matchmaking_queue.experience, write to that column instead of lp.
   const { error } = await db()
     .from('matchmaking_queue')
     .upsert(
-      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp: experience, created_at: new Date().toISOString() },
+      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp: experience, experience, created_at: new Date().toISOString() },
       { onConflict: 'player_id' },
     )
 
@@ -821,7 +820,7 @@ function mapMatchHistoryRow(row: MatchHistoryRow): MatchHistoryEntry {
 }
 
 /**
- * @deprecated Online matches are written by settle_match_lp for both players.
+ * @deprecated Online matches are written by settle_match_experience for both players.
  * Keep this only for legacy/offline compatibility surfaces.
  */
 export async function saveMatchHistory(

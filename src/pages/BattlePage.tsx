@@ -1,13 +1,13 @@
 import { type DragEvent, type PointerEvent, type TouchEvent, useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, exchangeEnergy, getAbilityEnergyCost, getEnergyCount, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
+import { battleEnergyOrder, battleEnergyMeta, canExchangeEnergy, canPayEnergy, createEnergyAmounts, exchangeEnergy, getAbilityEnergyCost, getEnergyCount, sumEnergyCosts, type BattleEnergyPool, type BattleEnergyCost, type BattleEnergyType } from '@/features/battle/energy'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
 import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
-import { battleBoardProfiles, PASS_ABILITY_ID } from '@/features/battle/data'
+import { battleBoardProfiles, battlefieldEffect, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   buildCompletionId,
   cacheLastBattleResult,
@@ -20,7 +20,7 @@ import {
   recordOnlineCompletedBattle,
   type LastBattleResult,
 } from '@/features/battle/matches'
-import { settleMatchLp } from '@/features/ranking/client'
+import { settleMatchExperience } from '@/features/ranking/client'
 import { fetchMatchHistoryEntryForPlayer, surrenderMatch } from '@/features/multiplayer/client'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
@@ -446,6 +446,38 @@ function buildTimeoutQueuedActions(
   return buildTimeoutCommands(state)
 }
 
+function createPendingOnlineBattle(): { viewState: BattleViewState; initialEvents: BattleEvent[] } {
+  const state: BattleState = {
+    stateSchemaVersion: 1,
+    battleSeed: 'online-pending',
+    round: 1,
+    phase: 'coinFlip',
+    firstPlayer: 'player',
+    activePlayer: 'player',
+    battlefield: battlefieldEffect,
+    playerEnergy: { amounts: createEnergyAmounts() },
+    enemyEnergy: { amounts: createEnergyAmounts() },
+    playerTeam: [],
+    enemyTeam: [],
+    playerTeamModifiers: [],
+    enemyTeamModifiers: [],
+    battlefieldModifiers: [],
+    scheduledEffects: [],
+    winner: null,
+    randomTickCount: 0,
+  }
+
+  return {
+    viewState: {
+      state,
+      queued: {},
+      actionOrder: [],
+      selectedActorId: null,
+    },
+    initialEvents: [],
+  }
+}
+
 function applyRandomAllocationToQueuedActions(
   queued: Record<string, QueuedBattleAction>,
   randomAlloc: RandomAllocation,
@@ -679,15 +711,16 @@ export function BattlePage() {
   const { user } = useAuth()
   const { matchId } = useParams<{ matchId?: string }>()
   const currentUserId = user?.id ?? null
+  const isOnlineRoute = Boolean(matchId)
 
   // ── Multiplayer hook (null when playing vs AI) ──────────────────────────
   const multiplayer = useMultiplayerMatch(matchId ?? null, currentUserId)
 
-  const [stagedSession] = useState(() => readStagedBattleSession())
+  const [stagedSession] = useState(() => (isOnlineRoute ? null : readStagedBattleSession()))
   const practiceOptions = stagedSession?.practiceOptions ?? null
   const isPracticeBattle = stagedSession?.mode === 'practice'
   const aiEnabled = practiceOptions ? practiceOptions.aiEnabled : true
-  const [initialBattle] = useState(createNewBattle)
+  const [initialBattle] = useState(() => (isOnlineRoute ? createPendingOnlineBattle() : createNewBattle()))
   const [battle, setBattle] = useState<BattleViewState>(initialBattle.viewState)
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
@@ -1020,11 +1053,8 @@ export function BattlePage() {
       const enemyTeamIds  = battle.state.enemyTeam.map((f) => f.templateId)
       const mode = multiplayer.matchRow?.mode ?? 'private'
 
-      const settlePromise = draw ? Promise.resolve({ data: null, error: null }) : settleMatchLp(matchId)
+      const settlePromise = draw ? Promise.resolve({ data: null, error: null }) : settleMatchExperience(matchId)
       return settlePromise.then(async ({ data: settle, error: settleError }) => {
-        // Compute experience delta from server response (settle_match_lp values are treated
-        // as experience until the RPC is migrated to settle_match_experience).
-        // TODO: once settle_match_experience RPC exists, read experienceGain/experienceLoss directly.
         let lpDelta = 0
         let lpBefore = readBattleProfileStats().experience
         if (settle && !settle.error && !settle.already_settled) {
@@ -1394,13 +1424,29 @@ export function BattlePage() {
     navigate('/battle/results')
   }
 
-  if (matchId && (!multiplayer || !multiplayerBattleState)) {
+  if (
+    matchId &&
+    (
+      !multiplayer ||
+      !multiplayerBattleState ||
+      multiplayer.status === 'abandoned' ||
+      multiplayer.status === 'error' ||
+      multiplayer.status === 'waiting_for_opponent' ||
+      multiplayer.status === 'finished'
+    )
+  ) {
     const unavailable = multiplayer?.status === 'abandoned' || multiplayer?.status === 'error'
+    const waiting = multiplayer?.status === 'waiting_for_opponent'
+    const finished = multiplayer?.status === 'finished'
     const message = multiplayer?.status === 'abandoned'
       ? 'This match is no longer active.'
       : multiplayer?.status === 'error'
         ? multiplayer.error ?? 'The match could not be loaded.'
-        : 'Loading online match...'
+        : waiting
+          ? 'Waiting for your opponent to join.'
+          : finished
+            ? 'This match has concluded. Open the results screen to review the server-recorded outcome.'
+            : 'Loading online match...'
 
     return (
       <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
@@ -1409,15 +1455,17 @@ export function BattlePage() {
         <div className="relative grid h-full place-items-center p-6">
           <div className="w-full max-w-sm rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 text-center shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
             <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ONLINE MATCH</p>
-            <h1 className="ca-display mt-3 text-3xl text-ca-text">{unavailable ? 'Match Unavailable' : 'Syncing Match'}</h1>
+            <h1 className="ca-display mt-3 text-3xl text-ca-text">
+              {unavailable ? 'Match Unavailable' : finished ? 'Match Finished' : waiting ? 'Waiting Room' : 'Syncing Match'}
+            </h1>
             <p className="mt-2 text-sm text-ca-text-2">{message}</p>
-            {unavailable ? (
+            {unavailable || finished ? (
               <button
                 type="button"
-                onClick={() => navigate('/battle/prep')}
+                onClick={() => navigate(finished ? '/battle/results' : '/battle/prep')}
                 className="ca-display mt-5 rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-5 py-3 text-xl text-ca-teal"
               >
-                Return to Prep
+                {finished ? 'View Results' : 'Return to Prep'}
               </button>
             ) : null}
           </div>
