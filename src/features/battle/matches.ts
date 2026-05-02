@@ -185,6 +185,24 @@ function writeLocalStorage<T>(key: string, value: T) {
   }
 }
 
+function removeLocalStorage(key: string) {
+  if (!canUseLocalStorage()) return
+
+  try {
+    window.localStorage.removeItem(key)
+  } catch {
+    // Ignore storage failures in local mock mode.
+  }
+}
+
+export function clearStagedBattleSession() {
+  removeLocalStorage(stagedBattleSessionKey)
+}
+
+export function clearOnlineMatchmakingLocalState() {
+  clearStagedBattleSession()
+}
+
 /**
  * Migrate a raw stored object from the old LP-based schema to the new
  * experience-based BattleProfileStats shape. Safe to call on already-migrated data.

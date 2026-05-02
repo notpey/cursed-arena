@@ -1345,6 +1345,38 @@ export function BattlePage() {
     setTimelineFocus(null)
   }
 
+  if (matchId && (!multiplayer || !multiplayerBattleState)) {
+    const unavailable = multiplayer?.status === 'abandoned' || multiplayer?.status === 'error'
+    const message = multiplayer?.status === 'abandoned'
+      ? 'This match is no longer active.'
+      : multiplayer?.status === 'error'
+        ? multiplayer.error ?? 'The match could not be loaded.'
+        : 'Loading online match...'
+
+    return (
+      <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
+        <div className="absolute inset-0 bg-cover bg-center opacity-[0.42]" style={{ backgroundImage: `url(${homeBgBase})` }} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(250,39,66,0.08),transparent_34%),radial-gradient(circle_at_84%_24%,rgba(5,216,189,0.08),transparent_32%),linear-gradient(180deg,rgba(4,5,8,0.18),rgba(4,5,8,0.58))]" />
+        <div className="relative grid h-full place-items-center p-6">
+          <div className="w-full max-w-sm rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 text-center shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
+            <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ONLINE MATCH</p>
+            <h1 className="ca-display mt-3 text-3xl text-ca-text">{unavailable ? 'Match Unavailable' : 'Syncing Match'}</h1>
+            <p className="mt-2 text-sm text-ca-text-2">{message}</p>
+            {unavailable ? (
+              <button
+                type="button"
+                onClick={() => navigate('/battle/prep')}
+                className="ca-display mt-5 rounded-lg border border-ca-teal/35 bg-ca-teal-wash px-5 py-3 text-xl text-ca-teal"
+              >
+                Return to Prep
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
       <div className="absolute inset-0 bg-cover bg-center opacity-[0.42]" style={{ backgroundImage: `url(${homeBgBase})` }} />

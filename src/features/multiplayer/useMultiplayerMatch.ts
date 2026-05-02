@@ -123,11 +123,11 @@ function buildPassCommands(
 
 export type MultiplayerMatchHandle = {
   /** BattleState from this player's perspective (always 'player' = you). */
-  battleState: BattleState
+  battleState: BattleState | null
   /** Queued actions in local perspective for UI display. */
   autoCommands: Record<string, QueuedBattleAction>
   isMyTurn: boolean
-  myRole: MultiplayerRole
+  myRole: MultiplayerRole | null
   opponentDisplayName: string
   status: MultiplayerStatus
   error: string | null
@@ -215,8 +215,33 @@ export function useMultiplayerMatch(
       setOpponentName(opponent || 'Opponent')
       setRole(myRole)
 
-      if (data.status === 'waiting' || !data.battle_state) {
+      if (data.status === 'abandoned') {
+        setCanonical(null)
+        canonicalRef.current = null
+        setError('This match is no longer active.')
+        setStatus('abandoned')
+        return
+      }
+
+      if (data.status === 'finished') {
+        if (data.battle_state) {
+          canonicalRef.current = data.battle_state
+          setCanonical(data.battle_state)
+        }
+        setStatus('finished')
+        return
+      }
+
+      if (data.status === 'waiting') {
         setStatus('waiting_for_opponent')
+        return
+      }
+
+      if (data.status !== 'in_progress' || !data.battle_state) {
+        setCanonical(null)
+        canonicalRef.current = null
+        setError('This match is no longer active.')
+        setStatus('error')
         return
       }
 
@@ -253,8 +278,34 @@ export function useMultiplayerMatch(
       const opponent = myRole === 'a' ? updatedRow.player_b_display_name : updatedRow.player_a_display_name
       if (opponent) setOpponentName(opponent)
 
-      if (updatedRow.status === 'waiting' || !updatedRow.battle_state) {
+      if (updatedRow.status === 'abandoned') {
+        canonicalRef.current = null
+        setCanonical(null)
+        setLatestResolution(null)
+        setError('This match is no longer active.')
+        setStatus('abandoned')
+        return
+      }
+
+      if (updatedRow.status === 'finished') {
+        if (updatedRow.battle_state) {
+          canonicalRef.current = updatedRow.battle_state
+          setCanonical(updatedRow.battle_state)
+        }
+        setStatus('finished')
+        return
+      }
+
+      if (updatedRow.status === 'waiting') {
         setStatus('waiting_for_opponent')
+        return
+      }
+
+      if (updatedRow.status !== 'in_progress' || !updatedRow.battle_state) {
+        canonicalRef.current = null
+        setCanonical(null)
+        setError('This match is no longer active.')
+        setStatus('error')
         return
       }
 
@@ -403,14 +454,31 @@ export function useMultiplayerMatch(
   }, [matchId])
 
   // â”€â”€ Assemble return value â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  if (!matchId || !currentUserId || !canonical || !role) {
+  if (!matchId || !currentUserId) {
     // Not ready or not in online mode
     return null
   }
 
+  if (!canonical || !role) {
+    return {
+      battleState: null,
+      autoCommands: {},
+      isMyTurn: false,
+      myRole: role,
+      opponentDisplayName: opponentName,
+      status,
+      error,
+      matchRow,
+      latestResolution,
+      lastOpponentActionAt,
+      claimVictory,
+      submitCommands,
+    }
+  }
+
   const myTeam = roleToTeam(role)
   const local = localState(canonical, role)
-  const isMy = calcIsMyTurn(canonical, myTeam)
+  const isMy = status === 'my_turn' && calcIsMyTurn(canonical, myTeam)
 
   return {
     battleState:          local,

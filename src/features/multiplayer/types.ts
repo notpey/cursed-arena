@@ -67,6 +67,7 @@ export type QueueRow = {
   display_name: string
   lp: number
   created_at: string
+  updated_at?: string | null
 }
 
 // ── High-level match info used to initialise the battle hook ─────────────────
@@ -85,6 +86,7 @@ export type MultiplayerStatus =
   | 'my_turn'          // it is this client's command phase
   | 'opponent_turn'    // watching opponent take their turn
   | 'finished'         // match over
+  | 'abandoned'        // match was canceled/expired and must not be playable
   | 'error'            // unrecoverable
 
 // ── Payload written to match_commands ────────────────────────────────────────

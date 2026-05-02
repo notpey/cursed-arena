@@ -39,10 +39,27 @@ export async function joinMatchmakingQueue({
   const { error } = await db()
     .from('matchmaking_queue')
     .upsert(
-      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp: experience },
+      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp: experience, created_at: new Date().toISOString() },
       { onConflict: 'player_id' },
     )
 
+  return { error: error?.message ?? null }
+}
+
+export const QUEUE_STALE_MS = 2 * 60 * 1000
+
+export function queueStaleCutoffIso(nowMs = Date.now()): string {
+  return new Date(nowMs - QUEUE_STALE_MS).toISOString()
+}
+
+export async function cleanupStaleQueueRows(mode?: BattleMatchMode): Promise<{ error: string | null }> {
+  let req = db()
+    .from('matchmaking_queue')
+    .delete()
+    .lt('created_at', queueStaleCutoffIso())
+
+  if (mode) req = req.eq('mode', mode)
+  const { error } = await req
   return { error: error?.message ?? null }
 }
 
@@ -76,6 +93,25 @@ export async function findAndCreateQueuedMatch({
   seed: string
 }): Promise<{ data: MatchRow | null; error: string | null }> {
   const supabase = db()
+  await cleanupStaleQueueRows(mode)
+
+  const selfActive = await fetchActiveMatch(playerId, { mode })
+  if (selfActive.error) return selfActive
+  if (selfActive.data) {
+    await supabase.from('matchmaking_queue').delete().eq('player_id', playerId)
+    return { data: selfActive.data, error: null }
+  }
+
+  const { data: selfQueue, error: selfQueueErr } = await supabase
+    .from('matchmaking_queue')
+    .select('*')
+    .eq('player_id', playerId)
+    .eq('mode', mode)
+    .gte('created_at', queueStaleCutoffIso())
+    .maybeSingle()
+
+  if (selfQueueErr) return { data: null, error: selfQueueErr.message }
+  if (!selfQueue) return { data: null, error: null }
 
   // Find oldest opponent in queue (not ourselves)
   const { data: opponents, error: qErr } = await supabase
@@ -83,6 +119,7 @@ export async function findAndCreateQueuedMatch({
     .select('*')
     .eq('mode', mode)
     .neq('player_id', playerId)
+    .gte('created_at', queueStaleCutoffIso())
     .order('created_at', { ascending: true })
     .limit(1)
 
@@ -90,6 +127,26 @@ export async function findAndCreateQueuedMatch({
   if (!opponents || opponents.length === 0) return { data: null, error: null }
 
   const opponent = opponents[0] as QueueRow
+  const opponentActive = await fetchActiveMatch(opponent.player_id, { mode })
+  if (opponentActive.error) return opponentActive
+  if (opponentActive.data) {
+    await supabase
+      .from('matchmaking_queue')
+      .delete()
+      .in('player_id', [playerId, opponent.player_id])
+    return { data: null, error: null }
+  }
+
+  const { data: queuedPlayers, error: queuedErr } = await supabase
+    .from('matchmaking_queue')
+    .select('player_id')
+    .in('player_id', [playerId, opponent.player_id])
+    .gte('created_at', queueStaleCutoffIso())
+
+  if (queuedErr) return { data: null, error: queuedErr.message }
+  const queuedIds = new Set((queuedPlayers ?? []).map((row) => (row as { player_id: string }).player_id))
+  if (!queuedIds.has(playerId) || !queuedIds.has(opponent.player_id)) return { data: null, error: null }
+
   const initialBattleState = buildInitialState(teamIds, opponent.team_ids, seed)
 
   // Create the match
@@ -440,25 +497,48 @@ export function staleCutoffIso(nowMs = Date.now()): string {
   return new Date(nowMs - STALE_MATCH_CUTOFF_MS).toISOString()
 }
 
+export type FetchActiveMatchOptions = {
+  mode?: BattleMatchMode
+  excludeMatchIds?: string[]
+}
+
+export function isPlayableActiveMatch(match: MatchRow | null | undefined, options: FetchActiveMatchOptions = {}): match is MatchRow {
+  if (!match) return false
+  if (options.excludeMatchIds?.includes(match.id)) return false
+  if (options.mode && match.mode !== options.mode) return false
+  if (match.status !== 'in_progress') return false
+  if (!match.player_a_id || !match.player_b_id) return false
+  if (!match.battle_state) return false
+  if (match.winner !== null) return false
+  if (match.battle_state.phase === 'finished') return false
+  if (match.current_phase === 'finished') return false
+  if (!Array.isArray(match.player_a_team) || !Array.isArray(match.player_b_team)) return false
+  if (match.player_a_team.length === 0 || match.player_b_team.length === 0) return false
+  return true
+}
+
 /**
  * Look up any active match the current player is already in
  * (handles page refresh mid-game).
  * Only returns matches active within the last 60 minutes — stale
  * in_progress rows from crashed or abandoned sessions are ignored.
  */
-export async function fetchActiveMatch(playerId: string): Promise<{ data: MatchRow | null; error: string | null }> {
-  const { data, error } = await db()
+export async function fetchActiveMatch(playerId: string, options: FetchActiveMatchOptions = {}): Promise<{ data: MatchRow | null; error: string | null }> {
+  let req = db()
     .from('matches')
     .select('*')
     .eq('status', 'in_progress')
     .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
     .gte('last_activity_at', staleCutoffIso())
     .order('last_activity_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(10)
+
+  if (options.mode) req = req.eq('mode', options.mode)
+  const { data, error } = await req
 
   if (error) return { data: null, error: error.message }
-  return { data: data as MatchRow | null, error: null }
+  const active = ((data ?? []) as MatchRow[]).find((match) => isPlayableActiveMatch(match, options)) ?? null
+  return { data: active, error: null }
 }
 
 /**
@@ -471,6 +551,7 @@ export async function abandonStaleMatches(playerId: string): Promise<{ error: st
     .from('matches')
     .update({
       status: 'abandoned',
+      winner: null,
       last_activity_at: new Date().toISOString(),
     })
     .eq('status', 'in_progress')
@@ -478,6 +559,37 @@ export async function abandonStaleMatches(playerId: string): Promise<{ error: st
     .lt('last_activity_at', staleCutoffIso())
 
   return { error: error?.message ?? null }
+}
+
+export async function cleanupMatchmakingStateForPlayer(
+  playerId: string,
+  options: { mode?: BattleMatchMode; abandonActive?: boolean } = {},
+): Promise<{ error: string | null }> {
+  const client = db()
+
+  const queueDelete = await client.from('matchmaking_queue').delete().eq('player_id', playerId)
+  if (queueDelete.error) return { error: queueDelete.error.message }
+
+  const stale = await abandonStaleMatches(playerId)
+  if (stale.error) return stale
+
+  if (options.abandonActive) {
+    let req = client
+      .from('matches')
+      .update({ status: 'abandoned', winner: null, last_activity_at: new Date().toISOString() })
+      .in('status', ['waiting', 'in_progress'])
+      .or(`player_a_id.eq.${playerId},player_b_id.eq.${playerId}`)
+
+    if (options.mode) req = req.eq('mode', options.mode)
+    const { error } = await req
+    if (error) return { error: error.message }
+  }
+
+  return { error: null }
+}
+
+export async function forceResetMyMatchmakingState(playerId: string): Promise<{ error: string | null }> {
+  return cleanupMatchmakingStateForPlayer(playerId, { abandonActive: true })
 }
 
 /**
@@ -496,7 +608,7 @@ export async function abandonMatch(matchId: string, losingTeam: BattleTeamId): P
   const winner: BattleTeamId = losingTeam === 'player' ? 'enemy' : 'player'
   const { error } = await db()
     .from('matches')
-    .update({ status: 'abandoned', winner })
+    .update({ status: 'abandoned', winner, last_activity_at: new Date().toISOString() })
     .eq('id', matchId)
 
   return { error: error?.message ?? null }

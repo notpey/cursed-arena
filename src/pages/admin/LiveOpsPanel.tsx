@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '@/lib/supabase'
-import { STALE_MATCH_CUTOFF_MS } from '@/features/multiplayer/client'
+import { cleanupMatchmakingStateForPlayer, STALE_MATCH_CUTOFF_MS } from '@/features/multiplayer/client'
 import type { MatchRow } from '@/features/multiplayer/types'
 import { getAllUnlockMissionProgress, UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 import { getMissionsWithProgress } from '@/features/missions/store'
@@ -203,6 +203,7 @@ function MatchesTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  const [resetPlayerId, setResetPlayerId] = useState('')
 
   useEffect(() => {
     if (!flash) return
@@ -235,12 +236,17 @@ function MatchesTab() {
   async function handleAbandon(matchId: string) {
     const client = db()
     if (!client) return
+    const match = matches.find((item) => item.id === matchId)
     const { error: err } = await client
       .from('matches')
-      .update({ status: 'abandoned', last_activity_at: new Date().toISOString() })
+      .update({ status: 'abandoned', winner: null, last_activity_at: new Date().toISOString() })
       .eq('id', matchId)
       .eq('status', 'in_progress')
     if (err) { setFlash('ABANDON FAILED'); return }
+    const playerIds = [match?.player_a_id, match?.player_b_id].filter((id): id is string => Boolean(id))
+    if (playerIds.length > 0) {
+      await client.from('matchmaking_queue').delete().in('player_id', playerIds)
+    }
     setFlash('MATCH ABANDONED')
     void loadMatches()
   }
@@ -251,11 +257,21 @@ function MatchesTab() {
     const cutoff = new Date(Date.now() - STALE_MATCH_CUTOFF_MS).toISOString()
     const { error: err } = await client
       .from('matches')
-      .update({ status: 'abandoned', last_activity_at: new Date().toISOString() })
+      .update({ status: 'abandoned', winner: null, last_activity_at: new Date().toISOString() })
       .eq('status', 'in_progress')
       .lt('last_activity_at', cutoff)
     if (err) { setFlash('CLEANUP FAILED'); return }
     setFlash('STALE MATCHES CLEANED')
+    void loadMatches()
+  }
+
+  async function handleForceResetPlayer() {
+    const playerId = resetPlayerId.trim()
+    if (!playerId) return
+    const { error: err } = await cleanupMatchmakingStateForPlayer(playerId, { abandonActive: true })
+    if (err) { setFlash('RESET FAILED'); return }
+    setFlash('PLAYER MATCHMAKING RESET')
+    setResetPlayerId('')
     void loadMatches()
   }
 
@@ -302,6 +318,25 @@ function MatchesTab() {
         >
           Refresh
         </button>
+      </div>
+
+      <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] p-3">
+        <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Force Reset Player Matchmaking</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={resetPlayerId}
+            onChange={(event) => setResetPlayerId(event.target.value)}
+            placeholder="auth user id"
+            className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text outline-none focus:border-ca-teal/35"
+          />
+          <button
+            type="button"
+            onClick={() => void handleForceResetPlayer()}
+            className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-3 py-2 text-[0.42rem] text-ca-red"
+          >
+            Force Reset
+          </button>
+        </div>
       </div>
 
       {flash ? <Pill label={flash} tone="frost" /> : null}

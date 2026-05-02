@@ -22,6 +22,7 @@ import {
   persistStagedBattleSession,
   readBattleProfileStats,
   readSelectedMatchMode,
+  clearOnlineMatchmakingLocalState,
   type BattleMatchMode,
 } from '@/features/battle/matches'
 import { createInitialBattleState } from '@/features/battle/engine'
@@ -39,6 +40,8 @@ import {
   findAndCreateQueuedMatch,
   fetchActiveMatch,
   abandonStaleMatches,
+  cleanupMatchmakingStateForPlayer,
+  cleanupStaleQueueRows,
   type ProfileSearchResult,
 } from '@/features/multiplayer/client'
 import type { MatchRow } from '@/features/multiplayer/types'
@@ -213,6 +216,7 @@ export function BattlePrepPage() {
   const [aiFallback, setAiFallback] = useState(false)
   const searchingRef = useRef(false)
   const searchAttemptsRef = useRef(0)
+  const searchSessionIdRef = useRef(0)
 
   // Timeout before falling back to AI: quick = 3 s, ranked = 45 s
   const POLL_INTERVAL_MS = 2_500
@@ -248,6 +252,7 @@ export function BattlePrepPage() {
   useEffect(() => {
     return () => {
       if (searchingRef.current && user) {
+        searchSessionIdRef.current += 1
         searchingRef.current = false
         leaveMatchmakingQueue(user.id).catch(() => {})
       }
@@ -418,8 +423,35 @@ export function BattlePrepPage() {
     const displayName = authProfile?.display_name ?? 'Player'
     setSearching(true)
     setQueueError(null)
+    clearOnlineMatchmakingLocalState()
+
+    const sessionId = searchSessionIdRef.current + 1
+    searchSessionIdRef.current = sessionId
+
+    const cleanup = await cleanupMatchmakingStateForPlayer(user.id, { mode: selectedMode })
+    if (sessionId !== searchSessionIdRef.current) return
+    if (cleanup.error) {
+      setSearching(false)
+      setQueueError(cleanup.error)
+      return
+    }
+
+    const active = await fetchActiveMatch(user.id, { mode: selectedMode })
+    if (sessionId !== searchSessionIdRef.current) return
+    if (active.error) {
+      setSearching(false)
+      setQueueError(active.error)
+      return
+    }
+    if (active.data) {
+      searchingRef.current = false
+      setSearching(false)
+      navigate(`/battle/${active.data.id}`)
+      return
+    }
 
     const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName, experience: profileStats.experience })
+    if (sessionId !== searchSessionIdRef.current) return
     if (qErr) {
       setSearching(false)
       setQueueError(qErr)
@@ -429,19 +461,22 @@ export function BattlePrepPage() {
     searchingRef.current = true
     searchAttemptsRef.current = 0
     setAiFallback(false)
-    void pollForMatch({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName })
+    void pollForMatch({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName, sessionId })
   }
 
   async function pollForMatch({
-    playerId, mode, teamIds: sanitized, displayName,
-  }: { playerId: string; mode: BattleMatchMode; teamIds: string[]; displayName: string }) {
-    if (!searchingRef.current) return
+    playerId, mode, teamIds: sanitized, displayName, sessionId,
+  }: { playerId: string; mode: BattleMatchMode; teamIds: string[]; displayName: string; sessionId: number }) {
+    if (!searchingRef.current || sessionId !== searchSessionIdRef.current) return
 
     // Clean up any zombie in_progress matches before checking for an active one
     await abandonStaleMatches(playerId)
+    await cleanupStaleQueueRows(mode)
+    if (!searchingRef.current || sessionId !== searchSessionIdRef.current) return
 
     // Check if we've already been matched as Player B
-    const { data: activeMatch } = await fetchActiveMatch(playerId)
+    const { data: activeMatch } = await fetchActiveMatch(playerId, { mode })
+    if (!searchingRef.current || sessionId !== searchSessionIdRef.current) return
     if (activeMatch) {
       searchingRef.current = false
       setSearching(false)
@@ -456,6 +491,7 @@ export function BattlePrepPage() {
       buildInitialState: (playerATeam, playerBTeam, matchSeed) =>
         createInitialBattleState({ playerTeamIds: playerATeam, enemyTeamIds: playerBTeam, battleSeed: matchSeed }),
     })
+    if (!searchingRef.current || sessionId !== searchSessionIdRef.current) return
 
     if (error) {
       searchingRef.current = false
@@ -483,6 +519,7 @@ export function BattlePrepPage() {
         setAiFallback(true)
         leaveMatchmakingQueue(playerId).catch(() => {})
         window.setTimeout(() => {
+          if (sessionId !== searchSessionIdRef.current) return
           setSearching(false)
           setAiFallback(false)
           stageBattleLaunch(sanitized, mode)
@@ -492,12 +529,13 @@ export function BattlePrepPage() {
       }
 
       window.setTimeout(() => {
-        void pollForMatch({ playerId, mode, teamIds: sanitized, displayName })
+        void pollForMatch({ playerId, mode, teamIds: sanitized, displayName, sessionId })
       }, POLL_INTERVAL_MS)
     }
   }
 
   async function handleCancelSearch() {
+    searchSessionIdRef.current += 1
     searchingRef.current = false
     setSearching(false)
     setQueueError(null)
