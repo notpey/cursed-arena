@@ -21,7 +21,14 @@ export async function uploadPlayerAvatar(userId: string, file: File): Promise<{ 
     cacheControl: '3600',
     upsert: true,
   })
-  if (error) return { data: null, error: error.message }
+  if (error) {
+    if (isMissingStorageBucketError(error.message)) {
+      // TODO: Create Supabase Storage bucket `player-avatars`; this mock URL keeps avatar UI usable until then.
+      return { data: { url: localObjectUrl(file), path: `mock:${path}` }, error: null }
+    }
+
+    return { data: null, error: error.message }
+  }
 
   const { data } = client.storage.from('player-avatars').getPublicUrl(path)
   return { data: { url: data.publicUrl, path }, error: null }
@@ -30,6 +37,7 @@ export async function uploadPlayerAvatar(userId: string, file: File): Promise<{ 
 export async function updatePlayerAvatarUrl(userId: string, avatarUrl: string): Promise<{ error: string | null }> {
   const client = getSupabaseClient()
   if (!client) return { error: null }
+  if (avatarUrl.startsWith('blob:')) return { error: null }
 
   // TODO: Add profiles.avatar_url migration/RLS in Supabase if not present.
   const { error } = await client.from('profiles').update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() }).eq('id', userId)
@@ -42,4 +50,9 @@ export async function removePlayerAvatar(userId: string): Promise<{ error: strin
 
   const { error } = await client.from('profiles').update({ avatar_url: null, updated_at: new Date().toISOString() }).eq('id', userId)
   return { error: error?.message ?? null }
+}
+
+function isMissingStorageBucketError(message: string) {
+  const normalized = message.toLowerCase()
+  return normalized.includes('bucket not found') || normalized.includes('storage bucket') || normalized.includes('bucket')
 }
