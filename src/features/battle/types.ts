@@ -399,6 +399,11 @@ export type BattleUserProfile = {
   title: string
   initials: string
   accent: BattleBoardAccent
+  avatarUrl?: string | null
+  clanTag?: string | null
+  level?: number | null
+  rankTitle?: string | null
+  ladderRank?: number | null
 }
 
 export type QueuedBattleAction = {

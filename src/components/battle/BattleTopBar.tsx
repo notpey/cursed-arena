@@ -1,7 +1,8 @@
 import { EnergyPip } from '@/components/battle/BattleEnergy'
 import { battleEnergyExchangeCost, battleEnergyMeta, battleEnergyOrder, canExchangeEnergy, getEnergyCount, totalEnergyInPool, type BattleEnergyPool, type BattleEnergyType } from '@/features/battle/energy'
 import type { BattleUserProfile } from '@/features/battle/types'
-import { cn, getAccentStyles } from '@/components/battle/battleDisplay'
+import { cn } from '@/components/battle/battleDisplay'
+import { PlayerIdentityBadge } from '@/features/battle/components/PlayerIdentityBadge'
 
 function ProfileBlock({
   profile,
@@ -10,18 +11,17 @@ function ProfileBlock({
   profile: BattleUserProfile
   mirrored?: boolean
 }) {
-  const accent = getAccentStyles(profile.accent)
-
   return (
-    <div className={cn('flex items-center gap-2.5', mirrored && 'flex-row-reverse text-right')}>
-      <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-[0.18rem] border-2 text-[0.82rem] font-black tracking-[0.08em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]', accent.border, accent.wash, accent.text)}>
-        {profile.initials}
-      </div>
-      <div className="min-w-0">
-        <p className={cn('ca-display truncate text-[1rem] leading-none', accent.text)}>{profile.username.toUpperCase()}</p>
-        <p className="mt-0.5 ca-mono-label truncate text-[0.6rem] text-ca-text-2">{profile.title.toUpperCase()}</p>
-      </div>
-    </div>
+    <PlayerIdentityBadge
+      avatarUrl={profile.avatarUrl}
+      displayName={profile.username}
+      clanTag={profile.clanTag}
+      level={profile.level}
+      rankTitle={profile.rankTitle ?? profile.title}
+      ladderRank={profile.ladderRank}
+      side={mirrored ? 'opponent' : 'player'}
+      compact
+    />
   )
 }
 
@@ -51,8 +51,8 @@ export function BattleTopBar({
   const exchangeReady = canExchangeEnergy(playerEnergy)
 
   return (
-    <header className="flex items-center gap-4 border-b border-white/10 bg-[linear-gradient(180deg,rgba(16,14,25,0.96),rgba(10,9,18,0.92))] px-4 py-2 shadow-[0_2px_10px_rgba(0,0,0,0.38)]">
-      <div className="w-[13rem] shrink-0">
+    <header className="flex items-center gap-3 border-b border-white/10 bg-[linear-gradient(180deg,rgba(16,14,25,0.96),rgba(10,9,18,0.92))] px-3 py-2 shadow-[0_2px_10px_rgba(0,0,0,0.38)] lg:gap-4 lg:px-4">
+      <div className="w-[13.5rem] shrink-0 lg:w-[17rem]">
         <ProfileBlock profile={playerProfile} />
       </div>
 
@@ -121,7 +121,7 @@ export function BattleTopBar({
         </div>
       </div>
 
-      <div className="w-[13rem] shrink-0">
+      <div className="w-[13.5rem] shrink-0 lg:w-[17rem]">
         <ProfileBlock profile={enemyProfile} mirrored />
       </div>
     </header>

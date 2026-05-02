@@ -807,7 +807,7 @@ describe('battle engine scenarios', () => {
       playerTeamIds: ['mai', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
     })
-    let mai = getFighter(state, 'player', 'mai')
+    const mai = getFighter(state, 'player', 'mai')
     mai.stateCounters.cursed_bullet = 3
 
     state = resolveTeamTurn(

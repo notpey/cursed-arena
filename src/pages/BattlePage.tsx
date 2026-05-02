@@ -22,6 +22,8 @@ import { saveMatchHistory } from '@/features/multiplayer/client'
 import { readStagedBattleLaunch } from '@/features/battle/prep'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
+import { fetchMyClan } from '@/features/clans/client'
+import { getLadderRankTitle, getLevelForExperience } from '@/features/ranking/ladder'
 import {
   buildEnemyCommands,
   canQueueAbility,
@@ -437,6 +439,7 @@ function buildTimeoutQueuedActions(
   state: BattleState,
   _queued: Record<string, QueuedBattleAction>,
 ): Record<string, QueuedBattleAction> {
+  void _queued
   return buildTimeoutCommands(state)
 }
 
@@ -701,12 +704,36 @@ export function BattlePage() {
   )
   const timelineRunRef = useRef(0)
   const lastPlayedMultiplayerResolutionRef = useRef<string | null>(null)
+  const [playerClanTag, setPlayerClanTag] = useState<string | null>(null)
+  const battleProfileStats = readBattleProfileStats()
+
+  useEffect(() => {
+    const identityUserId = currentUserId ?? 'local-user'
+    let disposed = false
+
+    fetchMyClan(identityUserId)
+      .then(({ data }) => {
+        if (!disposed) setPlayerClanTag(data?.tag ?? null)
+      })
+      .catch(() => {
+        if (!disposed) setPlayerClanTag(null)
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [currentUserId])
 
   const playerBoardProfile = {
     username: profile.displayName,
     title: profile.title,
     initials: profile.avatarLabel,
     accent: 'teal' as const,
+    avatarUrl: profile.avatarUrl,
+    clanTag: playerClanTag,
+    level: battleProfileStats.level,
+    rankTitle: battleProfileStats.rankTitle,
+    ladderRank: battleProfileStats.ladderRank ?? null,
   }
   const enemyBoardProfile = multiplayer
     ? {
@@ -714,6 +741,12 @@ export function BattlePage() {
         title: 'Opponent',
         initials: getInitials(multiplayer.opponentDisplayName),
         accent: 'red' as const,
+        // TODO: Fetch opponent avatar, clan tag, level, rank title, and ladder rank from profile metadata when match rows expose opponent IDs safely.
+        avatarUrl: null,
+        clanTag: null,
+        level: null,
+        rankTitle: null,
+        ladderRank: null,
       }
     : stagedSession
       ? {
@@ -721,6 +754,15 @@ export function BattlePage() {
           title: stagedSession.opponentTitle,
           initials: getInitials(stagedSession.opponentName),
           accent: 'red' as const,
+          avatarUrl: null,
+          clanTag: null,
+          level: stagedSession.opponentExperience ? getLevelForExperience(stagedSession.opponentExperience) : null,
+          rankTitle: stagedSession.opponentRankLabel ?? (
+            stagedSession.opponentExperience
+              ? getLadderRankTitle({ level: getLevelForExperience(stagedSession.opponentExperience), ladderRank: null })
+              : stagedSession.opponentTitle
+          ),
+          ladderRank: null,
         }
       : battleBoardProfiles.enemy
   const selectedActor = battle.selectedActorId ? getFighterById(battle.state, battle.selectedActorId) : null
