@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useAuth } from '@/features/auth/useAuth'
+import { SquareAvatar } from '@/components/ui/SquareAvatar'
+import { AvatarUploader } from '@/features/avatar/components/AvatarUploader'
 import {
   defaultPlayerState,
   normalizeAvatarLabel,
@@ -80,6 +82,7 @@ export function SettingsPage() {
         displayName: profileDraft.displayName.trim() || defaultPlayerState.profile.displayName,
         title: profileDraft.title.trim() || defaultPlayerState.profile.title,
         avatarLabel: normalizeAvatarLabel(profileDraft.avatarLabel, profileDraft.displayName),
+        avatarUrl: profileDraft.avatarUrl,
       }
       next.settings = settingsDraft
     })
@@ -376,9 +379,7 @@ export function SettingsPage() {
 
             <Field label="Avatar Label">
               <div className="flex items-center gap-3 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-3 py-3">
-                <div className="grid h-10 w-10 place-items-center rounded-full border border-ca-red/30 bg-gradient-to-br from-ca-red-wash-mid to-transparent">
-                  <span className="ca-display text-lg text-ca-text">{avatarPreviewLabel}</span>
-                </div>
+                <SquareAvatar src={profileDraft.avatarUrl} alt={profileDraft.displayName} fallbackLabel={avatarPreviewLabel} size={56} />
                 <TextInput
                   value={profileDraft.avatarLabel}
                   onChange={(value) => setProfileDraft((current) => ({ ...current, avatarLabel: value }))}
@@ -386,6 +387,21 @@ export function SettingsPage() {
                   maxLength={2}
                 />
               </div>
+            </Field>
+
+            <Field label="Profile Avatar">
+              <AvatarUploader
+                userId={auth.user?.id ?? 'local-user'}
+                displayName={profileDraft.displayName}
+                avatarUrl={profileDraft.avatarUrl}
+                fallbackLabel={avatarPreviewLabel}
+                onChange={(avatarUrl) => {
+                  setProfileDraft((current) => ({ ...current, avatarUrl }))
+                  updatePlayerState((next) => {
+                    next.profile.avatarUrl = avatarUrl
+                  })
+                }}
+              />
             </Field>
           </SettingsSection>
 

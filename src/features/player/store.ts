@@ -12,6 +12,7 @@ export type PlayerProfile = {
   playerId: string
   title: string
   avatarLabel: string
+  avatarUrl: string | null
   role: PlayerRole
 }
 
@@ -62,6 +63,7 @@ export const defaultPlayerState: PlayerState = {
     playerId: '#7742',
     title: 'DOMAIN MASTER',
     avatarLabel: 'PN',
+    avatarUrl: null,
     role: 'player',
   },
   economy: {
@@ -140,6 +142,7 @@ function normalizePlayerState(state?: Partial<PlayerState> | null): PlayerState 
       playerId: state?.profile?.playerId?.trim() || defaultPlayerState.profile.playerId,
       title: state?.profile?.title?.trim() || defaultPlayerState.profile.title,
       avatarLabel: normalizeAvatarLabel(state?.profile?.avatarLabel, displayName),
+      avatarUrl: state?.profile?.avatarUrl?.trim() || null,
       role: normalizePlayerRole(state?.profile?.role),
     },
     economy: {

@@ -5,6 +5,9 @@ const pathToNav: Record<string, NavItemKey> = {
   '/': 'home',
   '/battle/prep': 'battle',
   '/missions': 'missions',
+  '/ladders': 'ladders',
+  '/clans': 'clans',
+  '/clan-panel': 'clan-panel',
   '/profile': 'profile',
   '/settings': 'settings',
   '/admin': 'admin',
@@ -21,11 +24,17 @@ export function ShellLayout() {
         ? 'profile'
         : pathname.startsWith('/missions')
           ? 'missions'
-          : pathname.startsWith('/settings')
-            ? 'settings'
-            : pathname.startsWith('/admin')
-              ? 'admin'
-              : 'home')
+          : pathname.startsWith('/ladders')
+            ? 'ladders'
+            : pathname.startsWith('/clans')
+              ? 'clans'
+              : pathname.startsWith('/clan-panel')
+                ? 'clan-panel'
+                : pathname.startsWith('/settings')
+                  ? 'settings'
+                  : pathname.startsWith('/admin')
+                    ? 'admin'
+                    : 'home')
 
   return (
     <AppShell activeNav={activeNav}>

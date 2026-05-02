@@ -10,6 +10,11 @@ const BattlePage = lazy(async () => ({ default: (await import('@/pages/BattlePag
 const BattlePrepPage = lazy(async () => ({ default: (await import('@/pages/BattlePrepPage')).BattlePrepPage }))
 const BattleResultsPage = lazy(async () => ({ default: (await import('@/pages/BattleResultsPage')).BattleResultsPage }))
 const MissionsPage = lazy(async () => ({ default: (await import('@/pages/MissionsPage')).MissionsPage }))
+const ClansPage = lazy(async () => ({ default: (await import('@/pages/ClansPage')).ClansPage }))
+const CreateClanPage = lazy(async () => ({ default: (await import('@/pages/CreateClanPage')).CreateClanPage }))
+const ClanProfilePage = lazy(async () => ({ default: (await import('@/pages/ClanProfilePage')).ClanProfilePage }))
+const ClanPanelPage = lazy(async () => ({ default: (await import('@/pages/ClanPanelPage')).ClanPanelPage }))
+const LadderPage = lazy(async () => ({ default: (await import('@/pages/LadderPage')).LadderPage }))
 const ProfilePage = lazy(async () => ({ default: (await import('@/pages/ProfilePage')).ProfilePage }))
 const SettingsPage = lazy(async () => ({ default: (await import('@/pages/SettingsPage')).SettingsPage }))
 const NotFoundPage = lazy(async () => ({ default: (await import('@/pages/NotFoundPage')).NotFoundPage }))
@@ -31,6 +36,11 @@ const shellRoutes = [
   { path: 'battle/prep', element: withRouteSuspense(<BattlePrepPage />) },
   { path: 'battle/results', element: withRouteSuspense(<BattleResultsPage />) },
   { path: 'missions', element: withRouteSuspense(<MissionsPage />) },
+  { path: 'ladders', element: withRouteSuspense(<LadderPage />) },
+  { path: 'clans', element: withRouteSuspense(<ClansPage />) },
+  { path: 'clans/create', element: withRouteSuspense(<CreateClanPage />) },
+  { path: 'clans/:clanId', element: withRouteSuspense(<ClanProfilePage />) },
+  { path: 'clan-panel', element: withRouteSuspense(<ClanPanelPage />) },
   { path: 'profile', element: withRouteSuspense(<ProfilePage />) },
   { path: 'settings', element: withRouteSuspense(<SettingsPage />) },
   { path: 'admin', element: withRouteSuspense(<AdminRoute />) },

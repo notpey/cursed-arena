@@ -11,6 +11,7 @@ import {
   type MatchHistoryEntry,
 } from '@/features/battle/matches'
 import { usePlayerState } from '@/features/player/store'
+import { SquareAvatar } from '@/components/ui/SquareAvatar'
 import { useAuth } from '@/features/auth/useAuth'
 import {
   fetchPlayerRankProfile,
@@ -125,9 +126,7 @@ function ProfileHeaderCard({
   return (
     <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-4 sm:p-5">
       <div className="flex items-center gap-4">
-        <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full border border-sky-300/30 bg-[linear-gradient(145deg,rgba(96,165,250,0.12),rgba(20,20,28,0.3))]">
-          <span className="ca-display text-2xl text-ca-text">{profile.avatarLabel}</span>
-        </div>
+        <SquareAvatar src={profile.avatarUrl} alt={profile.displayName} fallbackLabel={profile.avatarLabel} />
 
         <div className="min-w-0">
           <h1 className="ca-display text-4xl text-ca-text sm:text-[2.6rem]">{profile.displayName}</h1>

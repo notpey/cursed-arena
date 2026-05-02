@@ -16,6 +16,9 @@ type SidebarItem = {
 const primaryNavItems: SidebarItem[] = [
   { key: 'home', label: 'Home', to: '/' },
   { key: 'battle', label: 'Battle', to: '/battle/prep' },
+  { key: 'ladders', label: 'Ladders', to: '/ladders' },
+  { key: 'clans', label: 'Clans', to: '/clans' },
+  { key: 'clan-panel', label: 'Panel', to: '/clan-panel' },
   { key: 'missions', label: 'Missions', to: '/missions' },
   { key: 'profile', label: 'Profile', to: '/profile' },
 ]
@@ -116,6 +119,32 @@ function SidebarGlyph({ kind }: { kind: NavItemKey }) {
           <path d="M9 12l2 2 4-4" />
           <rect x="4" y="4" width="16" height="16" rx="2" />
           <path d="M4 9h16" />
+        </svg>
+      )
+    case 'ladders':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
+          <path d="M5 19h14" />
+          <path d="M7 17V9" />
+          <path d="M12 17V5" />
+          <path d="M17 17v-6" />
+        </svg>
+      )
+    case 'clans':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
+          <path d="M12 4 5 7v5c0 4 2.6 6.5 7 8 4.4-1.5 7-4 7-8V7l-7-3Z" />
+          <path d="M8.5 12h7" />
+          <path d="M12 8.5v7" />
+        </svg>
+      )
+    case 'clan-panel':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className={common} strokeWidth="1.6">
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path d="M8 9h8" />
+          <path d="M8 13h3" />
+          <path d="M14 13h2" />
         </svg>
       )
     case 'settings':

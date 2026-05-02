@@ -62,6 +62,7 @@ function applySignedOutPlayerState() {
     next.profile.playerId = defaultPlayerState.profile.playerId
     next.profile.title = defaultPlayerState.profile.title
     next.profile.avatarLabel = defaultPlayerState.profile.avatarLabel
+    next.profile.avatarUrl = defaultPlayerState.profile.avatarUrl
     next.profile.role = defaultPlayerState.profile.role
     next.settings.accountLinks = {
       google: false,
@@ -80,6 +81,7 @@ function applyAuthenticatedPlayerState(user: User, profile: ProfileRow | null) {
     next.profile.displayName = displayName
     next.profile.playerId = `#${user.id.replace(/-/g, '').slice(0, 4).toUpperCase()}`
     next.profile.avatarLabel = normalizeAvatarLabel(next.profile.avatarLabel, displayName)
+    next.profile.avatarUrl = profile?.avatar_url ?? deriveAvatarUrl(user)
     next.profile.role = role
     next.settings.accountLinks = accountLinks
   })
