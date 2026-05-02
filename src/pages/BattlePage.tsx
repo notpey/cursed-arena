@@ -952,16 +952,18 @@ export function BattlePage() {
 
       const settlePromise = draw ? Promise.resolve({ data: null }) : settleMatchLp(matchId)
       settlePromise.then(({ data: settle }) => {
-        // Compute LP delta from server response; fall back to 0 if non-ranked or error
+        // Compute experience delta from server response (settle_match_lp values are treated
+        // as experience until the RPC is migrated to settle_match_experience).
+        // TODO: once settle_match_experience RPC exists, read experienceGain/experienceLoss directly.
         let lpDelta = 0
-        let lpBefore = readBattleProfileStats().lpCurrent
+        let lpBefore = readBattleProfileStats().experience
         if (settle && !settle.error && !settle.already_settled) {
           if (won) {
-            lpDelta  = settle.lp_gain ?? 0
-            lpBefore = (settle.winner_lp ?? lpBefore) - lpDelta
+            lpDelta  = settle.experienceGain ?? 0
+            lpBefore = (settle.winnerExperience ?? lpBefore) - lpDelta
           } else {
-            lpDelta  = -(settle.lp_loss ?? 0)
-            lpBefore = (settle.loser_lp ?? lpBefore) - lpDelta
+            lpDelta  = -(settle.experienceLoss ?? 0)
+            lpBefore = (settle.loserExperience ?? lpBefore) - lpDelta
           }
         }
 
@@ -992,9 +994,15 @@ export function BattlePage() {
                 theirTeam: result.theirTeam,
                 timestamp: result.timestamp,
                 rounds: result.rounds,
-                lpDelta: result.lpDelta,
-                rankBefore: result.rankBefore,
-                rankAfter: result.rankAfter,
+                experienceDelta: result.experienceDelta,
+                experienceBefore: result.experienceBefore,
+                experienceAfter: result.experienceAfter,
+                levelBefore: result.levelBefore,
+                levelAfter: result.levelAfter,
+                rankTitleBefore: result.rankTitleBefore,
+                rankTitleAfter: result.rankTitleAfter,
+                ladderRankBefore: result.ladderRankBefore ?? null,
+                ladderRankAfter: result.ladderRankAfter ?? null,
                 roomCode: result.roomCode ?? null,
               }
             : null
@@ -1425,9 +1433,9 @@ function BattleResultOverlay({
             {recordedResult.mode === 'ranked' ? (
               <span className={[
                 'ca-mono-label rounded-md border px-2 py-1 text-[0.42rem]',
-                recordedResult.lpDelta >= 0 ? 'border-ca-teal/20 bg-ca-teal-wash text-ca-teal' : 'border-ca-red/20 bg-ca-red-wash text-ca-red',
+                recordedResult.experienceDelta >= 0 ? 'border-ca-teal/20 bg-ca-teal-wash text-ca-teal' : 'border-ca-red/20 bg-ca-red-wash text-ca-red',
               ].join(' ')}>
-                LP {recordedResult.lpDelta >= 0 ? '+' + recordedResult.lpDelta : recordedResult.lpDelta}
+                XP {recordedResult.experienceDelta >= 0 ? '+' + recordedResult.experienceDelta : recordedResult.experienceDelta}
               </span>
             ) : null}
             <span className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">

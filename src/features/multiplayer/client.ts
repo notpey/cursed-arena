@@ -26,18 +26,20 @@ export async function joinMatchmakingQueue({
   mode,
   teamIds,
   displayName,
-  lp,
+  experience,
 }: {
   playerId: string
   mode: BattleMatchMode
   teamIds: string[]
   displayName: string
-  lp: number
+  /** Player's total experience, used for matchmaking and XP delta calculations. */
+  experience: number
 }) {
+  // TODO: Once migration 012 adds matchmaking_queue.experience, write to that column instead of lp.
   const { error } = await db()
     .from('matchmaking_queue')
     .upsert(
-      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp },
+      { player_id: playerId, mode, team_ids: teamIds, display_name: displayName, lp: experience },
       { onConflict: 'player_id' },
     )
 
@@ -543,9 +545,9 @@ export async function saveMatchHistory(
         your_team: entry.yourTeam,
         their_team: entry.theirTeam,
         rounds: entry.rounds,
-        lp_delta: entry.lpDelta,
-        rank_before: entry.rankBefore,
-        rank_after: entry.rankAfter,
+        lp_delta: entry.experienceDelta,
+        rank_before: entry.rankTitleBefore,
+        rank_after: entry.rankTitleAfter,
         room_code: entry.roomCode ?? null,
         played_at: new Date(entry.timestamp).toISOString(),
       },
@@ -572,22 +574,33 @@ export async function fetchPlayerMatchHistory(
 
   if (error) return { data: null, error: error.message }
 
-  const entries: MatchHistoryEntry[] = (data ?? []).map((row) => ({
-    id: row.id as string,
-    result: row.result as 'WIN' | 'LOSS',
-    mode: row.mode as BattleMatchMode,
-    opponentName: row.opponent_name as string,
-    opponentTitle: row.opponent_title as string,
-    opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
-    yourTeam: row.your_team as string[],
-    theirTeam: row.their_team as string[],
-    timestamp: new Date(row.played_at as string).getTime(),
-    rounds: row.rounds as number,
-    lpDelta: row.lp_delta as number,
-    rankBefore: row.rank_before as string,
-    rankAfter: row.rank_after as string,
-    roomCode: (row.room_code as string | null) ?? null,
-  }))
+  const entries: MatchHistoryEntry[] = (data ?? []).map((row) => {
+    const experienceDelta = typeof row.experience_delta === 'number'
+      ? row.experience_delta
+      : (row.lp_delta as number) ?? 0
+    return {
+      id: row.id as string,
+      result: row.result as 'WIN' | 'LOSS',
+      mode: row.mode as BattleMatchMode,
+      opponentName: row.opponent_name as string,
+      opponentTitle: row.opponent_title as string,
+      opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
+      yourTeam: row.your_team as string[],
+      theirTeam: row.their_team as string[],
+      timestamp: new Date(row.played_at as string).getTime(),
+      rounds: row.rounds as number,
+      experienceDelta,
+      experienceBefore: 0,
+      experienceAfter: 0,
+      levelBefore: 0,
+      levelAfter: 0,
+      rankTitleBefore: (row.rank_before as string) ?? '',
+      rankTitleAfter: (row.rank_after as string) ?? '',
+      ladderRankBefore: null,
+      ladderRankAfter: null,
+      roomCode: (row.room_code as string | null) ?? null,
+    }
+  })
 
   return { data: entries, error: null }
 }

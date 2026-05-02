@@ -37,6 +37,7 @@ function makeSession(seed = 'test-seed', mode: 'quick' | 'ranked' = 'quick') {
     opponentName: 'SPAR_PARTNER',
     opponentTitle: 'Quick Match',
     opponentRankLabel: null,
+    opponentExperience: null,
     roomCode: null,
     practiceOptions: null,
   }
@@ -61,7 +62,7 @@ function recordOnline(seed = 'online-seed') {
     opponentName: 'OPPONENT',
     mode: 'quick',
     lpDelta: 0,
-    lpBefore: 1480,
+    lpBefore: 0,
     battleSeed: seed,
   })
 }
@@ -216,7 +217,7 @@ describe('recordOnlineCompletedBattle — idempotency', () => {
     expect(after2.wins).toBe(after1.wins)
   })
 
-  test('LP is applied exactly once on duplicate call', () => {
+  test('experience is applied exactly once on duplicate call', () => {
     recordOnlineCompletedBattle({
       winner: 'player',
       rounds: 3,
@@ -224,9 +225,9 @@ describe('recordOnlineCompletedBattle — idempotency', () => {
       enemyTeamIds: ['yuji', 'megumi', 'nobara'],
       opponentName: 'OPP',
       mode: 'ranked',
-      lpDelta: 24,
-      lpBefore: 1480,
-      battleSeed: 'lp-seed',
+      lpDelta: 75,
+      lpBefore: 0,
+      battleSeed: 'xp-seed',
     })
     const after1 = readBattleProfileStats()
 
@@ -237,13 +238,13 @@ describe('recordOnlineCompletedBattle — idempotency', () => {
       enemyTeamIds: ['yuji', 'megumi', 'nobara'],
       opponentName: 'OPP',
       mode: 'ranked',
-      lpDelta: 24,
-      lpBefore: 1480,
-      battleSeed: 'lp-seed',
+      lpDelta: 75,
+      lpBefore: 0,
+      battleSeed: 'xp-seed',
     })
     const after2 = readBattleProfileStats()
 
-    expect(after2.lpCurrent).toBe(after1.lpCurrent)
+    expect(after2.experience).toBe(after1.experience)
     expect(after2.matchesPlayed).toBe(after1.matchesPlayed)
   })
 
@@ -263,5 +264,105 @@ describe('recordOnlineCompletedBattle — idempotency', () => {
     const history = readRecentMatchHistory()
     expect(history.some((e) => e.completionId === buildCompletionId('online-seed-C1', 'quick'))).toBe(true)
     expect(history.some((e) => e.completionId === buildCompletionId('online-seed-C2', 'quick'))).toBe(true)
+  })
+})
+
+// ── Experience fields on recorded result ──────────────────────────────────────
+
+describe('recordCompletedBattle — experience fields', () => {
+  test('ranked win result has positive experienceDelta', () => {
+    const session = makeSession('xp-win-test', 'ranked')
+    const result = recordCompletedBattle({
+      winner: 'player',
+      rounds: 3,
+      playerTeamIds: ['yuji', 'megumi', 'nobara'],
+      enemyTeamIds: ['yuji', 'megumi', 'nobara'],
+      session,
+    })
+    expect(result.experienceDelta).toBeGreaterThan(0)
+  })
+
+  test('ranked loss result has non-positive experienceDelta', () => {
+    const session = makeSession('xp-loss-test', 'ranked')
+    const result = recordCompletedBattle({
+      winner: 'enemy',
+      rounds: 3,
+      playerTeamIds: ['yuji', 'megumi', 'nobara'],
+      enemyTeamIds: ['yuji', 'megumi', 'nobara'],
+      session,
+    })
+    expect(result.experienceDelta).toBeLessThanOrEqual(0)
+  })
+
+  test('quick match has 0 experienceDelta', () => {
+    const session = makeSession('xp-quick-test', 'quick')
+    const result = recordCompletedBattle({
+      winner: 'player',
+      rounds: 3,
+      playerTeamIds: ['yuji', 'megumi', 'nobara'],
+      enemyTeamIds: ['yuji', 'megumi', 'nobara'],
+      session,
+    })
+    expect(result.experienceDelta).toBe(0)
+  })
+
+  test('result has levelBefore and levelAfter', () => {
+    const result = recordLocal('xp-level-check')
+    expect(typeof result.levelBefore).toBe('number')
+    expect(typeof result.levelAfter).toBe('number')
+    expect(result.levelBefore).toBeGreaterThanOrEqual(1)
+    expect(result.levelAfter).toBeGreaterThanOrEqual(1)
+  })
+
+  test('profile snapshot has experience and rankTitle fields', () => {
+    const result = recordLocal('xp-snapshot-check')
+    expect(typeof result.profileSnapshot.experience).toBe('number')
+    expect(typeof result.profileSnapshot.level).toBe('number')
+    expect(typeof result.profileSnapshot.rankTitle).toBe('string')
+    expect(result.profileSnapshot.rankTitle.length).toBeGreaterThan(0)
+  })
+
+  test('experienceAfter cannot go below 0', () => {
+    // New player has 0 XP — a loss should not produce negative experienceAfter
+    const session = makeSession('xp-floor-test', 'ranked')
+    const result = recordCompletedBattle({
+      winner: 'enemy',
+      rounds: 3,
+      playerTeamIds: ['yuji', 'megumi', 'nobara'],
+      enemyTeamIds: ['yuji', 'megumi', 'nobara'],
+      session,
+    })
+    expect(result.experienceAfter).toBeGreaterThanOrEqual(0)
+    expect(result.profileSnapshot.experience).toBeGreaterThanOrEqual(0)
+  })
+})
+
+// ── Old localStorage LP data migration ───────────────────────────────────────
+
+describe('old LP data migration', () => {
+  test('existing localStorage with lpCurrent but no experience does not crash', () => {
+    const legacyStats = {
+      playerName: 'TEST',
+      title: 'T',
+      playerId: '#0001',
+      season: 'SEASON 3',
+      lpCurrent: 1480,
+      lpToNext: 1600,
+      peakLp: 2300,
+      rank: 'PLATINUM II',
+      peakRank: 'DIAMOND I',
+      wins: 10,
+      losses: 5,
+      matchesPlayed: 15,
+      currentStreak: 2,
+      bestStreak: 7,
+    }
+    store['ca-battle-profile-stats-v1'] = JSON.stringify(legacyStats)
+
+    // Should not throw, and should have experience mapped from lpCurrent
+    const stats = readBattleProfileStats()
+    expect(stats.experience).toBe(1480)
+    expect(stats.level).toBeGreaterThanOrEqual(1)
+    expect(typeof stats.rankTitle).toBe('string')
   })
 })

@@ -283,7 +283,8 @@ export function getUnlockMissionForFighter(fighterId: string): UnlockMissionDef 
 export type BattleUnlockContext = {
   won: boolean
   teamIds: string[]
-  lpAfter: number
+  /** Total experience after the match — replaces lpAfter. */
+  experienceAfter: number
   currentStreak: number
 }
 
@@ -324,8 +325,8 @@ export function evaluateUnlockMissions(ctx: BattleUnlockContext): string[] {
         break
       }
       case 'reach_lp': {
-        newProgress = ctx.lpAfter
-        justCompleted = ctx.lpAfter >= def.objective.lp
+        newProgress = ctx.experienceAfter
+        justCompleted = ctx.experienceAfter >= def.objective.lp
         break
       }
     }

@@ -416,12 +416,10 @@ export function BattlePrepPage() {
 
     const sanitized = sanitizePrepTeamIds(teamIds)
     const displayName = authProfile?.display_name ?? 'Player'
-    const lp = profileStats.lpCurrent
-
     setSearching(true)
     setQueueError(null)
 
-    const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName, lp })
+    const { error: qErr } = await joinMatchmakingQueue({ playerId: user.id, mode: selectedMode, teamIds: sanitized, displayName, experience: profileStats.experience })
     if (qErr) {
       setSearching(false)
       setQueueError(qErr)
@@ -840,7 +838,7 @@ function PlayerInfoPanel({
       </div>
       <div className="min-w-0">
         <p className="ca-display truncate text-[1.05rem] leading-none text-ca-text">{profileName}</p>
-        <p className="ca-mono-label mt-1 truncate text-[0.42rem] text-ca-text-3">{stats.rank}</p>
+        <p className="ca-mono-label mt-1 truncate text-[0.42rem] text-ca-text-3">Lv {stats.level} {stats.rankTitle}</p>
         <div className="mt-2 grid grid-cols-3 gap-1">
           <RecordStat label="Wins" value={String(stats.wins)} compact />
           <RecordStat label="Losses" value={String(stats.losses)} compact />

@@ -6,7 +6,6 @@ import {
   formatMatchTimestamp,
   getFeaturedTeamIds,
   getModeLabel,
-  getRankTier,
   readBattleProfileStats,
   readRecentMatchHistory,
   type MatchHistoryEntry,
@@ -16,10 +15,12 @@ import { useAuth } from '@/features/auth/useAuth'
 import {
   fetchPlayerRankProfile,
   fetchLeaderboard,
+  getLevelProgress,
   type PlayerRankProfile,
   type LeaderboardEntry,
 } from '@/features/ranking/client'
 import { fetchPlayerMatchHistory } from '@/features/multiplayer/client'
+import { getLevelForExperience, getLadderRankTitle } from '@/features/ranking/ladder'
 
 const rosterById = Object.fromEntries(ownedRosterCharacters.map((character) => [character.id, character]))
 
@@ -44,20 +45,26 @@ export function ProfilePage() {
   // Prefer server history when available (cross-device); fall back to localStorage
   const recentMatches = serverMatches ?? localMatches
 
-  // Prefer server LP/stats when the user is logged in
+  // Prefer server experience/stats when the user is logged in
   const profileStats = useMemo(() => {
     if (!dbProfile) return localStats
-    const lpCurrent = dbProfile.lp
-    const tier = getRankTier(lpCurrent)
-    const peakLp = Math.max(localStats.peakLp, lpCurrent)
-    const peakTier = getRankTier(peakLp)
+    const experience = dbProfile.experience
+    const level = getLevelForExperience(experience)
+    const progress = getLevelProgress(experience)
+    const rankTitle = getLadderRankTitle({ level, ladderRank: dbProfile.ladderRank ?? null })
+    const peakExperience = Math.max(localStats.peakExperience, experience)
+    const peakLevel = getLevelForExperience(peakExperience)
+    const peakRankTitle = getLadderRankTitle({ level: peakLevel, ladderRank: null })
     return {
       ...localStats,
-      lpCurrent,
-      lpToNext: tier.next ?? lpCurrent,
-      rank: tier.label,
-      peakLp,
-      peakRank: peakTier.label,
+      experience,
+      level,
+      rankTitle,
+      experienceToNextLevel: progress.nextLevelExperience,
+      peakExperience,
+      peakLevel,
+      peakRankTitle,
+      ladderRank: dbProfile.ladderRank ?? null,
       wins: dbProfile.wins,
       losses: dbProfile.losses,
       matchesPlayed: dbProfile.wins + dbProfile.losses,
@@ -66,7 +73,8 @@ export function ProfilePage() {
     }
   }, [dbProfile, localStats])
 
-  const lpPct = Math.min(100, Math.round((profileStats.lpCurrent / Math.max(profileStats.lpToNext, 1)) * 100))
+  const progress = getLevelProgress(profileStats.experience)
+  const expPct = progress.progressPct
   const statBento = [
     { label: 'Total Wins', value: `${profileStats.wins}` },
     { label: 'Total Losses', value: `${profileStats.losses}` },
@@ -84,7 +92,7 @@ export function ProfilePage() {
             <ProfileHeaderCard profile={profile} />
           </div>
           <div className="animate-ca-stagger-in" style={{ animationDelay: '60ms' }}>
-            <RankCard profileStats={profileStats} lpPct={lpPct} />
+            <RankCard profileStats={profileStats} expPct={expPct} progress={progress} />
           </div>
           <div className="animate-ca-stagger-in" style={{ animationDelay: '120ms' }}>
             <StatsBento items={statBento} />
@@ -135,33 +143,48 @@ function ProfileHeaderCard({
   )
 }
 
-function RankCard({ profileStats, lpPct }: { profileStats: ReturnType<typeof readBattleProfileStats>; lpPct: number }) {
-  const rankGlyph = profileStats.rank.split(' ').map((part) => part[0]).join('').slice(0, 2)
+function RankCard({
+  profileStats,
+  expPct,
+  progress,
+}: {
+  profileStats: ReturnType<typeof readBattleProfileStats>
+  expPct: number
+  progress: ReturnType<typeof getLevelProgress>
+}) {
+  const titleInitials = profileStats.rankTitle.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
       <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
         <div className="grid h-16 w-16 place-items-center rounded-full border border-sky-300/30 bg-[radial-gradient(circle_at_35%_25%,rgba(255,255,255,0.14),transparent_46%),linear-gradient(145deg,rgba(96,165,250,0.14),rgba(31,41,55,0.3))] shadow-[0_0_20px_rgba(96,165,250,0.14)]">
-          <span className="ca-display text-2xl text-sky-200">{rankGlyph}</span>
+          <span className="ca-display text-2xl text-sky-200">{titleInitials}</span>
         </div>
 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="ca-display text-3xl text-ca-text">{profileStats.rank}</p>
+              <p className="ca-display text-3xl text-ca-text">
+                Level {profileStats.level} — {profileStats.rankTitle}
+              </p>
               <p className="ca-mono-label mt-1 text-[0.5rem] text-ca-text-disabled">{profileStats.season}</p>
             </div>
-            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">PEAK: {profileStats.peakRank}</p>
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">
+              PEAK: Lv {profileStats.peakLevel} — {profileStats.peakRankTitle}
+            </p>
           </div>
 
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="ca-mono-label text-[0.48rem] text-ca-text-3">LP PROGRESS</span>
+              <span className="ca-mono-label text-[0.48rem] text-ca-text-3">EXPERIENCE PROGRESS</span>
               <span className="ca-mono-label text-[0.52rem] text-ca-text-2">
-                {profileStats.lpCurrent} / {profileStats.lpToNext}
+                {progress.experienceIntoLevel.toLocaleString()} / {progress.experienceNeededForNextLevel.toLocaleString()} XP
               </span>
             </div>
-            <ProgressBar value={lpPct} tone="teal" className="h-2 bg-ca-highlight/55" />
+            <ProgressBar value={expPct} tone="teal" className="h-2 bg-ca-highlight/55" />
+            <p className="mt-1.5 ca-mono-label text-[0.44rem] text-ca-text-3">
+              {progress.experienceNeededForNextLevel - progress.experienceIntoLevel} XP to Level {profileStats.level + 1}
+            </p>
           </div>
         </div>
       </div>
@@ -197,11 +220,11 @@ function LeaderboardCard({
       </div>
 
       <div className="space-y-1.5">
-        {leaderboard.map((entry, index) => {
-          const tier = getRankTier(entry.lp)
+        {leaderboard.map((entry) => {
           const isMe = entry.id === currentUserId
           const wl = entry.wins + entry.losses
           const winRate = wl > 0 ? Math.round((entry.wins / wl) * 100) : 0
+          const rank = entry.ladderRank
 
           return (
             <div
@@ -215,9 +238,9 @@ function LeaderboardCard({
             >
               <span className={[
                 'ca-mono-label w-5 shrink-0 text-center text-[0.46rem]',
-                index === 0 ? 'text-amber-300' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-ca-text-3',
+                rank === 1 ? 'text-amber-300' : rank === 2 ? 'text-slate-300' : rank === 3 ? 'text-amber-600' : 'text-ca-text-3',
               ].join(' ')}>
-                {index + 1}
+                {rank ?? '—'}
               </span>
 
               <div className="min-w-0 flex-1">
@@ -226,14 +249,18 @@ function LeaderboardCard({
                     {entry.display_name}
                     {isMe ? ' (YOU)' : ''}
                   </span>
-                  <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{tier.label}</span>
+                  <span className="ca-mono-label text-[0.44rem] text-ca-text-3">
+                    Lv {entry.level} — {entry.rankTitle}
+                  </span>
                 </div>
                 <p className="ca-mono-label mt-0.5 text-[0.42rem] text-ca-text-3">
                   {entry.wins}W / {entry.losses}L — {winRate}%
                 </p>
               </div>
 
-              <span className="ca-mono-label shrink-0 text-[0.52rem] text-ca-teal">{entry.lp} LP</span>
+              <span className="ca-mono-label shrink-0 text-[0.52rem] text-ca-teal">
+                {entry.experience.toLocaleString()} EXP
+              </span>
             </div>
           )
         })}
@@ -320,11 +347,13 @@ function MatchHistoryRow({ match }: { match: MatchHistoryEntry }) {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{match.rounds} ROUNDS</span>
             {match.mode === 'ranked' ? (
-              <span className={`ca-mono-label text-[0.42rem] ${match.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
-                {match.lpDelta >= 0 ? `+${match.lpDelta} LP` : `${match.lpDelta} LP`}
+              <span className={`ca-mono-label text-[0.42rem] ${match.experienceDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                {match.experienceDelta >= 0 ? `+${match.experienceDelta} XP` : `${match.experienceDelta} XP`}
               </span>
             ) : null}
-            <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{match.rankBefore} / {match.rankAfter}</span>
+            <span className="ca-mono-label text-[0.42rem] text-ca-text-3">
+              Lv {match.levelBefore} → {match.levelAfter}
+            </span>
           </div>
         </div>
 

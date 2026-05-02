@@ -7,7 +7,6 @@ import sukunaHome from '@/assets/renders/sukuna-home.webp'
 import {
   getModeDescription,
   getModeLabel,
-  getRankTier,
   readBattleProfileStats,
   readLastBattleResult,
   readRecentMatchHistory,
@@ -16,7 +15,8 @@ import {
 } from '@/features/battle/matches'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
-import { fetchPlayerRankProfile, type PlayerRankProfile } from '@/features/ranking/client'
+import { fetchPlayerRankProfile, getLevelProgress, type PlayerRankProfile } from '@/features/ranking/client'
+import { getLevelForExperience, getLadderRankTitle } from '@/features/ranking/ladder'
 import {
   getMissionsWithProgress,
   getMissionCoins,
@@ -92,11 +92,16 @@ export function HomePage() {
 
   const displayStats = useMemo(() => {
     if (!dbProfile) return profileStats
-    const rankTier = getRankTier(dbProfile.lp)
+    const experience = dbProfile.experience
+    const level = getLevelForExperience(experience)
+    const progress = getLevelProgress(experience)
+    const rankTitle = getLadderRankTitle({ level, ladderRank: dbProfile.ladderRank ?? null })
     return {
       ...profileStats,
-      rank: rankTier.label,
-      lpCurrent: dbProfile.lp,
+      experience,
+      level,
+      rankTitle,
+      experienceToNextLevel: progress.nextLevelExperience,
       wins: dbProfile.wins,
       losses: dbProfile.losses,
       currentStreak: dbProfile.win_streak,
@@ -320,7 +325,7 @@ function ProfileSummaryCard({
           </div>
           <div className="min-w-0">
             <p className="ca-display truncate text-2xl">{profileStats.playerName}</p>
-            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">{profileStats.rank} · {profileStats.season}</p>
+            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Lv {profileStats.level} {profileStats.rankTitle} · {profileStats.season}</p>
           </div>
         </div>
         <div className="grid grid-cols-4 gap-4">
@@ -481,7 +486,7 @@ function HeroPlayPanel({
             </div>
             <div className="text-right">
               <p className="ca-mono-label text-[0.42rem] text-ca-text-3">RANK</p>
-              <p className="ca-display mt-1 text-[1.2rem] text-ca-text">{profileStats.rank}</p>
+              <p className="ca-display mt-1 text-[1.2rem] text-ca-text">Lv {profileStats.level}</p>
             </div>
           </div>
           <p className="mt-2 text-xs leading-5 text-ca-text-2">{getModeDescription(selectedMode)}</p>
@@ -545,7 +550,7 @@ function HeroPlayPanel({
               <>
                 <p className="mt-2 ca-display text-[1.35rem] text-ca-text">VS {activeMatch.opponentName}</p>
                 <p className="mt-1 text-xs leading-5 text-ca-text-2">
-                  {getModeLabel(activeMatch.mode)} / {activeMatch.rounds} ROUNDS / {activeMatch.rankAfter}
+                  {getModeLabel(activeMatch.mode)} / {activeMatch.rounds} ROUNDS / {activeMatch.rankTitleAfter}
                 </p>
               </>
             ) : (

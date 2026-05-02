@@ -9,6 +9,14 @@ import {
   syncMatchHistoryEntryToSupabase,
   syncLastBattleResultToSupabase,
 } from '@/features/battle/persistence'
+import {
+  calculateExperienceDelta,
+  getLevelForExperience,
+  getLevelProgress,
+  getLevelShift,
+  getLadderRankTitle,
+  normalizeExperience,
+} from '@/features/ranking/ladder'
 
 const selectedMatchModeKey = 'ca-battle-match-mode-v1'
 const stagedBattleSessionKey = 'ca-battle-staged-session-v1'
@@ -24,6 +32,7 @@ export type PracticeOptions = {
   enemyTeamIds: string[]
 }
 export type BattleMatchResult = 'WIN' | 'LOSS' | 'DRAW'
+/** @deprecated Use getLevelShift instead. Kept for UI compatibility. */
 export type BattleRankShift = 'promoted' | 'demoted' | 'steady'
 
 export type BattleProfileStats = {
@@ -31,11 +40,16 @@ export type BattleProfileStats = {
   title: string
   playerId: string
   season: string
-  rank: string
-  peakRank: string
-  lpCurrent: number
-  lpToNext: number
-  peakLp: number
+  // ── New experience/level fields ──
+  experience: number
+  level: number
+  rankTitle: string
+  experienceToNextLevel: number
+  peakExperience: number
+  peakLevel: number
+  peakRankTitle: string
+  ladderRank?: number | null
+  // ── Match stats ──
   wins: number
   losses: number
   matchesPlayed: number
@@ -56,9 +70,16 @@ export type MatchHistoryEntry = {
   theirTeam: string[]
   timestamp: number
   rounds: number
-  lpDelta: number
-  rankBefore: string
-  rankAfter: string
+  // ── New experience fields ──
+  experienceDelta: number
+  experienceBefore: number
+  experienceAfter: number
+  levelBefore: number
+  levelAfter: number
+  rankTitleBefore: string
+  rankTitleAfter: string
+  ladderRankBefore?: number | null
+  ladderRankAfter?: number | null
   roomCode?: string | null
 }
 
@@ -70,6 +91,8 @@ export type StagedBattleSession = {
   opponentName: string
   opponentTitle: string
   opponentRankLabel?: string | null
+  /** Opponent's experience for delta calculation. Populated from queue/match row for online matches. */
+  opponentExperience?: number | null
   roomCode?: string | null
   practiceOptions?: PracticeOptions | null
 }
@@ -87,12 +110,17 @@ export type LastBattleResult = {
   opponentRankLabel?: string | null
   yourTeam: string[]
   theirTeam: string[]
-  lpDelta: number
-  lpBefore: number
-  lpAfter: number
-  rankBefore: string
-  rankAfter: string
+  // ── New experience fields ──
+  experienceDelta: number
+  experienceBefore: number
+  experienceAfter: number
+  levelBefore: number
+  levelAfter: number
+  rankTitleBefore: string
+  rankTitleAfter: string
   rankShift: BattleRankShift
+  ladderRankBefore?: number | null
+  ladderRankAfter?: number | null
   roomCode?: string | null
   timestamp: number
   profileSnapshot: BattleProfileStats
@@ -106,38 +134,19 @@ export type LastBattleResult = {
   matchesPlayedDelta: number
 }
 
-type RankTier = {
-  label: string
-  min: number
-  next?: number
-}
-
 type OpponentSeed = {
   opponentName: string
   opponentTitle: string
   enemyTeamIds: string[]
   opponentRankLabel?: string | null
+  /** Approximate experience for this seeded opponent, used for XP delta calculation. */
+  opponentExperience?: number
   roomCode?: string | null
 }
 
-const rankTiers: RankTier[] = [
-  { label: 'BRONZE III', min: 0, next: 400 },
-  { label: 'BRONZE II', min: 400, next: 700 },
-  { label: 'BRONZE I', min: 700, next: 1000 },
-  { label: 'SILVER III', min: 1000, next: 1200 },
-  { label: 'SILVER II', min: 1200, next: 1350 },
-  { label: 'SILVER I', min: 1350, next: 1400 },
-  { label: 'PLATINUM III', min: 1400, next: 1480 },
-  { label: 'PLATINUM II', min: 1480, next: 1600 },
-  { label: 'PLATINUM I', min: 1600, next: 1800 },
-  { label: 'DIAMOND III', min: 1800, next: 2050 },
-  { label: 'DIAMOND II', min: 2050, next: 2300 },
-  { label: 'DIAMOND I', min: 2300 },
-]
-
 const rankedOpponentPool: OpponentSeed[] = [
-  { opponentName: 'HEX_KING', opponentTitle: 'Ladder Hunter', opponentRankLabel: 'PLATINUM I', enemyTeamIds: ['yuji', 'nobara', 'megumi'] },
-  { opponentName: 'DOMAINFRAME', opponentTitle: 'Barrier Technician', opponentRankLabel: 'PLATINUM II', enemyTeamIds: ['megumi', 'yuji', 'nobara'] },
+  { opponentName: 'HEX_KING', opponentTitle: 'Ladder Hunter', opponentRankLabel: 'Grade 1 Sorcerer', opponentExperience: 8500, enemyTeamIds: ['yuji', 'nobara', 'megumi'] },
+  { opponentName: 'DOMAINFRAME', opponentTitle: 'Barrier Technician', opponentRankLabel: 'Grade 1 Sorcerer', opponentExperience: 9200, enemyTeamIds: ['megumi', 'yuji', 'nobara'] },
 ]
 
 const quickOpponentPool: OpponentSeed[] = [
@@ -176,161 +185,156 @@ function writeLocalStorage<T>(key: string, value: T) {
   }
 }
 
-export function getRankTier(lp: number) {
-  return rankTiers.reduce((best, tier) => (lp >= tier.min ? tier : best), rankTiers[0])
-}
+/**
+ * Migrate a raw stored object from the old LP-based schema to the new
+ * experience-based BattleProfileStats shape. Safe to call on already-migrated data.
+ */
+function migrateProfileStats(raw: Record<string, unknown>): BattleProfileStats {
+  // Prefer experience; fall back to lpCurrent for cross-version compat.
+  const experience = typeof raw.experience === 'number'
+    ? raw.experience
+    : typeof raw.lpCurrent === 'number'
+      ? raw.lpCurrent
+      : 0
 
-function getRankTierIndex(label: string) {
-  return Math.max(0, rankTiers.findIndex((tier) => tier.label === label))
-}
+  const level = getLevelForExperience(experience)
+  const progress = getLevelProgress(experience)
+  const rankTitle = getLadderRankTitle({ level, ladderRank: (raw.ladderRank as number | null | undefined) ?? null })
 
-function getRankShift(before: string, after: string): BattleRankShift {
-  const beforeIndex = getRankTierIndex(before)
-  const afterIndex = getRankTierIndex(after)
+  const peakExperience = typeof raw.peakExperience === 'number'
+    ? raw.peakExperience
+    : typeof raw.peakLp === 'number'
+      ? raw.peakLp
+      : experience
 
-  if (afterIndex > beforeIndex) return 'promoted'
-  if (afterIndex < beforeIndex) return 'demoted'
-  return 'steady'
+  const peakLevel = getLevelForExperience(peakExperience)
+  const peakRankTitle = getLadderRankTitle({ level: peakLevel, ladderRank: null })
+
+  return {
+    playerName: (raw.playerName as string) ?? '',
+    title: (raw.title as string) ?? '',
+    playerId: (raw.playerId as string) ?? '',
+    season: (raw.season as string) ?? 'SEASON 3',
+    experience,
+    level,
+    rankTitle,
+    experienceToNextLevel: progress.nextLevelExperience,
+    peakExperience,
+    peakLevel,
+    peakRankTitle,
+    ladderRank: (raw.ladderRank as number | null | undefined) ?? null,
+    wins: (raw.wins as number) ?? 0,
+    losses: (raw.losses as number) ?? 0,
+    matchesPlayed: (raw.matchesPlayed as number) ?? 0,
+    currentStreak: (raw.currentStreak as number) ?? 0,
+    bestStreak: (raw.bestStreak as number) ?? 0,
+  }
 }
 
 function createDefaultProfileStats(): BattleProfileStats {
-  const tier = getRankTier(1480)
   const playerProfile = readPlayerProfile()
+  const experience = 0
+  const level = getLevelForExperience(experience)
+  const progress = getLevelProgress(experience)
+  const rankTitle = getLadderRankTitle({ level, ladderRank: null })
 
   return {
     playerName: playerProfile.displayName,
     title: playerProfile.title,
     playerId: playerProfile.playerId,
     season: 'SEASON 3',
-    rank: tier.label,
-    peakRank: 'DIAMOND I',
-    lpCurrent: 1480,
-    lpToNext: tier.next ?? 1480,
-    peakLp: 2300,
-    wins: 47,
-    losses: 31,
-    matchesPlayed: 78,
-    currentStreak: 4,
-    bestStreak: 11,
+    experience,
+    level,
+    rankTitle,
+    experienceToNextLevel: progress.nextLevelExperience,
+    peakExperience: experience,
+    peakLevel: level,
+    peakRankTitle: rankTitle,
+    ladderRank: null,
+    wins: 0,
+    losses: 0,
+    matchesPlayed: 0,
+    currentStreak: 0,
+    bestStreak: 0,
   }
 }
 
-function createDefaultHistorySeed(): MatchHistoryEntry[] {
-  const now = Date.now()
-  const hours = (count: number) => now - count * 60 * 60 * 1000
-  const days = (count: number) => now - count * 24 * 60 * 60 * 1000
+/**
+ * Migrate a raw MatchHistoryEntry from old LP-based fields to experience-based.
+ */
+function migrateHistoryEntry(raw: Record<string, unknown>): MatchHistoryEntry {
+  const experienceDelta = typeof raw.experienceDelta === 'number'
+    ? raw.experienceDelta
+    : typeof raw.lpDelta === 'number'
+      ? raw.lpDelta
+      : 0
 
-  return [
-    {
-      id: 'm1',
-      result: 'WIN',
-      mode: 'ranked',
-      opponentName: 'HEX_KING',
-      opponentTitle: 'Ladder Hunter',
-      opponentRankLabel: 'PLATINUM I',
-      yourTeam: ['yuji', 'nobara', 'megumi'],
-      theirTeam: ['megumi', 'nobara', 'yuji'],
-      timestamp: hours(2),
-      rounds: 4,
-      lpDelta: 24,
-      rankBefore: 'PLATINUM III',
-      rankAfter: 'PLATINUM II',
-      roomCode: null,
-    },
-    {
-      id: 'm2',
-      result: 'LOSS',
-      mode: 'ranked',
-      opponentName: 'DOMAINFRAME',
-      opponentTitle: 'Barrier Technician',
-      opponentRankLabel: 'PLATINUM II',
-      yourTeam: ['yuji', 'megumi', 'nobara'],
-      theirTeam: ['nobara', 'yuji', 'megumi'],
-      timestamp: hours(5),
-      rounds: 5,
-      lpDelta: -18,
-      rankBefore: 'PLATINUM II',
-      rankAfter: 'PLATINUM II',
-      roomCode: null,
-    },
-    {
-      id: 'm3',
-      result: 'WIN',
-      mode: 'quick',
-      opponentName: 'VESSEL_17',
-      opponentTitle: 'Open Lobby',
-      yourTeam: ['yuji', 'nobara', 'megumi'],
-      theirTeam: ['megumi', 'yuji', 'nobara'],
-      timestamp: hours(9),
-      rounds: 3,
-      lpDelta: 0,
-      rankBefore: 'PLATINUM II',
-      rankAfter: 'PLATINUM II',
-      roomCode: null,
-    },
-    {
-      id: 'm4',
-      result: 'WIN',
-      mode: 'private',
-      opponentName: 'SEALBREAKER',
-      opponentTitle: 'Private Match',
-      yourTeam: ['megumi', 'nobara', 'yuji'],
-      theirTeam: ['yuji', 'megumi', 'nobara'],
-      timestamp: days(1),
-      rounds: 6,
-      lpDelta: 0,
-      rankBefore: 'PLATINUM II',
-      rankAfter: 'PLATINUM II',
-      roomCode: 'ROOM-188',
-    },
-    {
-      id: 'm5',
-      result: 'LOSS',
-      mode: 'ranked',
-      opponentName: 'MALVOLENT',
-      opponentTitle: 'Ladder Hunter',
-      opponentRankLabel: 'DIAMOND III',
-      yourTeam: ['yuji', 'nobara', 'megumi'],
-      theirTeam: ['megumi', 'yuji', 'nobara'],
-      timestamp: days(1),
-      rounds: 4,
-      lpDelta: -18,
-      rankBefore: 'PLATINUM II',
-      rankAfter: 'PLATINUM III',
-      roomCode: null,
-    },
-    {
-      id: 'm6',
-      result: 'WIN',
-      mode: 'quick',
-      opponentName: 'TOKYO_CURSE',
-      opponentTitle: 'Quick Match',
-      yourTeam: ['yuji', 'megumi', 'nobara'],
-      theirTeam: ['nobara', 'megumi', 'yuji'],
-      timestamp: days(2),
-      rounds: 2,
-      lpDelta: 0,
-      rankBefore: 'PLATINUM III',
-      rankAfter: 'PLATINUM III',
-      roomCode: null,
-    },
-  ]
+  const experienceBefore = typeof raw.experienceBefore === 'number'
+    ? raw.experienceBefore
+    : typeof raw.lpBefore === 'number'
+      ? raw.lpBefore
+      : 0
+
+  const experienceAfter = typeof raw.experienceAfter === 'number'
+    ? raw.experienceAfter
+    : typeof raw.lpAfter === 'number'
+      ? raw.lpAfter
+      : Math.max(0, experienceBefore + experienceDelta)
+
+  const levelBefore = typeof raw.levelBefore === 'number' ? raw.levelBefore : getLevelForExperience(experienceBefore)
+  const levelAfter = typeof raw.levelAfter === 'number' ? raw.levelAfter : getLevelForExperience(experienceAfter)
+
+  const rankTitleBefore = typeof raw.rankTitleBefore === 'string'
+    ? raw.rankTitleBefore
+    : getLadderRankTitle({ level: levelBefore, ladderRank: null })
+
+  const rankTitleAfter = typeof raw.rankTitleAfter === 'string'
+    ? raw.rankTitleAfter
+    : getLadderRankTitle({ level: levelAfter, ladderRank: null })
+
+  return {
+    id: (raw.id as string) ?? `migrated-${Date.now()}`,
+    completionId: raw.completionId as string | undefined,
+    result: (raw.result as BattleMatchResult) ?? 'LOSS',
+    mode: (raw.mode as BattleMatchMode) ?? 'quick',
+    opponentName: (raw.opponentName as string) ?? 'Unknown',
+    opponentTitle: (raw.opponentTitle as string) ?? '',
+    opponentRankLabel: (raw.opponentRankLabel as string | null | undefined) ?? null,
+    yourTeam: (raw.yourTeam as string[]) ?? [],
+    theirTeam: (raw.theirTeam as string[]) ?? [],
+    timestamp: (raw.timestamp as number) ?? Date.now(),
+    rounds: (raw.rounds as number) ?? 0,
+    experienceDelta,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore,
+    rankTitleAfter,
+    ladderRankBefore: (raw.ladderRankBefore as number | null | undefined) ?? null,
+    ladderRankAfter: (raw.ladderRankAfter as number | null | undefined) ?? null,
+    roomCode: (raw.roomCode as string | null | undefined) ?? null,
+  }
 }
 
 function normalizeHistoryEntry(entry: MatchHistoryEntry): MatchHistoryEntry {
   return {
     ...entry,
     rounds: entry.rounds ?? 0,
-    lpDelta: entry.lpDelta ?? 0,
-    rankBefore: entry.rankBefore ?? entry.rankAfter ?? 'PLACEMENT',
-    rankAfter: entry.rankAfter ?? entry.rankBefore ?? 'PLACEMENT',
+    experienceDelta: entry.experienceDelta ?? 0,
+    experienceBefore: entry.experienceBefore ?? 0,
+    experienceAfter: entry.experienceAfter ?? 0,
+    levelBefore: entry.levelBefore ?? 1,
+    levelAfter: entry.levelAfter ?? 1,
+    rankTitleBefore: entry.rankTitleBefore ?? entry.rankTitleAfter ?? 'Jujutsu Student',
+    rankTitleAfter: entry.rankTitleAfter ?? entry.rankTitleBefore ?? 'Jujutsu Student',
     roomCode: entry.roomCode ?? null,
   }
 }
 
 function normalizeHistory(entries: MatchHistoryEntry[]) {
   return [...entries]
-    .map(normalizeHistoryEntry)
+    .map((e) => normalizeHistoryEntry(migrateHistoryEntry(e as unknown as Record<string, unknown>)))
     .sort((left, right) => right.timestamp - left.timestamp)
     .slice(0, 20)
 }
@@ -338,12 +342,34 @@ function normalizeHistory(entries: MatchHistoryEntry[]) {
 function normalizeLastResult(result: LastBattleResult | null) {
   if (!result) return null
 
+  const snapshot = result.profileSnapshot
+    ? migrateProfileStats(result.profileSnapshot as unknown as Record<string, unknown>)
+    : null
+
+  const experienceBefore = result.experienceBefore
+    ?? (result as unknown as Record<string, unknown>).lpBefore as number
+    ?? Math.max(0, ((snapshot?.experience ?? 0) - (result.experienceDelta ?? 0)))
+
+  const experienceAfter = result.experienceAfter
+    ?? (result as unknown as Record<string, unknown>).lpAfter as number
+    ?? (snapshot?.experience ?? 0)
+
+  const levelBefore = result.levelBefore ?? getLevelForExperience(experienceBefore)
+  const levelAfter = result.levelAfter ?? getLevelForExperience(experienceAfter)
+
   return {
     ...result,
-    lpBefore: result.lpBefore ?? Math.max(0, (result.profileSnapshot?.lpCurrent ?? 0) - (result.lpDelta ?? 0)),
-    lpAfter: result.lpAfter ?? result.profileSnapshot?.lpCurrent ?? 0,
-    rankBefore: result.rankBefore ?? result.profileSnapshot?.rank ?? 'PLACEMENT',
-    rankAfter: result.rankAfter ?? result.profileSnapshot?.rank ?? 'PLACEMENT',
+    experienceDelta: result.experienceDelta ?? (result as unknown as Record<string, unknown>).lpDelta as number ?? 0,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore: result.rankTitleBefore
+      ?? (result as unknown as Record<string, unknown>).rankBefore as string
+      ?? getLadderRankTitle({ level: levelBefore, ladderRank: null }),
+    rankTitleAfter: result.rankTitleAfter
+      ?? (result as unknown as Record<string, unknown>).rankAfter as string
+      ?? getLadderRankTitle({ level: levelAfter, ladderRank: null }),
     rankShift: result.rankShift ?? 'steady',
     roomCode: result.roomCode ?? null,
     newlyUnlockedMissionIds: result.newlyUnlockedMissionIds ?? [],
@@ -351,6 +377,7 @@ function normalizeLastResult(result: LastBattleResult | null) {
     newlyCompletedQuestIds: result.newlyCompletedQuestIds ?? [],
     streakBefore: result.streakBefore ?? 0,
     matchesPlayedDelta: result.matchesPlayedDelta ?? 1,
+    profileSnapshot: snapshot ?? result.profileSnapshot,
   }
 }
 
@@ -371,6 +398,7 @@ function normalizeStagedBattleSession(session: StagedBattleSession | null) {
     playerTeamIds: session.playerTeamIds.slice(),
     enemyTeamIds: session.enemyTeamIds.slice(),
     opponentRankLabel: session.opponentRankLabel ?? null,
+    opponentExperience: session.opponentExperience ?? null,
     roomCode: session.roomCode ?? null,
     practiceOptions: session.practiceOptions ?? null,
   }
@@ -398,6 +426,7 @@ export function createStagedBattleSession(mode: BattleMatchMode, playerTeamIds: 
     opponentName: picked.opponentName,
     opponentTitle: picked.opponentTitle,
     opponentRankLabel: picked.opponentRankLabel ?? null,
+    opponentExperience: picked.opponentExperience ?? null,
     roomCode: picked.roomCode ?? null,
     practiceOptions: null,
   }
@@ -413,6 +442,7 @@ export function createPracticeSession(playerTeamIds: string[], options: Practice
     opponentName: 'TRAINING_DUMMY',
     opponentTitle: 'Practice Match',
     opponentRankLabel: null,
+    opponentExperience: null,
     roomCode: null,
     practiceOptions: { ...options },
   }
@@ -426,9 +456,11 @@ export function readStagedBattleSession(): StagedBattleSession | null {
   return normalizeStagedBattleSession(readLocalStorage<StagedBattleSession | null>(stagedBattleSessionKey, null))
 }
 
-export function readBattleProfileStats() {
+export function readBattleProfileStats(): BattleProfileStats {
   const playerProfile = readPlayerProfile()
-  const stored = readLocalStorage<BattleProfileStats>(battleProfileStatsKey, createDefaultProfileStats())
+  const raw = readLocalStorage<Record<string, unknown>>(battleProfileStatsKey, {})
+  const hasData = Object.keys(raw).length > 0
+  const stored = hasData ? migrateProfileStats(raw) : createDefaultProfileStats()
 
   return {
     ...stored,
@@ -439,7 +471,9 @@ export function readBattleProfileStats() {
 }
 
 export function readRecentMatchHistory() {
-  return normalizeHistory(readLocalStorage<MatchHistoryEntry[]>(battleMatchHistoryKey, createDefaultHistorySeed()))
+  const raw = readLocalStorage<unknown[]>(battleMatchHistoryKey, [])
+  if (raw.length === 0) return []
+  return normalizeHistory(raw as MatchHistoryEntry[])
 }
 
 export function readLastBattleResult() {
@@ -464,7 +498,7 @@ export function getModeLabel(mode: BattleMatchMode) {
 }
 
 export function getModeDescription(mode: BattleMatchMode) {
-  if (mode === 'ranked') return 'Ranked climb with LP gains and losses.'
+  if (mode === 'ranked') return 'Ranked climb with experience gains and losses.'
   if (mode === 'quick') return 'Fast unranked matches for testing teams.'
   return 'Private-room rules with no ranked stakes.'
 }
@@ -497,11 +531,6 @@ type CompletionLookup =
 
 /**
  * Check whether a completionId has already been written to localStorage.
- * Three outcomes:
- *   'new'              — not seen before; caller should record.
- *   'found'            — lastBattleResult matches; return that result.
- *   'already-recorded' — found in history but lastBattleResult is a different
- *                        match; block re-recording but don't return wrong data.
  */
 function findExistingResult(completionId: string): CompletionLookup {
   const last = readLocalStorage<LastBattleResult | null>(lastBattleResultKey, null)
@@ -539,6 +568,7 @@ export function recordCompletedBattle({
     opponentName: 'SPAR_PARTNER',
     opponentTitle: 'Quick Match',
     opponentRankLabel: null,
+    opponentExperience: null,
     roomCode: null,
   }
 
@@ -550,13 +580,34 @@ export function recordCompletedBattle({
   const current = readBattleProfileStats()
   const won = winner === 'player'
   const draw = winner === 'draw'
-  const lpDelta = activeSession.mode === 'ranked' && !draw ? (won ? 24 : -18) : 0
-  const lpBefore = current.lpCurrent
-  const rankBefore = current.rank
-  const lpCurrent = Math.max(0, current.lpCurrent + lpDelta)
-  const peakLp = Math.max(current.peakLp, lpCurrent)
-  const rankTier = getRankTier(lpCurrent)
-  const peakTier = getRankTier(peakLp)
+  const isRanked = activeSession.mode === 'ranked'
+
+  // Use opponent XP from session when available; otherwise seed a reasonable value
+  // TODO: For online matches, opponent XP should come from the match row / RPC response
+  const opponentExperience = activeSession.opponentExperience
+    ?? current.experience // Treat unknown opponents as same-level
+
+  const experienceDelta = isRanked && !draw
+    ? calculateExperienceDelta({
+        playerExperience: current.experience,
+        opponentExperience,
+        result: won ? 'win' : 'loss',
+      })
+    : 0
+
+  const experienceBefore = current.experience
+  const levelBefore = current.level
+  const rankTitleBefore = current.rankTitle
+
+  const experienceAfter = normalizeExperience(current.experience + experienceDelta)
+  const levelAfter = getLevelForExperience(experienceAfter)
+  const progress = getLevelProgress(experienceAfter)
+  const peakExperience = Math.max(current.peakExperience, experienceAfter)
+  const peakLevel = getLevelForExperience(peakExperience)
+  const peakRankTitle = getLadderRankTitle({ level: peakLevel, ladderRank: null })
+  const rankTitleAfter = getLadderRankTitle({ level: levelAfter, ladderRank: current.ladderRank ?? null })
+  const levelShift = getLevelShift(levelBefore, levelAfter)
+
   const nextStats: BattleProfileStats = {
     ...current,
     wins: current.wins + (won ? 1 : 0),
@@ -564,13 +615,14 @@ export function recordCompletedBattle({
     matchesPlayed: current.matchesPlayed + 1,
     currentStreak: won ? current.currentStreak + 1 : draw ? current.currentStreak : 0,
     bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
-    lpCurrent,
-    lpToNext: rankTier.next ?? lpCurrent,
-    rank: rankTier.label,
-    peakLp,
-    peakRank: peakTier.label,
+    experience: experienceAfter,
+    level: levelAfter,
+    rankTitle: rankTitleAfter,
+    experienceToNextLevel: progress.nextLevelExperience,
+    peakExperience,
+    peakLevel,
+    peakRankTitle,
   }
-  const rankShift = getRankShift(rankBefore, nextStats.rank)
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-${Date.now()}`,
@@ -584,9 +636,15 @@ export function recordCompletedBattle({
     theirTeam: enemyTeamIds.slice(),
     timestamp: Date.now(),
     rounds,
-    lpDelta,
-    rankBefore,
-    rankAfter: nextStats.rank,
+    experienceDelta,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore,
+    rankTitleAfter,
+    ladderRankBefore: current.ladderRank ?? null,
+    ladderRankAfter: current.ladderRank ?? null,
     roomCode: activeSession.roomCode ?? null,
   }
 
@@ -603,12 +661,16 @@ export function recordCompletedBattle({
     opponentRankLabel: activeSession.opponentRankLabel ?? null,
     yourTeam: playerTeamIds.slice(),
     theirTeam: enemyTeamIds.slice(),
-    lpDelta,
-    lpBefore,
-    lpAfter: nextStats.lpCurrent,
-    rankBefore,
-    rankAfter: nextStats.rank,
-    rankShift,
+    experienceDelta,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore,
+    rankTitleAfter,
+    rankShift: levelShift,
+    ladderRankBefore: current.ladderRank ?? null,
+    ladderRankAfter: current.ladderRank ?? null,
     roomCode: activeSession.roomCode ?? null,
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
@@ -629,7 +691,7 @@ export function recordCompletedBattle({
     lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
       won,
       teamIds: playerTeamIds,
-      lpAfter: nextStats.lpCurrent,
+      experienceAfter: nextStats.experience,
       currentStreak: nextStats.currentStreak,
     })
   }
@@ -646,8 +708,12 @@ export function recordCompletedBattle({
 
 /**
  * Record the outcome of a completed online match.
- * Unlike `recordCompletedBattle`, LP delta comes from the server RPC
+ * Unlike `recordCompletedBattle`, experience delta comes from the server RPC
  * rather than being computed locally.
+ *
+ * TODO: The RPC is still named `settle_match_lp` and returns lp_gain/lp_loss/
+ * winner_lp/loser_lp. Those values are treated as experience values until the
+ * RPC and database are migrated to experience columns. See migration 012_experience.sql.
  */
 export function recordOnlineCompletedBattle({
   winner,
@@ -656,8 +722,9 @@ export function recordOnlineCompletedBattle({
   enemyTeamIds,
   opponentName,
   mode,
-  lpDelta,
-  lpBefore,
+  // TODO: rename param to experienceDelta once settle_match_lp RPC is migrated
+  lpDelta: experienceDelta,
+  lpBefore: experienceBefore,
   battleSeed,
 }: {
   winner: BattleWinner
@@ -666,7 +733,9 @@ export function recordOnlineCompletedBattle({
   enemyTeamIds: string[]
   opponentName: string
   mode: BattleMatchMode
+  /** @deprecated Renamed to experienceDelta — treated as XP until RPC migration. */
   lpDelta: number
+  /** @deprecated Renamed to experienceBefore — treated as XP until RPC migration. */
   lpBefore: number
   battleSeed: string
 }): LastBattleResult {
@@ -676,13 +745,20 @@ export function recordOnlineCompletedBattle({
   if (lookup.status === 'already-recorded') return readLastBattleResult()!
 
   const current = readBattleProfileStats()
-  const rankBefore = current.rank
   const won = winner === 'player'
   const draw = winner === 'draw'
-  const lpCurrent = Math.max(0, lpBefore + lpDelta)
-  const peakLp = Math.max(current.peakLp, lpCurrent)
-  const rankTier = getRankTier(lpCurrent)
-  const peakTier = getRankTier(peakLp)
+
+  const levelBefore = getLevelForExperience(experienceBefore)
+  const rankTitleBefore = getLadderRankTitle({ level: levelBefore, ladderRank: current.ladderRank ?? null })
+
+  const experienceAfter = normalizeExperience(experienceBefore + experienceDelta)
+  const levelAfter = getLevelForExperience(experienceAfter)
+  const progress = getLevelProgress(experienceAfter)
+  const peakExperience = Math.max(current.peakExperience, experienceAfter)
+  const peakLevel = getLevelForExperience(peakExperience)
+  const peakRankTitle = getLadderRankTitle({ level: peakLevel, ladderRank: null })
+  const rankTitleAfter = getLadderRankTitle({ level: levelAfter, ladderRank: current.ladderRank ?? null })
+  const levelShift = getLevelShift(levelBefore, levelAfter)
 
   const nextStats: BattleProfileStats = {
     ...current,
@@ -691,14 +767,14 @@ export function recordOnlineCompletedBattle({
     matchesPlayed: current.matchesPlayed + 1,
     currentStreak: won ? current.currentStreak + 1 : draw ? current.currentStreak : 0,
     bestStreak: won ? Math.max(current.bestStreak, current.currentStreak + 1) : current.bestStreak,
-    lpCurrent,
-    lpToNext: rankTier.next ?? lpCurrent,
-    rank: rankTier.label,
-    peakLp,
-    peakRank: peakTier.label,
+    experience: experienceAfter,
+    level: levelAfter,
+    rankTitle: rankTitleAfter,
+    experienceToNextLevel: progress.nextLevelExperience,
+    peakExperience,
+    peakLevel,
+    peakRankTitle,
   }
-
-  const rankShift = getRankShift(rankBefore, nextStats.rank)
 
   const historyEntry: MatchHistoryEntry = {
     id: `match-online-${Date.now()}`,
@@ -711,9 +787,15 @@ export function recordOnlineCompletedBattle({
     theirTeam: enemyTeamIds.slice(),
     timestamp: Date.now(),
     rounds,
-    lpDelta,
-    rankBefore,
-    rankAfter: nextStats.rank,
+    experienceDelta,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore,
+    rankTitleAfter,
+    ladderRankBefore: current.ladderRank ?? null,
+    ladderRankAfter: current.ladderRank ?? null,
   }
 
   const lastResult: LastBattleResult = {
@@ -727,12 +809,16 @@ export function recordOnlineCompletedBattle({
     opponentTitle: 'Online Match',
     yourTeam: playerTeamIds.slice(),
     theirTeam: enemyTeamIds.slice(),
-    lpDelta,
-    lpBefore,
-    lpAfter: nextStats.lpCurrent,
-    rankBefore,
-    rankAfter: nextStats.rank,
-    rankShift,
+    experienceDelta,
+    experienceBefore,
+    experienceAfter,
+    levelBefore,
+    levelAfter,
+    rankTitleBefore,
+    rankTitleAfter,
+    rankShift: levelShift,
+    ladderRankBefore: current.ladderRank ?? null,
+    ladderRankAfter: current.ladderRank ?? null,
     timestamp: historyEntry.timestamp,
     profileSnapshot: nextStats,
     newlyUnlockedMissionIds: [],
@@ -753,7 +839,7 @@ export function recordOnlineCompletedBattle({
     lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
       won,
       teamIds: playerTeamIds,
-      lpAfter: nextStats.lpCurrent,
+      experienceAfter: nextStats.experience,
       currentStreak: nextStats.currentStreak,
     })
   }

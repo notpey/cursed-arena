@@ -1,8 +1,21 @@
 /**
- * Supabase DB operations for the LP / ranking system.
+ * Supabase DB operations for the experience / ranking system.
+ *
+ * The visible LP system has been replaced with experience + level + rank titles.
+ * The underlying `settle_match_lp` RPC and `profiles.lp` column are still used
+ * as the DB transport; returned values are treated as experience numbers.
+ *
+ * TODO: Create a new `settle_match_experience` RPC with variable XP deltas based
+ * on both players' levels, then remove the settle_match_lp compatibility layer.
  */
 
 import { getSupabaseClient } from '@/lib/supabase'
+import {
+  getLevelForExperience,
+  getLevelProgress,
+  getLadderRankTitle,
+} from '@/features/ranking/ladder'
+import { LADDER_TOP_RANK_LIMIT } from '@/features/ranking/ladder'
 
 function db() {
   const client = getSupabaseClient()
@@ -10,33 +23,55 @@ function db() {
   return client
 }
 
-// ── settle_match_lp RPC ───────────────────────────────────────────────────────
+// ── settle_match_lp RPC (compatibility layer) ─────────────────────────────────
 
+/**
+ * @deprecated Type alias for the existing RPC result. The lp_* fields are
+ * treated as experience values until `settle_match_experience` RPC is created.
+ * TODO: Replace with ExperienceSettleResult once the RPC is migrated.
+ */
 export type LpSettleResult = {
-  /** LP awarded to the winner (0 for non-ranked matches). */
   lp_gain: number
-  /** LP deducted from the loser (0 for non-ranked matches). */
   lp_loss: number
-  /** Winner's new LP total (null for non-ranked). */
   winner_lp: number | null
-  /** Loser's new LP total (null for non-ranked). */
   loser_lp: number | null
-  /** True when this match was already settled by the other client. */
   already_settled?: boolean
-  /** Set if an error occurred. */
+  error?: string
+}
+
+/** Normalized result after treating LP values as experience. */
+export type LadderSettleResult = {
+  experienceGain: number
+  experienceLoss: number
+  winnerExperience: number | null
+  loserExperience: number | null
+  already_settled?: boolean
   error?: string
 }
 
 /**
- * Call the `settle_match_lp` Postgres function to atomically award LP.
- * Idempotent — safe to call from both clients; the second call is a no-op.
+ * Call the `settle_match_lp` Postgres function.
+ * Returns experience-normalized values (lp fields mapped to experience).
+ * TODO: Rename RPC to settle_match_experience and implement variable XP deltas.
  */
 export async function settleMatchLp(
   matchId: string,
-): Promise<{ data: LpSettleResult | null; error: string | null }> {
+): Promise<{ data: LadderSettleResult | null; error: string | null }> {
   const { data, error } = await db().rpc('settle_match_lp', { p_match_id: matchId })
   if (error) return { data: null, error: error.message }
-  return { data: data as LpSettleResult, error: null }
+
+  const raw = data as LpSettleResult
+  return {
+    data: {
+      experienceGain: raw.lp_gain,
+      experienceLoss: raw.lp_loss,
+      winnerExperience: raw.winner_lp,
+      loserExperience: raw.loser_lp,
+      already_settled: raw.already_settled,
+      error: raw.error,
+    },
+    error: null,
+  }
 }
 
 // ── Player rank profile ───────────────────────────────────────────────────────
@@ -44,15 +79,20 @@ export async function settleMatchLp(
 export type PlayerRankProfile = {
   id: string
   display_name: string
-  lp: number
+  /** Total experience (sourced from profiles.lp until migration 012 adds profiles.experience). */
+  experience: number
+  level: number
+  rankTitle: string
   wins: number
   losses: number
   win_streak: number
   best_streak: number
+  ladderRank?: number | null
 }
 
 /**
- * Fetch a single player's LP and match stats from the profiles table.
+ * Fetch a single player's experience and match stats from the profiles table.
+ * TODO: Once migration 012 adds profiles.experience, select that column instead of lp.
  */
 export async function fetchPlayerRankProfile(
   userId: string,
@@ -64,7 +104,26 @@ export async function fetchPlayerRankProfile(
     .single()
 
   if (error) return { data: null, error: error.message }
-  return { data: data as PlayerRankProfile, error: null }
+
+  const raw = data as { id: string; display_name: string; lp: number; wins: number; losses: number; win_streak: number; best_streak: number }
+  const experience = raw.lp // TODO: map to profiles.experience once column exists
+  const level = getLevelForExperience(experience)
+  const rankTitle = getLadderRankTitle({ level, ladderRank: null })
+
+  return {
+    data: {
+      id: raw.id,
+      display_name: raw.display_name,
+      experience,
+      level,
+      rankTitle,
+      wins: raw.wins,
+      losses: raw.losses,
+      win_streak: raw.win_streak,
+      best_streak: raw.best_streak,
+    },
+    error: null,
+  }
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
@@ -72,13 +131,24 @@ export async function fetchPlayerRankProfile(
 export type LeaderboardEntry = {
   id: string
   display_name: string
-  lp: number
+  /** Total experience (sourced from profiles.lp until migration 012). */
+  experience: number
+  level: number
+  rankTitle: string
   wins: number
   losses: number
+  /** Position on the leaderboard (1-based). Only set when rank <= LADDER_TOP_RANK_LIMIT. */
+  ladderRank: number | null
 }
 
 /**
- * Fetch the top players ordered by LP descending.
+ * Fetch the top players ordered by experience (lp) descending.
+ * Computes ladderRank from array position.
+ * Only assigns a ladderRank to entries within the top LADDER_TOP_RANK_LIMIT.
+ *
+ * TODO: Naruto-Arena updates ladder ranks every 15 minutes via a batch job.
+ * If live calculation becomes expensive, add a scheduled function that writes
+ * ladder_rank into the profiles table and query that instead.
  */
 export async function fetchLeaderboard(
   limit = 20,
@@ -90,5 +160,29 @@ export async function fetchLeaderboard(
     .limit(limit)
 
   if (error) return { data: [], error: error.message }
-  return { data: (data ?? []) as LeaderboardEntry[], error: null }
+
+  const entries: LeaderboardEntry[] = (data ?? []).map((row, index) => {
+    const raw = row as { id: string; display_name: string; lp: number; wins: number; losses: number }
+    const experience = raw.lp // TODO: map to profiles.experience once column exists
+    const ladderRank = index + 1 <= LADDER_TOP_RANK_LIMIT ? index + 1 : null
+    const level = getLevelForExperience(experience)
+    const rankTitle = getLadderRankTitle({ level, ladderRank })
+
+    return {
+      id: raw.id,
+      display_name: raw.display_name,
+      experience,
+      level,
+      rankTitle,
+      wins: raw.wins,
+      losses: raw.losses,
+      ladderRank,
+    }
+  })
+
+  return { data: entries, error: null }
 }
+
+// ── Re-export helpers used by ProfilePage ─────────────────────────────────────
+
+export { getLevelProgress }

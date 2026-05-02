@@ -15,6 +15,7 @@ import {
 } from '@/features/battle/persistence'
 import { MISSION_DEFS } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
+import { getLevelProgress } from '@/features/ranking/ladder'
 
 function TeamPillRow({ ids, label }: { ids: string[]; label: string }) {
   return (
@@ -84,10 +85,14 @@ function ProgressReceipt({ result }: { result: LastBattleResult }) {
   const streakAfter = result.profileSnapshot.currentStreak
   const streakBefore = result.streakBefore ?? 0
 
-  // LP row
-  const lpRow = result.mode === 'ranked'
-    ? { label: 'LP CHANGE', value: result.lpDelta >= 0 ? `+${result.lpDelta} LP` : `${result.lpDelta} LP`, tone: (result.lpDelta >= 0 ? 'positive' : 'negative') as 'positive' | 'negative' }
-    : { label: 'LP CHANGE', value: 'No ranked LP at stake', tone: 'muted' as const }
+  // Experience row
+  const xpRow = result.mode === 'ranked'
+    ? {
+        label: 'EXPERIENCE',
+        value: result.experienceDelta >= 0 ? `+${result.experienceDelta} XP` : `${result.experienceDelta} XP`,
+        tone: (result.experienceDelta >= 0 ? 'positive' : 'negative') as 'positive' | 'negative',
+      }
+    : { label: 'EXPERIENCE', value: 'No ranked XP at stake', tone: 'muted' as const }
 
   // Streak row
   let streakValue: string
@@ -121,11 +126,14 @@ function ProgressReceipt({ result }: { result: LastBattleResult }) {
     return { name: fighter?.name ?? def.reward.fighterId }
   }).filter(Boolean) as { name: string }[]
 
+  // Level progress after match
+  const progressAfter = getLevelProgress(result.experienceAfter)
+
   return (
     <div className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-3">
       <p className="ca-mono-label text-[0.44rem] text-ca-text-3 mb-2">PROGRESS EARNED</p>
 
-      <ReceiptRow label={lpRow.label} value={lpRow.value} tone={lpRow.tone} />
+      <ReceiptRow label={xpRow.label} value={xpRow.value} tone={xpRow.tone} />
       <ReceiptRow
         label="RESULT"
         value={draw ? 'Draw' : won ? 'Win' : 'Loss'}
@@ -133,6 +141,13 @@ function ProgressReceipt({ result }: { result: LastBattleResult }) {
       />
       <ReceiptRow label="MATCHES PLAYED" value={`+1  →  ${result.profileSnapshot.matchesPlayed}`} tone="neutral" />
       <ReceiptRow label="STREAK" value={streakValue} tone={streakTone} />
+      {result.mode === 'ranked' && (
+        <ReceiptRow
+          label="LEVEL PROGRESS"
+          value={`${progressAfter.experienceIntoLevel.toLocaleString()} / ${progressAfter.experienceNeededForNextLevel.toLocaleString()} XP into Lv ${progressAfter.level}`}
+          tone="neutral"
+        />
+      )}
 
       {questRows && questRows.map((q, i) => (
         <ReceiptRow key={i} label={q.label} value={q.value} tone="positive" />
@@ -147,14 +162,43 @@ function ProgressReceipt({ result }: { result: LastBattleResult }) {
   )
 }
 
-function RankShiftBanner({ shift, rankBefore, rankAfter }: { shift: 'promoted' | 'demoted' | 'steady'; rankBefore: string; rankAfter: string }) {
-  const tone = shift === 'promoted' ? 'text-ca-teal border-ca-teal/22 bg-ca-teal-wash' : shift === 'demoted' ? 'text-ca-red border-ca-red/22 bg-ca-red-wash' : 'text-ca-text-2 border-white/10 bg-[rgba(255,255,255,0.03)]'
-  const label = shift === 'promoted' ? 'PROMOTION' : shift === 'demoted' ? 'DEMOTION' : 'RANK HELD'
+function LevelShiftBanner({
+  shift,
+  rankTitleBefore,
+  rankTitleAfter,
+  levelBefore,
+  levelAfter,
+}: {
+  shift: 'promoted' | 'demoted' | 'steady'
+  rankTitleBefore: string
+  rankTitleAfter: string
+  levelBefore: number
+  levelAfter: number
+}) {
+  const tone =
+    shift === 'promoted' ? 'text-ca-teal border-ca-teal/22 bg-ca-teal-wash' :
+    shift === 'demoted' ? 'text-ca-red border-ca-red/22 bg-ca-red-wash' :
+    'text-ca-text-2 border-white/10 bg-[rgba(255,255,255,0.03)]'
+
+  const label =
+    shift === 'promoted' ? 'LEVEL UP' :
+    shift === 'demoted' ? 'LEVEL DOWN' :
+    'LEVEL HELD'
+
+  const levelChanged = levelBefore !== levelAfter
 
   return (
     <div className={`mt-4 rounded-[10px] border px-3 py-3 ${tone}`}>
       <p className="ca-mono-label text-[0.42rem]">{label}</p>
-      <p className="ca-display mt-2 text-[1.5rem]">{rankBefore} / {rankAfter}</p>
+      {levelChanged ? (
+        <p className="ca-display mt-2 text-[1.5rem]">
+          Lv {levelBefore} → Lv {levelAfter}
+        </p>
+      ) : null}
+      <p className="ca-mono-label mt-1 text-[0.44rem] opacity-70">
+        {rankTitleBefore}
+        {rankTitleBefore !== rankTitleAfter ? ` → ${rankTitleAfter}` : ''}
+      </p>
     </div>
   )
 }
@@ -217,41 +261,49 @@ export function BattleResultsPage() {
                 </div>
                 <p className="mt-3 text-sm text-ca-text-2">
                   {result.opponentTitle}
-                  {result.opponentRankLabel ? ` � ${result.opponentRankLabel}` : ''}
-                  {result.roomCode ? ` � ${result.roomCode}` : ''}
+                  {result.opponentRankLabel ? ` · ${result.opponentRankLabel}` : ''}
+                  {result.roomCode ? ` · ${result.roomCode}` : ''}
                 </p>
               </div>
 
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-4 py-3 text-right">
                 <p className="ca-mono-label text-[0.42rem] text-ca-text-3">ROUNDS</p>
                 <p className="ca-display mt-2 text-3xl text-ca-text">{result.rounds}</p>
-                <p className={`ca-mono-label mt-2 text-[0.5rem] ${result.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
-                  {result.mode === 'ranked' ? `LP ${result.lpDelta >= 0 ? `+${result.lpDelta}` : result.lpDelta}` : 'UNRANKED'}
+                <p className={`ca-mono-label mt-2 text-[0.5rem] ${result.experienceDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                  {result.mode === 'ranked'
+                    ? `XP ${result.experienceDelta >= 0 ? `+${result.experienceDelta}` : result.experienceDelta}`
+                    : 'UNRANKED'}
                 </p>
               </div>
             </div>
 
-            <RankShiftBanner shift={result.rankShift} rankBefore={result.rankBefore} rankAfter={result.rankAfter} />
+            <LevelShiftBanner
+              shift={result.rankShift}
+              rankTitleBefore={result.rankTitleBefore}
+              rankTitleAfter={result.rankTitleAfter}
+              levelBefore={result.levelBefore}
+              levelAfter={result.levelAfter}
+            />
             <UnlockBanner missionIds={result.newlyUnlockedMissionIds ?? []} />
             <ProgressReceipt result={result} />
           </section>
 
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-5 animate-ca-stagger-in" style={{ animationDelay: '80ms' }}>
-            <p className="ca-display text-3xl text-ca-text">Rank Readout</p>
+            <p className="ca-display text-3xl text-ca-text">Ladder Readout</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP BEFORE</p>
-                <p className="ca-display mt-2 text-3xl text-ca-text">{result.lpBefore}</p>
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">EXP BEFORE</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.experienceBefore.toLocaleString()}</p>
               </div>
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP DELTA</p>
-                <p className={`ca-display mt-2 text-3xl ${result.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
-                  {result.lpDelta >= 0 ? `+${result.lpDelta}` : result.lpDelta}
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">EXP CHANGE</p>
+                <p className={`ca-display mt-2 text-3xl ${result.experienceDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                  {result.experienceDelta >= 0 ? `+${result.experienceDelta}` : result.experienceDelta}
                 </p>
               </div>
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
-                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">LP AFTER</p>
-                <p className="ca-display mt-2 text-3xl text-ca-text">{result.lpAfter}</p>
+                <p className="ca-mono-label text-[0.42rem] text-ca-text-3">EXP AFTER</p>
+                <p className="ca-display mt-2 text-3xl text-ca-text">{result.experienceAfter.toLocaleString()}</p>
               </div>
             </div>
           </section>
@@ -279,15 +331,15 @@ export function BattleResultsPage() {
                         <span className="ca-mono-label text-[0.44rem] text-ca-text-3">VS {match.opponentName}</span>
                         <span className="ca-mono-label text-[0.44rem] text-ca-text-3">{match.rounds} ROUNDS</span>
                         {match.mode === 'ranked' ? (
-                          <span className={`ca-mono-label text-[0.44rem] ${match.lpDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
-                            {match.lpDelta >= 0 ? `+${match.lpDelta} LP` : `${match.lpDelta} LP`}
+                          <span className={`ca-mono-label text-[0.44rem] ${match.experienceDelta >= 0 ? 'text-ca-teal' : 'text-ca-red'}`}>
+                            {match.experienceDelta >= 0 ? `+${match.experienceDelta} XP` : `${match.experienceDelta} XP`}
                           </span>
                         ) : null}
                       </div>
                       <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{formatMatchTimestamp(match.timestamp)}</span>
                     </div>
                     <p className="mt-2 text-xs leading-5 text-ca-text-2">
-                      {match.rankBefore} / {match.rankAfter}
+                      {match.rankTitleBefore} / {match.rankTitleAfter}
                       {match.roomCode ? ` / ${match.roomCode}` : ''}
                     </p>
                   </div>
@@ -300,7 +352,9 @@ export function BattleResultsPage() {
         <div className="space-y-4">
           <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.18)] p-5 animate-ca-stagger-in" style={{ animationDelay: '100ms' }}>
             <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Updated Profile</p>
-            <h2 className="ca-display mt-2 text-4xl text-ca-text">{result.profileSnapshot.rank}</h2>
+            <h2 className="ca-display mt-2 text-4xl text-ca-text">
+              Level {result.profileSnapshot.level} — {result.profileSnapshot.rankTitle}
+            </h2>
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
                 <p className="ca-mono-label text-[0.42rem] text-ca-text-3">WINS</p>
@@ -322,7 +376,9 @@ export function BattleResultsPage() {
             <div className="mt-4 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.03)] px-3 py-3">
               <p className="ca-mono-label text-[0.42rem] text-ca-text-3">MATCHES PLAYED</p>
               <p className="ca-display mt-2 text-3xl text-ca-text">{result.profileSnapshot.matchesPlayed}</p>
-              <p className="mt-2 text-sm text-ca-text-3">Peak Rank: {result.profileSnapshot.peakRank}</p>
+              <p className="mt-2 text-sm text-ca-text-3">
+                Peak: Lv {result.profileSnapshot.peakLevel} — {result.profileSnapshot.peakRankTitle}
+              </p>
             </div>
           </section>
 

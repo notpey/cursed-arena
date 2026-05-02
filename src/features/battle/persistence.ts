@@ -7,33 +7,36 @@
  * Required Supabase tables (see supabase/migrations/ for SQL):
  *
  *   player_battle_profiles
- *     player_id     uuid  references auth.users NOT NULL PRIMARY KEY
- *     lp_current    int   NOT NULL DEFAULT 1480
- *     peak_lp       int   NOT NULL DEFAULT 0
- *     wins          int   NOT NULL DEFAULT 0
- *     losses        int   NOT NULL DEFAULT 0
- *     current_streak int  NOT NULL DEFAULT 0
- *     best_streak   int   NOT NULL DEFAULT 0
- *     matches_played int  NOT NULL DEFAULT 0
- *     updated_at    timestamptz NOT NULL DEFAULT now()
+ *     player_id      uuid  references auth.users NOT NULL PRIMARY KEY
+ *     experience     int   NOT NULL DEFAULT 0          ← new (migration 012)
+ *     peak_experience int  NOT NULL DEFAULT 0          ← new (migration 012)
+ *     lp_current     int   NOT NULL DEFAULT 0          ← legacy compat column
+ *     peak_lp        int   NOT NULL DEFAULT 0          ← legacy compat column
+ *     wins           int   NOT NULL DEFAULT 0
+ *     losses         int   NOT NULL DEFAULT 0
+ *     current_streak int   NOT NULL DEFAULT 0
+ *     best_streak    int   NOT NULL DEFAULT 0
+ *     matches_played int   NOT NULL DEFAULT 0
+ *     updated_at     timestamptz NOT NULL DEFAULT now()
  *
  *   battle_match_history
- *     id              uuid  PRIMARY KEY DEFAULT gen_random_uuid()
- *     player_id       uuid  references auth.users NOT NULL
- *     completion_id   text  NOT NULL
- *     result          text  NOT NULL  -- 'WIN' | 'LOSS' | 'DRAW'
- *     mode            text  NOT NULL
- *     opponent_name   text  NOT NULL
- *     opponent_title  text  NOT NULL DEFAULT ''
+ *     id               uuid  PRIMARY KEY DEFAULT gen_random_uuid()
+ *     player_id        uuid  references auth.users NOT NULL
+ *     completion_id    text  NOT NULL
+ *     result           text  NOT NULL  -- 'WIN' | 'LOSS' | 'DRAW'
+ *     mode             text  NOT NULL
+ *     opponent_name    text  NOT NULL
+ *     opponent_title   text  NOT NULL DEFAULT ''
  *     opponent_rank_label text
- *     your_team       text[] NOT NULL
- *     their_team      text[] NOT NULL
- *     lp_delta        int   NOT NULL DEFAULT 0
- *     rank_before     text  NOT NULL DEFAULT ''
- *     rank_after      text  NOT NULL DEFAULT ''
- *     rounds          int   NOT NULL DEFAULT 0
- *     room_code       text
- *     played_at       timestamptz NOT NULL DEFAULT now()
+ *     your_team        text[] NOT NULL
+ *     their_team       text[] NOT NULL
+ *     experience_delta int   NOT NULL DEFAULT 0        ← new (migration 012)
+ *     lp_delta         int   NOT NULL DEFAULT 0        ← legacy compat column
+ *     rank_before      text  NOT NULL DEFAULT ''       ← legacy compat column
+ *     rank_after       text  NOT NULL DEFAULT ''       ← legacy compat column
+ *     rounds           int   NOT NULL DEFAULT 0
+ *     room_code        text
+ *     played_at        timestamptz NOT NULL DEFAULT now()
  *     UNIQUE(player_id, completion_id)  -- idempotency constraint
  *
  *   battle_last_results
@@ -47,6 +50,7 @@
  */
 
 import { getSupabaseClient } from '@/lib/supabase'
+import { getLevelForExperience, getLadderRankTitle, getLevelProgress } from '@/features/ranking/ladder'
 import type { BattleProfileStats, LastBattleResult, MatchHistoryEntry } from '@/features/battle/matches'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -75,8 +79,13 @@ export async function syncBattleProfileToSupabase(stats: BattleProfileStats): Pr
     await db.from('player_battle_profiles').upsert(
       {
         player_id: userId,
-        lp_current: stats.lpCurrent,
-        peak_lp: stats.peakLp,
+        // New experience columns (migration 012). Also write lp_current/peak_lp as
+        // compatibility fallback in case the migration hasn't run yet.
+        // TODO: Remove lp_current and peak_lp writes once migration 012 is deployed everywhere.
+        experience: stats.experience,
+        peak_experience: stats.peakExperience,
+        lp_current: stats.experience,
+        peak_lp: stats.peakExperience,
         wins: stats.wins,
         losses: stats.losses,
         current_streak: stats.currentStreak,
@@ -115,9 +124,12 @@ export async function syncMatchHistoryEntryToSupabase(entry: MatchHistoryEntry):
         opponent_rank_label: entry.opponentRankLabel ?? null,
         your_team: entry.yourTeam,
         their_team: entry.theirTeam,
-        lp_delta: entry.lpDelta,
-        rank_before: entry.rankBefore,
-        rank_after: entry.rankAfter,
+        // New experience column (migration 012). Also write lp_delta as compat fallback.
+        // TODO: Remove lp_delta write once migration 012 is deployed everywhere.
+        experience_delta: entry.experienceDelta,
+        lp_delta: entry.experienceDelta,
+        rank_before: entry.rankTitleBefore,
+        rank_after: entry.rankTitleAfter,
         rounds: entry.rounds,
         room_code: entry.roomCode ?? null,
         played_at: new Date(entry.timestamp).toISOString(),
@@ -168,18 +180,41 @@ export async function readBattleProfileStatsFromSupabase(
   if (!userId) return localFallback
 
   try {
+    // Select both new and legacy columns; prefer experience when present.
+    // TODO: Once migration 012 is fully deployed, drop lp_current/peak_lp from this select.
     const { data, error } = await db
       .from('player_battle_profiles')
-      .select('lp_current, peak_lp, wins, losses, current_streak, best_streak, matches_played')
+      .select('experience, peak_experience, lp_current, peak_lp, wins, losses, current_streak, best_streak, matches_played')
       .eq('player_id', userId)
       .maybeSingle()
 
     if (error || !data) return localFallback
 
+    // Prefer the new experience columns; fall back to lp_current if experience column
+    // doesn't exist yet (will be null before migration 012 runs).
+    const experience = typeof data.experience === 'number' ? data.experience
+      : typeof data.lp_current === 'number' ? data.lp_current
+      : localFallback.experience
+
+    const peakExperience = typeof data.peak_experience === 'number' ? data.peak_experience
+      : typeof data.peak_lp === 'number' ? data.peak_lp
+      : localFallback.peakExperience
+
+    const level = getLevelForExperience(experience)
+    const progress = getLevelProgress(experience)
+    const rankTitle = getLadderRankTitle({ level, ladderRank: localFallback.ladderRank ?? null })
+    const peakLevel = getLevelForExperience(peakExperience)
+    const peakRankTitle = getLadderRankTitle({ level: peakLevel, ladderRank: null })
+
     return {
       ...localFallback,
-      lpCurrent: data.lp_current as number,
-      peakLp: data.peak_lp as number,
+      experience,
+      level,
+      rankTitle,
+      experienceToNextLevel: progress.nextLevelExperience,
+      peakExperience,
+      peakLevel,
+      peakRankTitle,
       wins: data.wins as number,
       losses: data.losses as number,
       currentStreak: data.current_streak as number,
@@ -231,23 +266,36 @@ export async function readMatchHistoryFromSupabase(
 
     if (localHistoryIsNewer(localFallback, data[0].played_at as string)) return localFallback
 
-    const entries: MatchHistoryEntry[] = data.map((row) => ({
-      id: row.id as string,
-      completionId: row.completion_id as string,
-      result: row.result as 'WIN' | 'LOSS' | 'DRAW',
-      mode: row.mode as MatchHistoryEntry['mode'],
-      opponentName: row.opponent_name as string,
-      opponentTitle: row.opponent_title as string,
-      opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
-      yourTeam: row.your_team as string[],
-      theirTeam: row.their_team as string[],
-      timestamp: new Date(row.played_at as string).getTime(),
-      rounds: row.rounds as number,
-      lpDelta: row.lp_delta as number,
-      rankBefore: row.rank_before as string,
-      rankAfter: row.rank_after as string,
-      roomCode: (row.room_code as string | null) ?? null,
-    }))
+    const entries: MatchHistoryEntry[] = data.map((row) => {
+      // Prefer experience_delta; fall back to lp_delta for pre-migration rows.
+      const experienceDelta = typeof row.experience_delta === 'number'
+        ? row.experience_delta
+        : (row.lp_delta as number) ?? 0
+
+      return {
+        id: row.id as string,
+        completionId: row.completion_id as string,
+        result: row.result as 'WIN' | 'LOSS' | 'DRAW',
+        mode: row.mode as MatchHistoryEntry['mode'],
+        opponentName: row.opponent_name as string,
+        opponentTitle: row.opponent_title as string,
+        opponentRankLabel: (row.opponent_rank_label as string | null) ?? null,
+        yourTeam: row.your_team as string[],
+        theirTeam: row.their_team as string[],
+        timestamp: new Date(row.played_at as string).getTime(),
+        rounds: row.rounds as number,
+        experienceDelta,
+        experienceBefore: 0, // Not stored in DB; client recomputes if needed
+        experienceAfter: 0,
+        levelBefore: 0,
+        levelAfter: 0,
+        rankTitleBefore: (row.rank_before as string) ?? '',
+        rankTitleAfter: (row.rank_after as string) ?? '',
+        ladderRankBefore: null,
+        ladderRankAfter: null,
+        roomCode: (row.room_code as string | null) ?? null,
+      }
+    })
 
     return entries
   } catch {
