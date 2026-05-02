@@ -1,6 +1,7 @@
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { describeSkillEffectForUi, getSkillEffectDuration, getTargetLabel } from '@/components/battle/battleDisplay'
+import { formatSkillClasses } from '@/components/battle/skillClassDisplay'
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
 import { getCooldown, getQueueAbilityBlockReason, getResolvedAbilityEnergyCost, getValidTargetIds } from '@/features/battle/engine'
 import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
@@ -16,11 +17,6 @@ function classLabel(kind: BattleAbilityTemplate['kind']): string {
     case 'pass': return 'PASS'
     default: return 'UNKNOWN'
   }
-}
-
-function formatSkillClasses(ability: BattleAbilityTemplate): string {
-  const classes = [classLabel(ability.kind), ...ability.classes]
-  return classes.length > 0 ? Array.from(new Set(classes)).join(', ') : 'NONE'
 }
 
 export function BattleInfoPanel({

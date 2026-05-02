@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { getActivePips } from '@/components/battle/battleDisplay'
+import { formatSkillClasses } from '@/components/battle/skillClassDisplay'
 import { battleRoster, defaultBattleSetup } from '@/features/battle/data'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import { createInitialBattleState } from '@/features/battle/engine'
@@ -47,6 +48,32 @@ describe('battle content validation', () => {
     ], defaultBattleSetup)
 
     expect(report.errors.some((error) => error.includes('energy cost exceeds a single-round reserve budget'))).toBe(false)
+  })
+
+  test('skill class display keeps Cursed-Arena order', () => {
+    const ability = {
+      ...battleRoster[0].abilities[0],
+      classes: ['Strategic', 'Instant', 'Ranged', 'Energy', 'Ultimate'] as BattleFighterTemplate['abilities'][number]['classes'],
+    }
+
+    expect(formatSkillClasses(ability)).toBe('Energy, Ranged, Instant, Ultimate, Strategic')
+  })
+
+  test('targeted content lint catches fixed kit semantics', () => {
+    const nobara = battleRoster.find((fighter) => fighter.id === 'nobara')
+    const megumi = battleRoster.find((fighter) => fighter.id === 'megumi')
+    const ritual = nobara?.abilities.find((ability) => ability.id === 'nobara-straw-doll-ritual')
+    const nue = megumi?.abilities.find((ability) => ability.id === 'megumi-nue')
+
+    const ritualHealModifier = ritual?.effects?.find(
+      (effect) => effect.type === 'addModifier' && effect.modifier.stat === 'healTaken',
+    )
+    const nueClassStun = nue?.effects?.find((effect) => effect.type === 'classStun')
+
+    expect(ritual?.description.toLowerCase()).toContain('stacks')
+    expect(ritualHealModifier?.type === 'addModifier' ? ritualHealModifier.modifier.stacking : null).toBe('stack')
+    expect(nue?.description).toContain('non-Mental')
+    expect(nueClassStun?.type === 'classStun' ? nueClassStun.exemptClasses : []).toContain('Mental')
   })
 
   test('validator catches duplicate ids and malformed abilities', () => {

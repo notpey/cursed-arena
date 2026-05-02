@@ -3,11 +3,14 @@ import { createEnergyAmounts, totalEnergyInPool } from '@/features/battle/energy
 import { battleRoster } from '@/features/battle/data'
 import {
   beginNewRound,
+  canQueueAbility,
   canUseAbility,
   createInitialBattleState,
   endRound,
   endRoundTimeline,
+  getQueueAbilityBlockReason,
   getTeam,
+  getValidTargetIds,
   resolveTeamTurn,
   resolveTeamTurnTimeline,
 } from '@/features/battle/engine'
@@ -136,6 +139,32 @@ describe('battle engine scenarios', () => {
     expect(getFighter(afterRound.state, 'enemy', 'yuji').classStuns.some((cs) => cs.blockedClasses.includes('Physical'))).toBe(true)
   })
 
+  test('Megumi Nue seals non-Mental skills but allows Mental skills', () => {
+    const state = createChargedBattleState()
+    const megumi = getFighter(state, 'player', 'megumi')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+    const physicalSkill = yuji.abilities[0]
+    const mentalSkill = yuji.abilities[1]
+
+    physicalSkill.energyCost = {}
+    physicalSkill.cooldown = 0
+    physicalSkill.classes = ['Physical', 'Melee', 'Instant']
+    mentalSkill.energyCost = {}
+    mentalSkill.cooldown = 0
+    mentalSkill.classes = ['Mental', 'Ranged', 'Control']
+
+    const sealed = resolveTeamTurn(
+      state,
+      queue('player', megumi.instanceId, 'megumi-nue', yuji.instanceId),
+      'player',
+    )
+    const sealedYuji = getFighter(sealed.state, 'enemy', 'yuji')
+
+    expect(getQueueAbilityBlockReason(sealed.state, {}, sealedYuji, physicalSkill.id)).toBe('Technique class sealed')
+    expect(getQueueAbilityBlockReason(sealed.state, {}, sealedYuji, mentalSkill.id)).toBe(null)
+    expect(sealedYuji.classStuns.some((stun) => stun.exemptClasses?.includes('Mental'))).toBe(true)
+  })
+
   test('random energy allocation on queued commands is honored during spend', () => {
     const state = createChargedBattleState()
     const yuji = getFighter(state, 'player', 'yuji')
@@ -160,6 +189,34 @@ describe('battle engine scenarios', () => {
 
     expect(resolved.state.playerEnergy.amounts.physical).toBe(0)
     expect(resolved.state.playerEnergy.amounts.technique).toBe(2)
+  })
+
+  test('enemy-all abilities explicitly validate living enemies and queue with no target', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['gojo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const gojo = getFighter(state, 'player', 'gojo')
+
+    expect(getValidTargetIds(state, gojo.instanceId, 'gojo-hollow-purple')).toHaveLength(3)
+    expect(canQueueAbility(state, {}, gojo, 'gojo-hollow-purple')).toBe(true)
+
+    const resolved = resolveTeamTurn(
+      state,
+      queue('player', gojo.instanceId, 'gojo-hollow-purple', null),
+      'player',
+    )
+
+    expect(getFighter(resolved.state, 'enemy', 'yuji').hp).toBe(70)
+    expect(getFighter(resolved.state, 'enemy', 'nobara').hp).toBe(70)
+    expect(getFighter(resolved.state, 'enemy', 'megumi').hp).toBe(66)
+
+    resolved.state.enemyTeam.forEach((fighter) => {
+      fighter.hp = 0
+    })
+    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
+    updatedGojo.cooldowns['gojo-hollow-purple'] = 0
+    expect(getQueueAbilityBlockReason(resolved.state, {}, updatedGojo, 'gojo-hollow-purple')).toBe('No valid targets')
   })
 
   test('Yuji transformation restores HP from accumulated bonus and prevents defeat for the turn', () => {
@@ -271,6 +328,36 @@ describe('battle engine scenarios', () => {
     expect(getFighter(attacked.state, 'enemy', 'yuji').instanceId).toBe(enemyYuji.instanceId)
   })
 
+  test('Nobara Straw Doll Ritual stacks healing reduction and grants immediate defense', () => {
+    const state = createChargedBattleState()
+    const nobara = getFighter(state, 'player', 'nobara')
+
+    let result = resolveTeamTurn(
+      state,
+      queue('player', nobara.instanceId, 'nobara-straw-doll-ritual', nobara.instanceId),
+      'player',
+    )
+    let updatedNobara = getFighter(result.state, 'player', 'nobara')
+    expect(updatedNobara.shield?.amount).toBe(5)
+    expect(getFighter(result.state, 'enemy', 'yuji').modifiers.filter((modifier) => modifier.stat === 'healTaken' && modifier.tags.includes('straw-doll-ritual'))).toHaveLength(1)
+
+    updatedNobara.cooldowns['nobara-straw-doll-ritual'] = 0
+    result = resolveTeamTurn(
+      result.state,
+      queue('player', updatedNobara.instanceId, 'nobara-straw-doll-ritual', updatedNobara.instanceId),
+      'player',
+    )
+
+    updatedNobara = getFighter(result.state, 'player', 'nobara')
+    const enemyYuji = getFighter(result.state, 'enemy', 'yuji')
+    const ritualHealModifiers = enemyYuji.modifiers.filter((modifier) => modifier.stat === 'healTaken' && modifier.tags.includes('straw-doll-ritual'))
+
+    expect(updatedNobara.stateCounters.straw_doll_ritual_stacks).toBe(2)
+    expect(updatedNobara.shield?.amount).toBe(10)
+    expect(ritualHealModifiers).toHaveLength(2)
+    expect(ritualHealModifiers.reduce((total, modifier) => total + Number(modifier.value), 0)).toBe(-10)
+  })
+
   test('Nobara Hairpin hits all tagged enemies and ignores untagged enemies', () => {
     const state = createChargedBattleState()
     const nobara = getFighter(state, 'player', 'nobara')
@@ -314,6 +401,7 @@ describe('battle engine scenarios', () => {
     expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(85)
     expect(getFighter(result.state, 'enemy', 'megumi').hp).toBe(81)
     expect(getFighter(result.state, 'enemy', 'nobara').hp).toBe(100)
+    expect(getFighter(result.state, 'player', 'nobara').stateCounters.straw_doll_ritual_stacks).toBe(2)
   })
 
   test('Nobara Straw Effigy punishes enemies when they use a skill', () => {

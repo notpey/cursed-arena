@@ -70,7 +70,7 @@ export const nobara = fighter({
     skill({
       id: 'nobara-straw-doll-ritual',
       name: 'Straw Doll Ritual',
-      description: 'Each turn, for the rest of the game, all enemies will receive 5 damage and will be healed 5 less health. Nobara will gain 5 destructible defense. This skill stacks. While this skill is active, any enemy who uses a skill on Nobara can be targeted by Hairpin for 1 turn.',
+      description: 'Each round, for the rest of the game, all enemies will receive 5 damage and will be healed 5 less health. Nobara immediately gains 5 destructible defense and gains 5 more each round while Ritual is active. This skill stacks. While this skill is active, any enemy who uses a skill on Nobara can be targeted by Hairpin for 1 turn.',
       kind: 'utility',
       targetRule: 'self',
       classes: ['Special', 'Ranged', 'Instant'],
@@ -79,6 +79,7 @@ export const nobara = fighter({
       effects: [
         { type: 'setFlag', key: 'straw_doll_ritual_active', value: true, target: 'self' },
         { type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'self' },
+        { type: 'shield', amount: 5, label: 'Straw Doll Guard', tags: ['straw-doll-ritual'], target: 'self' },
         {
           type: 'addModifier',
           target: 'all-enemies',
@@ -90,7 +91,7 @@ export const nobara = fighter({
             duration: { kind: 'permanent' },
             tags: ['straw-doll-ritual'],
             visible: true,
-            stacking: 'replace',
+            stacking: 'stack',
           },
         },
       ],
@@ -126,7 +127,7 @@ export const nobara = fighter({
     skill({
       id: 'nobara-hairpin',
       name: 'Hairpin',
-      description: 'This skill deals 15 damage to all applicable enemies and increases the damage they receive from Straw Doll Ritual permanently by 5.',
+      description: 'This skill deals 15 damage to all applicable enemies and permanently increases Nobara\'s global Straw Doll Ritual damage by 5.',
       kind: 'attack',
       targetRule: 'enemy-all',
       classes: ['Physical', 'Ranged', 'Instant'],
@@ -137,9 +138,9 @@ export const nobara = fighter({
         { type: 'damageFiltered', power: 15, requiresTag: 'nobara-hairpin-targetable', target: 'all-enemies' },
         {
           type: 'conditional',
-          target: 'inherit',
+          target: 'all-enemies',
           conditions: [{ type: 'targetHasModifierTag', tag: 'nobara-hairpin-targetable' }],
-          effects: [{ type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'self' }],
+          effects: [{ type: 'adjustSourceCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'inherit' }],
         },
       ],
     }),

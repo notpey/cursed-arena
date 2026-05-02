@@ -90,7 +90,11 @@ export function cloneFighter(fighter: BattleFighterState): BattleFighterState {
     lastUsedAbilityId: fighter.lastUsedAbilityId,
     previousUsedAbilityId: fighter.previousUsedAbilityId,
     abilityHistory: fighter.abilityHistory.map((entry) => ({ ...entry })),
-    classStuns: fighter.classStuns.map((cs) => ({ ...cs, blockedClasses: [...cs.blockedClasses] })),
+    classStuns: fighter.classStuns.map((cs) => ({
+      ...cs,
+      blockedClasses: [...cs.blockedClasses],
+      exemptClasses: cs.exemptClasses ? [...cs.exemptClasses] : undefined,
+    })),
     reactionGuards: fighter.reactionGuards.map((guard) => ({
       ...guard,
       abilityClasses: guard.abilityClasses ? [...guard.abilityClasses] : undefined,

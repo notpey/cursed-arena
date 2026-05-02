@@ -67,6 +67,7 @@ export function createClassStunState(
     id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
     label: `Class Stun (${effect.blockedClasses.join(', ')})`,
     blockedClasses: [...effect.blockedClasses],
+    exemptClasses: effect.exemptClasses ? [...effect.exemptClasses] : undefined,
     remainingRounds: effect.duration,
     appliedInRound: round,
     sourceActorId: actor.instanceId,
@@ -108,10 +109,11 @@ export function isAbilityClassStunned(
   fighter: BattleFighterState,
   ability: BattleAbilityTemplate,
 ): boolean {
-  return fighter.classStuns.some(
-    (cs) =>
-      cs.remainingRounds > 0 && ability.classes.some((cls) => cs.blockedClasses.includes(cls)),
-  )
+  return fighter.classStuns.some((cs) => {
+    if (cs.remainingRounds <= 0) return false
+    if (cs.exemptClasses?.some((cls) => ability.classes.includes(cls))) return false
+    return ability.classes.some((cls) => cs.blockedClasses.includes(cls))
+  })
 }
 
 export function createEffectImmunityState(

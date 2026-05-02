@@ -268,6 +268,7 @@ export type BattleClassStunState = {
   id: string
   label: string
   blockedClasses: BattleSkillClass[]
+  exemptClasses?: BattleSkillClass[]
   remainingRounds: number
   // Round in which this class-stun was applied. The end-of-round tick for
   // that same round is skipped so "duration: N" always means N victim turns.
@@ -568,8 +569,8 @@ export type SkillEffect =
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
   | { type: 'stun'; duration: number; target: EffectTarget }
-  | { type: 'classStun'; duration: number; blockedClasses: BattleSkillClass[]; target: EffectTarget }
-  | { type: 'classStunScaledByCounter'; counterKey: string; baseDuration: number; durationPerStack: number; consumeStacks: boolean; modifierTag?: string; blockedClasses: BattleSkillClass[]; target: EffectTarget }
+  | { type: 'classStun'; duration: number; blockedClasses: BattleSkillClass[]; exemptClasses?: BattleSkillClass[]; target: EffectTarget }
+  | { type: 'classStunScaledByCounter'; counterKey: string; baseDuration: number; durationPerStack: number; consumeStacks: boolean; modifierTag?: string; blockedClasses: BattleSkillClass[]; exemptClasses?: BattleSkillClass[]; target: EffectTarget }
   | { type: 'mark'; bonus: number; duration: number; target: EffectTarget }
   | { type: 'burn'; damage: number; duration: number; target: EffectTarget }
   | { type: 'cooldownReduction'; amount: number; target: EffectTarget }

@@ -719,7 +719,15 @@ export function getQueueAbilityBlockReason(
   const cooldown = getCooldown(fighter, abilityId)
   if (cooldown > 0) return `Cooldown ${cooldown} turn${cooldown === 1 ? '' : 's'}`
 
-  if ((ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single') && getValidTargetIds(state, fighter.instanceId, abilityId).length === 0) {
+  if (
+    (
+      ability.targetRule === 'enemy-single'
+      || ability.targetRule === 'ally-single'
+      || ability.targetRule === 'enemy-all'
+      || ability.targetRule === 'ally-all'
+    )
+    && getValidTargetIds(state, fighter.instanceId, abilityId).length === 0
+  ) {
     return 'No valid targets'
   }
 
@@ -746,6 +754,10 @@ export function getValidTargetIds(state: BattleState, actorId: string, abilityId
     case 'enemy-single':
       return enemies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
     case 'ally-single':
+      return allies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+    case 'enemy-all':
+      return enemies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+    case 'ally-all':
       return allies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
     default:
       return []
@@ -2052,7 +2064,7 @@ function resolveEffects(
         case 'classStunScaledByCounter': {
           const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
           const duration = effect.baseDuration + stackCount * effect.durationPerStack
-          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, target: effect.target }, state.round))
+          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, exemptClasses: effect.exemptClasses, target: effect.target }, state.round))
           makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${duration} turn${duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, duration, abilityId)
           makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
             actorId: effectActor.instanceId,
