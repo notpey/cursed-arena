@@ -2,6 +2,7 @@ import type { BattleAbilityTemplate, BattleSkillClass } from '@/features/battle/
 
 const skillClassDisplayOrder: BattleSkillClass[] = [
   'Physical',
+  'Piercing',
   'Energy',
   'Affliction',
   'Mental',

@@ -1,5 +1,6 @@
 import { PASS_ABILITY_ID } from '@/features/battle/data.ts'
 import type {
+  BattleAbilityIntent,
   BattleAbilityTemplate,
   BattleFighterState,
   BattleReactionGuardState,
@@ -21,16 +22,89 @@ export function isEffectBlocked(target: BattleFighterState, effect: SkillEffect)
   )
 }
 
-export function isHarmfulAbility(ability: BattleAbilityTemplate) {
-  if (ability.id === PASS_ABILITY_ID) return false
-  const targetsEnemy = ability.targetRule === 'enemy-single' || ability.targetRule === 'enemy-all'
-  if (!targetsEnemy) return false
-  return (
-    ability.kind !== 'heal'
-    && ability.kind !== 'defend'
-    && ability.kind !== 'buff'
-    && ability.kind !== 'pass'
+function mergeIntent(left: BattleAbilityIntent, right: BattleAbilityIntent): BattleAbilityIntent {
+  if (left === right) return left
+  if (left === 'neutral') return right
+  if (right === 'neutral') return left
+  return 'mixed'
+}
+
+function getEffectIntent(effect: SkillEffect): BattleAbilityIntent {
+  switch (effect.type) {
+    case 'damage':
+    case 'damageScaledByCounter':
+    case 'damageFiltered':
+    case 'damageEqualToActorShield':
+    case 'randomEnemyDamageOverTime':
+    case 'randomEnemyDamageTick':
+    case 'shieldDamage':
+    case 'energyDrain':
+    case 'energySteal':
+    case 'stun':
+    case 'intentStun':
+    case 'classStun':
+    case 'classStunScaledByCounter':
+    case 'mark':
+    case 'burn':
+    case 'breakShield':
+    case 'counter':
+    case 'reflect':
+      return 'harmful'
+    case 'heal':
+    case 'setHpFromCounter':
+    case 'invulnerable':
+    case 'attackUp':
+    case 'cooldownReduction':
+    case 'damageBoost':
+    case 'shield':
+    case 'effectImmunity':
+    case 'overhealToShield':
+      return 'helpful'
+    case 'cooldownAdjust':
+      return effect.amount > 0 ? 'harmful' : 'helpful'
+    case 'energyGain':
+      return 'helpful'
+    case 'modifyAbilityCost':
+      return effect.modifier.mode === 'increaseRandom' || effect.modifier.mode === 'increaseTyped'
+        ? 'harmful'
+        : 'helpful'
+    case 'reaction':
+      return effect.effects.reduce<BattleAbilityIntent>(
+        (intent, nested) => mergeIntent(intent, getEffectIntent(nested)),
+        effect.harmfulOnly ? 'harmful' : 'neutral',
+      )
+    case 'schedule':
+      return effect.effects.reduce<BattleAbilityIntent>((intent, nested) => mergeIntent(intent, getEffectIntent(nested)), 'neutral')
+    case 'conditional': {
+      const thenIntent = effect.effects.reduce<BattleAbilityIntent>((intent, nested) => mergeIntent(intent, getEffectIntent(nested)), 'neutral')
+      const elseIntent = (effect.elseEffects ?? []).reduce<BattleAbilityIntent>((intent, nested) => mergeIntent(intent, getEffectIntent(nested)), 'neutral')
+      return mergeIntent(thenIntent, elseIntent)
+    }
+    default:
+      return 'neutral'
+  }
+}
+
+export function getAbilityIntent(ability: BattleAbilityTemplate): BattleAbilityIntent {
+  if (ability.intent) return ability.intent
+  if (ability.id === PASS_ABILITY_ID || ability.kind === 'pass') return 'neutral'
+  if (ability.kind === 'heal' || ability.kind === 'defend' || ability.kind === 'buff') return 'helpful'
+  if (ability.kind === 'attack' || ability.kind === 'debuff') return 'harmful'
+
+  return (ability.effects ?? []).reduce<BattleAbilityIntent>(
+    (intent, effect) => mergeIntent(intent, getEffectIntent(effect)),
+    'neutral',
   )
+}
+
+export function isHarmfulAbility(ability: BattleAbilityTemplate) {
+  const intent = getAbilityIntent(ability)
+  return intent === 'harmful' || intent === 'mixed'
+}
+
+export function isHelpfulAbility(ability: BattleAbilityTemplate) {
+  const intent = getAbilityIntent(ability)
+  return intent === 'helpful' || intent === 'mixed'
 }
 
 export function isEffectReflectable(effect: SkillEffect) {

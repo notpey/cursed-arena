@@ -95,6 +95,7 @@ export function cloneFighter(fighter: BattleFighterState): BattleFighterState {
       blockedClasses: [...cs.blockedClasses],
       exemptClasses: cs.exemptClasses ? [...cs.exemptClasses] : undefined,
     })),
+    intentStuns: fighter.intentStuns.map((stun) => ({ ...stun })),
     reactionGuards: fighter.reactionGuards.map((guard) => ({
       ...guard,
       abilityClasses: guard.abilityClasses ? [...guard.abilityClasses] : undefined,

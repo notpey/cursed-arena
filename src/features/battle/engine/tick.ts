@@ -29,6 +29,15 @@ export function tickClassStuns(fighter: BattleFighterState, round: number) {
     .filter((cs) => cs.remainingRounds > 0)
 }
 
+export function tickIntentStuns(fighter: BattleFighterState, round: number) {
+  fighter.intentStuns = fighter.intentStuns
+    .map((stun) => {
+      if (stun.appliedInRound !== undefined && stun.appliedInRound === round) return stun
+      return { ...stun, remainingRounds: Math.max(0, stun.remainingRounds - 1) }
+    })
+    .filter((stun) => stun.remainingRounds > 0)
+}
+
 export function tickReactionGuards(fighter: BattleFighterState, round: number) {
   fighter.reactionGuards = fighter.reactionGuards
     .map((guard) => {

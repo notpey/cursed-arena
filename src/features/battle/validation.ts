@@ -26,6 +26,7 @@ type EffectValidationContext =
 
 const supportedPassiveTriggers: PassiveEffect['trigger'][] = [...passiveTriggerOrder]
 const supportedStatuses = ['stun', 'invincible', 'mark', 'burn', 'attackUp']
+const supportedAbilityIntents = ['harmful', 'helpful', 'mixed', 'neutral']
 const supportedModifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable', 'isUndying', 'canGainInvulnerable', 'canReduceDamageTaken']
 const supportedModifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
 const supportedModifierScopes: BattleModifierScope[] = ['fighter', 'team', 'battlefield']
@@ -167,6 +168,10 @@ function validateSkillEffect(
     case 'stun':
       if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
       return
+    case 'intentStun':
+      if (!['harmful', 'helpful'].includes(effect.intent)) pushIssue(issues, scope, 'intentStun intent must be harmful or helpful')
+      if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
+      return
     case 'reflect':
       if (effect.duration <= 0) pushIssue(issues, scope, 'duration must be positive')
       if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'reflect abilityClasses cannot be an empty list')
@@ -181,6 +186,7 @@ function validateSkillEffect(
       if (effect.duration <= 0) pushIssue(issues, scope, 'reaction duration must be positive')
       if (effect.effects.length === 0) pushIssue(issues, scope, 'reaction must include nested effects')
       if ((effect.abilityClasses?.length ?? 0) === 0 && effect.abilityClasses) pushIssue(issues, scope, 'reaction abilityClasses cannot be an empty list')
+      if (effect.harmfulOnly && effect.helpfulOnly) pushIssue(issues, scope, 'reaction cannot set both harmfulOnly and helpfulOnly')
       effect.effects.forEach((nestedEffect, index) =>
         validateSkillEffect(`${scope} reaction effect ${index + 1}`, nestedEffect, issues, context),
       )
@@ -390,6 +396,7 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   }
   if (!ability.name.trim()) pushIssue(issues, scope, 'ability name is required')
   if (!ability.description.trim()) pushIssue(issues, scope, 'ability description is required')
+  if (ability.intent && !supportedAbilityIntents.includes(ability.intent)) pushIssue(issues, scope, `unsupported ability intent "${ability.intent}"`)
   if (ability.cooldown < 0) pushIssue(issues, scope, 'cooldown cannot be negative')
   if (classes.length === 0) pushIssue(issues, scope, 'ability requires at least one class')
   if (ability.targetRule === 'none' && ability.kind !== 'pass') {

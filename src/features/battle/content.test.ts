@@ -76,6 +76,22 @@ describe('battle content validation', () => {
     expect(nueClassStun?.type === 'classStun' ? nueClassStun.exemptClasses : []).toContain('Mental')
   })
 
+  test('Eso and Kechizu are authored as playable Rot fighters', () => {
+    const eso = battleRoster.find((fighter) => fighter.id === 'eso')
+    const kechizu = battleRoster.find((fighter) => fighter.id === 'kechizu')
+
+    expect(eso?.maxHp).toBe(100)
+    expect(kechizu?.maxHp).toBe(100)
+    expect(eso?.passiveEffects?.some((passive) => passive.counterKey === 'rot')).toBe(true)
+    expect(kechizu?.passiveEffects?.some((passive) => passive.counterKey === 'rot')).toBe(true)
+    expect(eso!.abilities[0].classes).toEqual(['Piercing', 'Ranged', 'Instant'])
+    expect(eso!.abilities[2].classes).toEqual(['Special', 'Ranged', 'Instant', 'Action'])
+    expect(kechizu!.abilities[0].classes).toEqual(['Affliction', 'Ranged', 'Instant'])
+    expect(eso!.ultimate.intent).toBe('helpful')
+    expect(kechizu!.abilities[1].intent).toBe('mixed')
+    expect(kechizu!.ultimate.intent).toBe('helpful')
+  })
+
   test('validator catches duplicate ids and malformed abilities', () => {
     const brokenRoster: BattleFighterTemplate[] = [
       {

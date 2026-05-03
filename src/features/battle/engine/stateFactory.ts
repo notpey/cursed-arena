@@ -6,9 +6,11 @@ import type {
   BattleClassStunState,
   BattleEffectImmunityState,
   BattleFighterState,
+  BattleIntentStunState,
   BattleReactionGuardState,
   SkillEffect,
 } from '@/features/battle/types.ts'
+import { isHarmfulAbility, isHelpfulAbility } from '@/features/battle/engine/reactionPredicates.ts'
 
 export function hasBaseAbility(fighter: BattleFighterState, slotAbilityId: string) {
   return (
@@ -75,11 +77,29 @@ export function createClassStunState(
   }
 }
 
+export function createIntentStunState(
+  actor: BattleFighterState,
+  abilityId: string | undefined,
+  effect: Extract<SkillEffect, { type: 'intentStun' }>,
+  round: number,
+): BattleIntentStunState {
+  return {
+    id: `intentstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
+    label: `${effect.intent === 'harmful' ? 'Harmful' : 'Helpful'} Skill Stun`,
+    intent: effect.intent,
+    remainingRounds: effect.duration,
+    appliedInRound: round,
+    sourceActorId: actor.instanceId,
+    sourceAbilityId: abilityId,
+  }
+}
+
 export function createReactionGuardState(
   actor: BattleFighterState,
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'counter' | 'reflect' | 'reaction' }>,
   round: number,
+  linkedTargetId?: string,
 ): BattleReactionGuardState {
   return {
     id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
@@ -97,11 +117,15 @@ export function createReactionGuardState(
     consumeOnTrigger: effect.consumeOnTrigger ?? true,
     trigger: effect.type === 'reaction' ? effect.trigger : undefined,
     harmfulOnly: effect.type === 'reaction' ? effect.harmfulOnly : undefined,
+    helpfulOnly: effect.type === 'reaction' ? effect.helpfulOnly : undefined,
+    newSkillOnly: effect.type === 'reaction' ? effect.newSkillOnly : undefined,
+    visible: effect.type === 'reaction' ? effect.visible ?? true : true,
     oncePerRound: effect.type === 'reaction' ? effect.oncePerRound : undefined,
     triggeredRounds: effect.type === 'reaction' ? [] : undefined,
     effects: effect.type === 'reaction' ? effect.effects.map(cloneEffect) : undefined,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,
+    linkedTargetId,
   }
 }
 
@@ -113,6 +137,17 @@ export function isAbilityClassStunned(
     if (cs.remainingRounds <= 0) return false
     if (cs.exemptClasses?.some((cls) => ability.classes.includes(cls))) return false
     return ability.classes.some((cls) => cs.blockedClasses.includes(cls))
+  })
+}
+
+export function isAbilityIntentStunned(
+  fighter: BattleFighterState,
+  ability: BattleAbilityTemplate,
+): boolean {
+  return fighter.intentStuns.some((stun) => {
+    if (stun.remainingRounds <= 0) return false
+    if (stun.intent === 'harmful') return isHarmfulAbility(ability)
+    return isHelpfulAbility(ability)
   })
 }
 

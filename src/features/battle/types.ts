@@ -14,6 +14,8 @@ export type BattleAbilityKind =
   | 'utility'
   | 'pass'
 
+export type BattleAbilityIntent = 'harmful' | 'helpful' | 'mixed' | 'neutral'
+
 export type BattleTargetRule =
   | 'none'
   | 'self'
@@ -23,7 +25,7 @@ export type BattleTargetRule =
   | 'ally-all'
 
 export type BattleSkillRange = 'Melee' | 'Ranged'
-export type BattleSkillDamageType = 'Physical' | 'Energy' | 'Affliction' | 'Mental'
+export type BattleSkillDamageType = 'Physical' | 'Piercing' | 'Energy' | 'Affliction' | 'Mental'
 export type BattleSkillActionType = 'Instant' | 'Action' | 'Control'
 export type BattleSkillClass =
   | BattleSkillRange
@@ -35,7 +37,7 @@ export type BattleSkillClass =
   | 'Special'
 
 export const battleSkillRangeValues: BattleSkillRange[] = ['Melee', 'Ranged']
-export const battleSkillDamageTypeValues: BattleSkillDamageType[] = ['Physical', 'Energy', 'Affliction', 'Mental']
+export const battleSkillDamageTypeValues: BattleSkillDamageType[] = ['Physical', 'Piercing', 'Energy', 'Affliction', 'Mental']
 export const battleSkillActionTypeValues: BattleSkillActionType[] = ['Instant', 'Action', 'Control']
 
 export type BattleAbilityIcon = {
@@ -51,6 +53,7 @@ export type BattleAbilityTemplate = {
   kind: BattleAbilityKind
   targetRule: BattleTargetRule
   classes: BattleSkillClass[]
+  intent?: BattleAbilityIntent
   icon: BattleAbilityIcon
   cooldown: number
   cannotBeCountered?: boolean
@@ -299,9 +302,23 @@ export type BattleReactionGuardState = {
   consumeOnTrigger: boolean
   trigger?: BattleReactionTrigger
   harmfulOnly?: boolean
+  helpfulOnly?: boolean
+  newSkillOnly?: boolean
+  visible?: boolean
   oncePerRound?: boolean
   triggeredRounds?: number[]
   effects?: SkillEffect[]
+  sourceActorId?: string
+  sourceAbilityId?: string
+  linkedTargetId?: string
+}
+
+export type BattleIntentStunState = {
+  id: string
+  label: string
+  intent: Extract<BattleAbilityIntent, 'harmful' | 'helpful'>
+  remainingRounds: number
+  appliedInRound?: number
   sourceActorId?: string
   sourceAbilityId?: string
 }
@@ -381,6 +398,7 @@ export type BattleFighterState = {
   previousUsedAbilityId: string | null
   abilityHistory: Array<{ abilityId: string; round: number; targetId?: string | null }>
   classStuns: BattleClassStunState[]
+  intentStuns: BattleIntentStunState[]
   reactionGuards: BattleReactionGuardState[]
   lastAttackerId: string | null
 }
@@ -553,7 +571,7 @@ export type BattleTimelineResult = {
   steps: BattleTimelineStep[]
 }
 
-export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'other-enemies' | 'attacker' | 'random-enemy'
+export type EffectTarget = 'inherit' | 'self' | 'all-allies' | 'all-enemies' | 'other-enemies' | 'attacker' | 'linked-target' | 'random-enemy'
 
 export type SkillEffect =
   | { type: 'damage'; power: number; target: EffectTarget; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean }
@@ -569,6 +587,7 @@ export type SkillEffect =
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }
   | { type: 'stun'; duration: number; target: EffectTarget }
+  | { type: 'intentStun'; intent: Extract<BattleAbilityIntent, 'harmful' | 'helpful'>; duration: number; target: EffectTarget }
   | { type: 'classStun'; duration: number; blockedClasses: BattleSkillClass[]; exemptClasses?: BattleSkillClass[]; target: EffectTarget }
   | { type: 'classStunScaledByCounter'; counterKey: string; baseDuration: number; durationPerStack: number; consumeStacks: boolean; modifierTag?: string; blockedClasses: BattleSkillClass[]; exemptClasses?: BattleSkillClass[]; target: EffectTarget }
   | { type: 'mark'; bonus: number; duration: number; target: EffectTarget }
@@ -599,7 +618,7 @@ export type SkillEffect =
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
   | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
-  | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; target: EffectTarget }
+  | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; helpfulOnly?: boolean; newSkillOnly?: boolean; visible?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; target: EffectTarget }
   | { type: 'overhealToShield'; power: number; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
   | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
 

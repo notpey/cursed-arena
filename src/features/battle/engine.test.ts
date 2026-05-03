@@ -14,8 +14,9 @@ import {
   resolveTeamTurn,
   resolveTeamTurnTimeline,
 } from '@/features/battle/engine'
+import { getAbilityIntent, isHarmfulAbility, isHelpfulAbility } from '@/features/battle/engine/reactionPredicates'
 import { getStatusDuration } from '@/features/battle/statuses'
-import type { BattleState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattleAbilityTemplate, BattleState, QueuedBattleAction } from '@/features/battle/types'
 import { validateBattleContent } from '@/features/battle/validation'
 
 function getFighter(state: BattleState, team: 'player' | 'enemy', templateId: string) {
@@ -42,7 +43,114 @@ function createChargedBattleState(overrides?: Parameters<typeof createInitialBat
   return state
 }
 
+function sampleAbility(overrides: Partial<BattleAbilityTemplate>): BattleAbilityTemplate {
+  return {
+    id: 'sample',
+    name: 'Sample',
+    description: 'Sample ability.',
+    kind: 'utility',
+    targetRule: 'self',
+    classes: ['Strategic', 'Instant'],
+    icon: { label: 'SA', tone: 'teal' },
+    cooldown: 0,
+    effects: [],
+    ...overrides,
+  }
+}
+
 describe('battle engine scenarios', () => {
+  test('ability intent helper infers and overrides hidden intent', () => {
+    expect(getAbilityIntent(sampleAbility({ kind: 'attack' }))).toBe('harmful')
+    expect(getAbilityIntent(sampleAbility({ kind: 'heal' }))).toBe('helpful')
+    expect(getAbilityIntent(sampleAbility({ kind: 'defend' }))).toBe('helpful')
+    expect(getAbilityIntent(sampleAbility({ kind: 'buff' }))).toBe('helpful')
+    expect(getAbilityIntent(sampleAbility({ kind: 'debuff' }))).toBe('harmful')
+    expect(getAbilityIntent(sampleAbility({ kind: 'pass', id: 'pass' }))).toBe('neutral')
+    expect(getAbilityIntent(sampleAbility({ kind: 'attack', intent: 'helpful' }))).toBe('helpful')
+
+    const mixed = sampleAbility({ intent: 'mixed' })
+    expect(isHarmfulAbility(mixed)).toBe(true)
+    expect(isHelpfulAbility(mixed)).toBe(true)
+  })
+
+  test('harmfulOnly and helpfulOnly reactions use hidden ability intent', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.abilities.push(
+      sampleAbility({
+        id: 'test-helpful',
+        name: 'Test Helpful',
+        kind: 'defend',
+        targetRule: 'self',
+        intent: 'helpful',
+        effects: [{ type: 'shield', amount: 5, target: 'self' }],
+      }),
+      sampleAbility({
+        id: 'test-mixed',
+        name: 'Test Mixed',
+        targetRule: 'self',
+        intent: 'mixed',
+        effects: [{ type: 'shield', amount: 5, target: 'self' }],
+      }),
+    )
+    enemyYuji.cooldowns['test-helpful'] = 0
+    enemyYuji.cooldowns['test-mixed'] = 0
+
+    enemyYuji.reactionGuards.push({
+      id: 'harmful-only-test',
+      kind: 'effect',
+      label: 'Harmful Only Test',
+      remainingRounds: 3,
+      consumeOnTrigger: false,
+      trigger: 'onAbilityUse',
+      harmfulOnly: true,
+      effects: [{ type: 'adjustCounter', key: 'harmful_reaction_hits', amount: 1, target: 'self' }],
+    })
+
+    const helpfulOnly = structuredClone(enemyYuji.reactionGuards[0])
+    helpfulOnly.id = 'helpful-only-test'
+    helpfulOnly.label = 'Helpful Only Test'
+    helpfulOnly.harmfulOnly = false
+    helpfulOnly.helpfulOnly = true
+    helpfulOnly.effects = [{ type: 'adjustCounter', key: 'helpful_reaction_hits', amount: 1, target: 'self' }]
+    enemyYuji.reactionGuards.push(helpfulOnly)
+
+    const helpful = resolveTeamTurn(state, queue('enemy', enemyYuji.instanceId, 'test-helpful', enemyYuji.instanceId), 'enemy')
+    expect(getFighter(helpful.state, 'enemy', 'yuji').stateCounters.harmful_reaction_hits ?? 0).toBe(0)
+    expect(getFighter(helpful.state, 'enemy', 'yuji').stateCounters.helpful_reaction_hits).toBe(1)
+
+    const mixedYuji = getFighter(helpful.state, 'enemy', 'yuji')
+    const mixed = resolveTeamTurn(helpful.state, queue('enemy', mixedYuji.instanceId, 'test-mixed', mixedYuji.instanceId), 'enemy')
+    expect(getFighter(mixed.state, 'enemy', 'yuji').stateCounters.harmful_reaction_hits).toBe(1)
+    expect(getFighter(mixed.state, 'enemy', 'yuji').stateCounters.helpful_reaction_hits).toBe(2)
+  })
+
+  test('intent stuns block matching hidden intent and expire on turn tick', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const yuji = getFighter(state, 'player', 'yuji')
+    yuji.abilities.push(
+      sampleAbility({ id: 'test-helpful', kind: 'defend', targetRule: 'self', intent: 'helpful', effects: [{ type: 'shield', amount: 5, target: 'self' }] }),
+      sampleAbility({ id: 'test-mixed', targetRule: 'self', intent: 'mixed', effects: [{ type: 'shield', amount: 5, target: 'self' }] }),
+    )
+    yuji.cooldowns['test-helpful'] = 0
+    yuji.cooldowns['test-mixed'] = 0
+
+    yuji.intentStuns.push({ id: 'harmful-stun', label: 'Harmful Skill Stun', intent: 'harmful', remainingRounds: 1 })
+    expect(canUseAbility(state, yuji, 'yuji-divergent-fist')).toBe(false)
+    expect(canUseAbility(state, yuji, 'test-mixed')).toBe(false)
+    expect(canUseAbility(state, yuji, 'test-helpful')).toBe(true)
+    expect(canUseAbility(state, yuji, 'pass')).toBe(true)
+
+    yuji.intentStuns = [{ id: 'helpful-stun', label: 'Helpful Skill Stun', intent: 'helpful', remainingRounds: 1 }]
+    expect(canUseAbility(state, yuji, 'test-helpful')).toBe(false)
+    expect(canUseAbility(state, yuji, 'test-mixed')).toBe(false)
+    expect(canUseAbility(state, yuji, 'yuji-divergent-fist')).toBe(true)
+    expect(canUseAbility(state, yuji, 'pass')).toBe(true)
+
+    const ticked = resolveTeamTurn(state, {}, 'player')
+    expect(getFighter(ticked.state, 'player', 'yuji').intentStuns).toHaveLength(0)
+  })
+
   test('initial energy gives the opening player 1 and the second player normal distribution', () => {
     const state = createInitialBattleState({ battleSeed: 'opening-distribution' })
     const openingTotal = state.firstPlayer === 'player' ? totalEnergyInPool(state.playerEnergy) : totalEnergyInPool(state.enemyEnergy)
@@ -50,6 +158,205 @@ describe('battle engine scenarios', () => {
 
     expect(openingTotal).toBe(1)
     expect(secondTotal).toBe(3)
+  })
+
+  test('Eso Impaling Rush applies permanent Rot and counts the new stack for bonus damage', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['eso', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const eso = getFighter(state, 'player', 'eso')
+    const yuji = getFighter(state, 'enemy', 'yuji')
+
+    const result = resolveTeamTurn(state, queue('player', eso.instanceId, 'eso-impaling-rush', yuji.instanceId), 'player')
+    const rottedYuji = getFighter(result.state, 'enemy', 'yuji')
+
+    expect(rottedYuji.stateCounters.rot).toBe(1)
+    expect(rottedYuji.modifiers.some((modifier) => modifier.tags.includes('rot'))).toBe(true)
+    expect(rottedYuji.hp).toBe(85)
+  })
+
+  test('Rot reduces new harmful non-affliction damage by stack count but not affliction damage', () => {
+    const physicalState = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const enemyYuji = getFighter(physicalState, 'enemy', 'yuji')
+    const playerYuji = getFighter(physicalState, 'player', 'yuji')
+    enemyYuji.stateCounters.rot = 2
+
+    const physicalHit = resolveTeamTurn(
+      physicalState,
+      queue('enemy', enemyYuji.instanceId, 'yuji-divergent-fist', playerYuji.instanceId),
+      'enemy',
+    )
+    expect(getFighter(physicalHit.state, 'player', 'yuji').hp).toBe(85)
+
+    const afflictionState = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['junpei', 'nobara', 'megumi'] })
+    const junpei = getFighter(afflictionState, 'enemy', 'junpei')
+    const target = getFighter(afflictionState, 'player', 'yuji')
+    junpei.stateCounters.rot = 2
+
+    const afflictionHit = resolveTeamTurn(
+      afflictionState,
+      queue('enemy', junpei.instanceId, 'junpei-moon-dregs-injection', target.instanceId),
+      'enemy',
+    )
+    expect(getFighter(afflictionHit.state, 'player', 'yuji').hp).toBe(90)
+  })
+
+  test('Rot does not trigger on helpful-only skills', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.stateCounters.rot = 2
+    enemyYuji.abilities.push(sampleAbility({
+      id: 'test-helpful',
+      kind: 'defend',
+      targetRule: 'self',
+      intent: 'helpful',
+      effects: [{ type: 'shield', amount: 5, target: 'self' }],
+    }))
+    enemyYuji.cooldowns['test-helpful'] = 0
+
+    const result = resolveTeamTurn(state, queue('enemy', enemyYuji.instanceId, 'test-helpful', enemyYuji.instanceId), 'enemy')
+    expect(getFighter(result.state, 'enemy', 'yuji').modifiers.some((modifier) => modifier.tags.includes('rot-outgoing-damage-down'))).toBe(false)
+  })
+
+  test('Kechizu spreads Rot and Eso Corrosive Blood detonates then removes it', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['kechizu', 'eso', 'yuji'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const kechizu = getFighter(state, 'player', 'kechizu')
+    const spit = resolveTeamTurn(state, queue('player', kechizu.instanceId, 'kechizu-acidic-spit', null), 'player')
+    expect(spit.state.enemyTeam.map((fighter) => fighter.stateCounters.rot ?? 0)).toEqual([1, 1, 1])
+
+    const eso = getFighter(spit.state, 'player', 'eso')
+    const corrosive = resolveTeamTurn(spit.state, queue('player', eso.instanceId, 'eso-corrosive-blood', null), 'player')
+    const detonated = beginNewRound(corrosive.state)
+
+    expect(detonated.state.enemyTeam.every((fighter) => fighter.hp <= 75)).toBe(true)
+    expect(detonated.state.enemyTeam.map((fighter) => fighter.stateCounters.rot ?? 0)).toEqual([0, 0, 0])
+  })
+
+  test('Eso Blood Brothers preserves Rot on Corrosive Blood and rewards new Rot with defense', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['eso', 'kechizu', 'yuji'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const eso = getFighter(state, 'player', 'eso')
+    const armed = resolveTeamTurn(state, queue('player', eso.instanceId, 'eso-blood-brothers', eso.instanceId), 'player')
+    const kechizu = getFighter(armed.state, 'player', 'kechizu')
+    const spit = resolveTeamTurn(armed.state, queue('player', kechizu.instanceId, 'kechizu-acidic-spit', null), 'player')
+
+    expect(getFighter(spit.state, 'player', 'eso').shield?.amount).toBe(15)
+
+    const corrosiveEso = getFighter(spit.state, 'player', 'eso')
+    const corrosive = resolveTeamTurn(spit.state, queue('player', corrosiveEso.instanceId, 'eso-corrosive-blood', null), 'player')
+    const detonated = beginNewRound(corrosive.state)
+
+    expect(detonated.state.enemyTeam.map((fighter) => fighter.stateCounters.rot ?? 0)).toEqual([2, 2, 2])
+    expect(getFighter(detonated.state, 'player', 'eso').stateFlags.eso_blood_brothers).toBe(false)
+  })
+
+  test('Kechizu Connected Souls protects once and applies Rot to the attacker', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['kechizu', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const kechizu = getFighter(state, 'player', 'kechizu')
+    const allyYuji = getFighter(state, 'player', 'yuji')
+    const guarded = resolveTeamTurn(state, queue('player', kechizu.instanceId, 'kechizu-connected-souls', allyYuji.instanceId), 'player')
+
+    const enemyYuji = getFighter(guarded.state, 'enemy', 'yuji')
+    const attacked = resolveTeamTurn(guarded.state, queue('enemy', enemyYuji.instanceId, 'yuji-divergent-fist', allyYuji.instanceId), 'enemy')
+
+    expect(getFighter(attacked.state, 'player', 'yuji').hp).toBe(100)
+    expect(getFighter(attacked.state, 'player', 'kechizu').hp).toBe(90)
+    expect(getFighter(attacked.state, 'enemy', 'yuji').stateCounters.rot).toBe(2)
+  })
+
+  test('Kechizu Connected Souls ignores helpful-only skills', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['kechizu', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const kechizu = getFighter(state, 'player', 'kechizu')
+    const allyYuji = getFighter(state, 'player', 'yuji')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.abilities.push(sampleAbility({
+      id: 'test-helpful-target',
+      kind: 'defend',
+      targetRule: 'enemy-single',
+      intent: 'helpful',
+      effects: [{ type: 'shield', amount: 5, target: 'inherit' }],
+    }))
+    enemyYuji.cooldowns['test-helpful-target'] = 0
+
+    const guarded = resolveTeamTurn(state, queue('player', kechizu.instanceId, 'kechizu-connected-souls', allyYuji.instanceId), 'player')
+    const helper = getFighter(guarded.state, 'enemy', 'yuji')
+    const target = getFighter(guarded.state, 'player', 'yuji')
+    const helped = resolveTeamTurn(guarded.state, queue('enemy', helper.instanceId, 'test-helpful-target', target.instanceId), 'enemy')
+
+    expect(getFighter(helped.state, 'player', 'yuji').shield?.amount).toBe(5)
+    expect(getFighter(helped.state, 'enemy', 'yuji').stateCounters.rot ?? 0).toBe(0)
+  })
+
+  test('Eso Hostage Situation gives Rot to the hostage when Eso is targeted', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['eso', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const eso = getFighter(state, 'player', 'eso')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    const hostage = resolveTeamTurn(state, queue('player', eso.instanceId, 'eso-hostage-situation', enemyYuji.instanceId), 'player')
+
+    const enemyNobara = getFighter(hostage.state, 'enemy', 'nobara')
+    const targeted = resolveTeamTurn(hostage.state, queue('enemy', enemyNobara.instanceId, 'nobara-hammer-and-nails', eso.instanceId), 'enemy')
+
+    expect(getFighter(targeted.state, 'enemy', 'yuji').stateCounters.rot).toBe(1)
+  })
+
+  test('Hostage Situation blocks harmful skills but not helpful skills', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['eso', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const eso = getFighter(state, 'player', 'eso')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.abilities.push(sampleAbility({
+      id: 'test-helpful',
+      kind: 'defend',
+      targetRule: 'self',
+      intent: 'helpful',
+      effects: [{ type: 'shield', amount: 5, target: 'self' }],
+    }))
+    enemyYuji.cooldowns['test-helpful'] = 0
+
+    const hostage = resolveTeamTurn(state, queue('player', eso.instanceId, 'eso-hostage-situation', enemyYuji.instanceId), 'player')
+    const stunned = getFighter(hostage.state, 'enemy', 'yuji')
+
+    expect(canUseAbility(hostage.state, stunned, 'yuji-divergent-fist')).toBe(false)
+    expect(canUseAbility(hostage.state, stunned, 'test-helpful')).toBe(true)
+  })
+
+  test('Kechizu Chomp applies Rot to a helpful skill user targeting the bitten enemy', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['kechizu', 'yuji', 'megumi'], enemyTeamIds: ['nobara', 'yuji', 'megumi'] })
+    const kechizu = getFighter(state, 'player', 'kechizu')
+    const enemyNobara = getFighter(state, 'enemy', 'nobara')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.abilities.push(sampleAbility({
+      id: 'test-ally-help',
+      name: 'Test Ally Help',
+      kind: 'defend',
+      targetRule: 'ally-single',
+      intent: 'helpful',
+      effects: [{ type: 'shield', amount: 5, target: 'inherit' }],
+    }))
+    enemyYuji.cooldowns['test-ally-help'] = 0
+    const chomped = resolveTeamTurn(state, queue('player', kechizu.instanceId, 'kechizu-chomp', enemyNobara.instanceId), 'player')
+
+    const helper = getFighter(chomped.state, 'enemy', 'yuji')
+    const chompTarget = getFighter(chomped.state, 'enemy', 'nobara')
+    const acted = resolveTeamTurn(chomped.state, queue('enemy', helper.instanceId, 'test-ally-help', chompTarget.instanceId), 'enemy')
+
+    expect(getFighter(acted.state, 'enemy', 'yuji').stateCounters.rot).toBe(1)
+  })
+
+  test('Chomp blocks helpful skills but not harmful skills', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['kechizu', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const kechizu = getFighter(state, 'player', 'kechizu')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    enemyYuji.abilities.push(sampleAbility({
+      id: 'test-helpful',
+      kind: 'defend',
+      targetRule: 'self',
+      intent: 'helpful',
+      effects: [{ type: 'shield', amount: 5, target: 'self' }],
+    }))
+    enemyYuji.cooldowns['test-helpful'] = 0
+
+    const chomped = resolveTeamTurn(state, queue('player', kechizu.instanceId, 'kechizu-chomp', enemyYuji.instanceId), 'player')
+    const stunned = getFighter(chomped.state, 'enemy', 'yuji')
+
+    expect(canUseAbility(chomped.state, stunned, 'test-helpful')).toBe(false)
+    expect(canUseAbility(chomped.state, stunned, 'yuji-divergent-fist')).toBe(true)
   })
 
   test('round opener remains stable after the initial coin flip', () => {

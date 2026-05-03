@@ -21,6 +21,7 @@ import {
   tickClassStuns,
   tickCostModifiers,
   tickEffectImmunities,
+  tickIntentStuns,
   tickReactionGuards,
 } from '@/features/battle/engine/tick.ts'
 import {
@@ -47,15 +48,18 @@ import {
   consumeReactionGuard,
   guardMatchesAbility,
   isEffectBlocked,
+  isHelpfulAbility,
   isHarmfulAbility,
 } from '@/features/battle/engine/reactionPredicates.ts'
 import {
   addAbilityStateDelta,
   createClassStunState,
   createEffectImmunityState,
+  createIntentStunState,
   createReactionGuardState,
   hasBaseAbility,
   isAbilityClassStunned,
+  isAbilityIntentStunned,
 } from '@/features/battle/engine/stateFactory.ts'
 import {
   getWinner,
@@ -147,6 +151,11 @@ type PreDamageReactionResult = {
   reflectedTargetIds: Set<string>
 }
 
+const ROT_COUNTER_KEY = 'rot'
+const ROT_MARKER_TAG = 'rot'
+const ROT_OUTGOING_TAG = 'rot-outgoing-damage-down'
+const ESO_BLOOD_BROTHERS_FLAG = 'eso_blood_brothers'
+
 function buildOrderedActionIds(
   aliveFighters: BattleFighterState[],
   actionOrder?: string[],
@@ -235,6 +244,7 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         previousUsedAbilityId: null,
         abilityHistory: [],
         classStuns: [],
+        intentStuns: [],
         reactionGuards: [],
         lastAttackerId: null,
       }
@@ -249,6 +259,10 @@ function setFighterFlag(fighter: BattleFighterState, key: string, value: boolean
 
 function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: number) {
   fighter.stateCounters[key] = (fighter.stateCounters[key] ?? 0) + amount
+}
+
+function hasRot(fighter: BattleFighterState) {
+  return (fighter.stateCounters[ROT_COUNTER_KEY] ?? 0) > 0
 }
 
 
@@ -366,6 +380,8 @@ function runEffectReactionGuards(
   for (const guard of guards) {
     if (!observed.reactionGuards.some((active) => active.id === guard.id)) continue
     if (guard.harmfulOnly && (!ability || !isHarmfulAbility(ability))) continue
+    if (guard.helpfulOnly && (!ability || !isHelpfulAbility(ability))) continue
+    if (guard.newSkillOnly && ability && source?.lastUsedAbilityId === ability.id) continue
     if (ability && !guardMatchesAbility(guard, ability)) continue
     if (guard.oncePerRound && guard.triggeredRounds?.includes(state.round)) continue
 
@@ -396,6 +412,9 @@ function runEffectReactionGuards(
       effects,
       guard.sourceAbilityId ?? ability?.id,
       ability?.classes,
+      undefined,
+      undefined,
+      guard.linkedTargetId,
     )
 
     makeEvent(
@@ -690,6 +709,7 @@ export function canUseAbility(state: BattleState, fighter: BattleFighterState, a
   if (!ability) return false
   if (!isAlive(fighter)) return false
   if (abilityId === PASS_ABILITY_ID) return true
+  if (isAbilityIntentStunned(fighter, ability)) return false
   if (!canPayEnergy(getEnergyPool(state, fighter.team), getResolvedAbilityEnergyCost(fighter, ability).cost)) return false
   return getCooldown(fighter, abilityId) <= 0
 }
@@ -714,6 +734,7 @@ export function getQueueAbilityBlockReason(
   if (!isAlive(fighter)) return 'Fighter is KO'
   if (abilityId === PASS_ABILITY_ID) return null
   if (hasModifierStatus(fighter.modifiers, 'stun')) return 'Stunned this turn'
+  if (isAbilityIntentStunned(fighter, ability)) return 'Skill intent sealed'
   if (isAbilityClassStunned(fighter, ability)) return 'Technique class sealed'
 
   const cooldown = getCooldown(fighter, abilityId)
@@ -976,6 +997,7 @@ function resolveEffectTargets(
   allies: BattleFighterState[],
   enemies: BattleFighterState[],
   state?: BattleState,
+  linkedTargetId?: string,
 ): BattleFighterState[] {
   switch (targetMode) {
     case 'self':
@@ -994,6 +1016,11 @@ function resolveEffectTargets(
       if (!attackerId) return []
       const attacker = getFighterById(state, attackerId)
       return attacker && isAlive(attacker) ? [attacker] : []
+    }
+    case 'linked-target': {
+      if (!state || !linkedTargetId) return []
+      const linkedTarget = getFighterById(state, linkedTargetId)
+      return linkedTarget && isAlive(linkedTarget) ? [linkedTarget] : []
     }
     case 'random-enemy': {
       const alive = enemies.filter(isAlive)
@@ -1295,6 +1322,77 @@ function applyShieldToFighter(
   firePassives(state, ctx, target, actor, 'onShieldGain', shieldAbility, undefined, effect.amount)
 }
 
+function applyRotMarkerAndRewards(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  amount: number,
+  abilityId?: string,
+) {
+  if (amount <= 0 || !hasRot(target)) return
+
+  applyModifierToFighter(state, ctx, target, {
+    label: 'Rot',
+    stat: 'cooldownTick',
+    mode: 'flat',
+    value: 0,
+    duration: { kind: 'permanent' },
+    tags: [ROT_MARKER_TAG],
+    visible: true,
+    stacking: 'replace',
+  }, actor.instanceId, abilityId)
+
+  const alliedEso = getTeam(state, actor.team).find(
+    (fighter) => fighter.templateId === 'eso' && fighter.stateFlags[ESO_BLOOD_BROTHERS_FLAG] && isAlive(fighter),
+  )
+  if (alliedEso) {
+    applyShieldToFighter(state, ctx, alliedEso, alliedEso, {
+      type: 'shield',
+      amount: 5 * amount,
+      label: 'Blood Brothers',
+      tags: ['blood-brothers'],
+      target: 'self',
+    }, 'eso-blood-brothers')
+    makeEvent(ctx, state.round, 'system', 'teal', `${alliedEso.shortName} gained blood-bound defense.`, alliedEso.instanceId, alliedEso.instanceId, 5 * amount, 'eso-blood-brothers')
+  }
+}
+
+function removeRotMarkerIfEmpty(
+  state: BattleState,
+  ctx: ResolutionContext,
+  target: BattleFighterState,
+  actorId?: string,
+  abilityId?: string,
+) {
+  if (hasRot(target)) return
+  removeModifiersFromFighter(state, ctx, target, { tags: [ROT_MARKER_TAG] }, actorId, abilityId)
+}
+
+function applyRotOutgoingPenalty(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  ability: BattleAbilityTemplate,
+) {
+  const stacks = actor.stateCounters[ROT_COUNTER_KEY] ?? 0
+  if (stacks <= 0 || !isHarmfulAbility(ability) || actor.lastUsedAbilityId === ability.id) return
+
+  const amount = -5 * stacks
+  applyModifierToFighter(state, ctx, actor, {
+    label: 'Rot Weakening',
+    stat: 'damageDealt',
+    mode: 'flat',
+    value: amount,
+    duration: { kind: 'rounds', rounds: 1 },
+    tags: [ROT_OUTGOING_TAG],
+    visible: true,
+    stacking: 'replace',
+    excludedDamageClass: 'Affliction',
+  }, actor.instanceId, ability.id)
+  makeEvent(ctx, state.round, 'status', 'red', `${actor.shortName}'s Rot reduced non-affliction damage by ${Math.abs(amount)}.`, actor.instanceId, actor.instanceId, Math.abs(amount), ability.id)
+}
+
 function applyCostModifierToFighter(
   state: BattleState,
   ctx: ResolutionContext,
@@ -1574,13 +1672,14 @@ function calculateDamage(
   const actorContext: ReactionContext = { target, ability, isUltimate }
   const targetContext: ReactionContext = { target: actor, ability, isUltimate }
   const damageClass = (abilityClasses ?? ability?.classes ?? []).find(
-    (cls): cls is BattleSkillDamageType => ['Physical', 'Energy', 'Affliction', 'Mental'].includes(cls),
+    (cls): cls is BattleSkillDamageType => ['Physical', 'Piercing', 'Energy', 'Affliction', 'Mental'].includes(cls),
   )
 
-  amount += getNumericModifierTotal(state, actor, 'damageDealt', 'flat', actorContext)
+  const actorModifierPool = getModifierPool(state, actor, actorContext)
+  amount += sumNumericModifierValuesForClass(actorModifierPool, 'damageDealt', 'flat', damageClass)
 
-  amount = Math.round(amount * (1 + getNumericModifierTotal(state, actor, 'damageDealt', 'percentAdd', actorContext)))
-  amount = Math.round(amount * getModifierMultiplier(state, actor, 'damageDealt', actorContext))
+  amount = Math.round(amount * (1 + sumNumericModifierValuesForClass(actorModifierPool, 'damageDealt', 'percentAdd', damageClass)))
+  amount = Math.round(amount * getNumericModifierMultiplierForClass(actorModifierPool, 'damageDealt', damageClass))
 
   if (isUltimate) {
     amount = Math.round(amount * (1 + state.battlefield.ultimateDamageBoost))
@@ -1647,6 +1746,7 @@ function resolveEffects(
   abilityClasses?: BattleAbilityTemplate['classes'],
   reactionResult?: PreDamageReactionResult,
   triggerAmount?: number,
+  linkedTargetId?: string,
 ) {
   const allies = getTeam(state, actor.team).filter(isAlive)
   const enemies = getOpposingTeam(state, actor.team).filter(isAlive)
@@ -1654,7 +1754,7 @@ function resolveEffects(
   const resolvedAbility = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
 
   for (const effect of effects) {
-    const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies, state)
+    const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies, state, linkedTargetId)
 
     if (effect.type === 'schedule') {
       if (targets.length === 0) continue
@@ -2061,6 +2161,19 @@ function resolveEffects(
           })
           break
         }
+        case 'intentStun': {
+          effectTarget.intentStuns.push(createIntentStunState(effectActor, abilityId, effect, state.round))
+          const label = effect.intent === 'harmful' ? 'harmful' : 'helpful'
+          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${label} skills are stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
+          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
+            actorId: effectActor.instanceId,
+            targetId: effectTarget.instanceId,
+            team: effectTarget.team,
+            abilityId,
+            meta: { label: 'Intent Stun', stat: 'intentStun', mode: 'set', scope: 'fighter', status: null, intent: effect.intent },
+          })
+          break
+        }
         case 'classStunScaledByCounter': {
           const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
           const duration = effect.baseDuration + stackCount * effect.durationPerStack
@@ -2379,7 +2492,7 @@ function resolveEffects(
           break
         }
         case 'reaction': {
-          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
+          const guard = createReactionGuardState(actor, abilityId, effect, state.round, target?.instanceId)
           t.reactionGuards = t.reactionGuards.filter(
             (existing) => !(existing.kind === 'effect' && existing.label === guard.label && existing.sourceActorId === guard.sourceActorId),
           )
@@ -2445,10 +2558,18 @@ function resolveEffects(
             t.stateCounters[effect.key] = Math.min(effect.max ?? current, Math.max(effect.min ?? current, current))
           }
           emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+          if (effect.key === ROT_COUNTER_KEY) {
+            applyRotMarkerAndRewards(state, ctx, actor, t, effect.amount, abilityId)
+            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
+          }
           break
         case 'setCounter':
           t.stateCounters[effect.key] = effect.value
           emitCounterChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
+          if (effect.key === ROT_COUNTER_KEY) {
+            if (effect.value > 0) applyRotMarkerAndRewards(state, ctx, actor, t, effect.value, abilityId)
+            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
+          }
           break
         case 'adjustSourceCounter': {
           const source = getModifierSourceFighter(state, { sourceActorId: t.modifiers.find((modifier) => modifier.sourceActorId === actor.instanceId)?.sourceActorId }) ?? actor
@@ -2467,6 +2588,9 @@ function resolveEffects(
         case 'resetCounter':
           t.stateCounters[effect.key] = 0
           emitCounterChange(ctx, state.round, t, effect.key, 0, actor.instanceId, abilityId)
+          if (effect.key === ROT_COUNTER_KEY) {
+            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
+          }
           break
         case 'conditional': {
           const conditionAbility = abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined
@@ -2479,7 +2603,7 @@ function resolveEffects(
           }))
           const branch = passed ? effect.effects : effect.elseEffects ?? []
           if (branch.length > 0) {
-            resolveEffects(state, ctx, effectActor, effectTarget, branch, abilityId, abilityClasses, reactionResult, triggerAmount)
+            resolveEffects(state, ctx, effectActor, effectTarget, branch, abilityId, abilityClasses, reactionResult, triggerAmount, linkedTargetId)
           }
           break
         }
@@ -2546,6 +2670,7 @@ function tickTeamTurn(state: BattleState, ctx: ResolutionContext, team: BattleTe
     tickCostModifiers(fighter)
     tickEffectImmunities(fighter)
     tickClassStuns(fighter, state.round)
+    tickIntentStuns(fighter, state.round)
     tickReactionGuards(fighter, state.round)
     tickStateModes(fighter, state.round, ctx)
   })
@@ -2642,6 +2767,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
     abilityId: ability.id,
     tags: ability.classes,
   })
+  applyRotOutgoingPenalty(state, ctx, actor, ability)
 
   const allies = getTeam(state, actor.team)
   const enemies = getOpposingTeam(state, actor.team)

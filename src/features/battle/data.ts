@@ -29,6 +29,8 @@ import { mahito } from './content/fighters/mahito.ts'
 import { jogo } from './content/fighters/jogo.ts'
 import { hanami } from './content/fighters/hanami.ts'
 import { mechamaru } from './content/fighters/mechamaru.ts'
+import { eso } from './content/fighters/eso.ts'
+import { kechizu } from './content/fighters/kechizu.ts'
 
 export const PASS_ABILITY_ID = 'pass'
 
@@ -92,6 +94,8 @@ export const authoredBattleRoster: BattleFighterTemplate[] = [
   jogo,
   hanami,
   mechamaru,
+  eso,
+  kechizu,
 ]
 
 export const authoredDefaultBattleSetup = {

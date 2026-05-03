@@ -44,9 +44,9 @@ import { battleSkillActionTypeValues, battleSkillDamageTypeValues, battleSkillRa
 const abilityKinds: BattleAbilityKind[] = ['attack', 'heal', 'defend', 'buff', 'debuff', 'utility', 'pass']
 const targetRules: BattleTargetRule[] = ['none', 'self', 'enemy-single', 'enemy-all', 'ally-single', 'ally-all']
 const passiveTriggers: PassiveTrigger[] = ['whileAlive', 'onRoundStart', 'onRoundEnd', 'onAbilityUse', 'onAbilityResolve', 'onDealDamage', 'onTakeDamage', 'onHeal', 'onShieldBroken', 'onShieldGain', 'onDefeat', 'onDefeatEnemy', 'onTargetBelow']
-const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'setCounter', 'attackUp', 'stun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'reaction', 'conditional', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'setMode', 'clearMode', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
+const effectTypes: SkillEffect['type'][] = ['damage', 'damageFiltered', 'damageEqualToActorShield', 'heal', 'setHpFromCounter', 'overhealToShield', 'invulnerable', 'adjustCounterByTriggerAmount', 'resetCounter', 'setCounter', 'attackUp', 'stun', 'intentStun', 'classStun', 'classStunScaledByCounter', 'mark', 'burn', 'cooldownReduction', 'cooldownAdjust', 'energyGain', 'energyDrain', 'energySteal', 'damageBoost', 'shield', 'shieldDamage', 'breakShield', 'counter', 'reflect', 'reaction', 'conditional', 'modifyAbilityCost', 'effectImmunity', 'removeEffectImmunity', 'setFlag', 'setMode', 'clearMode', 'adjustCounter', 'adjustSourceCounter', 'addModifier', 'removeModifier', 'modifyAbilityState', 'schedule', 'randomEnemyDamageOverTime', 'randomEnemyDamageTick', 'replaceAbility', 'damageScaledByCounter', 'replaceAbilities']
 const conditionTypes: BattleReactionCondition['type'][] = ['selfHpBelow', 'targetHpBelow', 'actorHasStatus', 'targetHasStatus', 'actorHasModifierTag', 'targetHasModifierTag', 'abilityId', 'abilityClass', 'fighterFlag', 'actorModeIs', 'targetModeIs', 'counterAtLeast', 'targetCounterAtLeast', 'usedAbilityLastTurn', 'usedDifferentAbilityLastTurn', 'usedAbilityWithinRounds', 'usedAbilityOnTarget', 'shieldActive', 'brokenShieldTag', 'isUltimate']
-const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'other-enemies', 'attacker', 'random-enemy']
+const effectTargets: SkillEffect['target'][] = ['inherit', 'self', 'all-allies', 'all-enemies', 'other-enemies', 'attacker', 'linked-target', 'random-enemy']
 const reactionTriggers: BattleReactionTrigger[] = ['onAbilityUse', 'onBeingTargeted', 'onDamageApplied', 'onDamageBlocked', 'onShieldBroken', 'onDefeat', 'onDefeatEnemy']
 const modifierStats: BattleModifierStat[] = ['damageDealt', 'damageTaken', 'healDone', 'healTaken', 'cooldownTick', 'dotDamage', 'canAct', 'isInvulnerable']
 const modifierModes: BattleModifierMode[] = ['flat', 'percentAdd', 'multiplier', 'set']
@@ -65,6 +65,7 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   invulnerable: { label: 'Invulnerable', hint: 'Ignore incoming damage for a duration.' },
   attackUp: { label: 'Attack Up', hint: 'Flat outgoing damage increase.' },
   stun: { label: 'Stun', hint: 'Force the target to lose actions.' },
+  intentStun: { label: 'Intent Stun', hint: 'Seal hidden harmful or helpful skill intent without changing displayed classes.' },
   mark: { label: 'Mark', hint: 'Increase follow-up damage taken.' },
   burn: { label: 'Burn', hint: 'Damage over time each round.' },
   cooldownReduction: { label: 'Cooldown Reduction', hint: 'Accelerate ability cycling.' },
@@ -260,6 +261,8 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'attackUp', amount: 10, duration: 1, target: 'inherit' }
     case 'stun':
       return { type: 'stun', duration: 1, target: 'inherit' }
+    case 'intentStun':
+      return { type: 'intentStun', intent: 'harmful', duration: 1, target: 'inherit' }
     case 'mark':
       return { type: 'mark', bonus: 15, duration: 1, target: 'inherit' }
     case 'burn':

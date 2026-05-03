@@ -150,6 +150,18 @@ export const fighterBoardMeta: Record<string, BattleFighterBoardMeta> = {
     bio: 'Toge Inumaki commands opponents through Cursed Speech, balancing powerful control against the strain it places on his body.',
     boardPortraitFrame: { scale: 2.0, x: '0%', y: '-10%' },
   },
+  eso: {
+    affiliationLabel: 'Cursed Womb',
+    battleTitle: 'Rot Punisher',
+    bio: 'Eso is one of the Cursed Womb: Death Paintings, fighting with refined blood techniques and cruel punishment effects. He applies Rot to key enemies, pressures opponents who act recklessly, and turns each stack of Rot into a growing threat.',
+    boardPortraitFrame: { scale: 2.0, x: '0%', y: '-10%' },
+  },
+  kechizu: {
+    affiliationLabel: 'Cursed Womb',
+    battleTitle: 'Rot Protector',
+    bio: 'Kechizu is one of the Cursed Womb: Death Paintings, fighting with unstable cursed blood and brutal close-range attacks. He spreads Rot across the enemy team, protects his allies through his bond with Eso, and punishes enemies who try to break through his defenses.',
+    boardPortraitFrame: { scale: 2.0, x: '0%', y: '-10%' },
+  },
 }
 
 export function fighter(

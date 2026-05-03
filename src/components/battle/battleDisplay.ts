@@ -231,6 +231,8 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
       return `have HP set to a fixed value`
     case 'stun':
       return `be stunned for ${t(effect.duration)}`
+    case 'intentStun':
+      return `have ${effect.intent} skills stunned for ${t(effect.duration)}`
     case 'invulnerable':
       return `become invulnerable for ${t(effect.duration)}`
     case 'attackUp':
@@ -513,6 +515,9 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   if (key === 'scorched') {
     return `${value} Scorched stack${value === 1 ? '' : 's'}`
   }
+  if (key === 'rot') {
+    return `${value} Rot stack${value === 1 ? '' : 's'}. New harmful skills reduce non-affliction damage by ${value * 5}`
+  }
   if (key === 'limitless_blue') {
     return 'Lapse: Blue has been used recently'
   }
@@ -625,7 +630,18 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     mergePriority(group, 0)
   }
 
+  for (const stun of fighter.intentStuns) {
+    const sourceId = stun.sourceAbilityId ?? '__intentstun__'
+    const group = ensureGroup(sourceId)
+    const label = stun.intent === 'harmful' ? 'harmful' : 'helpful'
+    group.lines.push({ text: `This character cannot use ${label} skills`, turnsLeft: stun.remainingRounds })
+    mergeTurns(group, stun.remainingRounds)
+    mergeTone(group, 'stun')
+    mergePriority(group, 0)
+  }
+
   for (const guard of fighter.reactionGuards) {
+    if (guard.visible === false) continue
     const sourceId = guard.sourceAbilityId ?? `__reaction-${guard.kind}__`
     const group = ensureGroup(sourceId)
     const classScope = guard.abilityClasses && guard.abilityClasses.length > 0
