@@ -9,6 +9,7 @@ import {
   CONTENT_SCHEMA_VERSION,
   createContentSnapshot,
   clearPublishedBattleContent,
+  isSnapshotCurrent,
   readPublishedBattleContent,
   savePublishedBattleContent,
 } from '@/features/battle/contentSnapshot'
@@ -135,6 +136,19 @@ describe('battle content validation', () => {
     expect(read.updatedAt).toBe(saved.updatedAt)
 
     clearPublishedBattleContent()
+  })
+
+  test('stale published content falls back to authored roster after schema changes', () => {
+    const fallback = createContentSnapshot(battleRoster, defaultBattleSetup)
+    const stale = {
+      ...fallback,
+      roster: fallback.roster.filter((fighter) => fighter.id !== 'eso' && fighter.id !== 'kechizu'),
+      schemaVersion: CONTENT_SCHEMA_VERSION - 1,
+    }
+
+    expect(isSnapshotCurrent(stale)).toBe(false)
+    expect(fallback.roster.some((fighter) => fighter.id === 'eso')).toBe(true)
+    expect(fallback.roster.some((fighter) => fighter.id === 'kechizu')).toBe(true)
   })
 
   test('passive tracker pips only appear when their counter is active', () => {
