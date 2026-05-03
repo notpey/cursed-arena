@@ -138,6 +138,39 @@ describe('battle content validation', () => {
     clearPublishedBattleContent()
   })
 
+  test('published content normalizes legacy Supabase game asset URLs', () => {
+    const fallback = createContentSnapshot(battleRoster, defaultBattleSetup)
+    const brokenAssetUrl = 'https://example.supabase.co/storage/v1/object/game-assets/portraits/eso.png'
+    const fixedAssetUrl = 'https://example.supabase.co/storage/v1/object/public/game-assets/portraits/eso.png'
+    const snapshot = {
+      ...fallback,
+      roster: fallback.roster.map((fighter, fighterIndex) =>
+        fighterIndex === 0
+          ? {
+              ...fighter,
+              boardPortraitSrc: brokenAssetUrl,
+              abilities: fighter.abilities.map((ability, abilityIndex) =>
+                abilityIndex === 0
+                  ? {
+                      ...ability,
+                      icon: { ...ability.icon, src: brokenAssetUrl },
+                    }
+                  : ability,
+              ),
+            }
+          : fighter,
+      ),
+    }
+
+    clearPublishedBattleContent()
+    const saved = savePublishedBattleContent(snapshot)
+
+    expect(saved.roster[0].boardPortraitSrc).toBe(fixedAssetUrl)
+    expect(saved.roster[0].abilities[0].icon.src).toBe(fixedAssetUrl)
+
+    clearPublishedBattleContent()
+  })
+
   test('stale published content falls back to authored roster after schema changes', () => {
     const fallback = createContentSnapshot(battleRoster, defaultBattleSetup)
     const stale = {

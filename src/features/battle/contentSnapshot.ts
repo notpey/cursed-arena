@@ -4,7 +4,7 @@ import type { BattleFighterTemplate } from '@/features/battle/types.ts'
 // ways that make older published snapshots stale (kit redesigns, new
 // fighters, breaking effect-shape changes). Snapshots without a matching
 // version are treated as outdated and the runtime falls back to authored.
-export const CONTENT_SCHEMA_VERSION = 5
+export const CONTENT_SCHEMA_VERSION = 6
 
 const draftContentKey = `ca-battle-content-draft-v${CONTENT_SCHEMA_VERSION}`
 const publishedContentKey = `ca-battle-content-published-v${CONTENT_SCHEMA_VERSION}`
@@ -47,6 +47,15 @@ function resolveAbilityTone(kind: unknown, isUltimate: boolean) {
 
 function uniqueStrings(values: string[]) {
   return values.filter((value, index) => value && values.indexOf(value) === index)
+}
+
+function normalizeAssetSrc(value: unknown) {
+  if (typeof value !== 'string') return undefined
+
+  const src = value.trim()
+  if (!src) return undefined
+
+  return src.replace('/storage/v1/object/game-assets/', '/storage/v1/object/public/game-assets/')
 }
 
 function inferLegacyClasses(rawAbility: Record<string, unknown>, isUltimate: boolean) {
@@ -114,7 +123,7 @@ function normalizePassive(rawPassive: unknown) {
 
   const rawIcon = passive.icon && typeof passive.icon === 'object' ? passive.icon as Record<string, unknown> : {}
   const icon = {
-    src: typeof rawIcon.src === 'string' ? rawIcon.src : undefined,
+    src: normalizeAssetSrc(rawIcon.src),
     label: typeof rawIcon.label === 'string' && rawIcon.label.trim() ? rawIcon.label : deriveAbilityLabel(label),
     tone: 'teal',
   }
@@ -148,7 +157,7 @@ function normalizeAbility(rawAbility: unknown, isUltimate: boolean) {
     cooldown: Number.isFinite(ability.cooldown) ? Number(ability.cooldown) : 0,
     effects: Array.isArray(ability.effects) ? ability.effects : [],
     icon: {
-      src: typeof icon.src === 'string' ? icon.src : undefined,
+      src: normalizeAssetSrc(icon.src),
       label: typeof icon.label === 'string' && icon.label.trim() ? icon.label : deriveAbilityLabel(name),
       tone: resolveAbilityTone(kind, classes.includes('Ultimate')),
     },
@@ -164,6 +173,7 @@ function normalizeFighter(rawFighter: unknown) {
 
   return {
     ...fighter,
+    boardPortraitSrc: normalizeAssetSrc(fighter.boardPortraitSrc),
     abilities: rawAbilities.map((ability) => normalizeAbility(ability, false)),
     ultimate: normalizeAbility(rawUltimate, false),
     passiveEffects: Array.isArray(fighter.passiveEffects)
@@ -248,7 +258,7 @@ export function readDraftBattleContent(fallback: BattleContentSnapshot) {
 }
 
 export function saveDraftBattleContent(snapshot: BattleContentSnapshot) {
-  const next = { ...cloneSnapshot(snapshot), updatedAt: Date.now() }
+  const next = { ...(normalizeSnapshot(snapshot) ?? cloneSnapshot(snapshot)), updatedAt: Date.now() }
   writeStorage(draftContentKey, next)
   return next
 }
@@ -270,7 +280,7 @@ export function clearPublishedBattleContent() {
 }
 
 export function savePublishedBattleContent(snapshot: BattleContentSnapshot) {
-  const next = cloneSnapshot(snapshot)
+  const next = normalizeSnapshot(snapshot) ?? cloneSnapshot(snapshot)
   next.updatedAt = typeof snapshot.updatedAt === 'number' ? snapshot.updatedAt : Date.now()
   next.schemaVersion = CONTENT_SCHEMA_VERSION
   writeStorage(publishedContentKey, next)
