@@ -40,7 +40,7 @@ export function normalizeImageUrl(value: unknown): string | undefined {
   const legacyPattern = /\/storage\/v1\/object\/(?!public\/)([^/]+)\//
   if (legacyPattern.test(src)) {
     const fixed = src.replace(legacyPattern, '/storage/v1/object/public/$1/')
-    if (process.env.NODE_ENV !== 'production') {
+    if (import.meta.env?.DEV) {
       console.warn('[imageUrl] rewrote legacy Supabase URL', { from: src, to: fixed })
     }
     return fixed
