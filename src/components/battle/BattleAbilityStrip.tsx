@@ -2,6 +2,7 @@ import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/components/battle/battleDisplay'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import { hasStatus } from '@/features/battle/statuses'
 import { getAbilityById } from '@/features/battle/engine'
@@ -27,6 +28,7 @@ function SkillTile({
   onLeave?: () => void
 }) {
   const cost = getAbilityEnergyCost(ability)
+  const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
   const reasonTag =
     lockReason?.includes('Cooldown') ? 'CD'
       : lockReason?.includes('energy') ? 'NO CE'
@@ -55,8 +57,8 @@ function SkillTile({
       )}
     >
       <div className="absolute inset-0 grid place-items-center">
-        {ability.icon.src ? (
-          <img src={ability.icon.src} alt={ability.name} className="h-full w-full object-cover" />
+        {iconSrc ? (
+          <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover" />
         ) : (
           <div className="grid h-full w-full place-items-center bg-[rgba(15,15,20,0.95)] text-[1.2rem] font-black text-white/30">?</div>
         )}
@@ -86,6 +88,7 @@ function QueuedSlot({
 }) {
   const queuedAbility = queuedAction ? getAbilityById(actor, queuedAction.abilityId) : null
   const hasQueued = Boolean(queuedAbility)
+  const queuedIconSrc = normalizeBattleAssetSrc(queuedAbility?.icon.src)
 
   return (
     <button
@@ -103,8 +106,8 @@ function QueuedSlot({
     >
       <div className="absolute inset-0 grid place-items-center">
         {queuedAbility ? (
-          queuedAbility.icon.src ? (
-            <img src={queuedAbility.icon.src} alt={queuedAbility.name} className="h-full w-full object-cover" />
+          queuedIconSrc ? (
+            <img src={queuedIconSrc} alt={queuedAbility.name} className="h-full w-full object-cover" />
           ) : (
             <div className="grid h-full w-full place-items-center bg-[rgba(5,216,189,0.06)] text-[1.2rem] font-black text-ca-teal/60">?</div>
           )

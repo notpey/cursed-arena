@@ -1,4 +1,5 @@
 import type { BattleFighterTemplate } from '@/features/battle/types.ts'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets.ts'
 
 // Bump CONTENT_SCHEMA_VERSION whenever the authored roster shape changes in
 // ways that make older published snapshots stale (kit redesigns, new
@@ -47,15 +48,6 @@ function resolveAbilityTone(kind: unknown, isUltimate: boolean) {
 
 function uniqueStrings(values: string[]) {
   return values.filter((value, index) => value && values.indexOf(value) === index)
-}
-
-function normalizeAssetSrc(value: unknown) {
-  if (typeof value !== 'string') return undefined
-
-  const src = value.trim()
-  if (!src) return undefined
-
-  return src.replace('/storage/v1/object/game-assets/', '/storage/v1/object/public/game-assets/')
 }
 
 function inferLegacyClasses(rawAbility: Record<string, unknown>, isUltimate: boolean) {
@@ -123,7 +115,7 @@ function normalizePassive(rawPassive: unknown) {
 
   const rawIcon = passive.icon && typeof passive.icon === 'object' ? passive.icon as Record<string, unknown> : {}
   const icon = {
-    src: normalizeAssetSrc(rawIcon.src),
+    src: normalizeBattleAssetSrc(rawIcon.src),
     label: typeof rawIcon.label === 'string' && rawIcon.label.trim() ? rawIcon.label : deriveAbilityLabel(label),
     tone: 'teal',
   }
@@ -157,7 +149,7 @@ function normalizeAbility(rawAbility: unknown, isUltimate: boolean) {
     cooldown: Number.isFinite(ability.cooldown) ? Number(ability.cooldown) : 0,
     effects: Array.isArray(ability.effects) ? ability.effects : [],
     icon: {
-      src: normalizeAssetSrc(icon.src),
+      src: normalizeBattleAssetSrc(icon.src),
       label: typeof icon.label === 'string' && icon.label.trim() ? icon.label : deriveAbilityLabel(name),
       tone: resolveAbilityTone(kind, classes.includes('Ultimate')),
     },
@@ -173,7 +165,7 @@ function normalizeFighter(rawFighter: unknown) {
 
   return {
     ...fighter,
-    boardPortraitSrc: normalizeAssetSrc(fighter.boardPortraitSrc),
+    boardPortraitSrc: normalizeBattleAssetSrc(fighter.boardPortraitSrc),
     abilities: rawAbilities.map((ability) => normalizeAbility(ability, false)),
     ultimate: normalizeAbility(rawUltimate, false),
     passiveEffects: Array.isArray(fighter.passiveEffects)

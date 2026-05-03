@@ -14,6 +14,7 @@ import type {
   PassiveEffect,
   SkillEffect,
 } from '@/features/battle/types'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 
 // Optional battle state for cross-team icon resolution. When provided,
 // pips sourced from an opposing fighter's ability can still show the
@@ -462,7 +463,7 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
       lines: [],
       turnsLeft: null,
       tone: 'default',
-      iconSrc: icon?.src,
+      iconSrc: normalizeBattleAssetSrc(icon?.src),
       iconLabel: icon?.label ?? name.slice(0, 2).toUpperCase(),
       iconTone: icon?.tone ?? 'teal',
       stackCount: null,
@@ -559,7 +560,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       const sourceId = `replace-${delta.slotAbilityId}`
       const group = ensureGroup(sourceId)
       // Override icon/label with the replacement ability itself
-      group.iconSrc = delta.replacement.icon.src
+      group.iconSrc = normalizeBattleAssetSrc(delta.replacement.icon.src)
       group.iconLabel = delta.replacement.icon.label
       group.iconTone = delta.replacement.icon.tone
       group.label = delta.replacement.name
@@ -569,7 +570,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     } else if (delta.mode === 'grant') {
       const sourceId = `grant-${delta.grantedAbility.id}`
       const group = ensureGroup(sourceId)
-      group.iconSrc = delta.grantedAbility.icon.src
+      group.iconSrc = normalizeBattleAssetSrc(delta.grantedAbility.icon.src)
       group.iconLabel = delta.grantedAbility.icon.label
       group.iconTone = delta.grantedAbility.icon.tone
       group.label = delta.grantedAbility.name
@@ -702,7 +703,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       lines: describePassiveLines(passive),
       turnsLeft: null,
       tone: 'buff',
-      iconSrc: passive.icon?.src,
+      iconSrc: normalizeBattleAssetSrc(passive.icon?.src),
       iconLabel: passive.icon?.label ?? root.slice(0, 2).toUpperCase(),
       iconTone: passive.icon?.tone ?? 'teal',
       stackCount: null,
@@ -723,7 +724,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
       if (scheduled.abilityId) {
         const ability = findAbilityAnywhere(scheduled.abilityId)
         if (ability) {
-          group.iconSrc = ability.icon.src
+          group.iconSrc = normalizeBattleAssetSrc(ability.icon.src)
           group.iconLabel = ability.icon.label
           group.iconTone = ability.icon.tone
           group.label = ability.name

@@ -7,6 +7,7 @@ import {
   battleRoster,
   defaultBattleSetup,
 } from '@/features/battle/data'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import {
   clearDraftBattleContent,
   createContentSnapshot,
@@ -1896,13 +1897,14 @@ function AssetField({
 function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterTemplate; compact?: boolean }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
   const sizeClass = compact ? 'h-[5rem] w-[5rem]' : 'h-[8rem] w-[8rem]'
+  const portraitSrc = normalizeBattleAssetSrc(fighter.boardPortraitSrc)
 
   return (
     <div className={`relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))] ${sizeClass}`}>
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(5,216,189,0.08),transparent_70%)]" />
-      {fighter.boardPortraitSrc ? (
+      {portraitSrc ? (
         <img
-          src={fighter.boardPortraitSrc}
+          src={portraitSrc}
           alt={fighter.name}
           className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
           draggable={false}
@@ -1918,16 +1920,17 @@ function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterT
 
 function AbilityTilePreview({ ability, large = false }: { ability: BattleAbilityTemplate; large?: boolean }) {
   const sizeClass = large ? 'h-[7.5rem] w-[7.5rem]' : 'h-[6rem] w-[6rem]'
+  const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
 
   return (
     <div className={[
       'relative overflow-hidden rounded-[10px] border border-white/12 bg-[rgba(12,12,18,0.85)]',
       sizeClass,
     ].join(' ')}>
-      {ability.icon.src ? <img src={ability.icon.src} alt={ability.name} className="absolute inset-0 h-full w-full object-cover" /> : null}
+      {iconSrc ? <img src={iconSrc} alt={ability.name} className="absolute inset-0 h-full w-full object-cover" /> : null}
       <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.35))]" />
       <div className="absolute inset-0 grid place-items-center">
-        {!ability.icon.src ? <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span> : null}
+        {!iconSrc ? <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span> : null}
       </div>
       <div className="absolute bottom-1.5 left-1.5 rounded-[4px] bg-black/55 px-1.5 py-0.5">
         <span className="ca-mono-label text-[0.36rem] text-white">{ability.icon.label}</span>
@@ -1968,8 +1971,8 @@ function FighterProfilePreview({ fighter }: { fighter: BattleFighterTemplate }) 
         <div key={passive.label} className="rounded-[10px] border border-ca-teal/22 bg-ca-teal-wash px-3 py-3">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md border border-ca-teal/20 bg-[rgba(5,216,189,0.08)]">
-              {passive.icon?.src ? (
-                <img src={passive.icon.src} alt={passive.label} className="h-full w-full object-cover" />
+              {normalizeBattleAssetSrc(passive.icon?.src) ? (
+                <img src={normalizeBattleAssetSrc(passive.icon?.src)} alt={passive.label} className="h-full w-full object-cover" />
               ) : (
                 <span className="ca-mono-label text-[0.45rem] text-ca-teal">{passive.icon?.label ?? 'P'}</span>
               )}

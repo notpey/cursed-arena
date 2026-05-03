@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { battleRosterById } from '@/features/battle/data'
 import {
   UNLOCK_MISSION_DEFS,
@@ -73,15 +74,16 @@ function SectionIndexRow({
     .map((d) => battleRosterById[d.reward.fighterId])
     .filter(Boolean)
     .slice(0, 1)
+  const previewPortraitSrc = normalizeBattleAssetSrc(previewFighters[0]?.boardPortraitSrc)
 
   return (
     <div className="ca-card border-white/8 bg-[rgba(14,15,20,0.22)] transition duration-150 hover:border-white/14 hover:bg-[rgba(14,15,20,0.32)]">
       <div className="flex items-stretch gap-0">
         {/* Preview image */}
-        {previewFighters[0]?.boardPortraitSrc ? (
+        {previewPortraitSrc ? (
           <div className="w-[7rem] shrink-0 overflow-hidden rounded-l-[inherit]">
             <img
-              src={previewFighters[0].boardPortraitSrc}
+              src={previewPortraitSrc}
               alt={previewFighters[0].name}
               className="h-full w-full object-cover object-top"
             />
@@ -188,6 +190,7 @@ function MissionGridCard({
 }) {
   const reward = battleRosterById[def.reward.fighterId]
   const completed = progress.completed
+  const rewardPortraitSrc = normalizeBattleAssetSrc(reward?.boardPortraitSrc)
 
   return (
     <button
@@ -204,9 +207,9 @@ function MissionGridCard({
 
         {/* Portrait */}
         <div className="relative aspect-[4/3] w-full overflow-hidden">
-          {reward?.boardPortraitSrc ? (
+          {rewardPortraitSrc ? (
             <img
-              src={reward.boardPortraitSrc}
+              src={rewardPortraitSrc}
               alt={reward.name}
               className={['h-full w-full object-cover object-top transition duration-200 group-hover:scale-[1.03]', !completed ? 'grayscale-[0.5] brightness-75' : ''].join(' ')}
             />
@@ -309,6 +312,7 @@ function DetailView({
 }) {
   const reward = battleRosterById[def.reward.fighterId]
   const completed = progress.completed
+  const rewardPortraitSrc = normalizeBattleAssetSrc(reward?.boardPortraitSrc)
   const goalLine = getObjectiveGoalLine(def, progress)
 
   const pct = (() => {
@@ -396,8 +400,8 @@ function DetailView({
             {reward ? (
               <div className="mt-3 flex items-center gap-3">
                 <div className={['h-14 w-14 shrink-0 overflow-hidden rounded-[0.22rem] border', completed ? 'border-ca-teal/35' : 'border-white/10 grayscale opacity-50'].join(' ')}>
-                  {reward.boardPortraitSrc ? (
-                    <img src={reward.boardPortraitSrc} alt={reward.name} className="h-full w-full object-cover object-top" />
+                  {rewardPortraitSrc ? (
+                    <img src={rewardPortraitSrc} alt={reward.name} className="h-full w-full object-cover object-top" />
                   ) : (
                     <div className="grid h-full w-full place-items-center bg-[rgba(15,15,20,0.95)] text-[1.2rem] font-black text-white/15">?</div>
                   )}
@@ -415,11 +419,11 @@ function DetailView({
         </div>
 
         {/* Right column — large portrait */}
-        {reward?.boardPortraitSrc ? (
+        {rewardPortraitSrc ? (
           <div className="hidden lg:block">
             <div className={['w-[13rem] overflow-hidden rounded-[0.3rem] border xl:w-[15rem]', completed ? 'border-ca-teal/35' : 'border-white/10'].join(' ')}>
               <img
-                src={reward.boardPortraitSrc}
+                src={rewardPortraitSrc}
                 alt={reward.name}
                 className={['h-full w-full object-cover object-top', !completed ? 'grayscale brightness-75' : ''].join(' ')}
               />

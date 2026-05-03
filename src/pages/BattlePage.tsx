@@ -7,6 +7,7 @@ import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
 import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { battleBoardProfiles, battlefieldEffect, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   buildCompletionId,
@@ -2001,6 +2002,7 @@ export function SkillQueueModal({
                 const isDragging = dragIndex === index
                 const isTarget   = dragOverIndex === index && dragIndex !== index
                 const effCost    = row.cost ? resolvedCost(row.fighter.instanceId, row.cost, perActorAlloc) : null
+                const rowAbilityIconSrc = normalizeBattleAssetSrc(row.ability?.icon.src)
                 return (
                   <div
                     key={row.fighter.instanceId}
@@ -2018,8 +2020,8 @@ export function SkillQueueModal({
                   >
                     <span className="ca-mono-label text-[0.4rem] text-ca-text-3">{index + 1}</span>
                     <div className={['relative h-[3rem] w-[3rem] overflow-hidden rounded-[0.2rem] border-2 bg-[rgba(20,20,28,0.9)]', isTarget ? 'border-ca-teal/60 shadow-[0_0_10px_rgba(5,216,189,0.3)]' : 'border-white/25'].join(' ')}>
-                      {row.ability?.icon.src ? (
-                        <img src={row.ability.icon.src} alt={row.ability.name} className="h-full w-full object-cover" draggable={false} />
+                      {row.ability && rowAbilityIconSrc ? (
+                        <img src={rowAbilityIconSrc} alt={row.ability.name} className="h-full w-full object-cover" draggable={false} />
                       ) : (
                         <div className="grid h-full w-full place-items-center ca-mono-label text-[0.5rem] font-black text-white/20">{row.fighter.shortName.slice(0, 2).toUpperCase()}</div>
                       )}

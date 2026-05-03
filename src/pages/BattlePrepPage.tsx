@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import { useNavigate } from 'react-router-dom'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { getTargetLabel } from '@/components/battle/battleDisplay'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import {
   battlePrepRoster,
@@ -124,6 +125,7 @@ function PortraitThumb({
 }) {
   const style = rarityStyles[entry.rarity]
   const initial = entry.battleTemplate.shortName[0]?.toUpperCase() ?? '?'
+  const portraitSrc = normalizeBattleAssetSrc(entry.battleTemplate.boardPortraitSrc)
 
   return (
     <div
@@ -137,10 +139,10 @@ function PortraitThumb({
         }}
       />
 
-      {entry.battleTemplate.boardPortraitSrc ? (
+      {portraitSrc ? (
         <div className="absolute inset-0 overflow-hidden">
           <img
-            src={entry.battleTemplate.boardPortraitSrc}
+            src={portraitSrc}
             alt={entry.name}
             className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain object-center"
             style={{
@@ -1247,6 +1249,7 @@ function SelectedFighterPanel({
 }) {
   const abilities = entry.battleTemplate.abilities.concat(entry.battleTemplate.ultimate)
   const style = rarityStyles[entry.rarity]
+  const portraitSrc = normalizeBattleAssetSrc(entry.battleTemplate.boardPortraitSrc)
 
   return (
     <div className="animate-ca-fade-in">
@@ -1285,8 +1288,8 @@ function SelectedFighterPanel({
                     ].join(' ')}
                     aria-label={ability.name}
                   >
-                    {ability.icon.src ? (
-                      <img src={ability.icon.src} alt={ability.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.035]" />
+                    {normalizeBattleAssetSrc(ability.icon.src) ? (
+                      <img src={normalizeBattleAssetSrc(ability.icon.src)} alt={ability.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.035]" />
                     ) : (
                       <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
                         <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span>
@@ -1305,9 +1308,9 @@ function SelectedFighterPanel({
               className="pointer-events-none absolute inset-0"
               style={{ background: `radial-gradient(circle at 50% 25%, ${style.wash}, transparent 68%)` }}
             />
-            {entry.battleTemplate.boardPortraitSrc ? (
+            {portraitSrc ? (
               <img
-                src={entry.battleTemplate.boardPortraitSrc}
+                src={portraitSrc}
                 alt={entry.name}
                 className="relative h-[10.75rem] w-full object-contain object-center"
                 draggable={false}
@@ -1353,8 +1356,8 @@ function SelectedFighterPanel({
           </div>
 
           <div className="overflow-hidden rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.04)]">
-            {selectedAbility.icon.src ? (
-              <img src={selectedAbility.icon.src} alt={selectedAbility.name} className="h-full min-h-[7.25rem] w-full object-cover object-center" />
+            {normalizeBattleAssetSrc(selectedAbility.icon.src) ? (
+              <img src={normalizeBattleAssetSrc(selectedAbility.icon.src)} alt={selectedAbility.name} className="h-full min-h-[7.25rem] w-full object-cover object-center" />
             ) : (
               <div className="grid h-full min-h-[7.25rem] w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
                 <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>

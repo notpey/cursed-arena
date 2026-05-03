@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { isAlive } from '@/features/battle/engine'
 import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
@@ -60,6 +61,7 @@ function lineDurationLabel(line: ActiveEffectLine): { text: string; cls: string 
 function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; tooltipDown?: boolean }) {
   const border = pipToneBorder(pip.tone)
   const badgeCls = pipToneBadge(pip.tone)
+  const iconSrc = normalizeBattleAssetSrc(pip.iconSrc)
 
   // Show stack badge in header; omit turn count since each line shows its own duration
   const hasStackMeta = pip.stackCount !== null && pip.stackCount > 0
@@ -72,8 +74,8 @@ function PipTooltip({ pip, tooltipDown = false }: { pip: ActiveEffectPip; toolti
     )}>
       <div className="flex items-start gap-2.5">
         <div className={cn('relative h-10 w-10 shrink-0 overflow-hidden rounded-[0.24rem] border', border)}>
-          {pip.iconSrc ? (
-            <img src={pip.iconSrc} alt="" className="h-full w-full object-cover" draggable={false} />
+          {iconSrc ? (
+            <img src={iconSrc} alt="" className="h-full w-full object-cover" draggable={false} />
           ) : (
             <div className={cn('grid h-full w-full place-items-center', iconToneFallbackBg(pip.iconTone))}>
               <span className="ca-mono-label text-[0.62rem] font-bold text-white/80">{pip.iconLabel}</span>
@@ -131,6 +133,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
   const border = pipToneBorder(pip.tone)
   const glow = pipToneGlow(pip.tone)
   const badgeCls = pipToneBadge(pip.tone)
+  const iconSrc = normalizeBattleAssetSrc(pip.iconSrc)
 
   return (
     <div
@@ -144,9 +147,9 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
         border,
         hovered ? glow : '',
       )}>
-        {pip.iconSrc ? (
+        {iconSrc ? (
           <img
-            src={pip.iconSrc}
+            src={iconSrc}
             alt={pip.label}
             className="absolute inset-0 h-full w-full object-cover"
             draggable={false}
@@ -277,6 +280,7 @@ function PortraitSquare({
   mirrored?: boolean
 }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
+  const portraitSrc = normalizeBattleAssetSrc(fighter.boardPortraitSrc)
 
   return (
     <div
@@ -289,10 +293,10 @@ function PortraitSquare({
     >
       <div className={cn('absolute inset-0', rarityWash(fighter.rarity))} />
 
-      {fighter.boardPortraitSrc ? (
+      {portraitSrc ? (
         <div className="absolute inset-0 overflow-hidden">
           <img
-            src={fighter.boardPortraitSrc}
+            src={portraitSrc}
             alt={fighter.shortName}
             className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
             style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}
@@ -311,7 +315,7 @@ function PortraitSquare({
         </div>
       )}
 
-      {!fighter.boardPortraitSrc ? null : (
+      {!portraitSrc ? null : (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(180deg,transparent,rgba(5,5,8,0.55))]" />
       )}
 

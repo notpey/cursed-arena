@@ -1,5 +1,6 @@
 import { type DragEvent, type TouchEvent, useMemo, useRef, useState } from 'react'
 import { describePassiveForUi, getCommandSummary } from '@/components/battle/battleDisplay'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   battleEnergyMeta,
@@ -447,8 +448,8 @@ export function NarutoQueueCommitModal({
                     ].join(' ')}
                     title={`${index + 1}. ${row.summary}`}
                   >
-                    {row.iconSrc ? (
-                      <img src={row.iconSrc} alt={row.abilityName} className="h-full w-full object-cover" draggable={false} />
+                    {normalizeBattleAssetSrc(row.iconSrc) ? (
+                      <img src={normalizeBattleAssetSrc(row.iconSrc)} alt={row.abilityName} className="h-full w-full object-cover" draggable={false} />
                     ) : (
                       <div className="grid h-full w-full place-items-center">
                         <span className="ca-display text-[0.68rem] text-ca-text">{getQueueTileLabel(row)}</span>
