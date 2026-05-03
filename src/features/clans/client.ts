@@ -1,5 +1,6 @@
-import { buildAvatarStoragePath, validateAvatarFile, type AvatarUploadResult } from '@/features/avatar/validation'
+// Image customization is URL-only. Supabase Storage uploads are disabled.
 import { mockClanDetails, mockClanInvitations } from '@/features/clans/mockData'
+import { validateImageUrl } from '@/features/images/imageUrl'
 import type { ClanDetail, ClanInvitation, ClanMember, ClanMemberRole, ClanSummary, CreateClanInput } from '@/features/clans/types'
 import { getLevelForExperience, getLadderRankTitle } from '@/features/ranking/ladder'
 import { getSupabaseClient } from '@/lib/supabase'
@@ -468,33 +469,11 @@ export async function declineClanInvitation(invitationId: string): Result<boolea
   return { data: true, error: null }
 }
 
-export async function uploadClanAvatar(clanId: string, file: File): Promise<{ data: AvatarUploadResult | null; error: string | null }> {
-  const validation = validateAvatarFile(file)
-  if (!validation.ok) return { data: null, error: validation.error }
-
-  const path = buildAvatarStoragePath(clanId, file)
-  const client = getSupabaseClient()
-  if (!client) {
-    return { data: { url: URL.createObjectURL(file), path: `mock:${path}` }, error: null }
+export async function updateClanAvatarUrl(clanId: string, avatarUrl: string | null): Result<boolean> {
+  if (avatarUrl !== null) {
+    const validation = validateImageUrl(avatarUrl, { allowEmpty: false })
+    if (!validation.ok) return { data: false, error: validation.error }
   }
-
-  const { error } = await client.storage.from('clan-avatars').upload(path, file, {
-    cacheControl: '3600',
-    upsert: true,
-  })
-  if (error) {
-    const message = error.message.toLowerCase()
-    if (message.includes('bucket')) return { data: null, error: 'Storage bucket clan-avatars was not found. Run the avatar storage migration before uploading.' }
-    return { data: null, error: error.message }
-  }
-
-  const { data } = client.storage.from('clan-avatars').getPublicUrl(path)
-  const updated = await updateClanAvatarUrl(clanId, data.publicUrl)
-  if (updated.error) return { data: null, error: updated.error }
-  return { data: { url: data.publicUrl, path }, error: null }
-}
-
-export async function updateClanAvatarUrl(clanId: string, avatarUrl: string): Result<boolean> {
   const updated = await updateClan(clanId, { avatarUrl })
   return { data: Boolean(updated.data), error: updated.error }
 }

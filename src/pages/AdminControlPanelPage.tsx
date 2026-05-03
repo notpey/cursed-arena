@@ -8,6 +8,7 @@ import {
   defaultBattleSetup,
 } from '@/features/battle/data'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
+import { validateImageUrl } from '@/features/images/imageUrl'
 import {
   clearDraftBattleContent,
   createContentSnapshot,
@@ -56,12 +57,6 @@ const modifierStatusKinds: Array<BattleStatusKind | ''> = ['', 'stun', 'invincib
 const modifierStackingOptions = ['max', 'replace', 'stack'] as const
 const costModifierModes = ['set', 'reduceTyped', 'reduceRandom'] as const
 
-type SupabaseErrorLike = {
-  message?: string
-  code?: string
-  details?: string
-  hint?: string
-}
 
 const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string }> = {
   damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
@@ -704,52 +699,6 @@ function explainCostRule(ability: BattleAbilityTemplate) {
   return 'Automatic costs follow the live battle rules for this skill kind, target pattern, and ultimate state.'
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
-    reader.onerror = () => reject(new Error('Failed to read image file'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function formatGameAssetUploadError(error: SupabaseErrorLike, fallback: string) {
-  const message = error.message?.trim() || fallback
-  const normalized = message.toLowerCase()
-  const code = error.code ? ` (${error.code})` : ''
-  const detail = message.length > 0 && message !== fallback ? `: ${message}` : ''
-
-  if (normalized.includes('bucket')) return `GAME-ASSETS BUCKET ERROR${code}${detail}`
-  if (normalized.includes('row-level security') || normalized.includes('permission denied') || normalized.includes('policy')) return `GAME-ASSETS RLS BLOCKED${code}${detail}`
-  if (normalized.includes('payload') || normalized.includes('too large')) return `IMAGE TOO LARGE${code}`
-  if (normalized.includes('mime') || normalized.includes('content type')) return `IMAGE TYPE BLOCKED${code}`
-  return `UPLOAD FAILED${code}${detail}`
-}
-
-function logGameAssetUploadDiagnostics(stage: string, error: SupabaseErrorLike, context: Record<string, string | number>) {
-  if (typeof console === 'undefined') return
-  const supabaseUrl = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL ?? '(not set)'
-  console.error('[game-assets]', stage, {
-    supabaseProject: supabaseUrl,
-    message: error.message ?? null,
-    code: error.code ?? null,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-    ...context,
-  })
-}
-
-// Validates that a URL returned by Supabase getPublicUrl is a proper public storage URL.
-// A missing "/public/" segment means the bucket is private or the URL is a legacy bad value.
-function isValidPublicStorageUrl(url: string): boolean {
-  try {
-    const u = new URL(url)
-    return u.pathname.includes('/storage/v1/object/public/')
-  } catch {
-    return false
-  }
-}
-
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -981,84 +930,6 @@ export function AdminControlPanelPage() {
     })
   }
 
-  async function handleImageImport(
-    apply: (value: string) => void,
-    file: File | null,
-    successMessage: string,
-    storageKey?: string,
-  ) {
-    if (!file) return
-
-    try {
-      const supabase = storageKey ? getSupabaseClient() : null
-
-      if (supabase && storageKey) {
-        const ext = file.name.split('.').pop() ?? 'jpg'
-        const path = `${storageKey}.${ext}`
-        const bucket = 'game-assets'
-        const diagCtx = { bucket, path, contentType: file.type || 'unknown', fileSizeBytes: file.size }
-
-        console.info('[game-assets] upload attempt', diagCtx)
-
-        const { error: uploadErr } = await supabase.storage
-          .from(bucket)
-          .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type || undefined })
-
-        if (uploadErr) {
-          logGameAssetUploadDiagnostics('storage_upload_failed', uploadErr, diagCtx)
-          setStatusFlash(formatGameAssetUploadError(uploadErr, 'upload blocked'))
-          return
-        }
-
-        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
-        const rawUrl = urlData?.publicUrl ?? ''
-
-        if (!rawUrl) {
-          const err = { message: 'Storage returned an empty public URL after successful upload.' }
-          logGameAssetUploadDiagnostics('public_url_empty', err, diagCtx)
-          setStatusFlash('PUBLIC URL FAILED: storage returned no URL')
-          return
-        }
-
-        // Guard: a URL missing /public/ means the bucket is private or the URL is malformed.
-        // Do not save this — it will 400 when loaded.
-        if (!isValidPublicStorageUrl(rawUrl)) {
-          const err = { message: `URL missing /public/ segment — bucket may be private. Apply migration 016 to project mzpfwxrdituexjpwqlqz. Got: ${rawUrl}` }
-          logGameAssetUploadDiagnostics('public_url_invalid', err, diagCtx)
-          setStatusFlash('UPLOAD FAILED: bucket is private — run migration 016 on live project')
-          return
-        }
-
-        // Verify the uploaded file is actually reachable before saving the URL.
-        try {
-          const probe = await fetch(rawUrl, { method: 'HEAD' })
-          if (!probe.ok) {
-            const err = { message: `Uploaded file not reachable: HTTP ${probe.status} at ${rawUrl}` }
-            logGameAssetUploadDiagnostics('public_url_unreachable', err, diagCtx)
-            setStatusFlash(`UPLOAD FAILED: file not reachable (${probe.status}) — check bucket policies`)
-            return
-          }
-        } catch (fetchErr) {
-          // Network error during probe — still save the URL but warn.
-          console.warn('[game-assets] post-upload probe failed (network?), proceeding anyway', { url: rawUrl, error: String(fetchErr) })
-        }
-
-        // Cache-bust so re-uploads immediately reflect in the ACP preview
-        apply(`${rawUrl}?t=${Date.now()}`)
-      } else {
-        // Supabase not configured — fall back to base64 data URL
-        const dataUrl = await readFileAsDataUrl(file)
-        apply(dataUrl)
-      }
-
-      setStatusFlash(successMessage)
-    } catch (error) {
-      const err = error instanceof Error ? { message: error.message } : { message: String(error) }
-      logGameAssetUploadDiagnostics('unexpected', err, { bucket: 'game-assets', storageKey: storageKey ?? 'local' })
-      setStatusFlash(formatGameAssetUploadError(err, 'unexpected upload failure'))
-    }
-  }
-
   function handleAddPassive() {
     updateSelectedFighter((fighter) => {
       fighter.passiveEffects = [...(fighter.passiveEffects ?? []), { label: 'New Passive', trigger: 'whileAlive', effects: [createEffect('damageBoost')] }]
@@ -1275,6 +1146,26 @@ export function AdminControlPanelPage() {
     if (validationReport.errors.length > 0) {
       setStatusFlash('FIX VALIDATION')
       return
+    }
+
+    // Reject any image URL fields that contain unsafe or non-public values
+    for (const fighter of draft.roster) {
+      if (fighter.boardPortraitSrc) {
+        const v = validateImageUrl(fighter.boardPortraitSrc, { allowEmpty: true, allowLocalPaths: true })
+        if (!v.ok) {
+          setStatusFlash(`BAD PORTRAIT URL (${fighter.shortName}): ${v.error}`)
+          return
+        }
+      }
+      for (const ability of [...(fighter.abilities ?? []), fighter.ultimate].filter(Boolean)) {
+        if (ability.icon.src) {
+          const v = validateImageUrl(ability.icon.src, { allowEmpty: true, allowLocalPaths: true })
+          if (!v.ok) {
+            setStatusFlash(`BAD ICON URL (${ability.name}): ${v.error}`)
+            return
+          }
+        }
+      }
     }
 
     if (!getSupabaseClient()) {
@@ -1503,12 +1394,10 @@ export function AdminControlPanelPage() {
                         <p className="mt-1 ca-mono-label text-[0.42rem] text-ca-text-3">{selectedFighter.rarity} | {selectedFighter.role.toUpperCase()} | HP {selectedFighter.maxHp}</p>
                       </div>
                       <AssetField
-                        fieldId={`fighter-portrait-${selectedFighter.id}`}
                         label="Portrait Image"
                         value={selectedFighter.boardPortraitSrc ?? ''}
                         onChange={(value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value })}
-                        onImport={(file) => handleImageImport((value) => updateSelectedFighter((fighter) => { fighter.boardPortraitSrc = value }), file, 'PORTRAIT UPDATED', `portraits/${selectedFighter.id}`)}
-                        helper="Square crop. Recommended 512x512."
+                        helper="Paste a direct image URL, such as an i.imgur.com PNG/JPG/GIF/WebP link. Square crop. Recommended 512x512."
                       />
                     </div>
                   </div>
@@ -1611,7 +1500,6 @@ export function AdminControlPanelPage() {
                                   onSelect={() => setSelectedAbilityId(ability.id)}
                                   onUpdate={(mutator) => updateAbilityById(ability.id, mutator)}
                                   onUpdateEffects={(effects) => updateAbilityEffectsById(ability.id, effects)}
-                                  onImportIcon={(file) => handleImageImport((value) => updateAbilityById(ability.id, (current) => { current.icon.src = value }), file, 'ABILITY ICON UPDATED', `ability-icons/${ability.id}`)}
                                   onAdvancedEffectsJson={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateAbilityById(ability.id, (current) => { current.effects = parsed }), 'ABILITY EFFECTS UPDATED')}
                                 />
                               </div>
@@ -1686,18 +1574,13 @@ export function AdminControlPanelPage() {
                                 </div>
                                 <div className="grid gap-3 md:grid-cols-[1fr_1fr] items-start">
                                   <AssetField
-                                    fieldId={`passive-icon-${index}`}
                                     label="Passive Icon"
                                     value={selectedPassive.icon?.src ?? ''}
                                     onChange={(value) => updateSelectedPassive((p) => {
                                       const current = p.icon ?? { label: (p.label?.slice(0, 2) || 'P').toUpperCase(), tone: 'teal' as const }
                                       p.icon = { ...current, src: value || undefined }
                                     })}
-                                    onImport={(file) => handleImageImport((value) => updateSelectedPassive((p) => {
-                                      const current = p.icon ?? { label: (p.label?.slice(0, 2) || 'P').toUpperCase(), tone: 'teal' as const }
-                                      p.icon = { ...current, src: value || undefined }
-                                    }), file, 'PASSIVE ICON UPDATED', `passive-icons/${selectedFighter?.id ?? 'passive'}-${index}`)}
-                                    helper="Square. Recommended 256x256. Leave empty to borrow from a linked skill below."
+                                    helper="Paste a direct image URL. Square. Recommended 256x256. Leave empty to borrow from a linked skill below."
                                   />
                                   <SelectField
                                     label="Borrow Icon From Skill"
@@ -1934,43 +1817,27 @@ function StatusPill({ label, tone }: { label: string; tone: 'teal' | 'red' | 'go
 }
 
 function AssetField({
-  fieldId,
   label,
   value,
   onChange,
-  onImport,
   helper,
 }: {
-  fieldId: string
   label: string
   value: string
   onChange: (value: string) => void
-  onImport: (file: File | null) => void
   helper: string
 }) {
   return (
     <div>
       <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</span>
       <input
+        type="url"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Paste an image URL or data URI"
+        placeholder="https://i.imgur.com/example.png"
         className="mt-2 w-full rounded-[8px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2 text-sm text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
       />
       <div className="mt-2 flex flex-wrap gap-2">
-        <label htmlFor={fieldId} className="ca-mono-label cursor-pointer rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal">
-          Upload Image
-        </label>
-        <input
-          id={fieldId}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(event) => {
-            void onImport(event.target.files?.[0] ?? null)
-            event.currentTarget.value = ''
-          }}
-        />
         <button type="button" onClick={() => onChange('')} className="ca-mono-label rounded-md border border-white/10 px-2.5 py-1.5 text-[0.42rem] text-ca-text-2">
           Clear
         </button>
@@ -2148,7 +2015,6 @@ function SkillEditorCard({
   onSelect,
   onUpdate,
   onUpdateEffects,
-  onImportIcon,
   onAdvancedEffectsJson,
 }: {
   ability: BattleAbilityTemplate
@@ -2157,7 +2023,6 @@ function SkillEditorCard({
   onSelect: () => void
   onUpdate: (mutator: (ability: BattleAbilityTemplate) => void) => void
   onUpdateEffects: (effects: SkillEffect[]) => void
-  onImportIcon: (file: File | null) => void
   onAdvancedEffectsJson: (value: string) => void
 }) {
   return (
@@ -2209,12 +2074,10 @@ function SkillEditorCard({
         </div>
 
         <AssetField
-          fieldId={`ability-icon-${ability.id}`}
           label="Skill Icon"
           value={ability.icon.src ?? ''}
           onChange={(value) => onUpdate((current) => { current.icon.src = value || undefined })}
-          onImport={onImportIcon}
-          helper="Square icon. Recommended 256x256."
+          helper="Paste a direct image URL, such as an i.imgur.com PNG/JPG/GIF/WebP link. Square icon. Recommended 256x256."
         />
 
         <SkillCostPanel ability={ability} onUpdate={onUpdate} />
