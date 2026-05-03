@@ -3,6 +3,7 @@ import {
   battleRosterById,
   defaultBattleSetup,
 } from '@/features/battle/data.ts'
+import { normalizeBattleAssetSrc } from '@/features/battle/assets.ts'
 import {
   getCooldown,
   getFighterById,
@@ -219,14 +220,26 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
         affiliationLabel: template.affiliationLabel,
         battleTitle: template.battleTitle,
         bio: template.bio,
-        boardPortraitSrc: template.boardPortraitSrc,
+        boardPortraitSrc: normalizeBattleAssetSrc(template.boardPortraitSrc),
         portraitFrame: template.portraitFrame,
         boardPortraitFrame: template.boardPortraitFrame,
         maxHp: template.maxHp,
         hp: template.maxHp,
-        passiveEffects: template.passiveEffects?.map(clonePassiveEffect),
-        abilities: template.abilities.map(cloneAbilityTemplate),
-        ultimate: cloneAbilityTemplate(template.ultimate),
+        passiveEffects: template.passiveEffects?.map((passive) => {
+          const cloned = clonePassiveEffect(passive)
+          if (cloned.icon) cloned.icon.src = normalizeBattleAssetSrc(cloned.icon.src)
+          return cloned
+        }),
+        abilities: template.abilities.map((ability) => {
+          const cloned = cloneAbilityTemplate(ability)
+          cloned.icon.src = normalizeBattleAssetSrc(cloned.icon.src)
+          return cloned
+        }),
+        ultimate: (() => {
+          const cloned = cloneAbilityTemplate(template.ultimate)
+          cloned.icon.src = normalizeBattleAssetSrc(cloned.icon.src)
+          return cloned
+        })(),
         cooldowns: Object.fromEntries(
           template.abilities.concat(template.ultimate).map((ability) => [ability.id, 0]),
         ),

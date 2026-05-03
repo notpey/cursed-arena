@@ -56,6 +56,13 @@ const modifierStatusKinds: Array<BattleStatusKind | ''> = ['', 'stun', 'invincib
 const modifierStackingOptions = ['max', 'replace', 'stack'] as const
 const costModifierModes = ['set', 'reduceTyped', 'reduceRandom'] as const
 
+type SupabaseErrorLike = {
+  message?: string
+  code?: string
+  details?: string
+  hint?: string
+}
+
 const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string }> = {
   damage: { label: 'Direct Damage', hint: 'Immediate HP loss.' },
   damageFiltered: { label: 'Filtered Damage', hint: 'Deals damage only to targets that carry a specific modifier tag.' },
@@ -706,6 +713,29 @@ function readFileAsDataUrl(file: File) {
   })
 }
 
+function formatGameAssetUploadError(error: SupabaseErrorLike, fallback: string) {
+  const message = error.message?.trim() || fallback
+  const normalized = message.toLowerCase()
+  const code = error.code ? ` (${error.code})` : ''
+
+  if (normalized.includes('bucket')) return `GAME-ASSETS BUCKET ERROR${code}`
+  if (normalized.includes('row-level security') || normalized.includes('permission denied') || normalized.includes('policy')) return `GAME-ASSETS RLS BLOCKED${code}`
+  if (normalized.includes('payload') || normalized.includes('too large')) return `IMAGE TOO LARGE${code}`
+  if (normalized.includes('mime') || normalized.includes('content type')) return `IMAGE TYPE BLOCKED${code}`
+  return `UPLOAD FAILED${code}`
+}
+
+function logGameAssetUploadError(stage: string, error: SupabaseErrorLike, context: Record<string, string>) {
+  if (typeof console === 'undefined') return
+  console.error('[game-assets]', stage, {
+    message: error.message ?? null,
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    ...context,
+  })
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -954,11 +984,21 @@ export function AdminControlPanelPage() {
         const path = `${storageKey}.${ext}`
         const { error: uploadErr } = await supabase.storage
           .from('game-assets')
-          .upload(path, file, { upsert: true, contentType: file.type })
+          .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type || undefined })
 
-        if (uploadErr) throw uploadErr
+        if (uploadErr) {
+          logGameAssetUploadError('storage_upload', uploadErr, { bucket: 'game-assets', path, contentType: file.type || 'unknown' })
+          setStatusFlash(formatGameAssetUploadError(uploadErr, 'upload blocked'))
+          return
+        }
 
         const { data: urlData } = supabase.storage.from('game-assets').getPublicUrl(path)
+        if (!urlData.publicUrl) {
+          const error = { message: 'Storage returned an empty public URL.' }
+          logGameAssetUploadError('public_url', error, { bucket: 'game-assets', path })
+          setStatusFlash('PUBLIC URL FAILED')
+          return
+        }
         // Append a cache-bust so re-uploads immediately reflect in the ACP preview
         apply(`${urlData.publicUrl}?t=${Date.now()}`)
       } else {
@@ -968,8 +1008,9 @@ export function AdminControlPanelPage() {
       }
 
       setStatusFlash(successMessage)
-    } catch {
-      setStatusFlash('UPLOAD FAILED')
+    } catch (error) {
+      logGameAssetUploadError('unexpected', error instanceof Error ? { message: error.message } : { message: String(error) }, { bucket: 'game-assets', storageKey: storageKey ?? 'local' })
+      setStatusFlash(formatGameAssetUploadError(error instanceof Error ? { message: error.message } : { message: String(error) }, 'unexpected upload failure'))
     }
   }
 
