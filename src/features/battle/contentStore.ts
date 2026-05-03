@@ -5,6 +5,7 @@ import {
   clearDraftBattleContent,
   clearPublishedBattleContent,
   isSnapshotCurrent,
+  normalizeContentSnapshot,
   readDraftBattleContent,
   readPublishedBattleContent,
   saveDraftBattleContent,
@@ -32,11 +33,13 @@ export {
 }
 
 function clonePublishedSnapshot(snapshot: BattleContentSnapshot): BattleContentSnapshot {
+  const normalized = normalizeContentSnapshot(snapshot) ?? snapshot
+
   return {
-    roster: JSON.parse(JSON.stringify(snapshot.roster)) as BattleContentSnapshot['roster'],
+    roster: JSON.parse(JSON.stringify(normalized.roster)) as BattleContentSnapshot['roster'],
     defaultSetup: {
-      playerTeamIds: snapshot.defaultSetup.playerTeamIds.slice(),
-      enemyTeamIds: snapshot.defaultSetup.enemyTeamIds.slice(),
+      playerTeamIds: normalized.defaultSetup.playerTeamIds.slice(),
+      enemyTeamIds: normalized.defaultSetup.enemyTeamIds.slice(),
     },
     updatedAt: Date.now(),
     schemaVersion: CONTENT_SCHEMA_VERSION,
@@ -122,16 +125,23 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
 
     if (error || !data) return false
 
-    const remote = data.content
+    const remote = normalizeContentSnapshot(data.content)
     if (!remote || typeof remote.updatedAt !== 'number') return false
+    const remoteWasNormalized = JSON.stringify(remote) !== JSON.stringify(data.content)
 
     // Reject remote snapshots that don't carry the current schema version.
     // They were published from an older app build and would re-introduce the
     // stale roster the moment we wrote them to localStorage.
     if (!isSnapshotCurrent(remote)) return false
 
+    if (remoteWasNormalized) {
+      await client
+        .from('game_content')
+        .upsert({ key: supabaseContentKey, content: remote, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    }
+
     const local = readPublishedBattleContent(fallback)
-    if (remote.updatedAt <= local.updatedAt) return false
+    if (remote.updatedAt <= local.updatedAt && !remoteWasNormalized) return false
 
     // Remote is newer — update localStorage
     savePublishedBattleContent(remote)

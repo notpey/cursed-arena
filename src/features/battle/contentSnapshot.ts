@@ -207,6 +207,10 @@ function normalizeSnapshot(rawSnapshot: unknown): BattleContentSnapshot | null {
   }
 }
 
+export function normalizeContentSnapshot(snapshot: unknown): BattleContentSnapshot | null {
+  return normalizeSnapshot(snapshot)
+}
+
 function canUseLocalStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
