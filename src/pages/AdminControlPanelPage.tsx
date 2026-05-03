@@ -717,23 +717,37 @@ function formatGameAssetUploadError(error: SupabaseErrorLike, fallback: string) 
   const message = error.message?.trim() || fallback
   const normalized = message.toLowerCase()
   const code = error.code ? ` (${error.code})` : ''
+  const detail = message.length > 0 && message !== fallback ? `: ${message}` : ''
 
-  if (normalized.includes('bucket')) return `GAME-ASSETS BUCKET ERROR${code}`
-  if (normalized.includes('row-level security') || normalized.includes('permission denied') || normalized.includes('policy')) return `GAME-ASSETS RLS BLOCKED${code}`
+  if (normalized.includes('bucket')) return `GAME-ASSETS BUCKET ERROR${code}${detail}`
+  if (normalized.includes('row-level security') || normalized.includes('permission denied') || normalized.includes('policy')) return `GAME-ASSETS RLS BLOCKED${code}${detail}`
   if (normalized.includes('payload') || normalized.includes('too large')) return `IMAGE TOO LARGE${code}`
   if (normalized.includes('mime') || normalized.includes('content type')) return `IMAGE TYPE BLOCKED${code}`
-  return `UPLOAD FAILED${code}`
+  return `UPLOAD FAILED${code}${detail}`
 }
 
-function logGameAssetUploadError(stage: string, error: SupabaseErrorLike, context: Record<string, string>) {
+function logGameAssetUploadDiagnostics(stage: string, error: SupabaseErrorLike, context: Record<string, string | number>) {
   if (typeof console === 'undefined') return
+  const supabaseUrl = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL ?? '(not set)'
   console.error('[game-assets]', stage, {
+    supabaseProject: supabaseUrl,
     message: error.message ?? null,
     code: error.code ?? null,
     details: error.details ?? null,
     hint: error.hint ?? null,
     ...context,
   })
+}
+
+// Validates that a URL returned by Supabase getPublicUrl is a proper public storage URL.
+// A missing "/public/" segment means the bucket is private or the URL is a legacy bad value.
+function isValidPublicStorageUrl(url: string): boolean {
+  try {
+    const u = new URL(url)
+    return u.pathname.includes('/storage/v1/object/public/')
+  } catch {
+    return false
+  }
 }
 
 function slugify(value: string) {
@@ -979,38 +993,69 @@ export function AdminControlPanelPage() {
       const supabase = storageKey ? getSupabaseClient() : null
 
       if (supabase && storageKey) {
-        // Upload to Supabase Storage -> store CDN URL instead of base64
         const ext = file.name.split('.').pop() ?? 'jpg'
         const path = `${storageKey}.${ext}`
+        const bucket = 'game-assets'
+        const diagCtx = { bucket, path, contentType: file.type || 'unknown', fileSizeBytes: file.size }
+
+        console.info('[game-assets] upload attempt', diagCtx)
+
         const { error: uploadErr } = await supabase.storage
-          .from('game-assets')
+          .from(bucket)
           .upload(path, file, { cacheControl: '3600', upsert: true, contentType: file.type || undefined })
 
         if (uploadErr) {
-          logGameAssetUploadError('storage_upload', uploadErr, { bucket: 'game-assets', path, contentType: file.type || 'unknown' })
+          logGameAssetUploadDiagnostics('storage_upload_failed', uploadErr, diagCtx)
           setStatusFlash(formatGameAssetUploadError(uploadErr, 'upload blocked'))
           return
         }
 
-        const { data: urlData } = supabase.storage.from('game-assets').getPublicUrl(path)
-        if (!urlData.publicUrl) {
-          const error = { message: 'Storage returned an empty public URL.' }
-          logGameAssetUploadError('public_url', error, { bucket: 'game-assets', path })
-          setStatusFlash('PUBLIC URL FAILED')
+        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
+        const rawUrl = urlData?.publicUrl ?? ''
+
+        if (!rawUrl) {
+          const err = { message: 'Storage returned an empty public URL after successful upload.' }
+          logGameAssetUploadDiagnostics('public_url_empty', err, diagCtx)
+          setStatusFlash('PUBLIC URL FAILED: storage returned no URL')
           return
         }
-        // Append a cache-bust so re-uploads immediately reflect in the ACP preview
-        apply(`${urlData.publicUrl}?t=${Date.now()}`)
+
+        // Guard: a URL missing /public/ means the bucket is private or the URL is malformed.
+        // Do not save this — it will 400 when loaded.
+        if (!isValidPublicStorageUrl(rawUrl)) {
+          const err = { message: `URL missing /public/ segment — bucket may be private. Apply migration 016 to project mzpfwxrdituexjpwqlqz. Got: ${rawUrl}` }
+          logGameAssetUploadDiagnostics('public_url_invalid', err, diagCtx)
+          setStatusFlash('UPLOAD FAILED: bucket is private — run migration 016 on live project')
+          return
+        }
+
+        // Verify the uploaded file is actually reachable before saving the URL.
+        try {
+          const probe = await fetch(rawUrl, { method: 'HEAD' })
+          if (!probe.ok) {
+            const err = { message: `Uploaded file not reachable: HTTP ${probe.status} at ${rawUrl}` }
+            logGameAssetUploadDiagnostics('public_url_unreachable', err, diagCtx)
+            setStatusFlash(`UPLOAD FAILED: file not reachable (${probe.status}) — check bucket policies`)
+            return
+          }
+        } catch (fetchErr) {
+          // Network error during probe — still save the URL but warn.
+          console.warn('[game-assets] post-upload probe failed (network?), proceeding anyway', { url: rawUrl, error: String(fetchErr) })
+        }
+
+        // Cache-bust so re-uploads immediately reflect in the ACP preview
+        apply(`${rawUrl}?t=${Date.now()}`)
       } else {
-        // Supabase not configured - fall back to base64 data URL
+        // Supabase not configured — fall back to base64 data URL
         const dataUrl = await readFileAsDataUrl(file)
         apply(dataUrl)
       }
 
       setStatusFlash(successMessage)
     } catch (error) {
-      logGameAssetUploadError('unexpected', error instanceof Error ? { message: error.message } : { message: String(error) }, { bucket: 'game-assets', storageKey: storageKey ?? 'local' })
-      setStatusFlash(formatGameAssetUploadError(error instanceof Error ? { message: error.message } : { message: String(error) }, 'unexpected upload failure'))
+      const err = error instanceof Error ? { message: error.message } : { message: String(error) }
+      logGameAssetUploadDiagnostics('unexpected', err, { bucket: 'game-assets', storageKey: storageKey ?? 'local' })
+      setStatusFlash(formatGameAssetUploadError(err, 'unexpected upload failure'))
     }
   }
 
