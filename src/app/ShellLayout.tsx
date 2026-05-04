@@ -38,7 +38,7 @@ export function ShellLayout() {
 
   return (
     <AppShell activeNav={activeNav}>
-      <div key={location.pathname} className="animate-ca-fade-in">
+      <div key={location.pathname} className="h-full animate-ca-fade-in">
         <Outlet />
       </div>
     </AppShell>

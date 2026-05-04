@@ -32,7 +32,7 @@ export function AppShell({ activeNav, children }: AppShellProps) {
           <TopBar />
           <main
             className={
-              activeNav === 'home'
+              activeNav === 'home' || activeNav === 'battle'
                 ? 'flex-1 min-h-0 overflow-hidden px-4 sm:px-6 lg:px-8'
                 : 'flex-1 px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8'
             }
