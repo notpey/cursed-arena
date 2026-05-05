@@ -1344,7 +1344,6 @@ export function AdminControlPanelPage() {
                 fighter={selectedFighter}
                 selectedSection={selectedSection}
                 onSelectSection={setSelectedSection}
-                onClose={() => setSelectedSection(selectedSection)}
                 inspectorAbility={inspectorAbility}
                 selectedPassiveIndex={selectedPassiveIndexResolved}
                 selectedPassive={selectedPassive}
@@ -1676,7 +1675,6 @@ function CharacterInspectorPanel({
   fighter,
   selectedSection,
   onSelectSection,
-  onClose,
   inspectorAbility,
   selectedPassiveIndex,
   selectedPassive,
@@ -1703,7 +1701,6 @@ function CharacterInspectorPanel({
   fighter: BattleFighterTemplate
   selectedSection: SelectedSection
   onSelectSection: (s: SelectedSection) => void
-  onClose: () => void
   inspectorAbility: BattleAbilityTemplate | null
   selectedPassiveIndex: number
   selectedPassive: PassiveEffect | null
@@ -2119,19 +2116,6 @@ function SlugInputField({ label, value, onChange }: { label: string; value: stri
       />
     </label>
   )
-}
-
-function StatusPill({ label, tone }: { label: string; tone: 'teal' | 'red' | 'gold' | 'frost' }) {
-  const className =
-    tone === 'teal'
-      ? 'border-ca-teal/18 bg-ca-teal-wash text-ca-teal'
-      : tone === 'red'
-        ? 'border-ca-red/18 bg-ca-red-wash text-ca-red'
-        : tone === 'gold'
-          ? 'border-amber-400/18 bg-amber-400/10 text-amber-300'
-          : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2'
-
-  return <span className={`ca-mono-label rounded-md border px-2 py-1 text-[0.42rem] ${className}`}>{label}</span>
 }
 
 function AssetField({
