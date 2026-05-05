@@ -1,9 +1,11 @@
 import { Outlet, useLocation } from 'react-router-dom'
-import { AppShell, type NavItemKey } from '@/components/layout/AppShell'
+import { GameClientShell } from '@/components/layout/GameClientShell'
+import { SiteShell, type SiteNavKey } from '@/components/layout/SiteShell'
 
-const pathToNav: Record<string, NavItemKey> = {
+const pathToNav: Record<string, SiteNavKey> = {
   '/': 'home',
-  '/battle/prep': 'battle',
+  '/manual': 'manual',
+  '/characters': 'characters',
   '/missions': 'missions',
   '/ladders': 'ladders',
   '/clans': 'clans',
@@ -16,12 +18,31 @@ const pathToNav: Record<string, NavItemKey> = {
 export function ShellLayout() {
   const location = useLocation()
   const pathname = location.pathname
+
+  if (pathname === '/battle/prep') {
+    return (
+      <GameClientShell mode="prep">
+        <Outlet />
+      </GameClientShell>
+    )
+  }
+
+  if (pathname === '/battle/results') {
+    return (
+      <GameClientShell mode="results">
+        <Outlet />
+      </GameClientShell>
+    )
+  }
+
   const activeNav =
     pathToNav[pathname] ??
-    (pathname.startsWith('/battle')
-      ? 'battle'
-      : pathname.startsWith('/profile')
-        ? 'profile'
+    (pathname.startsWith('/profile')
+      ? 'profile'
+      : pathname.startsWith('/manual')
+        ? 'manual'
+        : pathname.startsWith('/characters')
+          ? 'characters'
         : pathname.startsWith('/missions')
           ? 'missions'
           : pathname.startsWith('/ladders')
@@ -37,10 +58,10 @@ export function ShellLayout() {
                     : 'home')
 
   return (
-    <AppShell activeNav={activeNav}>
+    <SiteShell activeNav={activeNav}>
       <div key={location.pathname} className="h-full animate-ca-fade-in">
         <Outlet />
       </div>
-    </AppShell>
+    </SiteShell>
   )
 }

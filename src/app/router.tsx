@@ -6,6 +6,8 @@ const ShellLayout = lazy(async () => ({ default: (await import('@/app/ShellLayou
 const AdminRoute = lazy(async () => ({ default: (await import('@/app/AdminRoute')).AdminRoute }))
 const LoginPage = lazy(async () => ({ default: (await import('@/pages/LoginPage')).LoginPage }))
 const HomePage = lazy(async () => ({ default: (await import('@/pages/HomePage')).HomePage }))
+const ManualPage = lazy(async () => ({ default: (await import('@/pages/ManualPage')).ManualPage }))
+const CharactersPage = lazy(async () => ({ default: (await import('@/pages/CharactersPage')).CharactersPage }))
 const BattlePage = lazy(async () => ({ default: (await import('@/pages/BattlePage')).BattlePage }))
 const BattlePrepPage = lazy(async () => ({ default: (await import('@/pages/BattlePrepPage')).BattlePrepPage }))
 const BattleResultsPage = lazy(async () => ({ default: (await import('@/pages/BattleResultsPage')).BattleResultsPage }))
@@ -18,6 +20,7 @@ const LadderPage = lazy(async () => ({ default: (await import('@/pages/LadderPag
 const ProfilePage = lazy(async () => ({ default: (await import('@/pages/ProfilePage')).ProfilePage }))
 const SettingsPage = lazy(async () => ({ default: (await import('@/pages/SettingsPage')).SettingsPage }))
 const NotFoundPage = lazy(async () => ({ default: (await import('@/pages/NotFoundPage')).NotFoundPage }))
+const GameClientShell = lazy(async () => ({ default: (await import('@/components/layout/GameClientShell')).GameClientShell }))
 
 const routeFallback = (
   <div className="grid min-h-screen place-items-center bg-[color:var(--bg-void)] px-6 text-ca-text">
@@ -33,6 +36,8 @@ function withRouteSuspense(node: ReactNode) {
 
 const shellRoutes = [
   { index: true, element: withRouteSuspense(<HomePage />) },
+  { path: 'manual', element: withRouteSuspense(<ManualPage />) },
+  { path: 'characters', element: withRouteSuspense(<CharactersPage />) },
   { path: 'battle/prep', element: withRouteSuspense(<BattlePrepPage />) },
   { path: 'battle/results', element: withRouteSuspense(<BattleResultsPage />) },
   { path: 'missions', element: withRouteSuspense(<MissionsPage />) },
@@ -56,11 +61,27 @@ export const router = createBrowserRouter([
   // Protected battle routes
   {
     path: '/battle',
-    element: <AuthGate>{withRouteSuspense(<BattlePage />)}</AuthGate>,
+    element: (
+      <AuthGate>
+        {withRouteSuspense(
+          <GameClientShell mode="battle">
+            <BattlePage />
+          </GameClientShell>,
+        )}
+      </AuthGate>
+    ),
   },
   {
     path: '/battle/:matchId',
-    element: <AuthGate>{withRouteSuspense(<BattlePage />)}</AuthGate>,
+    element: (
+      <AuthGate>
+        {withRouteSuspense(
+          <GameClientShell mode="battle">
+            <BattlePage />
+          </GameClientShell>,
+        )}
+      </AuthGate>
+    ),
   },
   // Protected shell
   {

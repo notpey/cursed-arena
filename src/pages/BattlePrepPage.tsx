@@ -608,7 +608,7 @@ export function BattlePrepPage() {
 
   return (
     <section className="relative h-full overflow-hidden py-2 sm:py-3">
-      <div className="pointer-events-none fixed bottom-0 left-[72px] right-0 top-16 z-0 overflow-hidden">
+      <div className="pointer-events-none fixed bottom-0 left-0 right-0 top-14 z-0 overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center opacity-[0.52]"
           style={{ backgroundImage: `url(${homeBgBase})` }}

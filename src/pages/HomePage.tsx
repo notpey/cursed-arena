@@ -1,86 +1,51 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { SurfaceCard } from '@/components/ui/SurfaceCard'
-import { ProgressBar } from '@/components/ui/ProgressBar'
-import { SectionHeader } from '@/components/ui/SectionHeader'
-import sukunaHome from '@/assets/renders/sukuna-home.webp'
 import {
-  getModeDescription,
-  getModeLabel,
+  AbilityChip,
+  FighterPortrait,
+  FighterStrip,
+  IllustratedSiteCard,
+  LadderSnapshotCard,
+  ManualEntryCard,
+  MissionSpotlightCard,
+  ReadoutTile,
+  RecentBattleRow,
+  SiteSectionHeader,
+  StylizedPortraitPlaceholder,
+  battlePrepRoster,
+  battlePrepRosterById,
+  homeBgBase,
+  siteArtBackgroundStyle,
+  sukunaHome,
+} from '@/components/site/siteVisuals'
+import {
   readBattleProfileStats,
-  readLastBattleResult,
   readRecentMatchHistory,
-  persistSelectedMatchMode,
-  type BattleMatchMode,
 } from '@/features/battle/matches'
-import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
+import { getMissionsWithProgress, getMissionCoins } from '@/features/missions/store'
+import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 import { fetchPlayerRankProfile, getLevelProgress, type PlayerRankProfile } from '@/features/ranking/client'
-import { getLevelForExperience, getLadderRankTitle } from '@/features/ranking/ladder'
-import {
-  getMissionsWithProgress,
-  getMissionCoins,
-  type MissionWithProgress,
-} from '@/features/missions/store'
+import { getLadderRankTitle, getLevelForExperience } from '@/features/ranking/ladder'
+import { usePlayerState } from '@/features/player/store'
 
-type HomeHeroRenderConfig = {
-  image: string
-  anchorX: string
-  anchorY: string
-  scale: number
-  xOffset: string
-  yOffset: string
-  maxWidth: string
-  wordmarkOffsetX: string
-  wordmarkOffsetY: string
-  wordmarkOpacity: number
-  wordmarkSize: string
-  bottomFadeHeight: string
-  bottomFadeStrength: number
-  sideFadeStrength: number
-  glowRed: number
-  glowTeal: number
-  glowFrost: number
-  rimLightStrength: number
-  opacity: number
-}
-
-const homeHeroRender: HomeHeroRenderConfig = {
-  image: sukunaHome,
-  anchorX: '50%',
-  anchorY: '87%',
-  scale: 0.9,
-  xOffset: '4%',
-  yOffset: '0%',
-  maxWidth: '35.5rem',
-  wordmarkOffsetX: '6%',
-  wordmarkOffsetY: '-52%',
-  wordmarkOpacity: 0.032,
-  wordmarkSize: '8.5rem',
-  bottomFadeHeight: '41%',
-  bottomFadeStrength: 0.92,
-  sideFadeStrength: 0.12,
-  glowRed: 0.46,
-  glowTeal: 0.28,
-  glowFrost: 0.38,
-  rimLightStrength: 0.34,
-  opacity: 0.97,
-}
+const manualEntries = [
+  { title: 'The Basics', label: '01', body: 'Win by defeating all enemy fighters. Every round is a compact exchange of committed techniques.', tone: 'teal' as const },
+  { title: 'Cursed Energy', label: 'CE', body: 'Energy types shape what skills can be paid for, held, or exchanged during battle.', tone: 'gold' as const },
+  { title: 'Battle Flow', label: 'BF', body: 'Queue skills, assign targets, confirm action order, then resolve the round timeline.', tone: 'red' as const },
+  { title: 'Skill Classes', label: 'SC', body: 'Melee, ranged, piercing, control, instant, unique, and ultimate classes drive counters and locks.', tone: 'frost' as const },
+]
 
 export function HomePage() {
   const navigate = useNavigate()
   const { profile } = usePlayerState()
   const { user } = useAuth()
-  const profileStats = useMemo(() => readBattleProfileStats(), [])
-  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 3), [])
-  const lastResult = useMemo(() => readLastBattleResult(), [])
-  const selectedMode: BattleMatchMode = lastResult?.mode ?? 'ranked'
-
+  const localStats = useMemo(() => readBattleProfileStats(), [])
+  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 4), [])
+  const missions = useMemo(() => getMissionsWithProgress(), [])
+  const missionCoins = useMemo(() => getMissionCoins(), [])
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
-  const missions = useMemo<MissionWithProgress[]>(() => getMissionsWithProgress(), [])
-  const coins = useMemo(() => getMissionCoins(), [])
 
-  // Fetch real LP from DB when logged in
   useEffect(() => {
     if (!user) return
     void fetchPlayerRankProfile(user.id).then(({ data }) => {
@@ -88,19 +53,16 @@ export function HomePage() {
     })
   }, [user])
 
-
-
-  const displayStats = useMemo(() => {
-    if (!dbProfile) return profileStats
+  const profileStats = useMemo(() => {
+    if (!dbProfile) return localStats
     const experience = dbProfile.experience
     const level = getLevelForExperience(experience)
     const progress = getLevelProgress(experience)
-    const rankTitle = getLadderRankTitle({ level, ladderRank: dbProfile.ladderRank ?? null })
     return {
-      ...profileStats,
+      ...localStats,
       experience,
       level,
-      rankTitle,
+      rankTitle: getLadderRankTitle({ level, ladderRank: dbProfile.ladderRank ?? null }),
       experienceToNextLevel: progress.nextLevelExperience,
       wins: dbProfile.wins,
       losses: dbProfile.losses,
@@ -108,474 +70,246 @@ export function HomePage() {
       bestStreak: dbProfile.best_streak,
       matchesPlayed: dbProfile.wins + dbProfile.losses,
     }
-  }, [dbProfile, profileStats])
+  }, [dbProfile, localStats])
 
-  const dailyMissions = missions.filter((m) => m.type === 'daily')
-  const weeklyMissions = missions.filter((m) => m.type === 'weekly')
-
-  function handleLaunchMode(mode: BattleMatchMode) {
-    persistSelectedMatchMode(mode)
-    navigate('/battle/prep')
-  }
+  const missionSpotlight = missions.find((mission) => !mission.complete) ?? missions[0] ?? null
+  const completedMissions = missions.filter((mission) => mission.complete).length
+  const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
+  const featuredFighters = ['yuji', 'megumi', 'nobara', 'gojo', 'todo', 'nanami']
+    .map((id) => battlePrepRosterById[id])
+    .filter(Boolean)
+  const heroFighter = battlePrepRosterById.sukuna ?? battlePrepRoster[0]
+  const rewardEntry =
+    battlePrepRosterById[UNLOCK_MISSION_DEFS[0]?.reward.fighterId ?? 'gojo'] ??
+    battlePrepRosterById.gojo ??
+    battlePrepRoster[0]
 
   return (
-    <div className="relative isolate grid h-full grid-cols-1 gap-4 overflow-hidden py-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:gap-5 xl:py-6">
-      <section className="relative z-10 min-w-0 space-y-4">
-        <EventBanner />
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-4">
+        <HomeHero onStart={() => navigate('/battle/prep')} fighter={heroFighter} />
 
-        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-          <MissionColumn title="Daily Missions" missions={dailyMissions} />
-          <MissionColumn title="Weekly Missions" missions={weeklyMissions} />
+        <IllustratedSiteCard>
+          <div className="p-4">
+            <SiteSectionHeader
+              eyebrow="Characters & Skills"
+              title="Roster Archive"
+              action={<Link to="/characters" className="ca-mono-label text-[0.46rem] text-ca-teal">VIEW ARCHIVE</Link>}
+            />
+            <FighterStrip entries={featuredFighters} />
+          </div>
+        </IllustratedSiteCard>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <IllustratedSiteCard>
+            <div className="p-4">
+              <SiteSectionHeader
+                eyebrow="Game Manual"
+                title="Battle Reference"
+                action={<Link to="/manual" className="ca-mono-label text-[0.46rem] text-ca-teal">OPEN MANUAL</Link>}
+              />
+              <div className="grid gap-2 sm:grid-cols-2">
+                {manualEntries.map((entry) => (
+                  <ManualEntryCard key={entry.title} {...entry} />
+                ))}
+              </div>
+            </div>
+          </IllustratedSiteCard>
+
+          <HomeAccountSummary
+            avatarLabel={profile.avatarLabel}
+            playerName={profileStats.playerName}
+            rankTitle={profileStats.rankTitle}
+            level={profileStats.level}
+            wins={profileStats.wins}
+            losses={profileStats.losses}
+            winRate={winRate}
+            missionCoins={missionCoins}
+          />
         </div>
 
-        <BattlePassCard />
-        <StoryContinueCard />
-        <ProfileSummaryCard
-          profileStats={displayStats}
-          avatarLabel={profile.avatarLabel}
-          coins={coins}
-        />
-      </section>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <MissionSpotlightCard
+            mission={missionSpotlight}
+            rewardEntry={rewardEntry}
+            completed={completedMissions}
+            total={missions.length}
+          />
+          <LadderSnapshotCard
+            level={profileStats.level}
+            rankTitle={profileStats.rankTitle}
+            wins={profileStats.wins}
+            losses={profileStats.losses}
+            winRate={winRate}
+            entries={featuredFighters}
+          />
+        </div>
+      </div>
 
-      <aside className="relative z-10 min-w-0">
-        <HeroPlayPanel
-          profileStats={displayStats}
-          recentMatches={recentMatches}
-          selectedMode={selectedMode}
-          onLaunchMode={handleLaunchMode}
-        />
+      <aside className="min-w-0 space-y-4">
+        <HomeStartPlayingCard onStart={() => navigate('/battle/prep')} fighter={battlePrepRosterById.yuji ?? featuredFighters[0]} />
+        <HomeRecentMatches matches={recentMatches} />
       </aside>
     </div>
   )
 }
 
-function EventBanner() {
+function HomeHero({ onStart, fighter }: { onStart: () => void; fighter?: (typeof battlePrepRoster)[number] }) {
   return (
-    <SurfaceCard className="overflow-hidden border-white/10 bg-[rgba(17,17,24,0.34)] shadow-[0_10px_26px_rgba(0,0,0,0.22)]">
-      <div className="relative h-[250px] p-4 sm:h-[270px] sm:p-5">
-        <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_18%_30%,rgba(5,216,189,0.18),transparent_55%),radial-gradient(130%_95%_at_72%_10%,rgba(250,39,66,0.22),transparent_60%),linear-gradient(110deg,#241a28_0%,#102433_40%,#23131c_100%)]" />
-        <div className="absolute inset-0 opacity-50 [background:linear-gradient(120deg,transparent_10%,rgba(255,255,255,0.1)_16%,transparent_23%,transparent_40%,rgba(255,255,255,0.08)_46%,transparent_52%,transparent_65%,rgba(250,39,66,0.1)_70%,transparent_78%)]" />
-        <div className="absolute right-6 top-4 h-52 w-44 rounded-[40%] border border-white/10 bg-[radial-gradient(circle_at_35%_30%,rgba(255,255,255,0.28),transparent_45%),radial-gradient(circle_at_65%_20%,rgba(250,39,66,0.25),transparent_52%),linear-gradient(180deg,rgba(228,230,239,0.12),rgba(48,46,58,0.35))] blur-[0.2px] sm:right-10 sm:w-52" />
-
-        <div className="relative z-10 flex h-full flex-col justify-between">
-          <div className="flex gap-2">
-            <Tag text="/Event Banner" tone="teal" />
-            <Tag text="/Patch 1.01" tone="red" />
-          </div>
-
-          <div>
-            <h1 className="ca-display max-w-xl text-3xl text-ca-text sm:text-4xl">
-              Special Grade Summon - Gojo Satoru
-            </h1>
-            <p className="mt-2 text-sm text-ca-text-2">
-              Boosted rates for the Strongest Sorcerer. Pity carries over from previous banner.
-            </p>
-            <ProgressBar value={18} tone="teal" className="mt-4 max-w-[12rem]" />
-          </div>
-        </div>
-      </div>
-    </SurfaceCard>
-  )
-}
-
-function MissionColumn({
-  title,
-  missions,
-}: {
-  title: string
-  missions: MissionWithProgress[]
-}) {
-  return (
-    <div className="min-w-0">
-      <SectionHeader title={title} />
-      <div className="space-y-2.5">
-        {missions.map((mission) => (
-          <SurfaceCard
-            key={mission.id}
-            className="border-white/8 bg-[rgba(15,15,21,0.24)] shadow-[0_6px_18px_rgba(0,0,0,0.14)]"
-          >
-            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3">
-              <div
-                className={[
-                  'grid h-7 w-7 place-items-center rounded-md border',
-                  mission.complete
-                    ? 'border-ca-teal/30 bg-ca-teal-wash-mid text-ca-teal'
-                    : 'border-ca-border bg-ca-surface/70 text-ca-text-3',
-                ].join(' ')}
-              >
-                {mission.complete ? (
-                  <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 8l3.5 3.5L13 4.5" />
-                  </svg>
-                ) : (
-                  <span className="text-[0.55rem] text-ca-text-3">–</span>
-                )}
-              </div>
-
-              <div className="min-w-0">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="truncate text-sm text-ca-text-2">{mission.label}</p>
-                  <span className="ca-mono-label text-[0.5rem] text-ca-text-3">
-                    {mission.progressLabel}
-                  </span>
-                </div>
-                <ProgressBar
-                  value={Math.round((mission.progress / mission.goal) * 100)}
-                  tone={mission.complete ? 'teal' : 'red'}
-                />
-              </div>
-
-              <div
-                className={[
-                  'ca-mono-label rounded-md border px-2 py-1 text-[0.45rem]',
-                  mission.claimed
-                    ? 'border-ca-teal/20 bg-ca-teal-wash text-ca-teal'
-                    : 'border-ca-border-subtle bg-ca-overlay/50 text-ca-text-3',
-                ].join(' ')}
-              >
-                {mission.claimed ? '✓' : `${mission.reward} CC`}
-              </div>
-            </div>
-          </SurfaceCard>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function BattlePassCard() {
-  return (
-    <SurfaceCard className="border-white/8 bg-[rgba(15,15,21,0.24)] shadow-[0_8px_20px_rgba(0,0,0,0.16)]">
-      <div className="grid grid-cols-[auto_1fr] gap-4 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center">
-        <div className="grid h-12 w-12 place-items-center rounded-lg border border-ca-red/30 bg-ca-red-wash-mid text-ca-red shadow-[0_0_16px_rgba(250,39,66,0.14)]">
-          <span className="ca-display text-2xl">BP</span>
-        </div>
-
-        <div>
-          <p className="ca-mono-label text-[0.55rem] text-ca-text-3">Cursed Pass - Season 3</p>
-          <p className="ca-display mt-1 text-3xl text-ca-text">Level 23</p>
-        </div>
-
-        <div className="sm:w-64">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="ca-mono-label text-[0.48rem] text-ca-text-3">680 / 1000 EXP</span>
-          </div>
-          <ProgressBar value={68} tone="gold" />
-        </div>
-      </div>
-    </SurfaceCard>
-  )
-}
-
-function StoryContinueCard() {
-  return (
-    <Link to="/missions" className="block">
-      <SurfaceCard className="overflow-hidden border-white/10 bg-[rgba(15,15,21,0.26)] shadow-[0_10px_24px_rgba(0,0,0,0.2)] transition duration-150 hover:border-white/16 hover:shadow-[0_14px_30px_rgba(0,0,0,0.24)]">
-        <div className="relative p-4">
-          <div className="absolute inset-0 bg-[radial-gradient(80%_120%_at_80%_20%,rgba(5,216,189,0.06),transparent_60%),linear-gradient(115deg,#0f1018_10%,#301315_58%,#0f1018_100%)]" />
-          <div className="absolute inset-0 opacity-35 [background:linear-gradient(135deg,rgba(255,255,255,0.06),transparent_25%,rgba(250,39,66,0.08)_55%,transparent_80%)]" />
-          <div className="relative grid grid-cols-[auto_1fr_auto] items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-lg border border-ca-teal/30 bg-ca-teal-wash">
-              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" className="stroke-ca-teal" />
-                <rect x="4" y="4" width="16" height="16" rx="2" className="stroke-ca-teal" />
-                <path d="M4 9h16" className="stroke-ca-teal" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <p className="ca-mono-label text-[0.52rem] text-ca-teal">Unlock Missions</p>
-              <p className="ca-display mt-1 truncate text-3xl text-ca-text sm:text-[2.2rem]">
-                Missions
-              </p>
-              <p className="mt-1 text-xs text-ca-text-3">
-                Complete missions to unlock new fighters
-              </p>
-            </div>
-            <div className="grid h-9 w-9 place-items-center rounded-full border border-ca-border bg-ca-overlay/70 text-ca-text-2 transition duration-150 group-hover:border-ca-border-strong group-hover:text-ca-text">
-              <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 3l5 5-5 5" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </SurfaceCard>
-    </Link>
-  )
-}
-
-function ProfileSummaryCard({
-  profileStats,
-  avatarLabel,
-  coins,
-}: {
-  profileStats: ReturnType<typeof readBattleProfileStats>
-  avatarLabel: string
-  coins: number
-}) {
-  const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
-
-  return (
-    <SurfaceCard className="border-white/8 bg-[rgba(15,15,21,0.22)] shadow-[0_7px_18px_rgba(0,0,0,0.14)]">
-      <div className="grid gap-4 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-full border border-ca-red/35 bg-gradient-to-br from-ca-red-wash-mid to-transparent p-[2px]">
-            <div className="grid h-full w-full place-items-center rounded-full bg-ca-surface text-xs font-semibold">
-              {avatarLabel}
-            </div>
-          </div>
-          <div className="min-w-0">
-            <p className="ca-display truncate text-2xl">{profileStats.playerName}</p>
-            <p className="ca-mono-label text-[0.5rem] text-ca-text-3">Lv {profileStats.level} {profileStats.rankTitle} · {profileStats.season}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-4">
-          <RecordStat label="W" value={`${profileStats.wins}`} />
-          <RecordStat label="L" value={`${profileStats.losses}`} />
-          <RecordStat label="WR" value={`${winRate}%`} />
-          <RecordStat label="CC" value={`${coins}`} tone="gold" />
-        </div>
-      </div>
-    </SurfaceCard>
-  )
-}
-
-
-function RecordStat({ label, value, tone }: { label: string; value: string; tone?: 'gold' }) {
-  return (
-    <div className="text-center">
-      <p className={['ca-mono-label text-xs', tone === 'gold' ? 'text-amber-400' : 'text-ca-text'].join(' ')}>{value}</p>
-      <p className="ca-mono-label mt-1 text-[0.45rem] text-ca-text-3">{label}</p>
-    </div>
-  )
-}
-
-function HeroPlayPanel({
-  profileStats,
-  recentMatches,
-  selectedMode,
-  onLaunchMode,
-}: {
-  profileStats: ReturnType<typeof readBattleProfileStats>
-  recentMatches: ReturnType<typeof readRecentMatchHistory>
-  selectedMode: BattleMatchMode
-  onLaunchMode: (mode: BattleMatchMode) => void
-}) {
-  const hero = homeHeroRender
-  const ctaWidth = '22rem'
-  const activeMatch = recentMatches[0]
-  const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
-
-  return (
-    <SurfaceCard className="relative h-full min-h-[480px] overflow-hidden border-transparent bg-transparent shadow-none backdrop-blur-0 xl:min-h-[720px]">
-      <div className="absolute inset-0 bg-[radial-gradient(72%_60%_at_66%_24%,rgba(228,230,239,0.09),transparent_60%),radial-gradient(50%_50%_at_72%_20%,rgba(250,39,66,0.08),transparent_62%),radial-gradient(45%_45%_at_36%_22%,rgba(5,216,189,0.04),transparent_66%)]" />
-
-      <div className="pointer-events-none absolute inset-0 z-[2]">
-        <div
-          className="absolute h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-          style={{
-            left: hero.anchorX,
-            top: '39%',
-            background: `radial-gradient(circle, rgba(250,39,66,${hero.glowRed.toFixed(2)}) 0%, rgba(250,39,66,${(
-              hero.glowRed * 0.35
-            ).toFixed(2)}) 28%, transparent 68%)`,
-          }}
-        />
-        <div
-          className="absolute h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-          style={{
-            left: `calc(${hero.anchorX} - 8%)`,
-            top: '42%',
-            background: `radial-gradient(circle, rgba(5,216,189,${hero.glowTeal.toFixed(2)}) 0%, rgba(5,216,189,${(
-              hero.glowTeal * 0.4
-            ).toFixed(2)}) 34%, transparent 72%)`,
-          }}
-        />
-        <div
-          className="absolute h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl"
-          style={{
-            left: `calc(${hero.anchorX} + 3%)`,
-            top: '33%',
-            background: `radial-gradient(circle, rgba(228,230,239,${hero.glowFrost.toFixed(2)}) 0%, rgba(228,230,239,${(
-              hero.glowFrost * 0.35
-            ).toFixed(2)}) 28%, transparent 70%)`,
-          }}
-        />
-        <div
-          className="absolute h-[21rem] w-[21rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl"
-          style={{
-            left: `calc(${hero.anchorX} + 1%)`,
-            top: '46%',
-            background: `radial-gradient(circle, rgba(250,39,66,${(hero.glowRed * 0.22).toFixed(
-              2,
-            )}) 0%, rgba(228,230,239,${(hero.glowFrost * 0.16).toFixed(2)}) 34%, transparent 74%)`,
-          }}
-        />
+    <section className="relative min-h-[22rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(28,24,34,0.9),rgba(14,13,19,0.92))] p-5 shadow-[0_18px_42px_rgba(0,0,0,0.24)]">
+      <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-35" style={siteArtBackgroundStyle(homeBgBase)} />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_120%_at_10%_20%,rgba(250,39,66,0.2),transparent_58%),radial-gradient(64%_110%_at_90%_10%,rgba(5,216,189,0.14),transparent_62%),linear-gradient(90deg,rgba(13,12,17,0.92)_0%,rgba(13,12,17,0.72)_48%,rgba(13,12,17,0.28)_100%)]" />
+      <div className="pointer-events-none absolute bottom-[-3.5rem] right-[-1rem] hidden h-[28rem] w-[22rem] md:block">
+        <img src={sukunaHome} alt="" className="h-full w-full object-contain object-bottom opacity-95 drop-shadow-[0_26px_42px_rgba(0,0,0,0.55)]" draggable={false} />
       </div>
 
-      <div
-        className="pointer-events-none absolute z-[3] -translate-x-1/2 -translate-y-1/2"
-        style={{ left: hero.anchorX, top: '41%' }}
-      >
-        <p
-          className="ca-display select-none text-white leading-none tracking-[0.08em] [mask-image:linear-gradient(90deg,transparent_0%,black_16%,black_84%,transparent_100%)]"
-          style={{
-            fontSize: `clamp(6rem, 8vw, ${hero.wordmarkSize})`,
-            opacity: hero.wordmarkOpacity,
-            transform: `translate(${hero.wordmarkOffsetX}, ${hero.wordmarkOffsetY})`,
-          }}
-        >
-          SUKUNA
-        </p>
-      </div>
-
-      <div className="pointer-events-none absolute inset-0 z-[4]">
-        <div
-          className="absolute"
-          style={{
-            left: hero.anchorX,
-            top: hero.anchorY,
-            width: hero.maxWidth,
-            transform: `translate(-50%, -100%) translate(${hero.xOffset}, ${hero.yOffset}) scale(${hero.scale})`,
-            transformOrigin: 'bottom center',
-          }}
-        >
-          <img
-            src={hero.image}
-            alt="Selected home character"
-            className="block h-auto w-full select-none"
-            style={{
-              opacity: hero.opacity,
-              filter: `drop-shadow(0 18px 28px rgba(0,0,0,0.28)) drop-shadow(0 -2px 28px rgba(228,230,239,${(
-                hero.rimLightStrength * 0.52
-              ).toFixed(2)})) drop-shadow(12px 0 34px rgba(250,39,66,${(
-                hero.rimLightStrength * 0.5
-              ).toFixed(2)})) drop-shadow(-12px 0 30px rgba(5,216,189,${(
-                hero.rimLightStrength * 0.34
-              ).toFixed(2)}))`,
-            }}
-            draggable={false}
-          />
-        </div>
-
-        <div
-          className="absolute inset-x-0 bottom-0 z-[5]"
-          style={{
-            height: hero.bottomFadeHeight,
-            background: `linear-gradient(180deg, rgba(8,9,14,0) 0%, rgba(8,9,14,${(
-              hero.bottomFadeStrength * 0.22
-            ).toFixed(2)}) 24%, rgba(8,9,14,${(hero.bottomFadeStrength * 0.62).toFixed(2)}) 58%, rgba(8,9,14,${hero.bottomFadeStrength.toFixed(2)}) 100%)`,
-          }}
-        />
-        <div
-          className="absolute inset-y-0 right-0 z-[5] w-[18%]"
-          style={{
-            background: `linear-gradient(90deg, rgba(8,9,14,0) 0%, rgba(8,9,14,${hero.sideFadeStrength.toFixed(
-              2,
-            )}) 72%, rgba(8,9,14,${(hero.sideFadeStrength * 1.8).toFixed(2)}) 100%)`,
-          }}
-        />
-        <div className="absolute inset-x-0 bottom-[17%] z-[5] h-[22%] bg-[radial-gradient(60%_100%_at_50%_100%,rgba(8,9,14,0.3),transparent_72%)]" />
-      </div>
-
-      <div className="relative z-10 flex h-full flex-col justify-end gap-4 p-4 sm:p-6">
-        <div className="mx-auto w-full rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm" style={{ maxWidth: ctaWidth }}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Battle Queue</p>
-              <p className="ca-display mt-1 text-[1.5rem] text-ca-text">{getModeLabel(selectedMode)}</p>
-            </div>
-            <div className="text-right">
-              <p className="ca-mono-label text-[0.42rem] text-ca-text-3">RANK</p>
-              <p className="ca-display mt-1 text-[1.2rem] text-ca-text">Lv {profileStats.level}</p>
-            </div>
+      <div className="relative grid min-h-[19rem] gap-5 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-end">
+        <div className="max-w-3xl">
+          <div className="flex flex-wrap items-center gap-2">
+            <Tag tone="teal">LATEST UPDATE</Tag>
+            <Tag tone="red">CURSED ARCHIVE</Tag>
+            <span className="ca-mono-label text-[0.48rem] text-ca-text-3">SITE HUB ONLINE</span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-ca-text-2">{getModeDescription(selectedMode)}</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <RecordStat label="W" value={`${profileStats.wins}`} />
-            <RecordStat label="L" value={`${profileStats.losses}`} />
-            <RecordStat label="WR" value={`${winRate}%`} />
-          </div>
+          <h1 className="ca-display mt-4 max-w-3xl text-[3.4rem] leading-[0.9] tracking-[0.05em] text-ca-text sm:text-[4.7rem]">
+            Enter The Cursed Arena
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-ca-text-2">
+            Study fighter kits, unlock new techniques through missions, then enter the focused 3v3 battle client. Cursed-Arena now behaves like a game website first and a match client when it is time to fight.
+          </p>
+          {fighter ? (
+            <div className="mt-4 grid max-w-xl gap-2 sm:grid-cols-3">
+              <ReadoutTile label="Featured" value={fighter.battleTemplate.shortName} />
+              <ReadoutTile label="Role" value={fighter.role.split('/')[0] ?? fighter.role} />
+              <ReadoutTile label="Grade" value={fighter.gradeLabel.replace('SPECIAL ', 'S. ')} />
+            </div>
+          ) : null}
         </div>
-
         <button
           type="button"
-          onClick={() => onLaunchMode(selectedMode)}
-          className="ca-display relative mx-auto w-full rounded-xl border border-ca-red/55 bg-gradient-to-b from-[#ff3150] to-[#f31f3d] px-6 py-8 text-6xl text-white shadow-[0_20px_60px_rgba(250,39,66,0.24)] transition duration-150 hover:scale-[1.01] hover:shadow-[0_25px_70px_rgba(250,39,66,0.3)] active:scale-[0.98] sm:text-7xl"
-          style={{ maxWidth: ctaWidth }}
+          onClick={onStart}
+          className="ca-display rounded-[9px] border border-ca-red/55 bg-[linear-gradient(180deg,rgba(250,39,66,0.98),rgba(196,29,51,0.96))] px-5 py-4 text-center text-[2rem] leading-none text-white shadow-[0_16px_36px_rgba(250,39,66,0.22)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.98]"
         >
-          <span className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(60%_55%_at_50%_30%,rgba(255,255,255,0.18),transparent_60%)]" />
-          Play
+          Start Playing
         </button>
-
-        <div className="mx-auto grid w-full grid-cols-3 gap-2.5" style={{ maxWidth: ctaWidth }}>
-          {(['ranked', 'quick', 'private'] as BattleMatchMode[]).map((mode) => {
-            const active = selectedMode === mode
-            return (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => onLaunchMode(mode)}
-                className={[
-                  'ca-display rounded-xl border px-3 py-3 text-xl transition duration-150 active:scale-[0.96]',
-                  active
-                    ? 'border-ca-red/55 bg-ca-red-wash text-ca-text'
-                    : 'border-ca-red/35 bg-[rgba(12,12,18,0.18)] text-ca-text hover:border-ca-red/55 hover:bg-ca-red-wash',
-                ].join(' ')}
-              >
-                {getModeLabel(mode)}
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="mx-auto grid w-full gap-2.5" style={{ maxWidth: ctaWidth }}>
-          <Link
-            to="/battle/results"
-            className="block rounded-[1rem] border border-white/10 bg-[rgba(10,10,16,0.54)] p-3 backdrop-blur-sm transition duration-150 hover:border-white/16 hover:bg-[rgba(14,14,22,0.62)]"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="ca-mono-label text-[0.46rem] text-ca-text-3">Recent Match</p>
-              {activeMatch ? (
-                <span
-                  className={[
-                    'ca-mono-label text-[0.46rem]',
-                    activeMatch.result === 'DRAW' ? 'text-ca-gold' : activeMatch.result === 'WIN' ? 'text-ca-teal' : 'text-ca-red',
-                  ].join(' ')}
-                >
-                  {activeMatch.result}
-                </span>
-              ) : null}
-            </div>
-            {activeMatch ? (
-              <>
-                <p className="mt-2 ca-display text-[1.35rem] text-ca-text">VS {activeMatch.opponentName}</p>
-                <p className="mt-1 text-xs leading-5 text-ca-text-2">
-                  {getModeLabel(activeMatch.mode)} / {activeMatch.rounds} ROUNDS / {activeMatch.rankTitleAfter}
-                </p>
-              </>
-            ) : (
-              <p className="mt-2 text-xs leading-5 text-ca-text-2">No recent battle data.</p>
-            )}
-          </Link>
-        </div>
       </div>
-
-      <div className="pointer-events-none absolute inset-0 z-[5] bg-[radial-gradient(90%_55%_at_50%_100%,rgba(8,9,14,0.46),transparent_58%)]" />
-    </SurfaceCard>
+    </section>
   )
 }
 
-function Tag({ text, tone }: { text: string; tone: 'red' | 'teal' }) {
+function HomeStartPlayingCard({ onStart, fighter }: { onStart: () => void; fighter?: (typeof battlePrepRoster)[number] }) {
   return (
-    <span
-      className={[
-        'ca-mono-label rounded-full border px-3 py-1 text-[0.52rem]',
-        tone === 'teal'
-          ? 'border-ca-teal/30 bg-ca-teal-wash-mid text-ca-teal'
-          : 'border-ca-red/30 bg-ca-red-wash-mid text-ca-red',
-      ].join(' ')}
-    >
-      {text}
+    <IllustratedSiteCard className="border-ca-red/28">
+      <div className="p-4">
+        <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3">
+          {fighter ? <FighterPortrait entry={fighter} className="aspect-square" /> : <StylizedPortraitPlaceholder label="CA" tone="red" className="aspect-square" />}
+          <div className="min-w-0">
+            <p className="ca-mono-label text-[0.48rem] text-ca-red">GAME CLIENT</p>
+            <h2 className="ca-display mt-2 text-[2rem] leading-none text-ca-text">Ready Room</h2>
+            <p className="mt-2 text-sm leading-5 text-ca-text-2">Select a trio and enter matchmaking.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onStart}
+          className="ca-display mt-4 w-full rounded-[8px] border border-ca-red/45 bg-ca-red px-4 py-3 text-[1.45rem] leading-none text-white transition duration-150 hover:brightness-110 active:scale-[0.98]"
+        >
+          Start Playing
+        </button>
+      </div>
+    </IllustratedSiteCard>
+  )
+}
+
+function HomeAccountSummary({
+  avatarLabel,
+  playerName,
+  rankTitle,
+  level,
+  wins,
+  losses,
+  winRate,
+  missionCoins,
+}: {
+  avatarLabel: string
+  playerName: string
+  rankTitle: string
+  level: number
+  wins: number
+  losses: number
+  winRate: number
+  missionCoins: number
+}) {
+  return (
+    <IllustratedSiteCard>
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <StylizedPortraitPlaceholder label={avatarLabel} tone="red" className="h-12 w-12 rounded-full" />
+          <div className="min-w-0">
+            <p className="ca-display truncate text-[1.75rem] leading-none text-ca-text">{playerName}</p>
+            <p className="ca-mono-label mt-1 text-[0.45rem] text-ca-text-3">LV {level} / {rankTitle}</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <ReadoutTile label="W" value={wins} />
+          <ReadoutTile label="L" value={losses} />
+          <ReadoutTile label="WR" value={`${winRate}%`} />
+          <ReadoutTile label="CC" value={missionCoins} />
+        </div>
+      </div>
+    </IllustratedSiteCard>
+  )
+}
+
+function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentMatchHistory> }) {
+  const fallbackEntries = battlePrepRoster.slice(0, 3)
+
+  return (
+    <IllustratedSiteCard>
+      <div className="p-4">
+        <SiteSectionHeader
+          eyebrow="Recent Battles"
+          title="Battle Log"
+          action={<Link to="/battle/results" className="ca-mono-label text-[0.46rem] text-ca-teal">RESULTS</Link>}
+        />
+        <div className="space-y-2">
+          {matches.length > 0 ? (
+            matches.map((match) => (
+              <RecentBattleRow
+                key={match.id}
+                match={match}
+                entries={match.yourTeam.map((id) => battlePrepRosterById[id]).filter(Boolean)}
+              />
+            ))
+          ) : (
+            <div className="rounded-[8px] border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex -space-x-2">
+                {fallbackEntries.map((entry) => (
+                  <FighterPortrait key={entry.id} entry={entry} className="h-10 w-10 rounded-full" imgClassName="top-[13%] w-[110%]" />
+                ))}
+              </div>
+              <p className="mt-3 text-sm text-ca-text-3">Your recent battle log will appear here after your first match.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </IllustratedSiteCard>
+  )
+}
+
+function Tag({ tone, children }: { tone: 'red' | 'teal'; children: string }) {
+  return (
+    <span className={['ca-mono-label rounded-[5px] border px-2 py-1 text-[0.45rem]', tone === 'red' ? 'border-ca-red/25 bg-ca-red-wash text-ca-red' : 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal'].join(' ')}>
+      {children}
     </span>
+  )
+}
+
+export function HomeAbilityPreview({ fighter }: { fighter: (typeof battlePrepRoster)[number] }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {fighter.battleTemplate.abilities.slice(0, 2).map((ability) => (
+        <AbilityChip key={ability.id} ability={ability} />
+      ))}
+    </div>
   )
 }
