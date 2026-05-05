@@ -1804,8 +1804,12 @@ function CharacterInspectorPanel({
               </div>
             </div>
             <TextAreaField label="Bio" value={fighter.bio} onChange={(v) => onUpdateFighter((f) => { f.bio = v })} rows={4} />
+            <FacePortraitAssetEditor
+              fighter={fighter}
+              onChange={(value) => onUpdateFighter((f) => { f.facePortrait = value || undefined })}
+            />
             <AssetField
-              label="Portrait Image URL"
+              label="Battle / Board Portrait URL"
               value={fighter.boardPortraitSrc ?? ''}
               onChange={(v) => onUpdateFighter((f) => { f.boardPortraitSrc = v })}
               helper="Battle/client render image URL. This can be a full-body or board render; it is not used for site face thumbnails."
@@ -2164,6 +2168,15 @@ function FacePortraitAssetEditor({
               helper="Paste a direct square/headshot image URL. Empty is allowed and will show the placeholder fallback."
             />
           </div>
+          {!value.trim() && fighter.boardPortraitSrc?.trim() ? (
+            <button
+              type="button"
+              onClick={() => onChange(fighter.boardPortraitSrc ?? '')}
+              className="ca-mono-label mt-2 rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal transition hover:border-ca-teal/35"
+            >
+              Use current battle URL as face portrait
+            </button>
+          ) : null}
           <p className={['mt-2 text-xs leading-5', validation.ok ? 'text-ca-text-3' : 'text-amber-300'].join(' ')}>
             {warning}
           </p>
