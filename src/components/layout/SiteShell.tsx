@@ -1,5 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
+import { useState } from 'react'
 import type { PropsWithChildren, ReactNode } from 'react'
+import { SquareAvatar } from '@/components/ui/SquareAvatar'
 import { battlePrepRoster } from '@/features/battle/prep'
 import { adminPanelConfig, canAccessAdminPanel } from '@/config/features'
 import { useAuth } from '@/features/auth/useAuth'
@@ -16,7 +18,6 @@ import {
   FighterPortrait,
   RecentBattleRow,
   SiteSectionHeader,
-  StylizedPortraitPlaceholder,
   homeBgBase,
   siteArtBackgroundStyle,
   sukunaHome,
@@ -58,11 +59,18 @@ const primaryNavItems: SiteNavItem[] = [
 ]
 
 export function SiteShell({ activeNav, children }: SiteShellProps) {
+  const [navCollapsed, setNavCollapsed] = useState(false)
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[color:var(--bg-void)] text-ca-text">
       <SiteAtmosphere />
-      <div className="relative mx-auto grid min-h-screen w-full max-w-[1540px] grid-cols-1 gap-4 px-3 py-3 lg:grid-cols-[18rem_minmax(0,1fr)] lg:px-4 lg:py-4 xl:grid-cols-[19rem_minmax(0,1fr)_17rem]">
-        <SiteHubRail activeNav={activeNav} />
+      <div
+        className={[
+          'relative grid min-h-screen w-full grid-cols-1 gap-4 px-3 py-3 lg:px-4 lg:py-4',
+          navCollapsed ? 'lg:grid-cols-[5.25rem_minmax(0,1fr)]' : 'lg:grid-cols-[18rem_minmax(0,1fr)]',
+        ].join(' ')}
+      >
+        <SiteHubRail activeNav={activeNav} collapsed={navCollapsed} onToggle={() => setNavCollapsed((value) => !value)} />
 
         <div className="min-w-0">
           <SiteHeaderBanner />
@@ -70,11 +78,6 @@ export function SiteShell({ activeNav, children }: SiteShellProps) {
             <SiteContentFrame>{children}</SiteContentFrame>
           </main>
         </div>
-
-        <aside className="hidden min-w-0 space-y-3 xl:block">
-          <SiteAccountBlock />
-          <SiteActivityBlock />
-        </aside>
       </div>
     </div>
   )
@@ -140,9 +143,13 @@ function SiteHeaderBanner() {
             to="/profile"
             className="flex items-center gap-2 rounded-[8px] border border-white/10 bg-[rgba(255,255,255,0.035)] px-2.5 py-2 transition duration-150 hover:border-ca-teal/24"
           >
-            <span className="grid h-7 w-7 place-items-center rounded-full border border-ca-red/30 bg-ca-surface text-[0.58rem] font-semibold">
-              {profile.avatarLabel}
-            </span>
+            <SquareAvatar
+              src={profile.avatarUrl}
+              alt={profile.displayName}
+              fallbackLabel={profile.avatarLabel}
+              size={28}
+              className="rounded-full border-ca-red/30"
+            />
             <span className="ca-mono-label max-w-[9rem] truncate text-[0.52rem] text-ca-text-2">
               {profile.displayName}
             </span>
@@ -153,7 +160,15 @@ function SiteHeaderBanner() {
   )
 }
 
-function SiteHubRail({ activeNav }: { activeNav: SiteNavKey }) {
+function SiteHubRail({
+  activeNav,
+  collapsed,
+  onToggle,
+}: {
+  activeNav: SiteNavKey
+  collapsed: boolean
+  onToggle: () => void
+}) {
   const { profile } = useAuth()
   const featured = battlePrepRoster.find((entry) => entry.id === 'gojo') ?? battlePrepRoster[0]
   const navItems = [
@@ -166,23 +181,36 @@ function SiteHubRail({ activeNav }: { activeNav: SiteNavKey }) {
   return (
     <aside className="lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
       <div className="flex h-full flex-col rounded-[10px] border border-white/10 bg-[rgba(20,18,27,0.82)] p-3 shadow-[0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-md">
-        <Link to="/" className="mb-3 overflow-hidden rounded-[8px] border border-white/8 bg-black/18">
-          <div className="relative h-16 bg-cover bg-center" style={siteArtBackgroundStyle(homeBgBase)}>
+        <div className="mb-3 flex items-center gap-2">
+          <Link to="/" className="min-w-0 flex-1 overflow-hidden rounded-[8px] border border-white/8 bg-black/18">
+            <div className={['relative bg-cover bg-center', collapsed ? 'h-11' : 'h-16'].join(' ')} style={siteArtBackgroundStyle(homeBgBase)}>
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(13,12,17,0.85),rgba(13,12,17,0.32)),radial-gradient(circle_at_85%_20%,rgba(5,216,189,0.22),transparent_48%)]" />
           </div>
-          <div className="px-3 py-3">
-          <p className="ca-mono-label text-[0.48rem] text-ca-text-3">SITE HUB</p>
-          <p className="ca-display mt-1 text-[1.65rem] leading-none text-ca-text">Arena Archive</p>
+            {!collapsed ? (
+              <div className="px-3 py-3">
+                <p className="ca-mono-label text-[0.48rem] text-ca-text-3">SITE HUB</p>
+                <p className="ca-display mt-1 text-[1.65rem] leading-none text-ca-text">Arena Archive</p>
+              </div>
+            ) : null}
+          </Link>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="hidden h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-white/10 bg-white/[0.035] text-ca-text-2 transition hover:border-ca-teal/24 hover:text-ca-text lg:grid"
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          >
+            <span className="ca-display text-[1.1rem] leading-none">{collapsed ? '>' : '<'}</span>
+          </button>
           </div>
-        </Link>
 
         <nav className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
           {navItems.map((item) => (
-            <NavButton key={item.key} item={item} activeNav={activeNav} />
+            <NavButton key={item.key} item={item} activeNav={activeNav} collapsed={collapsed} />
           ))}
         </nav>
 
-        {featured ? (
+        {featured && !collapsed ? (
           <div className="mt-3 hidden border-t border-white/8 pt-3 lg:block">
             <SiteSectionHeader eyebrow="Featured Fighter" title="Technique File" />
             <FeaturedFighterCard entry={featured} compact />
@@ -193,14 +221,30 @@ function SiteHubRail({ activeNav }: { activeNav: SiteNavKey }) {
           <NavButton
             item={{ key: 'settings', label: 'Settings', detail: 'Account and system', to: '/settings' }}
             activeNav={activeNav}
+            collapsed={collapsed}
           />
         </div>
+
+        {!collapsed ? (
+          <div className="mt-3 space-y-3 border-t border-white/8 pt-3">
+            <SiteAccountBlock />
+            <SiteActivityBlock />
+          </div>
+        ) : null}
       </div>
     </aside>
   )
 }
 
-function NavButton({ item, activeNav }: { item: SiteNavItem; activeNav: SiteNavKey }) {
+function NavButton({
+  item,
+  activeNav,
+  collapsed,
+}: {
+  item: SiteNavItem
+  activeNav: SiteNavKey
+  collapsed: boolean
+}) {
   return (
     <NavLink
       to={item.to}
@@ -208,7 +252,8 @@ function NavButton({ item, activeNav }: { item: SiteNavItem; activeNav: SiteNavK
       className={({ isActive }) => {
         const active = isActive || activeNav === item.key
         return [
-          'group relative rounded-[8px] border px-3 py-2.5 text-left transition duration-200 hover:-translate-y-0.5',
+          'group relative rounded-[8px] border text-left transition duration-200 hover:-translate-y-0.5',
+          collapsed ? 'grid h-12 place-items-center px-1 py-1' : 'px-3 py-2.5',
           item.cta
             ? 'border-ca-red/45 bg-[linear-gradient(180deg,rgba(250,39,66,0.98),rgba(196,29,51,0.94))] text-white shadow-[0_14px_30px_rgba(250,39,66,0.2)]'
             : active
@@ -222,10 +267,18 @@ function NavButton({ item, activeNav }: { item: SiteNavItem; activeNav: SiteNavK
         return (
           <>
             {!item.cta && active ? <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-ca-red" /> : null}
-            <span className="ca-display block text-[1.2rem] leading-none tracking-[0.04em]">{item.label}</span>
-            <span className={['mt-1 block text-[0.72rem]', item.cta ? 'text-white/78' : 'text-ca-text-3'].join(' ')}>
-              {item.detail}
-            </span>
+            {collapsed ? (
+              <span className="ca-display text-[1.05rem] leading-none tracking-[0.04em]" title={item.label}>
+                {item.label.slice(0, 2)}
+              </span>
+            ) : (
+              <>
+                <span className="ca-display block text-[1.2rem] leading-none tracking-[0.04em]">{item.label}</span>
+                <span className={['mt-1 block text-[0.72rem]', item.cta ? 'text-white/78' : 'text-ca-text-3'].join(' ')}>
+                  {item.detail}
+                </span>
+              </>
+            )}
           </>
         )
       }}
@@ -240,7 +293,13 @@ function SiteAccountBlock() {
   return (
     <SiteSideBlock title="Account">
       <div className="flex items-center gap-3">
-        <StylizedPortraitPlaceholder label={profile.avatarLabel} tone="red" className="h-11 w-11 shrink-0 rounded-full" />
+        <SquareAvatar
+          src={profile.avatarUrl}
+          alt={profile.displayName}
+          fallbackLabel={profile.avatarLabel}
+          size={44}
+          className="rounded-full border-ca-red/40"
+        />
         <div className="min-w-0">
           <p className="ca-display truncate text-[1.55rem] leading-none text-ca-text">{profile.displayName}</p>
           <p className="ca-mono-label mt-1 text-[0.44rem] text-ca-text-3">

@@ -85,71 +85,69 @@ export function HomePage() {
     battlePrepRoster[0]
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-      <div className="min-w-0 space-y-4">
-        <HomeHero onStart={() => navigate('/battle/prep')} fighter={heroFighter} />
+    <div className="space-y-4">
+      <HomeHero onStart={() => navigate('/battle/prep')} fighter={heroFighter} />
 
+      <div className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <HomeStartPlayingCard onStart={() => navigate('/battle/prep')} fighter={battlePrepRosterById.yuji ?? featuredFighters[0]} />
+        <HomeRecentMatches matches={recentMatches} />
+      </div>
+
+      <IllustratedSiteCard>
+        <div className="p-4">
+          <SiteSectionHeader
+            eyebrow="Characters & Skills"
+            title="Roster Archive"
+            action={<Link to="/characters" className="ca-mono-label text-[0.46rem] text-ca-teal">VIEW ARCHIVE</Link>}
+          />
+          <FighterStrip entries={featuredFighters} />
+        </div>
+      </IllustratedSiteCard>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <IllustratedSiteCard>
           <div className="p-4">
             <SiteSectionHeader
-              eyebrow="Characters & Skills"
-              title="Roster Archive"
-              action={<Link to="/characters" className="ca-mono-label text-[0.46rem] text-ca-teal">VIEW ARCHIVE</Link>}
+              eyebrow="Game Manual"
+              title="Battle Reference"
+              action={<Link to="/manual" className="ca-mono-label text-[0.46rem] text-ca-teal">OPEN MANUAL</Link>}
             />
-            <FighterStrip entries={featuredFighters} />
+            <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+              {manualEntries.map((entry) => (
+                <ManualEntryCard key={entry.title} {...entry} />
+              ))}
+            </div>
           </div>
         </IllustratedSiteCard>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <IllustratedSiteCard>
-            <div className="p-4">
-              <SiteSectionHeader
-                eyebrow="Game Manual"
-                title="Battle Reference"
-                action={<Link to="/manual" className="ca-mono-label text-[0.46rem] text-ca-teal">OPEN MANUAL</Link>}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                {manualEntries.map((entry) => (
-                  <ManualEntryCard key={entry.title} {...entry} />
-                ))}
-              </div>
-            </div>
-          </IllustratedSiteCard>
-
-          <HomeAccountSummary
-            avatarLabel={profile.avatarLabel}
-            playerName={profileStats.playerName}
-            rankTitle={profileStats.rankTitle}
-            level={profileStats.level}
-            wins={profileStats.wins}
-            losses={profileStats.losses}
-            winRate={winRate}
-            missionCoins={missionCoins}
-          />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <MissionSpotlightCard
-            mission={missionSpotlight}
-            rewardEntry={rewardEntry}
-            completed={completedMissions}
-            total={missions.length}
-          />
-          <LadderSnapshotCard
-            level={profileStats.level}
-            rankTitle={profileStats.rankTitle}
-            wins={profileStats.wins}
-            losses={profileStats.losses}
-            winRate={winRate}
-            entries={featuredFighters}
-          />
-        </div>
+        <HomeAccountSummary
+          avatarLabel={profile.avatarLabel}
+          playerName={profileStats.playerName}
+          rankTitle={profileStats.rankTitle}
+          level={profileStats.level}
+          wins={profileStats.wins}
+          losses={profileStats.losses}
+          winRate={winRate}
+          missionCoins={missionCoins}
+        />
       </div>
 
-      <aside className="min-w-0 space-y-4">
-        <HomeStartPlayingCard onStart={() => navigate('/battle/prep')} fighter={battlePrepRosterById.yuji ?? featuredFighters[0]} />
-        <HomeRecentMatches matches={recentMatches} />
-      </aside>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <MissionSpotlightCard
+          mission={missionSpotlight}
+          rewardEntry={rewardEntry}
+          completed={completedMissions}
+          total={missions.length}
+        />
+        <LadderSnapshotCard
+          level={profileStats.level}
+          rankTitle={profileStats.rankTitle}
+          wins={profileStats.wins}
+          losses={profileStats.losses}
+          winRate={winRate}
+          entries={featuredFighters}
+        />
+      </div>
     </div>
   )
 }
@@ -200,7 +198,7 @@ function HomeStartPlayingCard({ onStart, fighter }: { onStart: () => void; fight
   return (
     <IllustratedSiteCard className="border-ca-red/28">
       <div className="p-4">
-        <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-3">
+        <div className="grid gap-3 sm:grid-cols-[5rem_minmax(0,1fr)]">
           {fighter ? <FighterPortrait entry={fighter} className="aspect-square" /> : <StylizedPortraitPlaceholder label="CA" tone="red" className="aspect-square" />}
           <div className="min-w-0">
             <p className="ca-mono-label text-[0.48rem] text-ca-red">GAME CLIENT</p>
@@ -271,7 +269,7 @@ function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentM
           title="Battle Log"
           action={<Link to="/battle/results" className="ca-mono-label text-[0.46rem] text-ca-teal">RESULTS</Link>}
         />
-        <div className="space-y-2">
+        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
           {matches.length > 0 ? (
             matches.map((match) => (
               <RecentBattleRow
