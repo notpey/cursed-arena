@@ -1200,184 +1200,190 @@ export function AdminControlPanelPage() {
 
   const inspectorAbility = skillSections.includes(selectedSection) ? getAbilityForSection(selectedSection) : null
 
+  const inspectorOpen = selectedFighter !== null && selectedSection !== null
+
   return (
-    <section className="py-4 sm:py-6">
-      <div className="space-y-4">
+    <div className="py-4 sm:py-6 space-y-3">
 
-        {/* ── Top Header ── */}
-        <header className="rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.16)] px-4 py-3 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-4 min-w-0">
-              <div>
-                <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Internal Tools</p>
-                <h1 className="ca-display mt-1 text-2xl text-ca-text sm:text-3xl">Cursed Arena Studio</h1>
-              </div>
-              <div className="flex gap-1.5">
-                {([
-                  { id: 'liveops', label: 'Live Ops' },
-                  { id: 'content', label: 'Character Studio' },
-                ] as const).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setStudioSection(s.id)}
-                    className={[
-                      'ca-mono-label rounded-md border px-3 py-1.5 text-[0.42rem] transition',
-                      studioSection === s.id
-                        ? 'border-ca-teal/28 bg-ca-teal-wash text-ca-teal'
-                        : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-2 hover:border-white/18',
-                    ].join(' ')}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {studioSection === 'content' ? (
-                <>
-                  <StatusPill label={liveMatchesDraft ? 'MATCHES LIVE' : 'DRAFT CHANGED'} tone={liveMatchesDraft ? 'teal' : 'gold'} />
-                  <StatusPill label={validationReport.errors.length > 0 ? 'BLOCKED' : 'VALID'} tone={validationReport.errors.length > 0 ? 'red' : 'teal'} />
-                  {statusFlash ? <StatusPill label={statusFlash} tone="frost" /> : null}
-                  <button type="button" onClick={handleSaveDraft} className="ca-mono-label rounded-md border border-white/12 bg-[rgba(28,28,36,0.72)] px-3 py-1.5 text-[0.42rem] text-ca-text-2">Save Draft</button>
-                  <button type="button" onClick={handlePublish} disabled={isPublishing} className="ca-mono-label rounded-md border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.88),rgba(190,19,43,0.9))] px-3 py-1.5 text-[0.42rem] text-white disabled:opacity-70">{isPublishing ? 'Publishing…' : 'Publish'}</button>
-                  <details className="group relative">
-                    <summary className="ca-mono-label cursor-pointer rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-[0.42rem] text-ca-text-3 list-none">More ▾</summary>
-                    <div className="absolute right-0 top-full z-20 mt-1 flex flex-col gap-1.5 rounded-[8px] border border-white/10 bg-[rgba(18,18,26,0.97)] p-2 shadow-[0_12px_28px_rgba(0,0,0,0.45)]">
-                      <button type="button" onClick={handleResetDraft} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 whitespace-nowrap">Reset Draft</button>
-                      <button type="button" onClick={handleRestoreAuthored} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.42rem] text-ca-text-2 whitespace-nowrap">Restore Authored</button>
-                      <button type="button" onClick={handleRevertPublished} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2.5 py-1.5 text-[0.42rem] text-ca-teal whitespace-nowrap">Revert Live</button>
-                    </div>
-                  </details>
-                </>
-              ) : null}
-              <Link to="/settings" className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-3 py-1.5 text-[0.42rem] text-ca-text-3">← Settings</Link>
-            </div>
+      {/* ── Toolbar ── */}
+      <div className="flex items-center justify-between gap-3 px-0.5">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="min-w-0">
+            <p className="ca-mono-label text-[0.4rem] text-ca-text-3 tracking-wider">CURSED ARENA STUDIO</p>
+            {studioSection === 'content' && selectedFighter ? (
+              <p className="ca-display mt-0.5 truncate text-[1.1rem] text-ca-text">{selectedFighter.name}</p>
+            ) : (
+              <p className="ca-display mt-0.5 text-[1.1rem] text-ca-text">{studioSection === 'liveops' ? 'Live Ops' : 'Character Studio'}</p>
+            )}
           </div>
-        </header>
-
-        {studioSection === 'liveops' ? <LiveOpsPanel /> : null}
+          <div className="flex gap-1">
+            {([
+              { id: 'liveops', label: 'Live Ops' },
+              { id: 'content', label: 'Content' },
+            ] as const).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setStudioSection(s.id)}
+                className={[
+                  'ca-mono-label rounded-[5px] border px-2.5 py-1 text-[0.38rem] transition',
+                  studioSection === s.id
+                    ? 'border-white/18 bg-[rgba(255,255,255,0.06)] text-ca-text'
+                    : 'border-transparent text-ca-text-3 hover:text-ca-text-2',
+                ].join(' ')}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {studioSection === 'content' ? (
-          <div className="grid gap-3 xl:grid-cols-[14rem_minmax(0,1fr)_22rem]">
+          <div className="flex items-center gap-2 shrink-0">
+            {statusFlash ? <span className="ca-mono-label text-[0.38rem] text-ca-text-3">{statusFlash}</span> : null}
+            <span className={`ca-mono-label text-[0.38rem] ${liveMatchesDraft ? 'text-ca-text-3' : 'text-amber-400'}`}>
+              {liveMatchesDraft ? 'saved' : 'unsaved'}
+            </span>
+            {validationReport.errors.length > 0 ? (
+              <span className="ca-mono-label text-[0.38rem] text-ca-red">{validationReport.errors.length} error{validationReport.errors.length === 1 ? '' : 's'}</span>
+            ) : null}
+            <button type="button" onClick={handleSaveDraft} className="ca-mono-label rounded-[5px] border border-white/12 bg-[rgba(255,255,255,0.04)] px-2.5 py-1 text-[0.38rem] text-ca-text-2 hover:border-white/20 transition">Save</button>
+            <button type="button" onClick={handlePublish} disabled={isPublishing} className="ca-mono-label rounded-[5px] border border-ca-red/40 bg-[rgba(220,30,55,0.14)] px-2.5 py-1 text-[0.38rem] text-ca-red hover:bg-[rgba(220,30,55,0.22)] transition disabled:opacity-50">{isPublishing ? 'Publishing…' : 'Publish'}</button>
+            <details className="relative">
+              <summary className="ca-mono-label cursor-pointer border-0 text-[0.38rem] text-ca-text-3 list-none hover:text-ca-text-2 transition">···</summary>
+              <div className="absolute right-0 top-full z-20 mt-1 flex flex-col gap-1 rounded-[8px] border border-white/10 bg-[rgba(14,15,20,0.97)] p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.5)]">
+                <button type="button" onClick={handleResetDraft} className="ca-mono-label rounded-[5px] px-3 py-1.5 text-left text-[0.38rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.04)] whitespace-nowrap transition">Reset Draft</button>
+                <button type="button" onClick={handleRestoreAuthored} className="ca-mono-label rounded-[5px] px-3 py-1.5 text-left text-[0.38rem] text-ca-text-2 hover:bg-[rgba(255,255,255,0.04)] whitespace-nowrap transition">Restore Authored</button>
+                <button type="button" onClick={handleRevertPublished} className="ca-mono-label rounded-[5px] px-3 py-1.5 text-left text-[0.38rem] text-ca-teal hover:bg-[rgba(255,255,255,0.04)] whitespace-nowrap transition">Revert Live</button>
+              </div>
+            </details>
+            <Link to="/settings" className="ca-mono-label text-[0.38rem] text-ca-text-3 hover:text-ca-text-2 transition">← Back</Link>
+          </div>
+        ) : (
+          <Link to="/settings" className="ca-mono-label text-[0.38rem] text-ca-text-3 hover:text-ca-text-2 transition">← Back</Link>
+        )}
+      </div>
 
-            {/* ── Left Roster Rail ── */}
-            <aside className="flex flex-col gap-2 xl:sticky xl:top-4 xl:self-start">
-              <div className="rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.22)] p-3">
-                <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Fighter Registry</p>
+      {studioSection === 'liveops' ? <LiveOpsPanel /> : null}
+
+      {studioSection === 'content' ? (
+        <div className="flex gap-3 items-start">
+
+          {/* ── Roster Rail ── */}
+          <aside className="w-[11rem] shrink-0 sticky top-4 self-start">
+            <div className="space-y-px">
+              <div className="px-1 pb-1.5">
                 <input
                   type="text"
                   value={fighterSearch}
                   onChange={(e) => setFighterSearch(e.target.value)}
-                  placeholder="Search fighters…"
-                  className="mt-2 w-full rounded-[6px] border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-xs text-ca-text outline-none placeholder:text-ca-text-3 focus:border-ca-teal/35"
+                  placeholder="Search…"
+                  className="w-full rounded-[5px] border border-white/8 bg-transparent px-2 py-1 text-[0.7rem] text-ca-text outline-none placeholder:text-ca-text-3 focus:border-white/18"
                 />
-                <div className="mt-2 flex flex-wrap gap-1">
-                  <button type="button" onClick={handleAddFighter} className="ca-mono-label rounded-md border border-ca-teal/22 bg-ca-teal-wash px-2 py-1 text-[0.38rem] text-ca-teal">Add</button>
-                  <button type="button" onClick={handleDuplicateFighter} disabled={!selectedFighter} className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.38rem] text-ca-text-2 disabled:opacity-50">Dup</button>
-                  <button type="button" onClick={handleDeleteFighter} disabled={!selectedFighter || draft.roster.length <= 1} className="ca-mono-label rounded-md border border-ca-red/18 bg-ca-red-wash px-2 py-1 text-[0.38rem] text-ca-red disabled:opacity-50">Del</button>
-                </div>
               </div>
-              <div className="max-h-[calc(100vh-14rem)] overflow-y-auto space-y-1 pr-0.5">
-                {visibleRoster.length === 0 ? (
-                  <div className="rounded-[8px] border border-dashed border-white/10 px-3 py-3 text-xs text-ca-text-3">No fighters match.</div>
-                ) : null}
-                {visibleRoster.map((fighter) => {
-                  const fighterErrors = validationReport.errors.filter((e) => e.toLowerCase().includes(fighter.id))
-                  const hasErrors = fighterErrors.length > 0
-                  const isSelected = selectedFighterId === fighter.id
-                  return (
-                    <button
-                      key={fighter.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFighterId(fighter.id)
-                        setSelectedAbilityId(fighter.abilities[0]?.id ?? fighter.ultimate.id)
-                        setSelectedPassiveIndex(0)
-                        setFighterJsonDraft(JSON.stringify(fighter, null, 2))
-                        setSelectedSection('identity')
-                      }}
-                      className={[
-                        'w-full rounded-[8px] border px-2.5 py-2 text-left transition',
-                        isSelected
-                          ? 'border-ca-teal/28 bg-ca-teal-wash'
-                          : 'border-white/6 bg-[rgba(255,255,255,0.02)] hover:border-white/14',
-                      ].join(' ')}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="ca-display truncate text-[0.88rem] text-ca-text">{fighter.shortName || fighter.name}</p>
-                        {hasErrors ? <span className="shrink-0 text-[0.6rem] text-ca-red">!</span> : null}
-                      </div>
-                      <p className="mt-0.5 text-[0.6rem] text-ca-text-3">{fighter.rarity} · {fighter.role || '—'}</p>
-                    </button>
-                  )
-                })}
-              </div>
-            </aside>
-
-            {/* ── Center: Character Manual Preview ── */}
-            <main className="min-w-0">
-              {selectedFighter ? (
-                <CharacterManualPreview
-                  fighter={selectedFighter}
-                  selectedSection={selectedSection}
-                  onSelectSection={setSelectedSection}
-                  validationErrors={validationReport.errors.filter((e) => e.toLowerCase().includes(selectedFighter.id))}
-                />
-              ) : (
-                <div className="rounded-[10px] border border-dashed border-white/10 px-6 py-10 text-center text-sm text-ca-text-3">
-                  Select a fighter from the registry to begin.
-                </div>
-              )}
-            </main>
-
-            {/* ── Right: Inspector Panel ── */}
-            <aside className="xl:sticky xl:top-4 xl:self-start">
-              {selectedFighter ? (
-                <CharacterInspectorPanel
-                  fighter={selectedFighter}
-                  selectedSection={selectedSection}
-                  onSelectSection={setSelectedSection}
-                  inspectorAbility={inspectorAbility}
-                  selectedPassiveIndex={selectedPassiveIndexResolved}
-                  selectedPassive={selectedPassive}
-                  validationErrors={validationReport.errors}
-                  statusFlash={statusFlash}
-                  fighterJsonDraft={fighterJsonDraft}
-                  setFighterJsonDraft={setFighterJsonDraft}
-                  onUpdateFighter={updateSelectedFighter}
-                  onUpdateFighterId={handleUpdateFighterId}
-                  onUpdateAbility={(mutator) => {
-                    if (inspectorAbility) updateAbilityById(inspectorAbility.id, mutator)
-                  }}
-                  onUpdateAbilityEffects={(effects) => {
-                    if (inspectorAbility) updateAbilityEffectsById(inspectorAbility.id, effects)
-                  }}
-                  onAdvancedEffectsJson={(value) => {
-                    if (inspectorAbility) {
-                      updateJsonField<SkillEffect[]>(value, (parsed) => updateAbilityById(inspectorAbility.id, (a) => { a.effects = parsed }), 'EFFECTS UPDATED')
-                    }
-                  }}
-                  onUpdatePassive={updateSelectedPassive}
-                  onUpdatePassiveEffects={(mutator) => updateSelectedPassiveEffects(mutator)}
-                  onAdvancedPassiveJson={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedPassive((p) => { p.effects = parsed }), 'PASSIVE EFFECTS UPDATED')}
-                  onAdvancedPassiveConditionsJson={(value) => updateJsonField<BattleReactionCondition[]>(value, (parsed) => updateSelectedPassive((p) => { p.conditions = parsed }), 'PASSIVE CONDITIONS UPDATED')}
-                  onAddPassive={handleAddPassive}
-                  onRemovePassive={handleRemovePassive}
-                  onSelectPassiveIndex={setSelectedPassiveIndex}
-                  onAddAbility={handleAddAbility}
-                  onDeleteAbility={handleDeleteAbility}
-                  onImportFighter={handleImportFighter}
-                  onCopyFighterJson={handleCopyFighterJson}
-                />
+              {visibleRoster.length === 0 ? (
+                <p className="px-2 py-2 text-[0.65rem] text-ca-text-3">No matches.</p>
               ) : null}
-            </aside>
+              {visibleRoster.map((fighter) => {
+                const hasErrors = validationReport.errors.some((e) => e.toLowerCase().includes(fighter.id))
+                const isSelected = selectedFighterId === fighter.id
+                return (
+                  <button
+                    key={fighter.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedFighterId(fighter.id)
+                      setSelectedAbilityId(fighter.abilities[0]?.id ?? fighter.ultimate.id)
+                      setSelectedPassiveIndex(0)
+                      setFighterJsonDraft(JSON.stringify(fighter, null, 2))
+                      setSelectedSection('identity')
+                    }}
+                    className={[
+                      'w-full rounded-[5px] px-2 py-1.5 text-left transition',
+                      isSelected
+                        ? 'bg-[rgba(255,255,255,0.06)] text-ca-text'
+                        : 'text-ca-text-2 hover:bg-[rgba(255,255,255,0.03)] hover:text-ca-text',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate text-[0.72rem] font-medium">{fighter.shortName || fighter.name}</span>
+                      {hasErrors ? <span className="shrink-0 text-[0.55rem] text-ca-red">!</span> : null}
+                    </div>
+                    <p className="mt-0.5 text-[0.55rem] text-ca-text-3">{fighter.rarity}</p>
+                  </button>
+                )
+              })}
+              <div className="border-t border-white/6 pt-1.5 mt-1.5 px-1 flex gap-1">
+                <button type="button" onClick={handleAddFighter} className="ca-mono-label rounded-[4px] border border-white/8 px-2 py-1 text-[0.36rem] text-ca-text-3 hover:border-ca-teal/22 hover:text-ca-teal transition">+ Add</button>
+                <button type="button" onClick={handleDuplicateFighter} disabled={!selectedFighter} className="ca-mono-label rounded-[4px] border border-white/8 px-2 py-1 text-[0.36rem] text-ca-text-3 hover:border-white/18 transition disabled:opacity-40">Dup</button>
+                <button type="button" onClick={handleDeleteFighter} disabled={!selectedFighter || draft.roster.length <= 1} className="ca-mono-label rounded-[4px] border border-white/8 px-2 py-1 text-[0.36rem] text-ca-text-3 hover:border-ca-red/22 hover:text-ca-red transition disabled:opacity-40">Del</button>
+              </div>
+            </div>
+          </aside>
+
+          {/* ── Main canvas + bottom inspector ── */}
+          <div className="min-w-0 flex-1 space-y-3">
+
+            {/* Manual preview */}
+            {selectedFighter ? (
+              <CharacterManualPreview
+                fighter={selectedFighter}
+                selectedSection={selectedSection}
+                onSelectSection={(s) => setSelectedSection(s === selectedSection ? selectedSection : s)}
+                validationErrors={validationReport.errors.filter((e) => e.toLowerCase().includes(selectedFighter.id))}
+              />
+            ) : (
+              <div className="rounded-[10px] border border-dashed border-white/8 px-6 py-16 text-center">
+                <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Select a fighter from the registry</p>
+              </div>
+            )}
+
+            {/* Bottom inspector drawer */}
+            {inspectorOpen && selectedFighter ? (
+              <CharacterInspectorPanel
+                fighter={selectedFighter}
+                selectedSection={selectedSection}
+                onSelectSection={setSelectedSection}
+                onClose={() => setSelectedSection(selectedSection)}
+                inspectorAbility={inspectorAbility}
+                selectedPassiveIndex={selectedPassiveIndexResolved}
+                selectedPassive={selectedPassive}
+                validationErrors={validationReport.errors}
+                statusFlash={statusFlash}
+                fighterJsonDraft={fighterJsonDraft}
+                setFighterJsonDraft={setFighterJsonDraft}
+                onUpdateFighter={updateSelectedFighter}
+                onUpdateFighterId={handleUpdateFighterId}
+                onUpdateAbility={(mutator) => {
+                  if (inspectorAbility) updateAbilityById(inspectorAbility.id, mutator)
+                }}
+                onUpdateAbilityEffects={(effects) => {
+                  if (inspectorAbility) updateAbilityEffectsById(inspectorAbility.id, effects)
+                }}
+                onAdvancedEffectsJson={(value) => {
+                  if (inspectorAbility) {
+                    updateJsonField<SkillEffect[]>(value, (parsed) => updateAbilityById(inspectorAbility.id, (a) => { a.effects = parsed }), 'EFFECTS UPDATED')
+                  }
+                }}
+                onUpdatePassive={updateSelectedPassive}
+                onUpdatePassiveEffects={(mutator) => updateSelectedPassiveEffects(mutator)}
+                onAdvancedPassiveJson={(value) => updateJsonField<SkillEffect[]>(value, (parsed) => updateSelectedPassive((p) => { p.effects = parsed }), 'PASSIVE EFFECTS UPDATED')}
+                onAdvancedPassiveConditionsJson={(value) => updateJsonField<BattleReactionCondition[]>(value, (parsed) => updateSelectedPassive((p) => { p.conditions = parsed }), 'PASSIVE CONDITIONS UPDATED')}
+                onAddPassive={handleAddPassive}
+                onRemovePassive={handleRemovePassive}
+                onSelectPassiveIndex={setSelectedPassiveIndex}
+                onAddAbility={handleAddAbility}
+                onDeleteAbility={handleDeleteAbility}
+                onImportFighter={handleImportFighter}
+                onCopyFighterJson={handleCopyFighterJson}
+              />
+            ) : null}
 
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-      </div>
-    </section>
+    </div>
   )
 }
 
@@ -1404,129 +1410,114 @@ function CharacterManualPreview({
   ]
 
   return (
-    <div className="rounded-[10px] border border-white/10 bg-[rgba(10,11,16,0.88)] shadow-[0_20px_48px_rgba(0,0,0,0.32)]">
-      {/* Manual page header line */}
-      <div className="rounded-t-[10px] border-b border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-1.5">
-        <p className="ca-mono-label text-[0.4rem] text-ca-text-3 tracking-widest">CHARACTER MANUAL · CURSED ARENA</p>
+    <div className="overflow-hidden rounded-[10px] border border-white/10 bg-[rgba(9,10,15,0.92)]">
+      {/* Document header */}
+      <div className="border-b border-white/6 px-5 py-2">
+        <p className="ca-mono-label text-[0.38rem] tracking-[0.18em] text-ca-text-3">CHARACTER MANUAL · CURSED ARENA</p>
       </div>
 
-      <div className="p-4 space-y-0">
+      <div className="divide-y divide-white/6">
 
-        {/* ── Character Intro Block ── */}
+        {/* ── Character Intro ── */}
         <button
           type="button"
           onClick={() => onSelectSection('identity')}
           className={[
-            'w-full text-left rounded-[8px] border px-3 py-3 transition mb-0',
+            'relative w-full text-left px-5 py-5 transition-colors',
             selectedSection === 'identity'
-              ? 'border-ca-teal/30 bg-[rgba(5,216,189,0.04)] ring-1 ring-ca-teal/15'
-              : 'border-transparent hover:border-white/8 hover:bg-[rgba(255,255,255,0.015)]',
+              ? 'bg-[rgba(5,216,189,0.04)]'
+              : 'hover:bg-[rgba(255,255,255,0.012)]',
           ].join(' ')}
         >
-          <div className="flex gap-3">
-            {/* Portrait */}
+          {selectedSection === 'identity' && (
+            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-ca-teal/50 rounded-r-full" />
+          )}
+          <div className="flex gap-4">
             <div className="shrink-0">
               <PortraitPreview fighter={fighter} />
             </div>
-            {/* Name + bio */}
             <div className="min-w-0 flex-1">
-              <p className="ca-display text-[1.55rem] leading-tight text-ca-text">{fighter.name || '—'}</p>
-              <p className="ca-mono-label mt-0.5 text-[0.4rem] text-ca-text-3 tracking-wider">
-                {fighter.battleTitle?.toUpperCase() || fighter.role.toUpperCase()} · {fighter.rarity} · HP {fighter.maxHp}
+              <p className="ca-display text-[1.65rem] leading-none text-ca-text">{fighter.name || '—'}</p>
+              <p className="ca-mono-label mt-1 text-[0.38rem] tracking-wider text-ca-text-3">
+                {fighter.battleTitle?.toUpperCase() || fighter.role.toUpperCase()} · {fighter.rarity} · {fighter.maxHp} HP
               </p>
-              <p className="mt-2 text-[0.8rem] leading-[1.6] text-ca-text-2">{fighter.bio || 'No biography authored.'}</p>
+              <p className="mt-2.5 text-[0.78rem] leading-relaxed text-ca-text-2">{fighter.bio || 'No biography authored.'}</p>
+              <p className="mt-2 text-[0.68rem] text-ca-text-3">
+                <span className="ca-mono-label text-[0.36rem] mr-1 text-ca-text-3">UNLOCK:</span>
+                {fighter.affiliationLabel || 'Available by default'}
+              </p>
             </div>
-          </div>
-          {/* Unlock requirement */}
-          <div className="mt-2 border-t border-white/6 pt-2">
-            <p className="text-[0.72rem] text-ca-text-3">
-              <span className="ca-mono-label text-[0.38rem] text-ca-text-3 mr-1">REQUIREMENT TO UNLOCK:</span>
-              {fighter.affiliationLabel || 'Available by default'}
-            </p>
           </div>
         </button>
 
-        {/* ── Passive Block ── */}
-        {passives.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => onSelectSection('passive')}
-            className={[
-              'w-full text-left rounded-[8px] border px-3 py-2.5 transition mt-1',
-              selectedSection === 'passive'
-                ? 'border-ca-teal/28 bg-[rgba(5,216,189,0.04)] ring-1 ring-ca-teal/12'
-                : 'border-transparent hover:border-white/8 hover:bg-[rgba(255,255,255,0.015)]',
-            ].join(' ')}
-          >
-            {passives.map((passive, i) => (
-              <div key={i} className={i > 0 ? 'mt-2 pt-2 border-t border-white/6' : ''}>
-                <div className="flex items-center gap-2">
-                  <div className="grid h-6 w-6 shrink-0 place-items-center overflow-hidden rounded-[4px] border border-ca-teal/20 bg-[rgba(5,216,189,0.08)]">
-                    {normalizeBattleAssetSrc(passive.icon?.src) ? (
-                      <img src={normalizeBattleAssetSrc(passive.icon?.src)} alt={passive.label} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="ca-mono-label text-[0.38rem] text-ca-teal">{passive.icon?.label ?? 'P'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="ca-mono-label text-[0.38rem] text-ca-teal mr-1">PASSIVE:</span>
-                    <span className="font-[var(--font-display-alt)] text-[0.85rem] font-bold text-ca-text">{passive.label}</span>
-                  </div>
+        {/* ── Passive ── */}
+        <button
+          type="button"
+          onClick={() => onSelectSection('passive')}
+          className={[
+            'relative w-full text-left px-5 py-3.5 transition-colors',
+            selectedSection === 'passive'
+              ? 'bg-[rgba(5,216,189,0.04)]'
+              : 'hover:bg-[rgba(255,255,255,0.012)]',
+          ].join(' ')}
+        >
+          {selectedSection === 'passive' && (
+            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-ca-teal/50 rounded-r-full" />
+          )}
+          {passives.length > 0 ? passives.map((passive, i) => (
+            <div key={i} className={i > 0 ? 'mt-3 pt-3 border-t border-white/6' : ''}>
+              <div className="flex items-center gap-2">
+                <div className="grid h-5 w-5 shrink-0 place-items-center overflow-hidden rounded-[3px] border border-ca-teal/18 bg-[rgba(5,216,189,0.07)]">
+                  {normalizeBattleAssetSrc(passive.icon?.src)
+                    ? <img src={normalizeBattleAssetSrc(passive.icon?.src)} alt={passive.label} className="h-full w-full object-cover" />
+                    : <span className="ca-mono-label text-[0.36rem] text-ca-teal">{passive.icon?.label ?? 'P'}</span>
+                  }
                 </div>
-                <p className="mt-1 pl-8 text-[0.75rem] leading-[1.55] text-ca-text-2">
-                  {passive.description ?? describePassive(passive)}
-                </p>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="ca-mono-label text-[0.36rem] text-ca-teal">PASSIVE</span>
+                  <span className="font-[var(--font-display-alt)] text-[0.82rem] font-semibold text-ca-text">{passive.label}</span>
+                </div>
               </div>
-            ))}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onSelectSection('passive')}
-            className={[
-              'w-full text-left rounded-[8px] border px-3 py-2 transition mt-1',
-              selectedSection === 'passive'
-                ? 'border-ca-teal/28 bg-[rgba(5,216,189,0.04)]'
-                : 'border-dashed border-white/8 hover:border-white/14',
-            ].join(' ')}
-          >
-            <p className="ca-mono-label text-[0.38rem] text-ca-text-3">PASSIVE: none authored — click to add</p>
-          </button>
-        )}
+              <p className="mt-1 pl-7 text-[0.73rem] leading-[1.55] text-ca-text-2">{passive.description ?? describePassive(passive)}</p>
+            </div>
+          )) : (
+            <p className="ca-mono-label text-[0.38rem] text-ca-text-3">PASSIVE: none authored</p>
+          )}
+        </button>
 
-        {/* ── Divider ── */}
-        <div className="my-3 border-t border-dotted border-white/12" />
-
-        {/* ── 2×2 Skill Grid ── */}
-        <div className="grid grid-cols-2 gap-2">
-          {skillSectionMap.map(({ section, ability, isUltimate }) => (
+        {/* ── Skills ── */}
+        <div className="grid grid-cols-2">
+          {skillSectionMap.map(({ section, ability, isUltimate }, index) => (
             <CharacterSkillManualBlock
               key={section}
               ability={ability}
               isUltimate={isUltimate}
               isSelected={selectedSection === section}
               hasError={validationErrors.some((e) => e.toLowerCase().includes(ability.id))}
+              position={index}
               onClick={() => onSelectSection(section)}
             />
           ))}
         </div>
 
-        {/* ── Divider ── */}
-        <div className="my-3 border-t border-dotted border-white/12" />
-
-        {/* ── Footer: QA / Readiness ── */}
+        {/* ── Package Readiness ── */}
         <button
           type="button"
           onClick={() => onSelectSection('qa')}
           className={[
-            'w-full text-left rounded-[8px] border px-3 py-2 transition',
+            'relative w-full text-left px-5 py-3 transition-colors',
             selectedSection === 'qa'
-              ? 'border-ca-teal/28 bg-[rgba(5,216,189,0.04)]'
-              : 'border-white/6 hover:border-white/12 bg-[rgba(255,255,255,0.015)]',
+              ? 'bg-[rgba(5,216,189,0.04)]'
+              : 'hover:bg-[rgba(255,255,255,0.012)]',
           ].join(' ')}
         >
-          <p className="ca-mono-label text-[0.38rem] text-ca-text-3 mb-1.5">PACKAGE READINESS</p>
-          <PackageReadinessSummary fighter={fighter} validationErrors={validationErrors} />
+          {selectedSection === 'qa' && (
+            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-ca-teal/50 rounded-r-full" />
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <p className="ca-mono-label text-[0.36rem] text-ca-text-3">PACKAGE READINESS</p>
+            <PackageReadinessSummary fighter={fighter} validationErrors={validationErrors} />
+          </div>
         </button>
 
       </div>
@@ -1541,96 +1532,102 @@ function CharacterSkillManualBlock({
   isUltimate,
   isSelected,
   hasError,
+  position,
   onClick,
 }: {
   ability: BattleAbilityTemplate
   isUltimate: boolean
   isSelected: boolean
   hasError: boolean
+  position: number
   onClick: () => void
 }) {
   const cost = getAbilityEnergyCost(ability)
   const costEntries = Object.entries(cost) as Array<[string, number]>
   const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
+  const isRight = position % 2 === 1
+  const isBottom = position >= 2
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        'w-full text-left rounded-[8px] border transition',
+        'relative w-full text-left transition-colors px-4 py-3.5',
+        isRight ? 'border-l border-white/6' : '',
+        isBottom ? 'border-t border-white/6' : '',
         isSelected
           ? isUltimate
-            ? 'border-amber-400/35 bg-[rgba(250,180,60,0.06)] ring-1 ring-amber-400/18'
-            : 'border-ca-teal/30 bg-[rgba(5,216,189,0.04)] ring-1 ring-ca-teal/12'
-          : isUltimate
-            ? 'border-amber-400/14 bg-[rgba(250,180,60,0.025)] hover:border-amber-400/28'
-            : 'border-white/8 bg-[rgba(255,255,255,0.02)] hover:border-white/16',
+            ? 'bg-[rgba(218,160,55,0.05)]'
+            : 'bg-[rgba(5,216,189,0.04)]'
+          : 'hover:bg-[rgba(255,255,255,0.012)]',
       ].join(' ')}
     >
-      {/* Skill label row */}
-      <div className={[
-        'flex items-center justify-between gap-1 border-b px-2.5 py-1.5',
-        isUltimate ? 'border-amber-400/14 bg-[rgba(250,180,60,0.04)]' : 'border-white/6',
-      ].join(' ')}>
-        <div className="min-w-0 flex-1">
-          <span className="ca-mono-label text-[0.36rem] text-ca-text-3 mr-1">{isUltimate ? 'ULTIMATE:' : 'SKILL:'}</span>
-          <span className="ca-display text-[0.88rem] leading-none text-ca-text">{ability.name || 'Untitled'}</span>
+      {/* Selected accent bar */}
+      {isSelected && (
+        <div className={[
+          'absolute top-0 bottom-0 w-[2px] rounded-full',
+          isRight ? 'left-0' : 'left-0',
+          isUltimate ? 'bg-amber-400/55' : 'bg-ca-teal/50',
+        ].join(' ')} />
+      )}
+
+      {/* Label row */}
+      <div className="flex items-start justify-between gap-1 mb-2">
+        <div className="min-w-0">
+          <p className="ca-mono-label text-[0.35rem] text-ca-text-3">{isUltimate ? 'ULTIMATE' : 'SKILL'}</p>
+          <p className="ca-display text-[0.9rem] leading-tight text-ca-text mt-0.5">{ability.name || 'Untitled'}</p>
         </div>
-        {hasError ? <span className="shrink-0 text-[0.6rem] text-ca-red">!</span> : null}
+        {hasError ? <span className="shrink-0 text-[0.55rem] text-ca-red mt-0.5">!</span> : null}
       </div>
 
       {/* Icon + description */}
-      <div className="flex gap-2 px-2.5 py-2">
+      <div className="flex gap-2.5">
         <div className={[
-          'shrink-0 rounded-[5px] border overflow-hidden bg-[rgba(12,12,18,0.85)]',
-          isUltimate ? 'border-amber-400/18' : 'border-white/10',
-          'h-[3.4rem] w-[3.4rem]',
+          'shrink-0 rounded-[5px] border overflow-hidden',
+          isUltimate ? 'border-amber-400/18 bg-[rgba(218,160,55,0.06)]' : 'border-white/8 bg-[rgba(255,255,255,0.03)]',
+          'h-[3.2rem] w-[3.2rem]',
         ].join(' ')}>
           {iconSrc
             ? <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover" />
-            : <div className="h-full w-full grid place-items-center"><span className="ca-mono-label text-[0.45rem] text-ca-text-3">{ability.icon.label}</span></div>
+            : <div className="h-full w-full grid place-items-center"><span className="ca-mono-label text-[0.44rem] text-ca-text-3">{ability.icon.label}</span></div>
           }
         </div>
-        <p className="text-[0.72rem] leading-[1.5] text-ca-text-2 line-clamp-4 min-w-0">
+        <p className="text-[0.7rem] leading-[1.5] text-ca-text-2 line-clamp-4 min-w-0">
           {ability.description || 'No description authored.'}
         </p>
       </div>
 
-      {/* Cooldown / Cost / Classes */}
-      <div className="border-t border-white/6 px-2.5 py-1.5 space-y-0.5">
-        <p className="text-[0.68rem] text-ca-text-3">
-          <span className="ca-mono-label text-[0.36rem] text-ca-text-3 mr-1">COOLDOWN:</span>
-          {ability.cooldown === 0 ? 'None' : `${ability.cooldown} turn${ability.cooldown === 1 ? '' : 's'}`}
-        </p>
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="ca-mono-label text-[0.36rem] text-ca-text-3 mr-0.5">ENERGY:</span>
+      {/* Stats row */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="ca-mono-label text-[0.34rem] text-ca-text-3">
+          CD {ability.cooldown === 0 ? '—' : ability.cooldown}
+        </span>
+        <div className="flex items-center gap-0.5 flex-wrap">
           {costEntries.length > 0 ? costEntries.map(([type, value]) => {
             const meta = type === 'random' ? randomEnergyMeta : battleEnergyMeta[type as keyof typeof battleEnergyMeta]
             return (
-              <span key={type} style={{ color: meta.color, borderColor: meta.border }} className="ca-mono-label rounded-[3px] border px-1 py-0.5 text-[0.34rem]">
-                {meta.short} {value}
+              <span key={type} style={{ color: meta.color }} className="ca-mono-label text-[0.34rem]">
+                {meta.short}{value}
               </span>
             )
-          }) : <span className="ca-mono-label text-[0.36rem] text-ca-text-3">Free</span>}
+          }) : <span className="ca-mono-label text-[0.34rem] text-ca-text-3">free</span>}
         </div>
-        {ability.classes.length > 0 ? (
-          <div className="flex flex-wrap gap-0.5 pt-0.5">
-            {ability.classes.map((cls) => (
-              <span
-                key={cls}
-                className={[
-                  'ca-mono-label rounded-[3px] border px-1 py-0.5 text-[0.32rem]',
-                  cls === 'Ultimate' ? 'border-amber-400/22 bg-amber-400/8 text-amber-300'
-                  : cls === 'Unique' ? 'border-ca-teal/22 bg-ca-teal-wash text-ca-teal'
-                  : 'border-white/10 bg-[rgba(255,255,255,0.03)] text-ca-text-3',
-                ].join(' ')}
-              >
-                {cls}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-0.5">
+          {ability.classes.map((cls) => (
+            <span
+              key={cls}
+              className={[
+                'ca-mono-label text-[0.3rem]',
+                cls === 'Ultimate' ? 'text-amber-400/70'
+                : cls === 'Unique' ? 'text-ca-teal/70'
+                : 'text-ca-text-3',
+              ].join(' ')}
+            >
+              {cls}
+            </span>
+          ))}
+        </div>
       </div>
     </button>
   )
@@ -1679,6 +1676,7 @@ function CharacterInspectorPanel({
   fighter,
   selectedSection,
   onSelectSection,
+  onClose,
   inspectorAbility,
   selectedPassiveIndex,
   selectedPassive,
@@ -1705,6 +1703,7 @@ function CharacterInspectorPanel({
   fighter: BattleFighterTemplate
   selectedSection: SelectedSection
   onSelectSection: (s: SelectedSection) => void
+  onClose: () => void
   inspectorAbility: BattleAbilityTemplate | null
   selectedPassiveIndex: number
   selectedPassive: PassiveEffect | null
@@ -1729,7 +1728,17 @@ function CharacterInspectorPanel({
   onImportFighter: (mode: 'append' | 'replace') => void
   onCopyFighterJson: () => void
 }) {
-  const sectionButtons: Array<{ id: SelectedSection; label: string }> = [
+  const sectionLabel =
+    selectedSection === 'identity' ? 'Character Identity' :
+    selectedSection === 'passive' ? 'Passive' :
+    selectedSection === 'skill-0' ? 'Skill 1' :
+    selectedSection === 'skill-1' ? 'Skill 2' :
+    selectedSection === 'skill-2' ? 'Skill 3' :
+    selectedSection === 'ultimate' ? 'Ultimate' :
+    selectedSection === 'qa' ? 'Package Readiness' :
+    'Advanced'
+
+  const navSections: Array<{ id: SelectedSection; label: string }> = [
     { id: 'identity', label: 'Identity' },
     { id: 'passive', label: 'Passive' },
     { id: 'skill-0', label: 'Skill 1' },
@@ -1741,27 +1750,35 @@ function CharacterInspectorPanel({
   ]
 
   return (
-    <div className="rounded-[10px] border border-white/8 bg-[rgba(14,15,20,0.22)] overflow-hidden">
-      {/* Section tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-white/8 bg-[rgba(255,255,255,0.02)] p-2">
-        {sectionButtons.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => onSelectSection(s.id)}
-            className={[
-              'ca-mono-label rounded-[5px] border px-2 py-1 text-[0.38rem] transition',
-              selectedSection === s.id
-                ? 'border-ca-teal/28 bg-ca-teal-wash text-ca-teal'
-                : 'border-white/8 bg-[rgba(255,255,255,0.03)] text-ca-text-3 hover:border-white/18',
-            ].join(' ')}
-          >
-            {s.label}
-          </button>
-        ))}
+    <div className="rounded-[10px] border border-white/10 bg-[rgba(9,10,15,0.95)] overflow-hidden">
+      {/* Inspector header */}
+      <div className="flex items-center justify-between gap-3 border-b border-white/8 px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <div>
+            <p className="ca-mono-label text-[0.36rem] text-ca-text-3">EDITING</p>
+            <p className="ca-display text-[0.95rem] text-ca-text">{sectionLabel}</p>
+          </div>
+          <div className="flex gap-0.5 flex-wrap">
+            {navSections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onSelectSection(s.id)}
+                className={[
+                  'ca-mono-label rounded-[4px] px-2 py-1 text-[0.36rem] transition',
+                  selectedSection === s.id
+                    ? 'bg-[rgba(255,255,255,0.08)] text-ca-text'
+                    : 'text-ca-text-3 hover:text-ca-text-2 hover:bg-[rgba(255,255,255,0.04)]',
+                ].join(' ')}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3 space-y-3">
+      <div className="max-h-[32rem] overflow-y-auto p-4 space-y-3">
 
         {/* Identity */}
         {selectedSection === 'identity' ? (
