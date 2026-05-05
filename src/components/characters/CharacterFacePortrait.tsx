@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { getCharacterFacePortrait } from '@/data/characterFacePortraits'
+import { normalizeImageUrl } from '@/features/images/imageUrl'
 
 type CharacterFacePortraitProps = {
   characterId?: string
@@ -34,7 +36,9 @@ export function CharacterFacePortrait({
   className = '',
 }: CharacterFacePortraitProps) {
   const registeredSrc = characterId ? getCharacterFacePortrait(characterId) : undefined
-  const faceSrc = src ?? registeredSrc
+  const faceSrc = normalizeImageUrl(src) ?? normalizeImageUrl(registeredSrc)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const resolvedFaceSrc = faceSrc && failedSrc !== faceSrc ? faceSrc : undefined
   const tone = rarityTone[rarity] ?? rarityTone.R
   const initials = getInitials(name)
 
@@ -48,8 +52,14 @@ export function CharacterFacePortrait({
       ].join(' ')}
       title={name}
     >
-      {faceSrc ? (
-        <img src={faceSrc} alt={name} className="h-full w-full object-cover" draggable={false} />
+      {resolvedFaceSrc ? (
+        <img
+          src={resolvedFaceSrc}
+          alt={name}
+          className="h-full w-full object-cover"
+          draggable={false}
+          onError={() => setFailedSrc(resolvedFaceSrc)}
+        />
       ) : (
         <>
           <div className={`absolute inset-0 bg-gradient-to-br ${tone.wash} via-transparent to-ca-teal/10`} />
