@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import {
-  AbilityChip,
-  FighterPortrait,
   FighterStrip,
   IllustratedSiteCard,
-  LadderSnapshotCard,
   ManualEntryCard,
   MissionSpotlightCard,
   ReadoutTile,
@@ -16,24 +14,20 @@ import {
   battlePrepRosterById,
   homeBgBase,
   siteArtBackgroundStyle,
-  sukunaHome,
 } from '@/components/site/siteVisuals'
-import {
-  readBattleProfileStats,
-  readRecentMatchHistory,
-} from '@/features/battle/matches'
+import { readBattleProfileStats, readRecentMatchHistory } from '@/features/battle/matches'
 import { useAuth } from '@/features/auth/useAuth'
-import { getMissionsWithProgress, getMissionCoins } from '@/features/missions/store'
+import { getMissionCoins, getMissionsWithProgress } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
 import { fetchPlayerRankProfile, getLevelProgress, type PlayerRankProfile } from '@/features/ranking/client'
 import { getLadderRankTitle, getLevelForExperience } from '@/features/ranking/ladder'
 import { usePlayerState } from '@/features/player/store'
 
 const manualEntries = [
-  { title: 'The Basics', label: '01', body: 'Win by defeating all enemy fighters. Every round is a compact exchange of committed techniques.', tone: 'teal' as const },
-  { title: 'Cursed Energy', label: 'CE', body: 'Energy types shape what skills can be paid for, held, or exchanged during battle.', tone: 'gold' as const },
-  { title: 'Battle Flow', label: 'BF', body: 'Queue skills, assign targets, confirm action order, then resolve the round timeline.', tone: 'red' as const },
-  { title: 'Skill Classes', label: 'SC', body: 'Melee, ranged, piercing, control, instant, unique, and ultimate classes drive counters and locks.', tone: 'frost' as const },
+  { title: 'The Basics', label: '01', body: 'Rounds, teams, health, targeting, and the win condition for 3v3 arena play.', tone: 'teal' as const },
+  { title: 'Characters & Skills', label: 'CS', body: 'Read fighter roles, cooldowns, costs, classes, passives, and ultimate rules.', tone: 'red' as const },
+  { title: 'Cursed Energy', label: 'CE', body: 'Energy pips determine which techniques can be committed each round.', tone: 'gold' as const },
+  { title: 'Ladders & Missions', label: 'LM', body: 'Track ranked progress and unlock fighters through compact mission goals.', tone: 'frost' as const },
 ]
 
 export function HomePage() {
@@ -41,7 +35,7 @@ export function HomePage() {
   const { profile } = usePlayerState()
   const { user } = useAuth()
   const localStats = useMemo(() => readBattleProfileStats(), [])
-  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 4), [])
+  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 5), [])
   const missions = useMemo(() => getMissionsWithProgress(), [])
   const missionCoins = useMemo(() => getMissionCoins(), [])
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
@@ -78,48 +72,17 @@ export function HomePage() {
   const featuredFighters = ['yuji', 'megumi', 'nobara', 'gojo', 'todo', 'nanami']
     .map((id) => battlePrepRosterById[id])
     .filter(Boolean)
-  const heroFighter = battlePrepRosterById.sukuna ?? battlePrepRoster[0]
   const rewardEntry =
     battlePrepRosterById[UNLOCK_MISSION_DEFS[0]?.reward.fighterId ?? 'gojo'] ??
     battlePrepRosterById.gojo ??
     battlePrepRoster[0]
 
   return (
-    <div className="space-y-4">
-      <HomeHero onStart={() => navigate('/battle/prep')} fighter={heroFighter} />
+    <div className="space-y-3">
+      <HomePageHeader onStart={() => navigate('/battle/prep')} />
 
-      <div className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <HomeStartPlayingCard onStart={() => navigate('/battle/prep')} fighter={battlePrepRosterById.yuji ?? featuredFighters[0]} />
-        <HomeRecentMatches matches={recentMatches} />
-      </div>
-
-      <IllustratedSiteCard>
-        <div className="p-4">
-          <SiteSectionHeader
-            eyebrow="Characters & Skills"
-            title="Roster Archive"
-            action={<Link to="/characters" className="ca-mono-label text-[0.46rem] text-ca-teal">VIEW ARCHIVE</Link>}
-          />
-          <FighterStrip entries={featuredFighters} />
-        </div>
-      </IllustratedSiteCard>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <IllustratedSiteCard>
-          <div className="p-4">
-            <SiteSectionHeader
-              eyebrow="Game Manual"
-              title="Battle Reference"
-              action={<Link to="/manual" className="ca-mono-label text-[0.46rem] text-ca-teal">OPEN MANUAL</Link>}
-            />
-            <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
-              {manualEntries.map((entry) => (
-                <ManualEntryCard key={entry.title} {...entry} />
-              ))}
-            </div>
-          </div>
-        </IllustratedSiteCard>
-
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <LatestUpdateNews fighters={featuredFighters.slice(0, 4)} />
         <HomeAccountSummary
           avatarLabel={profile.avatarLabel}
           playerName={profileStats.playerName}
@@ -132,60 +95,72 @@ export function HomePage() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <IllustratedSiteCard>
+        <div className="p-3">
+          <SiteSectionHeader
+            eyebrow="Characters & Skills"
+            title="New / Reworked Fighters"
+            action={<Link to="/characters" className="ca-mono-label text-[0.44rem] text-ca-teal">VIEW ARCHIVE</Link>}
+          />
+          <FighterStrip entries={featuredFighters} />
+        </div>
+      </IllustratedSiteCard>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <IllustratedSiteCard>
+          <div className="p-3">
+            <SiteSectionHeader
+              eyebrow="Game Manual"
+              title="Player Reference"
+              action={<Link to="/manual" className="ca-mono-label text-[0.44rem] text-ca-teal">OPEN MANUAL</Link>}
+            />
+            <div className="grid gap-2 md:grid-cols-2">
+              {manualEntries.map((entry) => (
+                <ManualEntryCard key={entry.title} {...entry} />
+              ))}
+            </div>
+          </div>
+        </IllustratedSiteCard>
+
         <MissionSpotlightCard
           mission={missionSpotlight}
           rewardEntry={rewardEntry}
           completed={completedMissions}
           total={missions.length}
         />
-        <LadderSnapshotCard
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <HomeRecentMatches matches={recentMatches} />
+        <LadderMiniTable
           level={profileStats.level}
           rankTitle={profileStats.rankTitle}
           wins={profileStats.wins}
           losses={profileStats.losses}
           winRate={winRate}
-          entries={featuredFighters}
         />
       </div>
     </div>
   )
 }
 
-function HomeHero({ onStart, fighter }: { onStart: () => void; fighter?: (typeof battlePrepRoster)[number] }) {
+function HomePageHeader({ onStart }: { onStart: () => void }) {
   return (
-    <section className="relative min-h-[22rem] overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(28,24,34,0.9),rgba(14,13,19,0.92))] p-5 shadow-[0_18px_42px_rgba(0,0,0,0.24)]">
-      <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-35" style={siteArtBackgroundStyle(homeBgBase)} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_120%_at_10%_20%,rgba(250,39,66,0.2),transparent_58%),radial-gradient(64%_110%_at_90%_10%,rgba(5,216,189,0.14),transparent_62%),linear-gradient(90deg,rgba(13,12,17,0.92)_0%,rgba(13,12,17,0.72)_48%,rgba(13,12,17,0.28)_100%)]" />
-      <div className="pointer-events-none absolute bottom-[-3.5rem] right-[-1rem] hidden h-[28rem] w-[22rem] md:block">
-        <img src={sukunaHome} alt="" className="h-full w-full object-contain object-bottom opacity-95 drop-shadow-[0_26px_42px_rgba(0,0,0,0.55)]" draggable={false} />
-      </div>
-
-      <div className="relative grid min-h-[19rem] gap-5 lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-end">
-        <div className="max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag tone="teal">LATEST UPDATE</Tag>
-            <Tag tone="red">CURSED ARCHIVE</Tag>
-            <span className="ca-mono-label text-[0.48rem] text-ca-text-3">SITE HUB ONLINE</span>
-          </div>
-          <h1 className="ca-display mt-4 max-w-3xl text-[3.4rem] leading-[0.9] tracking-[0.05em] text-ca-text sm:text-[4.7rem]">
-            Enter The Cursed Arena
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-ca-text-2">
-            Study fighter kits, unlock new techniques through missions, then enter the focused 3v3 battle client. Cursed-Arena now behaves like a game website first and a match client when it is time to fight.
+    <section className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[rgba(30,28,36,0.58)] px-4 py-3">
+      <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-18" style={siteArtBackgroundStyle(homeBgBase)} />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(13,12,17,0.96),rgba(13,12,17,0.75)),radial-gradient(72%_140%_at_90%_0%,rgba(5,216,189,0.12),transparent_58%)]" />
+      <div className="relative flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="ca-mono-label text-[0.46rem] text-ca-teal">STARTPAGE / NEWS</p>
+          <h1 className="ca-display mt-1 text-[2.35rem] leading-none tracking-[0.06em] text-ca-text">Cursed-Arena</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-ca-text-2">
+            Study fighter files, unlock roster goals, check the ladder, then enter the focused 3v3 match client.
           </p>
-          {fighter ? (
-            <div className="mt-4 grid max-w-xl gap-2 sm:grid-cols-3">
-              <ReadoutTile label="Featured" value={fighter.battleTemplate.shortName} />
-              <ReadoutTile label="Role" value={fighter.role.split('/')[0] ?? fighter.role} />
-              <ReadoutTile label="Grade" value={fighter.gradeLabel.replace('SPECIAL ', 'S. ')} />
-            </div>
-          ) : null}
         </div>
         <button
           type="button"
           onClick={onStart}
-          className="ca-display rounded-[9px] border border-ca-red/55 bg-[linear-gradient(180deg,rgba(250,39,66,0.98),rgba(196,29,51,0.96))] px-5 py-4 text-center text-[2rem] leading-none text-white shadow-[0_16px_36px_rgba(250,39,66,0.22)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.98]"
+          className="ca-display rounded-[7px] border border-ca-red/45 bg-ca-red px-5 py-3 text-[1.4rem] leading-none text-white shadow-[0_10px_24px_rgba(250,39,66,0.16)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.98]"
         >
           Start Playing
         </button>
@@ -194,27 +169,57 @@ function HomeHero({ onStart, fighter }: { onStart: () => void; fighter?: (typeof
   )
 }
 
-function HomeStartPlayingCard({ onStart, fighter }: { onStart: () => void; fighter?: (typeof battlePrepRoster)[number] }) {
+function LatestUpdateNews({ fighters }: { fighters: (typeof battlePrepRoster)[number][] }) {
   return (
-    <IllustratedSiteCard className="border-ca-red/28">
-      <div className="p-4">
-        <div className="grid gap-3 sm:grid-cols-[5rem_minmax(0,1fr)]">
-          {fighter ? <FighterPortrait entry={fighter} className="aspect-square" /> : <StylizedPortraitPlaceholder label="CA" tone="red" className="aspect-square" />}
-          <div className="min-w-0">
-            <p className="ca-mono-label text-[0.48rem] text-ca-red">GAME CLIENT</p>
-            <h2 className="ca-display mt-2 text-[2rem] leading-none text-ca-text">Ready Room</h2>
-            <p className="mt-2 text-sm leading-5 text-ca-text-2">Select a trio and enter matchmaking.</p>
+    <IllustratedSiteCard>
+      <article className="p-3">
+        <SiteSectionHeader
+          eyebrow="Latest Update"
+          title="Archive Site Pass Online"
+          action={<span className="ca-mono-label text-[0.42rem] text-ca-text-3">PATCH 01B</span>}
+        />
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem]">
+          <div>
+            <p className="text-sm leading-6 text-ca-text-2">
+              Cursed-Arena now presents the site like a compact battle archive: navigation, account, recent activity, fighter files, missions, and manual entries live around the startpage instead of a launcher dashboard.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <NewsBullet title="Start Playing" body="Team selection remains the primary entrance into the match client." />
+              <NewsBullet title="Roster Archive" body="Character thumbnails and skill previews move the site toward a Naruto-Arena-style reference hub." />
+            </div>
+          </div>
+          <div className="rounded-[7px] border border-white/8 bg-black/18 p-2">
+            <p className="ca-mono-label mb-2 text-[0.42rem] text-ca-text-3">FEATURED FILES</p>
+            <div className="grid grid-cols-2 gap-2">
+              {fighters.map((entry) => (
+                <Link key={entry.id} to="/characters" className="group">
+                  <CharacterFacePortrait
+                    characterId={entry.id}
+                    name={entry.name}
+                    src={entry.facePortrait}
+                    rarity={entry.rarity}
+                    size="lg"
+                    className="h-auto w-full aspect-square"
+                  />
+                  <p className="ca-display mt-1 truncate text-[0.9rem] leading-none text-ca-text-2 group-hover:text-ca-teal">
+                    {entry.battleTemplate.shortName}
+                  </p>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onStart}
-          className="ca-display mt-4 w-full rounded-[8px] border border-ca-red/45 bg-ca-red px-4 py-3 text-[1.45rem] leading-none text-white transition duration-150 hover:brightness-110 active:scale-[0.98]"
-        >
-          Start Playing
-        </button>
-      </div>
+      </article>
     </IllustratedSiteCard>
+  )
+}
+
+function NewsBullet({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-[6px] border border-dotted border-white/12 bg-white/[0.02] px-3 py-2">
+      <p className="ca-display text-[1rem] leading-none text-ca-text">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-ca-text-3">{body}</p>
+    </div>
   )
 }
 
@@ -239,19 +244,19 @@ function HomeAccountSummary({
 }) {
   return (
     <IllustratedSiteCard>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <StylizedPortraitPlaceholder label={avatarLabel} tone="red" className="h-12 w-12 rounded-full" />
+      <div className="p-3">
+        <div className="flex items-center gap-3 border-b border-dotted border-white/12 pb-3">
+          <StylizedPortraitPlaceholder label={avatarLabel} tone="red" className="h-12 w-12 rounded-[7px]" />
           <div className="min-w-0">
-            <p className="ca-display truncate text-[1.75rem] leading-none text-ca-text">{playerName}</p>
-            <p className="ca-mono-label mt-1 text-[0.45rem] text-ca-text-3">LV {level} / {rankTitle}</p>
+            <p className="ca-display truncate text-[1.35rem] leading-none text-ca-text">{playerName}</p>
+            <p className="ca-mono-label mt-1 text-[0.42rem] text-ca-text-3">LV {level} / {rankTitle}</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          <ReadoutTile label="W" value={wins} />
-          <ReadoutTile label="L" value={losses} />
-          <ReadoutTile label="WR" value={`${winRate}%`} />
-          <ReadoutTile label="CC" value={missionCoins} />
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <ReadoutTile label="Record" value={`${wins}W/${losses}L`} />
+          <ReadoutTile label="Win Rate" value={`${winRate}%`} />
+          <ReadoutTile label="Coins" value={missionCoins} />
+          <ReadoutTile label="Mode" value="3v3" />
         </div>
       </div>
     </IllustratedSiteCard>
@@ -263,13 +268,13 @@ function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentM
 
   return (
     <IllustratedSiteCard>
-      <div className="p-4">
+      <div className="p-3">
         <SiteSectionHeader
-          eyebrow="Recent Battles"
+          eyebrow="Recent Games"
           title="Battle Log"
-          action={<Link to="/battle/results" className="ca-mono-label text-[0.46rem] text-ca-teal">RESULTS</Link>}
+          action={<Link to="/battle/results" className="ca-mono-label text-[0.44rem] text-ca-teal">RESULTS</Link>}
         />
-        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-4">
+        <div className="space-y-2">
           {matches.length > 0 ? (
             matches.map((match) => (
               <RecentBattleRow
@@ -279,13 +284,13 @@ function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentM
               />
             ))
           ) : (
-            <div className="rounded-[8px] border border-white/8 bg-white/[0.025] p-3">
-              <div className="flex -space-x-2">
+            <div className="rounded-[7px] border border-white/8 bg-white/[0.025] p-3">
+              <div className="flex gap-2">
                 {fallbackEntries.map((entry) => (
-                  <FighterPortrait key={entry.id} entry={entry} className="h-10 w-10 rounded-full" imgClassName="top-[13%] w-[110%]" />
+                  <CharacterFacePortrait key={entry.id} characterId={entry.id} name={entry.name} src={entry.facePortrait} rarity={entry.rarity} size="sm" />
                 ))}
               </div>
-              <p className="mt-3 text-sm text-ca-text-3">Your recent battle log will appear here after your first match.</p>
+              <p className="mt-3 text-sm text-ca-text-3">Your battle log will appear after your first match.</p>
             </div>
           )}
         </div>
@@ -294,20 +299,43 @@ function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentM
   )
 }
 
-function Tag({ tone, children }: { tone: 'red' | 'teal'; children: string }) {
+function LadderMiniTable({
+  level,
+  rankTitle,
+  wins,
+  losses,
+  winRate,
+}: {
+  level: number
+  rankTitle: string
+  wins: number
+  losses: number
+  winRate: number
+}) {
   return (
-    <span className={['ca-mono-label rounded-[5px] border px-2 py-1 text-[0.45rem]', tone === 'red' ? 'border-ca-red/25 bg-ca-red-wash text-ca-red' : 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal'].join(' ')}>
-      {children}
-    </span>
+    <IllustratedSiteCard>
+      <div className="p-3">
+        <SiteSectionHeader
+          eyebrow="Ladder Snapshot"
+          title="Profile Rank"
+          action={<Link to="/ladders" className="ca-mono-label text-[0.44rem] text-ca-teal">LADDERS</Link>}
+        />
+        <div className="divide-y divide-dotted divide-white/12 rounded-[6px] border border-white/8 bg-white/[0.02]">
+          <RankRow label="Level" value={level} />
+          <RankRow label="Rank" value={rankTitle} />
+          <RankRow label="Record" value={`${wins}W / ${losses}L`} />
+          <RankRow label="Win Rate" value={`${winRate}%`} />
+        </div>
+      </div>
+    </IllustratedSiteCard>
   )
 }
 
-export function HomeAbilityPreview({ fighter }: { fighter: (typeof battlePrepRoster)[number] }) {
+function RankRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {fighter.battleTemplate.abilities.slice(0, 2).map((ability) => (
-        <AbilityChip key={ability.id} ability={ability} />
-      ))}
+    <div className="flex items-center justify-between gap-3 px-3 py-2">
+      <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</span>
+      <span className="ca-mono-label truncate text-right text-[0.46rem] text-ca-text-2">{value}</span>
     </div>
   )
 }

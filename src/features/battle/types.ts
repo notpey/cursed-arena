@@ -157,6 +157,7 @@ export type BattleFighterTemplate = {
   affiliationLabel: string
   battleTitle: string
   bio: string
+  facePortrait?: string
   boardPortraitSrc?: string
   portraitFrame?: BattlePortraitFrame
   boardPortraitFrame?: BattlePortraitFrame
@@ -375,6 +376,7 @@ export type BattleFighterState = {
   affiliationLabel: string
   battleTitle: string
   bio: string
+  facePortrait?: string
   boardPortraitSrc?: string
   portraitFrame?: BattlePortraitFrame
   boardPortraitFrame?: BattlePortraitFrame

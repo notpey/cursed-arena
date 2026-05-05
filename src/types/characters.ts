@@ -16,6 +16,7 @@ export type CharacterRosterCard = {
   rarity: CharacterRarity
   archetypes: Archetype[]
   owned: boolean
+  facePortrait?: string
   renderSrc?: string
   portraitFrame?: {
     scale?: number

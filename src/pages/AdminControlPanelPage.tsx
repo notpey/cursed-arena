@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSupabaseClient } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
+import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import { LiveOpsPanel } from '@/pages/admin/LiveOpsPanel'
 import {
   authoredBattleContent,
@@ -735,6 +736,7 @@ function createBlankFighter(index: number): BattleFighterTemplate {
     affiliationLabel: 'Custom',
     battleTitle: 'Arena Recruit',
     bio: 'New combatant awaiting authored battle identity.',
+    facePortrait: '',
     boardPortraitSrc: '',
     maxHp: 100,
     passiveEffects: [
@@ -1138,6 +1140,13 @@ export function AdminControlPanelPage() {
         const v = validateImageUrl(fighter.boardPortraitSrc, { allowEmpty: true, allowLocalPaths: true })
         if (!v.ok) {
           setStatusFlash(`BAD PORTRAIT URL (${fighter.shortName}): ${v.error}`)
+          return
+        }
+      }
+      if (fighter.facePortrait) {
+        const v = validateImageUrl(fighter.facePortrait, { allowEmpty: true, allowLocalPaths: true })
+        if (!v.ok) {
+          setStatusFlash(`BAD FACE URL (${fighter.shortName}): ${v.error}`)
           return
         }
       }
@@ -1732,6 +1741,7 @@ function CharacterInspectorPanel({
     selectedSection === 'skill-1' ? 'Skill 2' :
     selectedSection === 'skill-2' ? 'Skill 3' :
     selectedSection === 'ultimate' ? 'Ultimate' :
+    selectedSection === 'assets' ? 'Assets' :
     selectedSection === 'qa' ? 'Package Readiness' :
     'Advanced'
 
@@ -1742,6 +1752,7 @@ function CharacterInspectorPanel({
     { id: 'skill-1', label: 'Skill 2' },
     { id: 'skill-2', label: 'Skill 3' },
     { id: 'ultimate', label: 'Ultimate' },
+    { id: 'assets', label: 'Assets' },
     { id: 'qa', label: 'QA' },
     { id: 'advanced', label: 'Advanced' },
   ]
@@ -1797,7 +1808,24 @@ function CharacterInspectorPanel({
               label="Portrait Image URL"
               value={fighter.boardPortraitSrc ?? ''}
               onChange={(v) => onUpdateFighter((f) => { f.boardPortraitSrc = v })}
-              helper="Paste a direct image URL (i.imgur.com, etc). Square crop. Recommended 512×512."
+              helper="Battle/client render image URL. This can be a full-body or board render; it is not used for site face thumbnails."
+            />
+          </div>
+        ) : null}
+
+        {/* Assets */}
+        {selectedSection === 'assets' ? (
+          <div className="space-y-3">
+            <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Assets</p>
+            <FacePortraitAssetEditor
+              fighter={fighter}
+              onChange={(value) => onUpdateFighter((f) => { f.facePortrait = value || undefined })}
+            />
+            <AssetField
+              label="Battle / Board Portrait URL"
+              value={fighter.boardPortraitSrc ?? ''}
+              onChange={(v) => onUpdateFighter((f) => { f.boardPortraitSrc = v })}
+              helper="Full-body or board render used by battle/client surfaces. Do not use this as a face portrait fallback."
             />
           </div>
         ) : null}
@@ -2098,6 +2126,53 @@ function SelectField({
   )
 }
 
+function FacePortraitAssetEditor({
+  fighter,
+  onChange,
+}: {
+  fighter: BattleFighterTemplate
+  onChange: (value: string) => void
+}) {
+  const value = fighter.facePortrait ?? ''
+  const validation = validateImageUrl(value, { allowEmpty: true, allowLocalPaths: true })
+  const warning = value.trim()
+    ? validation.ok
+      ? 'Face portrait URL will be saved with this character.'
+      : validation.error
+    : 'No face portrait set. Site thumbnails will use the intentional initials placeholder.'
+
+  return (
+    <section className="rounded-[8px] border border-white/10 bg-[rgba(11,11,18,0.62)] p-3">
+      <div className="grid gap-3 md:grid-cols-[5rem_minmax(0,1fr)]">
+        <CharacterFacePortrait
+          characterId={fighter.id}
+          name={fighter.name}
+          src={value || undefined}
+          rarity={fighter.rarity}
+          size="lg"
+        />
+        <div className="min-w-0">
+          <p className="ca-display text-[1.1rem] leading-none text-ca-text">Face Portrait</p>
+          <p className="mt-1 text-xs leading-5 text-ca-text-3">
+            Square/headshot image used for site thumbnails, manual pages, and roster archive. Do not use full-body renders here.
+          </p>
+          <div className="mt-3">
+            <AssetField
+              label="Face Portrait URL"
+              value={value}
+              onChange={onChange}
+              helper="Paste a direct square/headshot image URL. Empty is allowed and will show the placeholder fallback."
+            />
+          </div>
+          <p className={['mt-2 text-xs leading-5', validation.ok ? 'text-ca-text-3' : 'text-amber-300'].join(' ')}>
+            {warning}
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function SlugInputField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const [raw, setRaw] = useState(value)
   useEffect(() => { setRaw(value) }, [value])
@@ -2150,26 +2225,15 @@ function AssetField({
 }
 
 function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterTemplate; compact?: boolean }) {
-  const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
-  const sizeClass = compact ? 'h-[5rem] w-[5rem]' : 'h-[8rem] w-[8rem]'
-  const portraitSrc = normalizeBattleAssetSrc(fighter.boardPortraitSrc)
-
   return (
-    <div className={`relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))] ${sizeClass}`}>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(5,216,189,0.08),transparent_70%)]" />
-      {portraitSrc ? (
-        <img
-          src={portraitSrc}
-          alt={fighter.name}
-          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain"
-          draggable={false}
-        />
-      ) : (
-        <div className="absolute inset-0 grid place-items-center">
-          <span className="ca-display text-[2rem] text-white/35">{initial}</span>
-        </div>
-      )}
-    </div>
+    <CharacterFacePortrait
+      characterId={fighter.id}
+      name={fighter.name}
+      src={fighter.facePortrait}
+      rarity={fighter.rarity}
+      size={compact ? 'lg' : 'lg'}
+      className={compact ? 'h-[5rem] w-[5rem]' : 'h-[8rem] w-[8rem]'}
+    />
   )
 }
 

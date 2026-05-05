@@ -22,6 +22,7 @@ type BaseCharacterSeed = {
   archetypes: Archetype[]
   // Optional: chars without a stored render still appear in the roster with
   // a placeholder until a portrait/render is uploaded through the ACP.
+  facePortrait?: string
   renderSrc?: string
   obtainedOrder: number
   portraitFrame?: CharacterRosterCard['portraitFrame']
@@ -371,6 +372,7 @@ export const ownedRosterCharacters: RosterCharacter[] = baseOwnedCharacterSeeds.
     rarity,
     archetypes: deriveArchetypes(seed, battleTemplate),
     owned: true,
+    facePortrait: battleTemplate?.facePortrait ?? seed.facePortrait,
     renderSrc: seed.renderSrc,
     obtainedOrder: seed.obtainedOrder,
     portraitFrame: seed.portraitFrame,
@@ -395,6 +397,7 @@ export const characterProfiles: CharacterDetailProfile[] = baseOwnedCharacterSee
     rarity,
     archetypes,
     owned: true,
+    facePortrait: battleTemplate?.facePortrait ?? seed.facePortrait,
     renderSrc: seed.renderSrc,
     portraitFrame: seed.portraitFrame,
     detailRenderFrame: seed.detailRenderFrame,

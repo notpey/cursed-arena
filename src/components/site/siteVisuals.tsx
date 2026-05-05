@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { CSSProperties, ReactNode } from 'react'
+import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
@@ -9,7 +10,6 @@ import type { MissionWithProgress } from '@/features/missions/store'
 import type { MatchHistoryEntry } from '@/features/battle/matches'
 import { formatMatchTimestamp, getModeLabel } from '@/features/battle/matches'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
-import sukunaHome from '@/assets/renders/sukuna-home.webp'
 import yujiRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
 import megumiRender from '@/assets/renders/Megumi_Fushiguro_Cursed_Clash.webp'
 import nobaraRender from '@/assets/renders/Nobara_Kugisaki_Cursed_Clash.webp'
@@ -27,7 +27,7 @@ import maiRender from '@/assets/renders/Mai_Zenin_Cursed_Clash.webp'
 import noritoshiRender from '@/assets/renders/Noritoshi_Kamo_Cursed_Clash.webp'
 import mechamaruRender from '@/assets/renders/Mechamaru_Ultimate_29.webp'
 
-export { homeBgBase, sukunaHome }
+export { homeBgBase }
 export { battlePrepRoster, battlePrepRosterById } from '@/features/battle/prep'
 
 const fighterRenderMap: Record<string, string> = {
@@ -70,10 +70,10 @@ export function SiteSectionHeader({
   action?: ReactNode
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b border-white/8 pb-2">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b border-dotted border-white/12 pb-2">
       <div>
         <p className="ca-mono-label text-[0.48rem] text-ca-text-3">{eyebrow}</p>
-        <h2 className="ca-display mt-1 text-[1.9rem] leading-none text-ca-text">{title}</h2>
+        <h2 className="ca-display mt-1 text-[1.55rem] leading-none tracking-[0.05em] text-ca-text">{title}</h2>
       </div>
       {action}
     </div>
@@ -88,8 +88,8 @@ export function IllustratedSiteCard({
   className?: string
 }) {
   return (
-    <section className={`relative overflow-hidden rounded-[10px] border border-white/10 bg-[rgba(14,15,20,0.24)] shadow-[0_14px_32px_rgba(0,0,0,0.18)] ${className}`}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_90%_at_8%_12%,rgba(250,39,66,0.08),transparent_58%),radial-gradient(72%_90%_at_96%_6%,rgba(5,216,189,0.06),transparent_60%)]" />
+    <section className={`relative overflow-hidden rounded-[7px] border border-white/10 bg-[rgba(30,28,36,0.58)] shadow-[0_10px_24px_rgba(0,0,0,0.14)] ${className}`}>
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_90%_at_8%_12%,rgba(250,39,66,0.045),transparent_58%),radial-gradient(72%_90%_at_96%_6%,rgba(5,216,189,0.045),transparent_60%)]" />
       <div className="relative">{children}</div>
     </section>
   )
@@ -118,7 +118,7 @@ export function StylizedPortraitPlaceholder({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_22%,currentColor,transparent_58%)] opacity-[0.08]" />
       <div className="absolute inset-x-3 top-3 h-px bg-current opacity-20" />
       <div className="absolute inset-x-5 bottom-4 h-px bg-current opacity-20" />
-      <span className="ca-display relative text-[2.1rem] leading-none opacity-80">{label.slice(0, 2).toUpperCase()}</span>
+      <span className="ca-display relative text-[1.45rem] leading-none opacity-80">{label.slice(0, 2).toUpperCase()}</span>
     </div>
   )
 }
@@ -146,10 +146,10 @@ export function FighterPortrait({
         <img
           src={src}
           alt={entry.name}
-          className={`absolute left-1/2 top-[8%] h-auto w-[92%] max-w-none select-none object-contain ${imgClassName}`}
+          className={`absolute left-1/2 top-[-2%] h-auto w-[132%] max-w-none select-none object-contain ${imgClassName}`}
           style={{
             opacity: frame.opacity ?? 1,
-            transform: `translate(-50%, 0) translate(${frame.x ?? '0%'}, ${frame.y ?? '0%'}) scale(${frame.scale ?? 1})`,
+            transform: `translate(-50%, 0) translate(${frame.x ?? '0%'}, calc(${frame.y ?? '0%'} - 7%)) scale(${(frame.scale ?? 1) * 1.18})`,
             transformOrigin: 'top center',
           }}
           draggable={false}
@@ -169,19 +169,26 @@ export function FeaturedFighterCard({ entry, compact = false }: { entry: BattleP
   return (
     <Link
       to="/characters"
-      className="group block overflow-hidden rounded-[9px] border bg-[rgba(14,15,20,0.42)] transition duration-200 hover:-translate-y-0.5 hover:bg-[rgba(20,20,28,0.55)]"
+      className="group block overflow-hidden rounded-[7px] border bg-[rgba(14,15,20,0.42)] transition duration-200 hover:-translate-y-0.5 hover:bg-[rgba(20,20,28,0.55)]"
       style={{ borderColor: tone.border }}
     >
-      <div className={compact ? 'grid grid-cols-[4.5rem_minmax(0,1fr)]' : ''}>
-        <FighterPortrait entry={entry} className={compact ? 'h-full min-h-[5.75rem] rounded-none border-0' : 'aspect-[4/3] rounded-b-none border-x-0 border-t-0'} />
-        <div className={compact ? 'min-w-0 p-3' : 'p-3'}>
+      <div className={compact ? 'grid grid-cols-[4rem_minmax(0,1fr)]' : 'grid grid-cols-[4.25rem_minmax(0,1fr)]'}>
+        <CharacterFacePortrait
+          characterId={entry.id}
+          name={entry.name}
+          src={entry.facePortrait}
+          rarity={entry.rarity}
+          size={compact ? 'md' : 'md'}
+          className="h-full min-h-[4rem] w-full rounded-none border-0"
+        />
+        <div className="min-w-0 p-2.5">
           <div className="flex items-center gap-2">
             <span className="ca-mono-label rounded-[4px] border px-1.5 py-1 text-[0.38rem]" style={{ borderColor: tone.border, background: tone.wash, color: tone.text }}>
               {entry.gradeLabel}
             </span>
             <span className="ca-mono-label truncate text-[0.4rem] text-ca-text-3">{entry.role}</span>
           </div>
-          <p className="ca-display mt-2 truncate text-[1.35rem] leading-none text-ca-text group-hover:text-ca-teal">{entry.name}</p>
+          <p className="ca-display mt-2 truncate text-[1.15rem] leading-none text-ca-text group-hover:text-ca-teal">{entry.name}</p>
           {firstAbility ? <p className="mt-1 truncate text-xs text-ca-text-3">{firstAbility.name}</p> : null}
         </div>
       </div>
@@ -191,7 +198,7 @@ export function FeaturedFighterCard({ entry, compact = false }: { entry: BattleP
 
 export function FighterStrip({ entries }: { entries: BattlePrepRosterEntry[] }) {
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
       {entries.map((entry) => (
         <FeaturedFighterCard key={entry.id} entry={entry} />
       ))}
@@ -232,12 +239,13 @@ export function ManualEntryCard({
   tone?: 'red' | 'teal' | 'gold' | 'frost'
 }) {
   return (
-    <Link to="/manual" className="group grid grid-cols-[3rem_minmax(0,1fr)] gap-3 rounded-[9px] border border-white/8 bg-white/[0.025] p-3 transition duration-150 hover:-translate-y-0.5 hover:border-white/16">
-      <StylizedPortraitPlaceholder label={label} tone={tone} className="h-12 w-12 rounded-[7px]" />
+    <Link to="/manual" className="group grid grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-3 rounded-[7px] border border-white/8 bg-white/[0.025] p-2.5 transition duration-150 hover:-translate-y-0.5 hover:border-white/16">
+      <StylizedPortraitPlaceholder label={label} tone={tone} className="h-11 w-11 rounded-[6px]" />
       <div className="min-w-0">
-        <p className="ca-display text-[1.25rem] leading-none text-ca-text group-hover:text-ca-teal">{title}</p>
+        <p className="ca-display text-[1.08rem] leading-none text-ca-text group-hover:text-ca-teal">{title}</p>
         <p className="mt-1 line-clamp-2 text-xs leading-5 text-ca-text-3">{body}</p>
       </div>
+      <span className="ca-mono-label hidden text-[0.38rem] text-ca-teal sm:block">READ</span>
     </Link>
   )
 }
@@ -257,9 +265,16 @@ export function MissionSpotlightCard({
 
   return (
     <IllustratedSiteCard>
-      <div className="grid gap-4 p-4 sm:grid-cols-[8rem_minmax(0,1fr)]">
+      <div className="grid gap-3 p-3 sm:grid-cols-[4.75rem_minmax(0,1fr)]">
         {rewardEntry ? (
-          <FighterPortrait entry={rewardEntry} className="aspect-square" />
+          <CharacterFacePortrait
+            characterId={rewardEntry.id}
+            name={rewardEntry.name}
+            src={rewardEntry.facePortrait}
+            rarity={rewardEntry.rarity}
+            size="lg"
+            className="h-full min-h-[4.75rem] w-full"
+          />
         ) : (
           <StylizedPortraitPlaceholder label="MS" tone="gold" className="aspect-square" />
         )}
@@ -299,7 +314,7 @@ export function LadderSnapshotCard({
 }) {
   return (
     <IllustratedSiteCard>
-      <div className="p-4">
+      <div className="p-3">
         <SiteSectionHeader eyebrow="Ladder Snapshot" title={`Lv ${level} / ${rankTitle}`} />
         <div className="grid grid-cols-3 gap-2">
           <ReadoutTile label="Record" value={`${wins}W/${losses}L`} />
@@ -308,7 +323,15 @@ export function LadderSnapshotCard({
         </div>
         <div className="mt-3 flex -space-x-2">
           {entries.slice(0, 4).map((entry) => (
-            <FighterPortrait key={entry.id} entry={entry} className="h-11 w-11 rounded-full" imgClassName="top-[12%] w-[104%]" />
+            <CharacterFacePortrait
+              key={entry.id}
+              characterId={entry.id}
+              name={entry.name}
+              src={entry.facePortrait}
+              rarity={entry.rarity}
+              size="sm"
+              className="rounded-full"
+            />
           ))}
         </div>
         <Link to="/ladders" className="ca-display mt-4 inline-flex rounded-[7px] border border-white/10 bg-white/[0.035] px-3 py-2 text-[1rem] text-ca-text-2">
@@ -330,7 +353,15 @@ export function RecentBattleRow({
     <Link to="/battle/results" className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-[8px] border border-white/8 bg-white/[0.025] px-3 py-2 transition duration-150 hover:border-white/16">
       <div className="flex -space-x-1.5">
         {entries.slice(0, 3).map((entry) => (
-          <FighterPortrait key={entry.id} entry={entry} className="h-8 w-8 rounded-full" imgClassName="top-[13%] w-[110%]" />
+          <CharacterFacePortrait
+            key={entry.id}
+            characterId={entry.id}
+            name={entry.name}
+            src={entry.facePortrait}
+            rarity={entry.rarity}
+            size="xs"
+            className="rounded-full"
+          />
         ))}
       </div>
       <div className="min-w-0">

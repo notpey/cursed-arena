@@ -167,7 +167,7 @@ export const fighterBoardMeta: Record<string, BattleFighterBoardMeta> = {
 export function fighter(
   template: Omit<
     BattleFighterTemplate,
-    'affiliationLabel' | 'battleTitle' | 'bio' | 'boardPortraitSrc' | 'boardPortraitFrame'
+    'affiliationLabel' | 'battleTitle' | 'bio' | 'facePortrait' | 'boardPortraitSrc' | 'boardPortraitFrame'
   >,
 ): BattleFighterTemplate {
   return defineFighter(template, fighterBoardMeta[template.id])

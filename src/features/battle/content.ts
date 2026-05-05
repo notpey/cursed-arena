@@ -15,13 +15,14 @@ export type BattleFighterBoardMeta = Pick<
   BattleFighterTemplate,
   'affiliationLabel' | 'battleTitle' | 'bio'
 > & {
+  facePortrait?: string
   boardPortraitFrame?: BattleFighterTemplate['boardPortraitFrame']
   boardPortraitSrc?: string
 }
 
 export type BattleFighterDraft = Omit<
   BattleFighterTemplate,
-  'affiliationLabel' | 'battleTitle' | 'bio' | 'boardPortraitSrc' | 'boardPortraitFrame'
+  'affiliationLabel' | 'battleTitle' | 'bio' | 'facePortrait' | 'boardPortraitSrc' | 'boardPortraitFrame'
 >
 
 function deriveAbilityLabel(name: string) {
@@ -161,6 +162,7 @@ export function defineFighter(
     affiliationLabel: boardMeta.affiliationLabel,
     battleTitle: boardMeta.battleTitle,
     bio: boardMeta.bio,
+    facePortrait: boardMeta.facePortrait ?? '',
     boardPortraitSrc: boardMeta.boardPortraitSrc ?? '',
     boardPortraitFrame: boardMeta.boardPortraitFrame ?? template.portraitFrame,
   }

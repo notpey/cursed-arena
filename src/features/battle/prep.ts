@@ -43,6 +43,7 @@ export type BattlePrepRosterEntry = {
   gradeLabel: string
   role: string
   passiveLabel: string
+  facePortrait?: string
   battleTemplate: BattleFighterTemplate
 }
 
@@ -137,6 +138,7 @@ export function buildPrepRosterEntries(fighters: BattleFighterTemplate[]): Battl
         gradeLabel: gradeLabelFromRarity(rarity),
         role: fighter.role,
         passiveLabel: fighter.passiveEffects?.[0]?.label ?? 'No passive loaded',
+        facePortrait: fighter.facePortrait,
         battleTemplate: fighter,
       }
     })

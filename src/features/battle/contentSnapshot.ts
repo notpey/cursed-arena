@@ -165,6 +165,7 @@ function normalizeFighter(rawFighter: unknown) {
 
   return {
     ...fighter,
+    facePortrait: normalizeBattleAssetSrc(fighter.facePortrait),
     boardPortraitSrc: normalizeBattleAssetSrc(fighter.boardPortraitSrc),
     abilities: rawAbilities.map((ability) => normalizeAbility(ability, false)),
     ultimate: normalizeAbility(rawUltimate, false),

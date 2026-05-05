@@ -1,16 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import {
   AbilityChip,
-  FeaturedFighterCard,
-  FighterPortrait,
   IllustratedSiteCard,
   ReadoutTile,
   SiteSectionHeader,
   StylizedPortraitPlaceholder,
   battlePrepRoster,
-  homeBgBase,
-  siteArtBackgroundStyle,
 } from '@/components/site/siteVisuals'
 import type { CharacterRarity } from '@/types/characters'
 
@@ -21,7 +18,6 @@ const rarityOptions: RarityFilter[] = ['ALL', 'SSR', 'SR', 'R']
 export function CharactersPage() {
   const [rarity, setRarity] = useState<RarityFilter>('ALL')
   const [query, setQuery] = useState('')
-  const selected = battlePrepRoster[0]
 
   const visibleRoster = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -33,51 +29,11 @@ export function CharactersPage() {
   }, [query, rarity])
 
   return (
-    <div className="space-y-4">
-      <section className="relative overflow-hidden rounded-[10px] border border-white/10 bg-[rgba(14,15,20,0.28)] p-5">
-        <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-28" style={siteArtBackgroundStyle(homeBgBase)} />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(13,12,17,0.94),rgba(13,12,17,0.68)),radial-gradient(circle_at_88%_18%,rgba(250,39,66,0.14),transparent_46%)]" />
-        <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-end">
-          <div>
-            <p className="ca-mono-label text-[0.5rem] text-ca-teal">CHARACTER & SKILL ARCHIVE</p>
-            <h1 className="ca-display mt-2 text-[3.1rem] leading-[0.9] text-ca-text sm:text-[4.5rem]">Characters</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-ca-text-2">
-              Browse fighter roles, grades, passives, and technique previews. This index is structured for future full character pages while keeping the Naruto-Arena-style kit readability.
-            </p>
-          </div>
-          <Link
-            to="/battle/prep"
-            className="ca-display rounded-[8px] border border-ca-red/45 bg-ca-red px-4 py-3 text-center text-[1.55rem] leading-none text-white"
-          >
-            Build Team
-          </Link>
-        </div>
-      </section>
-
-      {selected ? (
-        <IllustratedSiteCard>
-          <div className="grid gap-4 p-4 lg:grid-cols-[12rem_minmax(0,1fr)]">
-            <FighterPortrait entry={selected} className="aspect-[3/4]" />
-            <div className="min-w-0">
-              <SiteSectionHeader eyebrow="Featured Technique File" title={selected.name} />
-              <p className="text-sm leading-6 text-ca-text-2">{selected.battleTemplate.bio}</p>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <ReadoutTile label="HP" value={selected.battleTemplate.maxHp} />
-                <ReadoutTile label="Grade" value={selected.gradeLabel} />
-                <ReadoutTile label="Role" value={selected.role.split('/')[0] ?? selected.role} />
-              </div>
-              <div className="mt-4 grid gap-2 md:grid-cols-4">
-                {selected.battleTemplate.abilities.slice(0, 3).concat(selected.battleTemplate.ultimate).map((ability) => (
-                  <AbilityChip key={ability.id} ability={ability} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </IllustratedSiteCard>
-      ) : null}
+    <div className="space-y-3">
+      <PageIntro />
 
       <IllustratedSiteCard>
-        <div className="p-4">
+        <div className="p-3">
           <SiteSectionHeader
             eyebrow="Roster Preview"
             title={`${visibleRoster.length} Fighters`}
@@ -87,9 +43,9 @@ export function CharactersPage() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search roster"
-                  className="w-40 rounded-[7px] border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text outline-none placeholder:text-ca-text-3 focus:border-ca-teal/35"
+                  className="w-40 rounded-[6px] border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text outline-none placeholder:text-ca-text-3 focus:border-ca-teal/35"
                 />
-                <div className="flex overflow-hidden rounded-[7px] border border-white/10 bg-black/20">
+                <div className="flex overflow-hidden rounded-[6px] border border-white/10 bg-black/20">
                   {rarityOptions.map((option) => (
                     <button
                       key={option}
@@ -109,13 +65,13 @@ export function CharactersPage() {
           />
 
           {visibleRoster.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+            <div className="grid gap-2">
               {visibleRoster.map((entry) => (
-                <FeaturedFighterCard key={entry.id} entry={entry} />
+                <CharacterArchiveRow key={entry.id} entry={entry} />
               ))}
             </div>
           ) : (
-            <div className="grid place-items-center rounded-[8px] border border-white/8 bg-white/[0.025] p-8">
+            <div className="grid place-items-center rounded-[7px] border border-white/8 bg-white/[0.025] p-8">
               <StylizedPortraitPlaceholder label="NA" tone="frost" className="mb-3 h-16 w-16" />
               <p className="text-sm text-ca-text-3">No fighters match that filter.</p>
             </div>
@@ -123,5 +79,59 @@ export function CharactersPage() {
         </div>
       </IllustratedSiteCard>
     </div>
+  )
+}
+
+function PageIntro() {
+  return (
+    <section className="rounded-[7px] border border-white/10 bg-[rgba(30,28,36,0.58)] px-4 py-3">
+      <p className="ca-mono-label text-[0.46rem] text-ca-teal">CHARACTERS / SKILLS</p>
+      <h1 className="ca-display mt-1 text-[2.25rem] leading-none tracking-[0.06em] text-ca-text">Character Archive</h1>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-ca-text-2">
+        Browse compact fighter files with square portraits, role summaries, grade, unlock status, and technique previews. Full individual character pages can build from this structure later.
+      </p>
+    </section>
+  )
+}
+
+function CharacterArchiveRow({ entry }: { entry: (typeof battlePrepRoster)[number] }) {
+  const abilities = entry.battleTemplate.abilities.slice(0, 2)
+
+  return (
+    <article className="grid gap-3 rounded-[7px] border border-white/8 bg-white/[0.025] p-3 transition duration-150 hover:-translate-y-0.5 hover:border-white/16 md:grid-cols-[5rem_minmax(0,1fr)]">
+      <CharacterFacePortrait
+        characterId={entry.id}
+        name={entry.name}
+        src={entry.facePortrait}
+        rarity={entry.rarity}
+        locked={entry.rarity === 'SSR'}
+        size="lg"
+        className="h-20 w-20 max-w-full md:w-auto"
+      />
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-dotted border-white/12 pb-2">
+          <div className="min-w-0">
+            <p className="ca-display truncate text-[1.35rem] leading-none text-ca-text">{entry.name}</p>
+            <p className="mt-1 text-xs leading-5 text-ca-text-3">{entry.role}</p>
+          </div>
+          <Link to="/characters" className="ca-mono-label text-[0.42rem] text-ca-teal">
+            MORE ABOUT {entry.battleTemplate.shortName}
+          </Link>
+        </div>
+        <p className="mt-2 line-clamp-2 text-sm leading-6 text-ca-text-2">{entry.battleTemplate.bio}</p>
+        <div className="mt-3 grid gap-2 lg:grid-cols-[13rem_minmax(0,1fr)]">
+          <div className="grid grid-cols-3 gap-2">
+            <ReadoutTile label="HP" value={entry.battleTemplate.maxHp} />
+            <ReadoutTile label="Grade" value={entry.gradeLabel.replace('SPECIAL ', 'S. ')} />
+            <ReadoutTile label="Unlock" value={entry.rarity === 'SSR' ? 'Mission' : 'Open'} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {abilities.map((ability) => (
+              <AbilityChip key={ability.id} ability={ability} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </article>
   )
 }
