@@ -141,7 +141,11 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
     }
 
     const local = readPublishedBattleContent(fallback)
-    if (remote.updatedAt <= local.updatedAt && !remoteWasNormalized) return false
+    const remoteIsNewer = remote.updatedAt > local.updatedAt
+    if (!remoteIsNewer) {
+      if (remoteWasNormalized) savePublishedBattleContent(remote)
+      return false
+    }
 
     // Remote is newer — update localStorage
     savePublishedBattleContent(remote)
