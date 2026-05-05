@@ -1752,7 +1752,7 @@ function CharacterInspectorPanel({
     { id: 'skill-1', label: 'Skill 2' },
     { id: 'skill-2', label: 'Skill 3' },
     { id: 'ultimate', label: 'Ultimate' },
-    { id: 'assets', label: 'Assets' },
+    { id: 'assets', label: 'Pictures' },
     { id: 'qa', label: 'QA' },
     { id: 'advanced', label: 'Advanced' },
   ]
@@ -1804,29 +1804,19 @@ function CharacterInspectorPanel({
               </div>
             </div>
             <TextAreaField label="Bio" value={fighter.bio} onChange={(v) => onUpdateFighter((f) => { f.bio = v })} rows={4} />
-            <FacePortraitAssetEditor
-              fighter={fighter}
-              onChange={(value) => onUpdateFighter((f) => { f.facePortrait = value || undefined })}
-            />
-            <AssetField
-              label="Battle / Board Portrait URL"
-              value={fighter.boardPortraitSrc ?? ''}
-              onChange={(v) => onUpdateFighter((f) => { f.boardPortraitSrc = v })}
-              helper="Battle/client render image URL. This can be a full-body or board render; it is not used for site face thumbnails."
-            />
           </div>
         ) : null}
 
         {/* Assets */}
         {selectedSection === 'assets' ? (
           <div className="space-y-3">
-            <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Assets</p>
+            <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Pictures</p>
             <FacePortraitAssetEditor
               fighter={fighter}
               onChange={(value) => onUpdateFighter((f) => { f.facePortrait = value || undefined })}
             />
             <AssetField
-              label="Battle / Board Portrait URL"
+              label="Battle Render URL"
               value={fighter.boardPortraitSrc ?? ''}
               onChange={(v) => onUpdateFighter((f) => { f.boardPortraitSrc = v })}
               helper="Full-body or board render used by battle/client surfaces. Do not use this as a face portrait fallback."
@@ -2156,13 +2146,13 @@ function FacePortraitAssetEditor({
           size="lg"
         />
         <div className="min-w-0">
-          <p className="ca-display text-[1.1rem] leading-none text-ca-text">Face Portrait</p>
+          <p className="ca-display text-[1.1rem] leading-none text-ca-text">Face Picture</p>
           <p className="mt-1 text-xs leading-5 text-ca-text-3">
             Square/headshot image used for site thumbnails, manual pages, and roster archive. Do not use full-body renders here.
           </p>
           <div className="mt-3">
             <AssetField
-              label="Face Portrait URL"
+              label="Face Picture URL"
               value={value}
               onChange={onChange}
               helper="Paste a direct square/headshot image URL. Empty is allowed and will show the placeholder fallback."
