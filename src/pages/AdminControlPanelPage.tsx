@@ -146,7 +146,6 @@ type AdminSelection = {
   passiveIndex: number
 }
 
-type EditorTabId = 'identity' | 'skills' | 'passives' | 'advanced' | 'livePreview'
 type StudioSection = 'liveops' | 'content'
 
 type SelectedSection = 'identity' | 'passive' | 'skill-0' | 'skill-1' | 'skill-2' | 'ultimate' | 'assets' | 'qa' | 'advanced'
@@ -791,9 +790,6 @@ export function AdminControlPanelPage() {
   })
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(() => readAdminSelection()?.abilityId ?? null)
   const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(() => readAdminSelection()?.passiveIndex ?? 0)
-  const [expandedAbilityIds, setExpandedAbilityIds] = useState<Set<string>>(new Set())
-  const [expandedPassiveIndices, setExpandedPassiveIndices] = useState<Set<number>>(new Set([0]))
-  const [editorTab, setEditorTab] = useState<EditorTabId>('identity')
   const [selectedSection, setSelectedSection] = useState<SelectedSection>('identity')
   const [fighterSearch, setFighterSearch] = useState('')
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
@@ -1084,21 +1080,6 @@ export function AdminControlPanelPage() {
     setStatusFlash('ABILITY ADDED')
   }
 
-  function handleDuplicateAbility() {
-    if (!selectedFighter || !selectedAbility) return
-    if (selectedFighter.ultimate.id === selectedAbility.id) {
-      setStatusFlash('DUPLICATE NORMAL SKILLS ONLY')
-      return
-    }
-
-    const duplicate = createBlankAbility(selectedFighter.id + '-skill-' + (selectedFighter.abilities.length + 1), selectedAbility.name + ' Copy', { ...JSON.parse(JSON.stringify(selectedAbility)), id: selectedFighter.id + '-skill-' + (selectedFighter.abilities.length + 1) })
-    updateSelectedFighter((fighter) => {
-      fighter.abilities.push(duplicate)
-    })
-    setSelectedAbilityId(duplicate.id)
-    setStatusFlash('ABILITY DUPLICATED')
-  }
-
   function handleDeleteAbility() {
     if (!selectedFighter || !selectedAbility) return
     if (selectedFighter.ultimate.id === selectedAbility.id) {
@@ -1205,14 +1186,6 @@ export function AdminControlPanelPage() {
     setDraft(cloneSnapshot(authoredBattleContent))
     window.location.reload()
   }
-
-  const editorTabs: Array<{ id: EditorTabId; label: string; hint: string }> = [
-    { id: 'identity', label: 'Identity', hint: 'Name, role, portrait, and bio.' },
-    { id: 'skills', label: 'Skills', hint: 'Author active techniques and ultimates.' },
-    { id: 'passives', label: 'Passives', hint: 'Configure reactions and conditions.' },
-    { id: 'advanced', label: 'Advanced', hint: 'Import, export, and raw JSON edits.' },
-    { id: 'livePreview', label: 'Live Preview', hint: 'Read this fighter exactly like players will.' },
-  ]
 
   const skillSections: SelectedSection[] = ['skill-0', 'skill-1', 'skill-2', 'ultimate']
 
@@ -2195,6 +2168,24 @@ function PortraitPreview({ fighter, compact = false }: { fighter: BattleFighterT
           <span className="ca-display text-[2rem] text-white/35">{initial}</span>
         </div>
       )}
+    </div>
+  )
+}
+
+function AbilityTilePreview({ ability, large = false }: { ability: BattleAbilityTemplate; large?: boolean }) {
+  const sizeClass = large ? 'h-[7.5rem] w-[7.5rem]' : 'h-[6rem] w-[6rem]'
+  const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
+
+  return (
+    <div className={['relative overflow-hidden rounded-[10px] border border-white/12 bg-[rgba(12,12,18,0.85)]', sizeClass].join(' ')}>
+      {iconSrc ? <img src={iconSrc} alt={ability.name} className="absolute inset-0 h-full w-full object-cover" /> : null}
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.35))]" />
+      <div className="absolute inset-0 grid place-items-center">
+        {!iconSrc ? <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span> : null}
+      </div>
+      <div className="absolute bottom-1.5 left-1.5 rounded-[4px] bg-black/55 px-1.5 py-0.5">
+        <span className="ca-mono-label text-[0.36rem] text-white">{ability.icon.label}</span>
+      </div>
     </div>
   )
 }
