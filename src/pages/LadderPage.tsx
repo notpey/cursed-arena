@@ -23,9 +23,9 @@ export function LadderPage() {
   }, [userId])
 
   return (
-    <section className="space-y-4 py-4 sm:py-6">
+    <div className="p-4 space-y-3">
       <LadderTabs value={tab} onChange={setTab} />
       {tab === 'sorcerer' ? <SorcererLadderView entries={sorcerers} myStanding={mySorcerer} currentUserId={userId} /> : <ClanLadderView entries={clans} myStanding={myClan} />}
-    </section>
+    </div>
   )
 }

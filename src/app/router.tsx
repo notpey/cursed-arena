@@ -8,6 +8,7 @@ const LoginPage = lazy(async () => ({ default: (await import('@/pages/LoginPage'
 const HomePage = lazy(async () => ({ default: (await import('@/pages/HomePage')).HomePage }))
 const ManualPage = lazy(async () => ({ default: (await import('@/pages/ManualPage')).ManualPage }))
 const CharactersPage = lazy(async () => ({ default: (await import('@/pages/CharactersPage')).CharactersPage }))
+const CharacterDetailPage = lazy(async () => ({ default: (await import('@/pages/CharacterDetailPage')).CharacterDetailPage }))
 const BattlePage = lazy(async () => ({ default: (await import('@/pages/BattlePage')).BattlePage }))
 const BattlePrepPage = lazy(async () => ({ default: (await import('@/pages/BattlePrepPage')).BattlePrepPage }))
 const BattleResultsPage = lazy(async () => ({ default: (await import('@/pages/BattleResultsPage')).BattleResultsPage }))
@@ -38,6 +39,7 @@ const shellRoutes = [
   { index: true, element: withRouteSuspense(<HomePage />) },
   { path: 'manual', element: withRouteSuspense(<ManualPage />) },
   { path: 'characters', element: withRouteSuspense(<CharactersPage />) },
+  { path: 'characters/:id', element: withRouteSuspense(<CharacterDetailPage />) },
   { path: 'battle/prep', element: withRouteSuspense(<BattlePrepPage />) },
   { path: 'battle/results', element: withRouteSuspense(<BattleResultsPage />) },
   { path: 'missions', element: withRouteSuspense(<MissionsPage />) },

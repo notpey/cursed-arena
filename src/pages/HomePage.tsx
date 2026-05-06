@@ -1,21 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import {
-  FighterStrip,
-  IllustratedSiteCard,
-  ManualEntryCard,
-  MissionSpotlightCard,
-  ReadoutTile,
-  RecentBattleRow,
-  SiteSectionHeader,
-  StylizedPortraitPlaceholder,
+  SitePanel,
+  SitePanelHeader,
+  SiteDivider,
+  SiteListRow,
+  SiteNewsPost,
   battlePrepRoster,
   battlePrepRosterById,
-  homeBgBase,
-  siteArtBackgroundStyle,
 } from '@/components/site/siteVisuals'
-import { readBattleProfileStats, readRecentMatchHistory } from '@/features/battle/matches'
+import { readBattleProfileStats } from '@/features/battle/matches'
 import { useAuth } from '@/features/auth/useAuth'
 import { getMissionCoins, getMissionsWithProgress } from '@/features/missions/store'
 import { UNLOCK_MISSION_DEFS } from '@/features/missions/unlocks'
@@ -23,19 +18,17 @@ import { fetchPlayerRankProfile, getLevelProgress, type PlayerRankProfile } from
 import { getLadderRankTitle, getLevelForExperience } from '@/features/ranking/ladder'
 import { usePlayerState } from '@/features/player/store'
 
-const manualEntries = [
-  { title: 'The Basics', label: '01', body: 'Rounds, teams, health, targeting, and the win condition for 3v3 arena play.', tone: 'teal' as const },
-  { title: 'Characters & Skills', label: 'CS', body: 'Read fighter roles, cooldowns, costs, classes, passives, and ultimate rules.', tone: 'red' as const },
-  { title: 'Cursed Energy', label: 'CE', body: 'Energy pips determine which techniques can be committed each round.', tone: 'gold' as const },
-  { title: 'Ladders & Missions', label: 'LM', body: 'Track ranked progress and unlock fighters through compact mission goals.', tone: 'frost' as const },
+const manualQuickLinks = [
+  { label: 'The Basics', desc: 'Rounds, turns, health, targeting, energy' },
+  { label: 'Characters & Skills', desc: 'Roles, cooldowns, costs, classes' },
+  { label: 'Missions', desc: 'Unlock characters through goals' },
+  { label: 'Ladders', desc: 'Ranked progress and standings' },
 ]
 
 export function HomePage() {
-  const navigate = useNavigate()
   const { profile } = usePlayerState()
   const { user } = useAuth()
   const localStats = useMemo(() => readBattleProfileStats(), [])
-  const recentMatches = useMemo(() => readRecentMatchHistory().slice(0, 5), [])
   const missions = useMemo(() => getMissionsWithProgress(), [])
   const missionCoins = useMemo(() => getMissionCoins(), [])
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
@@ -66,276 +59,203 @@ export function HomePage() {
     }
   }, [dbProfile, localStats])
 
-  const missionSpotlight = missions.find((mission) => !mission.complete) ?? missions[0] ?? null
-  const completedMissions = missions.filter((mission) => mission.complete).length
+  const missionSpotlight = missions.find((m) => !m.complete) ?? missions[0] ?? null
+  const completedMissions = missions.filter((m) => m.complete).length
   const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
-  const featuredFighters = ['yuji', 'megumi', 'nobara', 'gojo', 'todo', 'nanami']
+
+  // All characters for the strip; lead with fan favourites
+  const newCharacters = ['yuji', 'megumi', 'nobara', 'gojo', 'todo', 'nanami', 'maki', 'mahito', 'jogo']
     .map((id) => battlePrepRosterById[id])
     .filter(Boolean)
+
   const rewardEntry =
     battlePrepRosterById[UNLOCK_MISSION_DEFS[0]?.reward.fighterId ?? 'gojo'] ??
     battlePrepRosterById.gojo ??
     battlePrepRoster[0]
 
   return (
-    <div className="space-y-3">
-      <HomePageHeader onStart={() => navigate('/battle/prep')} />
-
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_17rem]">
-        <LatestUpdateNews fighters={featuredFighters.slice(0, 4)} />
-        <HomeAccountSummary
-          avatarLabel={profile.avatarLabel}
-          playerName={profileStats.playerName}
-          rankTitle={profileStats.rankTitle}
-          level={profileStats.level}
-          wins={profileStats.wins}
-          losses={profileStats.losses}
-          winRate={winRate}
-          missionCoins={missionCoins}
-        />
-      </div>
-
-      <IllustratedSiteCard>
-        <div className="p-3">
-          <SiteSectionHeader
-            eyebrow="Characters & Skills"
-            title="New / Reworked Fighters"
-            action={<Link to="/characters" className="ca-mono-label text-[0.44rem] text-ca-teal">VIEW ARCHIVE</Link>}
-          />
-          <FighterStrip entries={featuredFighters} />
-        </div>
-      </IllustratedSiteCard>
-
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <IllustratedSiteCard>
-          <div className="p-3">
-            <SiteSectionHeader
-              eyebrow="Game Manual"
-              title="Player Reference"
-              action={<Link to="/manual" className="ca-mono-label text-[0.44rem] text-ca-teal">OPEN MANUAL</Link>}
-            />
-            <div className="grid gap-2 md:grid-cols-2">
-              {manualEntries.map((entry) => (
-                <ManualEntryCard key={entry.title} {...entry} />
-              ))}
-            </div>
-          </div>
-        </IllustratedSiteCard>
-
-        <MissionSpotlightCard
-          mission={missionSpotlight}
-          rewardEntry={rewardEntry}
-          completed={completedMissions}
-          total={missions.length}
-        />
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <HomeRecentMatches matches={recentMatches} />
-        <LadderMiniTable
-          level={profileStats.level}
-          rankTitle={profileStats.rankTitle}
-          wins={profileStats.wins}
-          losses={profileStats.losses}
-          winRate={winRate}
-        />
-      </div>
-    </div>
-  )
-}
-
-function HomePageHeader({ onStart }: { onStart: () => void }) {
-  return (
-    <section className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[rgba(30,28,36,0.58)] px-4 py-3">
-      <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-18" style={siteArtBackgroundStyle(homeBgBase)} />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(13,12,17,0.96),rgba(13,12,17,0.75)),radial-gradient(72%_140%_at_90%_0%,rgba(5,216,189,0.12),transparent_58%)]" />
-      <div className="relative flex flex-wrap items-center justify-between gap-3">
+    <div className="p-4 space-y-3">
+      {/* Page intro strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dotted border-white/12 pb-3">
         <div>
-          <p className="ca-mono-label text-[0.46rem] text-ca-teal">STARTPAGE / NEWS</p>
-          <h1 className="ca-display mt-1 text-[2.35rem] leading-none tracking-[0.06em] text-ca-text">Cursed-Arena</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-ca-text-2">
-            Study fighter files, unlock roster goals, check the ladder, then enter the focused 3v3 match client.
+          <p className="ca-mono-label text-[0.44rem] text-ca-text-3 tracking-[0.1em]">STARTPAGE / NEWS</p>
+          <h1 className="ca-display mt-1 text-[1.85rem] leading-none tracking-[0.05em] text-ca-text">
+            Cursed-Arena
+          </h1>
+          <p className="mt-1.5 text-sm leading-[1.6] text-ca-text-2">
+            3v3 Cursed Technique arena — study the manual, unlock characters, then play.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onStart}
-          className="ca-display rounded-[7px] border border-ca-red/45 bg-ca-red px-5 py-3 text-[1.4rem] leading-none text-white shadow-[0_10px_24px_rgba(250,39,66,0.16)] transition duration-150 hover:-translate-y-0.5 active:scale-[0.98]"
+        <Link
+          to="/battle/prep"
+          className="ca-display shrink-0 rounded-[4px] border border-ca-red/45 bg-ca-red px-5 py-3 text-[1.2rem] leading-none text-white shadow-[0_6px_16px_rgba(250,39,66,0.18)] transition hover:brightness-110 active:scale-[0.98]"
         >
           Start Playing
-        </button>
+        </Link>
       </div>
-    </section>
-  )
-}
 
-function LatestUpdateNews({ fighters }: { fighters: (typeof battlePrepRoster)[number][] }) {
-  return (
-    <IllustratedSiteCard>
-      <article className="p-3">
-        <SiteSectionHeader
-          eyebrow="Latest Update"
-          title="Archive Site Pass Online"
-          action={<span className="ca-mono-label text-[0.42rem] text-ca-text-3">PATCH 01B</span>}
-        />
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_12rem]">
-          <div>
-            <p className="text-sm leading-6 text-ca-text-2">
-              Cursed-Arena now presents the site like a compact battle archive: navigation, account, recent activity, fighter files, missions, and manual entries live around the startpage instead of a launcher dashboard.
-            </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <NewsBullet title="Start Playing" body="Team selection remains the primary entrance into the match client." />
-              <NewsBullet title="Roster Archive" body="Character thumbnails and skill previews move the site toward a Naruto-Arena-style reference hub." />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_14rem]">
+        {/* ── Left: primary content column ── */}
+        <div className="space-y-3 min-w-0">
+
+          {/* New Characters — above news */}
+          <SitePanel>
+            <SitePanelHeader
+              eyebrow="Characters & Skills"
+              title="New Characters"
+              action={
+                <Link to="/characters" className="ca-mono-label text-[0.44rem] text-ca-teal">
+                  VIEW ALL →
+                </Link>
+              }
+            />
+            <div className="px-4 pb-4 pt-3">
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 md:grid-cols-9">
+                {newCharacters.map((entry) => (
+                  <Link key={entry.id} to={`/characters/${entry.id}`} className="group">
+                    <CharacterFacePortrait
+                      characterId={entry.id}
+                      name={entry.name}
+                      src={entry.facePortrait}
+                      rarity={entry.rarity}
+                      size="md"
+                      className="h-auto w-full aspect-square"
+                    />
+                    <p className="ca-display mt-1.5 truncate text-center text-[0.78rem] leading-none text-ca-text-2 group-hover:text-ca-teal">
+                      {entry.battleTemplate.shortName}
+                    </p>
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="rounded-[7px] border border-white/8 bg-black/18 p-2">
-            <p className="ca-mono-label mb-2 text-[0.42rem] text-ca-text-3">FEATURED FILES</p>
-            <div className="grid grid-cols-2 gap-2">
-              {fighters.map((entry) => (
-                <Link key={entry.id} to="/characters" className="group">
-                  <CharacterFacePortrait
-                    characterId={entry.id}
-                    name={entry.name}
-                    src={entry.facePortrait}
-                    rarity={entry.rarity}
-                    size="lg"
-                    className="h-auto w-full aspect-square"
-                  />
-                  <p className="ca-display mt-1 truncate text-[0.9rem] leading-none text-ca-text-2 group-hover:text-ca-teal">
-                    {entry.battleTemplate.shortName}
-                  </p>
+          </SitePanel>
+
+          {/* News / Updates */}
+          <SitePanel>
+            <SitePanelHeader eyebrow="Latest Updates" title="Site News" />
+            <div className="divide-y divide-dotted divide-white/10 px-4">
+              <SiteNewsPost
+                date="May 2025"
+                patchLabel="PATCH 01B"
+                title="Archive Site Pass Online"
+                body="Cursed-Arena now presents the site like a compact battle archive: navigation, character files, missions, and manual entries. The site structure follows a familiar reference-hub layout."
+              />
+              <SiteNewsPost
+                date="Apr 2025"
+                patchLabel="PATCH 01A"
+                title="16-Character Roster Live"
+                body="The full launch roster of sixteen characters is now available in the character archive with face portraits, role summaries, ability previews, and grade labels."
+              />
+              <SiteNewsPost
+                date="Mar 2025"
+                title="Missions & Unlocks System"
+                body="Complete mission goals to unlock characters and earn cursed coins. Mission progress is tracked locally and persists across sessions."
+              />
+            </div>
+          </SitePanel>
+
+          {/* Game Manual Quick Reference */}
+          <SitePanel>
+            <SitePanelHeader
+              eyebrow="Game Manual"
+              title="Player Reference"
+              action={
+                <Link to="/manual" className="ca-mono-label text-[0.44rem] text-ca-teal">
+                  OPEN MANUAL →
+                </Link>
+              }
+            />
+            <div className="divide-y divide-dotted divide-white/10">
+              {manualQuickLinks.map((entry) => (
+                <Link
+                  key={entry.label}
+                  to="/manual"
+                  className="flex items-center justify-between gap-3 px-4 py-2.5 transition hover:bg-white/[0.02]"
+                >
+                  <div className="min-w-0">
+                    <p className="ca-display text-[1rem] leading-none text-ca-text">{entry.label}</p>
+                    <p className="mt-1 text-[0.72rem] leading-[1.5] text-ca-text-3">{entry.desc}</p>
+                  </div>
+                  <span className="ca-mono-label shrink-0 text-[0.42rem] text-ca-teal">READ</span>
                 </Link>
               ))}
             </div>
-          </div>
+          </SitePanel>
         </div>
-      </article>
-    </IllustratedSiteCard>
-  )
-}
 
-function NewsBullet({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-[6px] border border-dotted border-white/12 bg-white/[0.02] px-3 py-2">
-      <p className="ca-display text-[1rem] leading-none text-ca-text">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-ca-text-3">{body}</p>
-    </div>
-  )
-}
+        {/* ── Right utility column — single: account + mission ── */}
+        <div className="space-y-3">
 
-function HomeAccountSummary({
-  avatarLabel,
-  playerName,
-  rankTitle,
-  level,
-  wins,
-  losses,
-  winRate,
-  missionCoins,
-}: {
-  avatarLabel: string
-  playerName: string
-  rankTitle: string
-  level: number
-  wins: number
-  losses: number
-  winRate: number
-  missionCoins: number
-}) {
-  return (
-    <IllustratedSiteCard>
-      <div className="p-3">
-        <div className="flex items-center gap-3 border-b border-dotted border-white/12 pb-3">
-          <StylizedPortraitPlaceholder label={avatarLabel} tone="red" className="h-12 w-12 rounded-[7px]" />
-          <div className="min-w-0">
-            <p className="ca-display truncate text-[1.35rem] leading-none text-ca-text">{playerName}</p>
-            <p className="ca-mono-label mt-1 text-[0.42rem] text-ca-text-3">LV {level} / {rankTitle}</p>
-          </div>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <ReadoutTile label="Record" value={`${wins}W/${losses}L`} />
-          <ReadoutTile label="Win Rate" value={`${winRate}%`} />
-          <ReadoutTile label="Coins" value={missionCoins} />
-          <ReadoutTile label="Mode" value="3v3" />
-        </div>
-      </div>
-    </IllustratedSiteCard>
-  )
-}
-
-function HomeRecentMatches({ matches }: { matches: ReturnType<typeof readRecentMatchHistory> }) {
-  const fallbackEntries = battlePrepRoster.slice(0, 3)
-
-  return (
-    <IllustratedSiteCard>
-      <div className="p-3">
-        <SiteSectionHeader
-          eyebrow="Recent Games"
-          title="Battle Log"
-          action={<Link to="/battle/results" className="ca-mono-label text-[0.44rem] text-ca-teal">RESULTS</Link>}
-        />
-        <div className="space-y-2">
-          {matches.length > 0 ? (
-            matches.map((match) => (
-              <RecentBattleRow
-                key={match.id}
-                match={match}
-                entries={match.yourTeam.map((id) => battlePrepRosterById[id]).filter(Boolean)}
-              />
-            ))
-          ) : (
-            <div className="rounded-[7px] border border-white/8 bg-white/[0.025] p-3">
-              <div className="flex gap-2">
-                {fallbackEntries.map((entry) => (
-                  <CharacterFacePortrait key={entry.id} characterId={entry.id} name={entry.name} src={entry.facePortrait} rarity={entry.rarity} size="sm" />
-                ))}
-              </div>
-              <p className="mt-3 text-sm text-ca-text-3">Your battle log will appear after your first match.</p>
+          {/* Account summary — compact, no duplication of sidebar */}
+          <SitePanel>
+            <SitePanelHeader eyebrow="Account" title={profileStats.playerName || profile.displayName} />
+            <div className="divide-y divide-dotted divide-white/10">
+              <SiteListRow label="Level">{profileStats.level}</SiteListRow>
+              <SiteListRow label="Rank">{profileStats.rankTitle}</SiteListRow>
+              <SiteListRow label="Record">{profileStats.wins}W / {profileStats.losses}L</SiteListRow>
+              <SiteListRow label="Win Rate">{winRate}%</SiteListRow>
+              <SiteListRow label="Coins">{missionCoins}</SiteListRow>
             </div>
-          )}
+          </SitePanel>
+
+          {/* Mission Spotlight */}
+          <SitePanel>
+            <SitePanelHeader
+              eyebrow="Missions"
+              title="Mission Spotlight"
+              action={
+                <span className="ca-mono-label text-[0.38rem] text-ca-text-3">
+                  {completedMissions}/{missions.length}
+                </span>
+              }
+            />
+            <div className="px-4 py-3 space-y-3">
+              {missionSpotlight && rewardEntry ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <CharacterFacePortrait
+                      characterId={rewardEntry.id}
+                      name={rewardEntry.name}
+                      src={rewardEntry.facePortrait}
+                      rarity={rewardEntry.rarity}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="ca-display truncate text-[1.05rem] leading-none text-ca-text">
+                        {missionSpotlight.label}
+                      </p>
+                      <p className="ca-mono-label mt-1 text-[0.42rem] text-ca-text-3">
+                        {missionSpotlight.progressLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="h-1 rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-ca-teal transition-all"
+                      style={{ width: `${Math.min(100, Math.round((missionSpotlight.progress / Math.max(1, missionSpotlight.goal)) * 100))}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-[0.72rem] leading-[1.5] text-ca-text-3">All missions complete.</p>
+              )}
+              <Link
+                to="/missions"
+                className="ca-display block rounded-[4px] border border-white/10 bg-white/[0.025] px-3 py-2 text-center text-[0.95rem] text-ca-text-2 transition hover:border-ca-teal/22 hover:text-ca-teal"
+              >
+                Open Missions
+              </Link>
+            </div>
+          </SitePanel>
+
+          <SiteDivider />
+          <div className="px-1">
+            <Link to="/profile" className="ca-mono-label block text-[0.44rem] text-ca-text-3 hover:text-ca-teal">
+              PROFILE & MATCH HISTORY →
+            </Link>
+          </div>
         </div>
       </div>
-    </IllustratedSiteCard>
-  )
-}
-
-function LadderMiniTable({
-  level,
-  rankTitle,
-  wins,
-  losses,
-  winRate,
-}: {
-  level: number
-  rankTitle: string
-  wins: number
-  losses: number
-  winRate: number
-}) {
-  return (
-    <IllustratedSiteCard>
-      <div className="p-3">
-        <SiteSectionHeader
-          eyebrow="Ladder Snapshot"
-          title="Profile Rank"
-          action={<Link to="/ladders" className="ca-mono-label text-[0.44rem] text-ca-teal">LADDERS</Link>}
-        />
-        <div className="divide-y divide-dotted divide-white/12 rounded-[6px] border border-white/8 bg-white/[0.02]">
-          <RankRow label="Level" value={level} />
-          <RankRow label="Rank" value={rankTitle} />
-          <RankRow label="Record" value={`${wins}W / ${losses}L`} />
-          <RankRow label="Win Rate" value={`${winRate}%`} />
-        </div>
-      </div>
-    </IllustratedSiteCard>
-  )
-}
-
-function RankRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex items-center justify-between gap-3 px-3 py-2">
-      <span className="ca-mono-label text-[0.42rem] text-ca-text-3">{label}</span>
-      <span className="ca-mono-label truncate text-right text-[0.46rem] text-ca-text-2">{value}</span>
     </div>
   )
 }

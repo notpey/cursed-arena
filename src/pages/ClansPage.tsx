@@ -38,24 +38,79 @@ export function ClansPage() {
   }
 
   return (
-    <section className="space-y-4 py-4 sm:py-6">
-      <header className="ca-card p-5">
-        <p className="ca-mono-label text-[0.5rem] text-ca-teal">Clan Directory</p>
-        <h1 className="ca-display mt-2 text-5xl text-ca-text">Clans</h1>
-        <p className="mt-3 text-sm text-ca-text-2">{myClan ? <>Your Clan: <Link className="text-ca-teal" to={`/clans/${myClan.clanId}`}>{myClan.name} [{myClan.tag}]</Link></> : 'Create a clan or join an existing one to compete on the Clan Ladder.'}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {myClan ? <Link to="/clan-panel" className="ca-display rounded-lg border border-ca-teal/25 bg-ca-teal-wash px-4 py-3 text-xl text-ca-teal">Clan Panel</Link> : <Link to="/clans/create" className="ca-display rounded-lg border border-ca-red/35 bg-ca-red px-4 py-3 text-xl text-white">Clan Register</Link>}
+    <div className="p-4 space-y-3">
+      {/* Page header */}
+      <div className="border-b border-dotted border-white/12 pb-3">
+        <p className="ca-mono-label text-[0.44rem] text-ca-text-3 tracking-[0.1em]">CLANS / DIRECTORY</p>
+        <h1 className="ca-display mt-1 text-[1.85rem] leading-none tracking-[0.05em] text-ca-text">Clans</h1>
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm leading-[1.65] text-ca-text-2">
+            {myClan ? (
+              <>Your Clan: <Link className="text-ca-teal hover:underline" to={`/clans/${myClan.clanId}`}>{myClan.name} [{myClan.tag}]</Link></>
+            ) : (
+              'Create a clan or join an existing one to compete on the Clan Ladder.'
+            )}
+          </p>
+          <div className="flex shrink-0 gap-2">
+            {myClan ? (
+              <Link
+                to="/clan-panel"
+                className="ca-display rounded-[4px] border border-ca-teal/28 bg-ca-teal-wash px-4 py-2 text-[1rem] leading-none text-ca-teal transition hover:brightness-110"
+              >
+                Clan Panel
+              </Link>
+            ) : (
+              <Link
+                to="/clans/create"
+                className="ca-display rounded-[4px] border border-ca-red/45 bg-ca-red px-4 py-2 text-[1rem] leading-none text-white transition hover:brightness-110"
+              >
+                Clan Register
+              </Link>
+            )}
+          </div>
         </div>
-      </header>
-      <div className="ca-card flex flex-wrap gap-3 p-3">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search clans by name or tag" className="min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text outline-none focus:border-ca-teal/35" />
-        <select value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-md border border-white/10 bg-ca-overlay px-3 py-2 text-sm text-ca-text">{['Open Recruitment', 'Invite Only', 'Top Ranked', 'Newest'].map((item) => <option key={item}>{item}</option>)}</select>
       </div>
-      {message ? <p className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text-2">{message}</p> : null}
-      <div className="space-y-3">
-        {filtered.length === 0 ? <p className="ca-card p-5 text-ca-text-2">No clans found.</p> : filtered.map((clan) => <ClanDirectoryCard key={clan.clanId} clan={clan} canJoin={!myClan && clan.leaderId !== userId} onJoin={(id) => { void handleJoin(id) }} />)}
+
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-2.5">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name or tag…"
+          className="min-w-0 flex-1 rounded-[4px] border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text outline-none placeholder:text-ca-text-3 focus:border-ca-teal/35"
+        />
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="rounded-[4px] border border-white/10 bg-[rgba(18,16,26,0.90)] px-3 py-2 text-sm text-ca-text"
+        >
+          {['Open Recruitment', 'Invite Only', 'Top Ranked', 'Newest'].map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+      </div>
+
+      {message ? (
+        <p className="rounded-[4px] border border-white/10 bg-black/20 px-3 py-2 text-sm text-ca-text-2">{message}</p>
+      ) : null}
+
+      <div className="space-y-2.5">
+        {filtered.length === 0 ? (
+          <div className="rounded-[5px] border border-white/10 bg-[rgba(18,16,26,0.90)] p-5 text-sm text-ca-text-2">
+            No clans found.
+          </div>
+        ) : (
+          filtered.map((clan) => (
+            <ClanDirectoryCard
+              key={clan.clanId}
+              clan={clan}
+              canJoin={!myClan && clan.leaderId !== userId}
+              onJoin={(id) => { void handleJoin(id) }}
+            />
+          ))
+        )}
       </div>
       <p className="sr-only">{profile.displayName}</p>
-    </section>
+    </div>
   )
 }

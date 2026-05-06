@@ -392,3 +392,146 @@ export function ReadoutTile({ label, value }: { label: string; value: string | n
 export function siteArtBackgroundStyle(image = homeBgBase): CSSProperties {
   return { backgroundImage: `url(${image})` }
 }
+
+// ─── Naruto-Arena-style site primitives ──────────────────────────────────────
+
+/** Flat content panel — thin border, very subtle bg, no decorative blobs. */
+export function SitePanel({
+  children,
+  className = '',
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-[5px] border border-white/10 bg-[rgba(18,16,24,0.70)] ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** Dotted horizontal divider matching sidebar separators. */
+export function SiteDivider({ className = '' }: { className?: string }) {
+  return <hr className={`border-0 border-t border-dotted border-white/12 ${className}`} />
+}
+
+/** A single compact list row — left label, right value or actions. */
+export function SiteListRow({
+  label,
+  children,
+  className = '',
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 px-4 py-2.5 ${className}`}
+    >
+      <span className="ca-mono-label text-[0.48rem] text-ca-text-3">{label}</span>
+      <span className="ca-mono-label text-right text-[0.5rem] text-ca-text-2">{children}</span>
+    </div>
+  )
+}
+
+/** A compact news/update post row for the home page stream. */
+export function SiteNewsPost({
+  date,
+  patchLabel,
+  title,
+  body,
+  fighters,
+}: {
+  date: string
+  patchLabel?: string
+  title: string
+  body: string
+  fighters?: BattlePrepRosterEntry[]
+}) {
+  return (
+    <article className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_9rem]">
+      <div className="min-w-0">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="ca-mono-label text-[0.46rem] text-ca-text-3">{date}</span>
+          {patchLabel ? (
+            <span className="ca-mono-label rounded-[3px] border border-white/10 px-1.5 py-0.5 text-[0.42rem] text-ca-text-3">
+              {patchLabel}
+            </span>
+          ) : null}
+        </div>
+        <h3 className="ca-display text-[1.25rem] leading-none tracking-[0.04em] text-ca-text">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm leading-[1.65] text-ca-text-2">{body}</p>
+      </div>
+      {fighters && fighters.length > 0 ? (
+        <div className="grid grid-cols-3 gap-2 self-start">
+          {fighters.slice(0, 3).map((entry) => (
+            <CharacterFacePortrait
+              key={entry.id}
+              characterId={entry.id}
+              name={entry.name}
+              src={entry.facePortrait}
+              rarity={entry.rarity}
+              size="sm"
+              className="h-auto w-full aspect-square"
+            />
+          ))}
+        </div>
+      ) : null}
+    </article>
+  )
+}
+
+/** Small inline portrait + name row used in mini-modules. */
+export function SiteMiniPortraitRow({
+  entry,
+  meta,
+}: {
+  entry: BattlePrepRosterEntry
+  meta?: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5 py-2">
+      <CharacterFacePortrait
+        characterId={entry.id}
+        name={entry.name}
+        src={entry.facePortrait}
+        rarity={entry.rarity}
+        size="xs"
+      />
+      <div className="min-w-0">
+        <p className="ca-display truncate text-[0.95rem] leading-none text-ca-text">{entry.name}</p>
+        {meta ? <p className="ca-mono-label mt-0.5 text-[0.42rem] text-ca-text-3">{meta}</p> : null}
+      </div>
+    </div>
+  )
+}
+
+/** Section header inside a SitePanel — eyebrow label + title + optional right action. */
+export function SitePanelHeader({
+  eyebrow,
+  title,
+  action,
+}: {
+  eyebrow?: string
+  title: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-dotted border-white/12 px-4 py-3">
+      <div className="min-w-0">
+        {eyebrow ? (
+          <p className="ca-mono-label text-[0.44rem] text-ca-text-3">{eyebrow}</p>
+        ) : null}
+        <h2 className="ca-display mt-1 text-[1.25rem] leading-none tracking-[0.05em] text-ca-text">
+          {title}
+        </h2>
+      </div>
+      {action}
+    </div>
+  )
+}
