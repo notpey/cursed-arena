@@ -82,9 +82,6 @@ export function HomePage() {
           <h1 className="ca-display mt-1 text-[1.85rem] leading-none tracking-[0.05em] text-ca-text">
             Cursed-Arena
           </h1>
-          <p className="mt-1.5 text-sm leading-[1.6] text-ca-text-2">
-            3v3 Cursed Technique arena — study the manual, unlock characters, then play.
-          </p>
         </div>
         <Link
           to="/battle/prep"
@@ -138,7 +135,7 @@ export function HomePage() {
                 date="May 2025"
                 patchLabel="PATCH 01B"
                 title="Archive Site Pass Online"
-                body="Cursed-Arena now presents the site like a compact battle archive: navigation, character files, missions, and manual entries. The site structure follows a familiar reference-hub layout."
+                body="Site navigation, character archive, missions, and manual are now live."
               />
               <SiteNewsPost
                 date="Apr 2025"
@@ -149,7 +146,7 @@ export function HomePage() {
               <SiteNewsPost
                 date="Mar 2025"
                 title="Missions & Unlocks System"
-                body="Complete mission goals to unlock characters and earn cursed coins. Mission progress is tracked locally and persists across sessions."
+                body="Complete mission goals to unlock characters and earn cursed coins."
               />
             </div>
           </SitePanel>

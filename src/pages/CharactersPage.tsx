@@ -36,9 +36,6 @@ export function CharactersPage() {
         <h1 className="ca-display mt-1 text-[1.85rem] leading-none tracking-[0.05em] text-ca-text">
           Character Archive
         </h1>
-        <p className="mt-1.5 max-w-2xl text-sm leading-[1.65] text-ca-text-2">
-          Browse character files with face portraits, role summaries, grade, unlock status, and technique previews.
-        </p>
       </div>
 
       {/* Filter bar */}

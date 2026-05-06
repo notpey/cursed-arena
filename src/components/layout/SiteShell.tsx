@@ -79,7 +79,7 @@ function SiteMasthead() {
             Cursed-Arena
           </span>
           <span className="ca-mono-label block text-[0.44rem] text-ca-text-3 tracking-[0.12em]">
-            3V3 CURSED TECHNIQUE BATTLE WEBSITE
+            CURSED TECHNIQUE BATTLE ARENA
           </span>
         </span>
       </Link>

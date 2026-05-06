@@ -30,21 +30,21 @@ const manualSections = [
     key: 'ladders',
     title: 'Ladders',
     label: 'LD',
-    desc: 'Ranked battles affect profile progress, standing, streaks, and match history.',
+    desc: 'Ranked standings, experience, streaks, and match history.',
     tone: 'gold',
   },
   {
     key: 'missions',
     title: 'Missions',
     label: 'MS',
-    desc: 'Complete roster goals to unlock characters and earn cursed coins.',
+    desc: 'Unlock characters and earn cursed coins.',
     tone: 'red',
   },
   {
     key: 'clans',
     title: 'Clans',
     label: 'CL',
-    desc: 'Community houses support identity, recruitment, and future clan ladder systems.',
+    desc: 'Join or create a clan and compete on the clan ladder.',
     tone: 'gold',
   },
 ]
@@ -64,9 +64,6 @@ export function ManualPage() {
         <h1 className="ca-display mt-1 text-[1.85rem] leading-none tracking-[0.05em] text-ca-text">
           Game Manual
         </h1>
-        <p className="mt-1.5 max-w-2xl text-sm leading-[1.65] text-ca-text-2">
-          A compact guide to Cursed-Arena's 3v3 flow: character files, skill classes, energy costs, missions, ladders, and community systems.
-        </p>
       </div>
 
       {/* Manual Index */}
