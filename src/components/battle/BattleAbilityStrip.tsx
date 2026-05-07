@@ -7,6 +7,7 @@ import { getAbilityEnergyCost } from '@/features/battle/energy'
 import { hasStatus } from '@/features/battle/statuses'
 import { getAbilityById } from '@/features/battle/engine'
 import type { BattleAbilityTemplate, BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattlePresentationMode } from '@/features/battle/presentationPreference'
 
 function SkillTile({
   ability,
@@ -144,6 +145,8 @@ export function BattleAbilityStrip({
   interactionLocked = false,
   timelineRole = null,
   timelineTone = null,
+  isActiveSide = true,
+  presentationMode = 'standard',
   onActorClick,
   onAbilityClick,
   onHoverAbility,
@@ -163,6 +166,9 @@ export function BattleAbilityStrip({
   interactionLocked?: boolean
   timelineRole?: 'actor' | 'target' | null
   timelineTone?: 'red' | 'teal' | 'gold' | 'frost' | null
+  /** Whether the player side is currently the active/commanding side. */
+  isActiveSide?: boolean
+  presentationMode?: BattlePresentationMode
   onActorClick?: () => void
   onAbilityClick?: (abilityId: string) => void
   onHoverAbility?: (abilityId: string) => void
@@ -181,7 +187,7 @@ export function BattleAbilityStrip({
           : null
 
   return (
-    <div className="relative flex items-start gap-2 sm:gap-2.5">
+    <div className={cn('relative flex items-start gap-2 sm:gap-2.5 transition-opacity duration-[350ms]', !isActiveSide && 'opacity-70')}>
       <div className="relative z-10 shrink-0 pt-0.5">
         <BattlePortraitSlot
           fighter={fighter}
@@ -230,7 +236,26 @@ export function BattleAbilityStrip({
           </div>
 
           <div className="relative flex min-w-0 items-center gap-1.5 px-1.5 py-1.5 sm:gap-2 sm:px-2">
-            <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+            {/* Queued-action slot: visible and expanded only on the active side */}
+            <div className={cn(
+              'shrink-0 overflow-hidden',
+              presentationMode === 'standard'
+                ? 'transition-[width,opacity] duration-[350ms]'
+                : 'transition-none',
+              isActiveSide
+                ? 'w-[3.2rem] opacity-100 sm:w-[3.9rem] xl:w-[4.65rem]'
+                : 'w-0 opacity-0',
+            )}>
+              <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
+            </div>
+
+            {/* Divider between queued slot and skill tiles — only visible when active */}
+            {isActiveSide ? (
+              <div className={cn(
+                'h-8 w-px shrink-0 bg-white/10',
+                presentationMode === 'standard' ? 'transition-opacity duration-200' : 'transition-none',
+              )} />
+            ) : null}
 
             {abilities.map((ability) => {
               const lockReason = interactionLocked

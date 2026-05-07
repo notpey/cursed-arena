@@ -4,11 +4,12 @@ import { battleRosterById } from '@/features/battle/data'
 import {
   UNLOCK_MISSION_DEFS,
   STARTER_FIGHTER_IDS,
-  getAllUnlockMissionProgress,
   getObjectiveGoalLine,
   type UnlockMissionDef,
   type UnlockMissionProgress,
 } from '@/features/missions/unlocks'
+import { useAuth } from '@/features/auth/useAuth'
+import { useEffectiveMissionProgress } from '@/features/missions/missionProgressStore'
 
 // ── Shared ────────────────────────────────────────────────────────────────────
 
@@ -439,7 +440,8 @@ function DetailView({
 
 export function MissionsPage() {
   const [view, setView] = useState<View>({ level: 'index' })
-  const allProgress = useMemo(() => getAllUnlockMissionProgress(), [])
+  const { user } = useAuth()
+  const allProgress = useEffectiveMissionProgress(user)
 
   const sections = useMemo<SectionSummary[]>(() => {
     const map = new Map<string, UnlockMissionDef[]>()

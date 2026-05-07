@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
@@ -9,7 +9,6 @@ import type { BattlePrepRosterEntry } from '@/features/battle/prep'
 import type { MissionWithProgress } from '@/features/missions/store'
 import type { MatchHistoryEntry } from '@/features/battle/matches'
 import { formatMatchTimestamp, getModeLabel } from '@/features/battle/matches'
-import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import yujiRender from '@/assets/renders/Yuji_Itadori_Cursed_Clash.webp'
 import megumiRender from '@/assets/renders/Megumi_Fushiguro_Cursed_Clash.webp'
 import nobaraRender from '@/assets/renders/Nobara_Kugisaki_Cursed_Clash.webp'
@@ -27,8 +26,6 @@ import maiRender from '@/assets/renders/Mai_Zenin_Cursed_Clash.webp'
 import noritoshiRender from '@/assets/renders/Noritoshi_Kamo_Cursed_Clash.webp'
 import mechamaruRender from '@/assets/renders/Mechamaru_Ultimate_29.webp'
 
-export { homeBgBase }
-export { battlePrepRoster, battlePrepRosterById } from '@/features/battle/prep'
 
 const fighterRenderMap: Record<string, string> = {
   yuji: yujiRender,
@@ -56,7 +53,7 @@ const rarityTone: Record<string, { border: string; wash: string; text: string }>
   UR: { border: 'rgba(245,166,35,0.42)', wash: 'rgba(245,166,35,0.12)', text: 'var(--warning)' },
 }
 
-export function getFighterRenderSrc(entry: BattlePrepRosterEntry | { id: string; battleTemplate?: { boardPortraitSrc?: string } }) {
+function getFighterRenderSrc(entry: BattlePrepRosterEntry | { id: string; battleTemplate?: { boardPortraitSrc?: string } }) {
   return fighterRenderMap[entry.id] ?? normalizeBattleAssetSrc(entry.battleTemplate?.boardPortraitSrc)
 }
 
@@ -387,10 +384,6 @@ export function ReadoutTile({ label, value }: { label: string; value: string | n
       <p className="ca-display mt-1 truncate text-[1.25rem] leading-none text-ca-text">{value}</p>
     </div>
   )
-}
-
-export function siteArtBackgroundStyle(image = homeBgBase): CSSProperties {
-  return { backgroundImage: `url(${image})` }
 }
 
 // ─── Naruto-Arena-style site primitives ──────────────────────────────────────

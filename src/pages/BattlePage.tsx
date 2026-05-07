@@ -23,7 +23,8 @@ import {
 } from '@/features/battle/matches'
 import { settleMatchExperience } from '@/features/ranking/client'
 import { fetchMatchHistoryEntryForPlayer, surrenderMatch } from '@/features/multiplayer/client'
-import { readStagedBattleLaunch } from '@/features/battle/prep'
+import { buildPrepRosterEntries, readStagedBattleLaunch } from '@/features/battle/prep'
+import { getCurrentBattleContent } from '@/features/battle/contentStore'
 import { usePlayerState } from '@/features/player/store'
 import { useAuth } from '@/features/auth/useAuth'
 import { fetchMyClan } from '@/features/clans/client'
@@ -56,6 +57,8 @@ import {
   useMultiplayerMatch,
   buildTimeoutCommands,
 } from '@/features/multiplayer/useMultiplayerMatch'
+import { resolveAbilityName } from '@/features/battle/presentation'
+import { readPresentationMode, togglePresentationMode, type BattlePresentationMode } from '@/features/battle/presentationPreference'
 
 type BattleViewState = {
   state: BattleState
@@ -86,105 +89,11 @@ type PracticeTurnLogEntry = {
   tone: 'red' | 'teal' | 'gold' | 'frost'
 }
 
-const timelineEventPriority: BattleRuntimeEvent['type'][] = [
-  'fighter_defeated',
-  'damage_applied',
-  'heal_applied',
-  'status_applied',
-  'modifier_applied',
-  'modifier_removed',
-  'resource_changed',
-  'ability_used',
-  'round_ended',
-  'round_started',
-]
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 }
 
-function createTimelineFocus(step: BattleTimelineStep): BattleTimelineFocus | null {
-  const runtime = timelineEventPriority
-    .map((type) => step.runtimeEvents.find((event) => event.type === type))
-    .find(Boolean)
-
-  if (runtime) {
-    switch (runtime.type) {
-      case 'damage_applied':
-        return {
-          actorId: runtime.actorId ?? (runtime.packet?.kind === 'damage' ? runtime.packet.sourceActorId : undefined),
-          targetId: runtime.targetId,
-          label: `${runtime.amount ?? (runtime.packet?.kind === 'damage' ? runtime.packet.amount : 0)} DAMAGE`,
-          tone: 'red',
-        }
-      case 'heal_applied':
-        return {
-          actorId: runtime.actorId ?? (runtime.packet?.kind === 'heal' ? runtime.packet.sourceActorId : undefined),
-          targetId: runtime.targetId,
-          label: `${runtime.amount ?? (runtime.packet?.kind === 'heal' ? runtime.packet.amount : 0)} HEAL`,
-          tone: 'teal',
-        }
-      case 'fighter_defeated':
-        return {
-          actorId: runtime.actorId,
-          targetId: runtime.targetId,
-          label: 'FIGHTER DEFEATED',
-          tone: 'red',
-        }
-      case 'status_applied':
-      case 'modifier_applied':
-        return {
-          actorId: runtime.actorId,
-          targetId: runtime.targetId,
-          label: String(runtime.meta?.status ?? 'STATUS').replace(/_/g, ' ').toUpperCase(),
-          tone: runtime.tags?.includes('burn') || runtime.tags?.includes('mark') ? 'red' : 'gold',
-        }
-      case 'modifier_removed':
-        return {
-          actorId: runtime.actorId,
-          targetId: runtime.targetId,
-          label: 'STATUS CLEARED',
-          tone: 'frost',
-        }
-      case 'resource_changed':
-        return {
-          actorId: runtime.actorId,
-          targetId: runtime.targetId,
-          label: runtime.packet?.kind === 'resource' && runtime.packet.mode === 'spend' ? 'ENERGY SPENT' : 'ENERGY SHIFT',
-          tone: 'gold',
-        }
-      case 'ability_used':
-        return {
-          actorId: runtime.actorId,
-          targetId: runtime.targetId,
-          label: 'TECHNIQUE RELEASED',
-          tone: runtime.team === 'enemy' ? 'red' : 'teal',
-        }
-      case 'round_ended':
-        return {
-          label: 'ROUND END',
-          tone: 'frost',
-        }
-      case 'round_started':
-        return {
-          label: `ROUND ${step.state.round}`,
-          tone: 'frost',
-        }
-      default:
-        break
-    }
-  }
-
-  const lastEvent = step.events[step.events.length - 1]
-  if (!lastEvent) return null
-
-  return {
-    actorId: lastEvent.actorId,
-    targetId: lastEvent.targetId,
-    label: lastEvent.message.toUpperCase(),
-    tone: lastEvent.tone,
-  }
-}
 
 function humanizeKey(value: string) {
   return value.replace(/[_-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
@@ -402,7 +311,11 @@ function getNextActorId(
 }
 
 function createNewBattle(): { viewState: BattleViewState; initialEvents: BattleEvent[] } {
-  let state = createInitialBattleState(readStagedBattleLaunch())
+  const currentContent = getCurrentBattleContent()
+  const currentRosterById = currentContent
+    ? Object.fromEntries(buildPrepRosterEntries(currentContent.roster).map((e) => [e.id, e]))
+    : undefined
+  let state = createInitialBattleState(readStagedBattleLaunch(currentRosterById))
   const initialEvents: BattleEvent[] = []
   const sessionAiEnabled = readStagedBattleSession()?.practiceOptions?.aiEnabled ?? true
 
@@ -555,8 +468,12 @@ function getInitials(value: string) {
 
 function UtilityRail({
   onSurrender,
+  presentationMode,
+  onTogglePresentationMode,
 }: {
   onSurrender: () => void
+  presentationMode: BattlePresentationMode
+  onTogglePresentationMode: () => void
 }) {
   return (
     <aside className="flex w-[10rem] shrink-0 flex-col gap-1.5 rounded-[0.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(20,18,30,0.96),rgba(10,8,18,0.98))] p-2 shadow-[0_12px_22px_rgba(0,0,0,0.34)]">
@@ -583,6 +500,25 @@ function UtilityRail({
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onTogglePresentationMode}
+        title={presentationMode === 'standard' ? 'Switch to minimal transitions' : 'Switch to standard transitions'}
+        className="rounded-[0.15rem] border border-white/8 bg-black/25 px-2.5 py-1.5 text-left transition hover:bg-black/40"
+      >
+        <div className="flex items-center justify-between gap-1">
+          <span className="ca-mono-label text-[0.52rem] text-ca-text-3">SPEED</span>
+          <span className={[
+            'ca-mono-label text-[0.48rem] rounded-[0.1rem] px-1 py-0.5',
+            presentationMode === 'minimal'
+              ? 'bg-ca-teal/15 text-ca-teal'
+              : 'bg-white/8 text-ca-text-2',
+          ].join(' ')}>
+            {presentationMode === 'minimal' ? 'FAST' : 'STD'}
+          </span>
+        </div>
+      </button>
     </aside>
   )
 }
@@ -739,6 +675,7 @@ export function BattlePage() {
   const [timelineLocked, setTimelineLocked] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
   const [boardRevealKey, setBoardRevealKey] = useState(0)
+  const [presentationMode, setPresentationMode] = useState<BattlePresentationMode>(() => readPresentationMode())
   const [isDocumentVisible, setIsDocumentVisible] = useState(
     () => typeof document === 'undefined' || document.visibilityState === 'visible',
   )
@@ -814,6 +751,8 @@ export function BattlePage() {
   const commandableUnits = getCommandablePlayerUnits(battle.state)
   const hasPendingTargetSelection = Boolean(selectedAbilityId)
   const commitReady = commandableUnits.length > 0 && !hasPendingTargetSelection && !timelineLocked
+  // Player side is "active" when it is their command window (not resolving, not enemy turn).
+  const playerIsActiveSide = commandableUnits.length > 0 && !timelineLocked
   const targetingAllies = selectedAbility?.targetRule === 'ally-single'
   const targetingEnemies = selectedAbility?.targetRule === 'enemy-single'
   const hoveredActor = hoveredAbility ? getFighterById(battle.state, hoveredAbility.actorId) : null
@@ -908,6 +847,8 @@ export function BattlePage() {
 
     setBattle((current) => ({ ...current, queued: {}, selectedActorId: null }))
 
+    // Append all events to the battle log and practice turn log up-front so
+    // they are available immediately (log panel is not animated per-frame).
     const events = steps.flatMap((step) => step.events)
     if (events.length > 0) {
       setBattleLog((current) => [...current, ...events].slice(-36))
@@ -919,20 +860,51 @@ export function BattlePage() {
       }
     }
 
-    for (const step of steps) {
-      if (timelineRunRef.current !== runId) return false
+    const lastStep = steps[steps.length - 1]
 
-      const focus = createTimelineFocus(step) ?? { label: 'RESOLVING', tone: 'frost' as const }
-      setBattle((current) => ({ ...current, state: step.state }))
-      setTimelineFocus(focus)
-      await wait(260)
+    const mode = readPresentationMode()
+
+    // Standard mode: for each action step, show the banner, then commit that
+    // step's state so HP changes and new pips appear before the next action.
+    // Minimal mode: skip straight to a single final commit.
+    if (mode === 'standard') {
+      for (const step of steps) {
+        if (timelineRunRef.current !== runId) return false
+
+        if (step.kind === 'action' && step.actorId) {
+          const actionName = resolveAbilityName(step)
+          if (actionName) {
+            const tone = step.team === 'enemy' ? 'red' : 'teal'
+            setTimelineFocus({
+              actorId: step.actorId,
+              targetId: step.targetId,
+              label: actionName.toUpperCase(),
+              tone,
+            })
+            await wait(500)
+            if (timelineRunRef.current !== runId) return false
+            setTimelineFocus(null)
+          }
+        }
+
+        // Commit this step's state so HP, pips, and statuses update before
+        // the next banner fires.
+        setBattle((current) => ({ ...current, state: step.state }))
+        await wait(120)
+      }
     }
 
     if (timelineRunRef.current !== runId) return false
 
+    // Commit the final resolved state (always — covers minimal mode and any
+    // non-action steps that weren't individually committed above).
+    if (lastStep?.state) {
+      setBattle((current) => ({ ...current, state: lastStep.state }))
+    }
     setTimelineFocus(null)
     return true
   }, [isPracticeBattle])
+
 
   useEffect(() => {
     if (!multiplayer || !multiplayerBattleState || !multiplayerAutoCommands || !multiplayerLatestResolution) return
@@ -1117,6 +1089,11 @@ export function BattlePage() {
   function clearPendingSelection() {
     setSelectedAbilityId(null)
     setSelectedTargetId(null)
+  }
+
+  function handleTogglePresentationMode() {
+    const next = togglePresentationMode()
+    setPresentationMode(next)
   }
 
   function resetSelection(actorId: string | null, queued = battle.queued) {
@@ -1515,10 +1492,16 @@ export function BattlePage() {
               getPlayerAbilityBlockReason={(fighter, abilityId) => getQueueAbilityBlockReason(battle.state, battle.queued, fighter, abilityId)}
               interactionLocked={timelineLocked}
               timelineFocus={timelineFocus}
+              playerIsActiveSide={playerIsActiveSide}
+              presentationMode={presentationMode}
             />
 
             <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
-              <UtilityRail onSurrender={handleSurrender} />
+              <UtilityRail
+                onSurrender={handleSurrender}
+                presentationMode={presentationMode}
+                onTogglePresentationMode={handleTogglePresentationMode}
+              />
               <BattleInfoPanel state={battle.state} queued={battle.queued} actor={inspectedActor} ability={inspectedAbility} />
             </div>
           </div>

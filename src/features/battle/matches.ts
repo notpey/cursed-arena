@@ -3,7 +3,8 @@ import { createBattleSeed, pickSeededIndex } from '@/features/battle/random'
 import type { BattleWinner } from '@/features/battle/types'
 import { readPlayerProfile } from '@/features/player/store'
 import { trackBattleCompleted } from '@/features/missions/store'
-import { evaluateUnlockMissions } from '@/features/missions/unlocks'
+import { evaluateAndGetUnlockMissions } from '@/features/missions/unlocks'
+import { saveAccountMissionProgress } from '@/features/missions/missionProgressStore'
 import {
   syncBattleProfileToSupabase,
   syncMatchHistoryEntryToSupabase,
@@ -779,12 +780,14 @@ export function recordCompletedBattle({
     const tracked = trackBattleCompleted(activeSession.mode, won)
     lastResult.coinsEarned = tracked.coinsEarned
     lastResult.newlyCompletedQuestIds = tracked.newlyCompletedQuestIds
-    lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
+    const { newlyCompletedIds, updatedProgress } = evaluateAndGetUnlockMissions({
       won,
       teamIds: playerTeamIds,
       experienceAfter: nextStats.experience,
       currentStreak: nextStats.currentStreak,
     })
+    lastResult.newlyUnlockedMissionIds = newlyCompletedIds
+    void saveAccountMissionProgress(updatedProgress)
   }
 
   writeLocalStorage(lastBattleResultKey, lastResult)
@@ -926,12 +929,14 @@ export function recordOnlineCompletedBattle({
     const tracked = trackBattleCompleted(mode, won)
     lastResult.coinsEarned = tracked.coinsEarned
     lastResult.newlyCompletedQuestIds = tracked.newlyCompletedQuestIds
-    lastResult.newlyUnlockedMissionIds = evaluateUnlockMissions({
+    const { newlyCompletedIds, updatedProgress } = evaluateAndGetUnlockMissions({
       won,
       teamIds: playerTeamIds,
       experienceAfter: nextStats.experience,
       currentStreak: nextStats.currentStreak,
     })
+    lastResult.newlyUnlockedMissionIds = newlyCompletedIds
+    void saveAccountMissionProgress(updatedProgress)
   }
 
   writeLocalStorage(lastBattleResultKey, lastResult)

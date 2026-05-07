@@ -160,13 +160,17 @@ export const battlePrepRosterById = Object.fromEntries(
 
 export const defaultPrepPlayerTeamIds = battlePrepRoster.slice(0, 3).map((entry) => entry.id)
 
-function sanitizeIds(ids: Array<string | null | undefined>, fallbackIds: string[]) {
-  const unique = ids.filter((value): value is string => Boolean(value && battlePrepRosterById[value]))
+function sanitizeIds(
+  ids: Array<string | null | undefined>,
+  fallbackIds: string[],
+  rosterById: Record<string, BattlePrepRosterEntry> = battlePrepRosterById,
+) {
+  const unique = ids.filter((value): value is string => Boolean(value && rosterById[value]))
     .filter((value, index, list) => list.indexOf(value) === index)
 
   for (const fallbackId of fallbackIds) {
     if (unique.length >= 3) break
-    if (!unique.includes(fallbackId) && battlePrepRosterById[fallbackId]) {
+    if (!unique.includes(fallbackId) && rosterById[fallbackId]) {
       unique.push(fallbackId)
     }
   }
@@ -174,27 +178,43 @@ function sanitizeIds(ids: Array<string | null | undefined>, fallbackIds: string[
   return unique.slice(0, 3)
 }
 
-export function sanitizePrepTeamIds(ids: Array<string | null | undefined>) {
-  return sanitizeIds(ids, defaultPrepPlayerTeamIds)
+export function sanitizePrepTeamIds(
+  ids: Array<string | null | undefined>,
+  rosterById?: Record<string, BattlePrepRosterEntry>,
+) {
+  return sanitizeIds(ids, defaultPrepPlayerTeamIds, rosterById)
 }
 
-function normalizePrepSelection(teamIds: Array<string | null | undefined>) {
+function normalizePrepSelection(
+  teamIds: Array<string | null | undefined>,
+  rosterById: Record<string, BattlePrepRosterEntry> = battlePrepRosterById,
+) {
   return Array.from({ length: 3 }, (_, index) => {
     const value = teamIds[index] ?? null
-    return value && battlePrepRosterById[value] ? value : null
+    return value && rosterById[value] ? value : null
   })
 }
 
-export function readPrepSelection() {
-  return normalizePrepSelection(readLocalStorage<Array<string | null | undefined>>(prepSelectionStorageKey, defaultPrepPlayerTeamIds))
+export function readPrepSelection(rosterById?: Record<string, BattlePrepRosterEntry>) {
+  return normalizePrepSelection(
+    readLocalStorage<Array<string | null | undefined>>(prepSelectionStorageKey, defaultPrepPlayerTeamIds),
+    rosterById,
+  )
 }
 
-export function persistPrepSelection(teamIds: Array<string | null | undefined>) {
-  writeLocalStorage(prepSelectionStorageKey, normalizePrepSelection(teamIds))
+export function persistPrepSelection(
+  teamIds: Array<string | null | undefined>,
+  rosterById?: Record<string, BattlePrepRosterEntry>,
+) {
+  writeLocalStorage(prepSelectionStorageKey, normalizePrepSelection(teamIds, rosterById))
 }
 
-export function createBattleLaunchSetup(playerTeamIds: Array<string | null | undefined>, mode: BattleMatchMode = readSelectedMatchMode()): BattleLaunchSetup {
-  const sanitized = sanitizePrepTeamIds(playerTeamIds)
+export function createBattleLaunchSetup(
+  playerTeamIds: Array<string | null | undefined>,
+  mode: BattleMatchMode = readSelectedMatchMode(),
+  rosterById?: Record<string, BattlePrepRosterEntry>,
+): BattleLaunchSetup {
+  const sanitized = sanitizePrepTeamIds(playerTeamIds, rosterById)
   const session = createStagedBattleSession(mode, sanitized)
 
   return {
@@ -204,10 +224,14 @@ export function createBattleLaunchSetup(playerTeamIds: Array<string | null | und
   }
 }
 
-export function stageBattleLaunch(playerTeamIds: Array<string | null | undefined>, mode: BattleMatchMode) {
-  const sanitized = sanitizePrepTeamIds(playerTeamIds)
+export function stageBattleLaunch(
+  playerTeamIds: Array<string | null | undefined>,
+  mode: BattleMatchMode,
+  rosterById?: Record<string, BattlePrepRosterEntry>,
+) {
+  const sanitized = sanitizePrepTeamIds(playerTeamIds, rosterById)
   const session = createStagedBattleSession(mode, sanitized)
-  persistPrepSelection(session.playerTeamIds)
+  persistPrepSelection(session.playerTeamIds, rosterById)
   persistSelectedMatchMode(mode)
   persistStagedBattleSession(session)
   return {
@@ -217,17 +241,17 @@ export function stageBattleLaunch(playerTeamIds: Array<string | null | undefined
   }
 }
 
-export function readStagedBattleLaunch() {
+export function readStagedBattleLaunch(rosterById?: Record<string, BattlePrepRosterEntry>) {
   const session = readStagedBattleSession()
   if (session) {
     return {
-      playerTeamIds: sanitizePrepTeamIds(session.playerTeamIds),
+      playerTeamIds: sanitizePrepTeamIds(session.playerTeamIds, rosterById),
       enemyTeamIds: (session.enemyTeamIds.length ? session.enemyTeamIds : defaultBattleSetup.enemyTeamIds).slice(),
       battleSeed: session.battleSeed,
     }
   }
 
-  return createBattleLaunchSetup(readPrepSelection())
+  return createBattleLaunchSetup(readPrepSelection(rosterById), readSelectedMatchMode(), rosterById)
 }
 
 function createSavedTeamName(teamIds: string[]) {
@@ -236,22 +260,26 @@ function createSavedTeamName(teamIds: string[]) {
     .join(' / ')
 }
 
-export function readSavedPrepTeams() {
+export function readSavedPrepTeams(rosterById?: Record<string, BattlePrepRosterEntry>) {
   const saved = readLocalStorage<SavedPrepTeam[]>(savedTeamsStorageKey, [])
   return saved
     .map((team) => ({
       ...team,
-      teamIds: sanitizePrepTeamIds(team.teamIds),
+      teamIds: sanitizePrepTeamIds(team.teamIds, rosterById),
     }))
     .filter((team) => team.teamIds.length === 3)
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, maxSavedTeams)
 }
 
-export function savePrepTeam(teamIds: Array<string | null | undefined>, customName?: string) {
-  const sanitized = sanitizePrepTeamIds(teamIds)
+export function savePrepTeam(
+  teamIds: Array<string | null | undefined>,
+  customName?: string,
+  rosterById?: Record<string, BattlePrepRosterEntry>,
+) {
+  const sanitized = sanitizePrepTeamIds(teamIds, rosterById)
   const name = customName?.trim() || createSavedTeamName(sanitized)
-  const current = readSavedPrepTeams().filter((team) => team.name !== name)
+  const current = readSavedPrepTeams(rosterById).filter((team) => team.name !== name)
   const next: SavedPrepTeam[] = [
     {
       id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
@@ -266,8 +294,8 @@ export function savePrepTeam(teamIds: Array<string | null | undefined>, customNa
   return next
 }
 
-export function deleteSavedPrepTeam(teamId: string) {
-  const next = readSavedPrepTeams().filter((team) => team.id !== teamId)
+export function deleteSavedPrepTeam(teamId: string, rosterById?: Record<string, BattlePrepRosterEntry>) {
+  const next = readSavedPrepTeams(rosterById).filter((team) => team.id !== teamId)
   writeLocalStorage(savedTeamsStorageKey, next)
   return next
 }

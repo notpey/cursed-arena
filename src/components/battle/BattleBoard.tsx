@@ -3,6 +3,7 @@ import { BattleAbilityStrip } from '@/components/battle/BattleAbilityStrip'
 import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { setActiveBattleStateForPips } from '@/components/battle/battleDisplay'
 import type { BattleAbilityTemplate, BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
+import type { BattlePresentationMode } from '@/features/battle/presentationPreference'
 
 type TimelineFocus = {
   actorId?: string
@@ -30,6 +31,8 @@ export function BattleBoard({
   getPlayerAbilityBlockReason,
   interactionLocked = false,
   timelineFocus = null,
+  playerIsActiveSide = true,
+  presentationMode = 'standard',
 }: {
   state: BattleState
   queued: Record<string, QueuedBattleAction>
@@ -49,6 +52,9 @@ export function BattleBoard({
   getPlayerAbilityBlockReason: (fighter: BattleFighterState, abilityId: string) => string | null
   interactionLocked?: boolean
   timelineFocus?: TimelineFocus | null
+  /** Whether the player side is currently the active/commanding side. */
+  playerIsActiveSide?: boolean
+  presentationMode?: BattlePresentationMode
 }) {
   useEffect(() => {
     setActiveBattleStateForPips(state)
@@ -123,6 +129,8 @@ export function BattleBoard({
                   interactionLocked={interactionLocked}
                   timelineRole={allyTimelineRole}
                   timelineTone={timelineFocus?.tone ?? null}
+                  isActiveSide={playerIsActiveSide}
+                  presentationMode={presentationMode}
                   onActorClick={() => {
                     if (interactionLocked) return
                     if (allyTargetable) {

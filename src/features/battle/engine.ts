@@ -290,6 +290,44 @@ function targetHasRequiredTags(state: BattleState, target: BattleFighterState, a
   return requiredTags.every((tag) => getFighterModifierPool(state, target).some((modifier) => modifier.tags.includes(tag)))
 }
 
+/**
+ * Returns true if the ability has at least one damage/shieldDamage effect that
+ * explicitly carries ignoresInvulnerability, meaning it can hit invulnerable targets.
+ */
+function abilityIgnoresInvulnerability(ability: BattleAbilityTemplate): boolean {
+  return (ability.effects ?? []).some((effect) =>
+    (effect.type === 'damage'
+      || effect.type === 'damageFiltered'
+      || effect.type === 'damageScaledByCounter'
+      || effect.type === 'damageEqualToActorShield')
+    && effect.ignoresInvulnerability === true,
+  )
+}
+
+/**
+ * Whether an invulnerable enemy fighter is a valid target for the given ability.
+ * Harmful abilities cannot target invulnerable fighters unless the ability explicitly
+ * bypasses invulnerability. Helpful/neutral abilities may still target them.
+ */
+export function canAbilityTargetFighter(
+  state: BattleState,
+  ability: BattleAbilityTemplate,
+  target: BattleFighterState,
+): boolean {
+  const targetIsInvulnerable = hasBooleanModifierValue(
+    target.modifiers,
+    'isInvulnerable',
+    true,
+    { statusKind: 'invincible' },
+  )
+
+  if (targetIsInvulnerable && isHarmfulAbility(ability) && !abilityIgnoresInvulnerability(ability)) {
+    return false
+  }
+
+  return targetHasRequiredTags(state, target, ability)
+}
+
 
 function runPreDamageReactionWindow(
   state: BattleState,
@@ -786,13 +824,13 @@ export function getValidTargetIds(state: BattleState, actorId: string, abilityId
     case 'self':
       return [actor.instanceId]
     case 'enemy-single':
-      return enemies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+      return enemies.filter((fighter) => canAbilityTargetFighter(state, ability, fighter)).map((fighter) => fighter.instanceId)
     case 'ally-single':
-      return allies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+      return allies.filter((fighter) => canAbilityTargetFighter(state, ability, fighter)).map((fighter) => fighter.instanceId)
     case 'enemy-all':
-      return enemies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+      return enemies.filter((fighter) => canAbilityTargetFighter(state, ability, fighter)).map((fighter) => fighter.instanceId)
     case 'ally-all':
-      return allies.filter((fighter) => targetHasRequiredTags(state, fighter, ability)).map((fighter) => fighter.instanceId)
+      return allies.filter((fighter) => canAbilityTargetFighter(state, ability, fighter)).map((fighter) => fighter.instanceId)
     default:
       return []
   }

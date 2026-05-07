@@ -25,8 +25,8 @@ const GameClientShell = lazy(async () => ({ default: (await import('@/components
 
 const routeFallback = (
   <div className="grid min-h-screen place-items-center bg-[color:var(--bg-void)] px-6 text-ca-text">
-    <div className="rounded-[10px] border border-white/10 bg-[rgba(18,18,26,0.92)] px-5 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.34)]">
-      <p className="ca-mono-label text-[0.62rem] text-ca-text-2">LOADING ROUTE</p>
+    <div className="rounded-[10px] border border-white/8 bg-[rgba(14,14,20,0.94)] px-5 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.34)]">
+      <p className="ca-mono-label text-[0.58rem] text-ca-text-3">CURSED ARENA</p>
     </div>
   </div>
 )

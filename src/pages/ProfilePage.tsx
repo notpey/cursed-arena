@@ -5,8 +5,9 @@ import {
   SitePanel,
   SitePanelHeader,
   SiteListRow,
-  battlePrepRosterById,
 } from '@/components/site/siteVisuals'
+import { useBattleRosterById } from '@/features/battle/contentStore'
+import type { BattlePrepRosterEntry } from '@/features/battle/prep'
 import {
   formatMatchTimestamp,
   getModeLabel,
@@ -215,6 +216,7 @@ export function ProfilePage() {
 }
 
 function MatchHistoryRow({ match }: { match: MatchHistoryEntry }) {
+  const rosterById = useBattleRosterById()
   const win = match.result === 'WIN'
 
   return (
@@ -236,9 +238,9 @@ function MatchHistoryRow({ match }: { match: MatchHistoryEntry }) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <TinyTeamRow ids={match.yourTeam} label="YOU" />
+        <TinyTeamRow ids={match.yourTeam} label="YOU" rosterById={rosterById} />
         <span className="ca-mono-label text-[0.38rem] text-ca-text-3">vs</span>
-        <TinyTeamRow ids={match.theirTeam} label="OPP" />
+        <TinyTeamRow ids={match.theirTeam} label="OPP" rosterById={rosterById} />
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-3">
@@ -253,13 +255,13 @@ function MatchHistoryRow({ match }: { match: MatchHistoryEntry }) {
   )
 }
 
-function TinyTeamRow({ ids, label }: { ids: string[]; label: string }) {
+function TinyTeamRow({ ids, label, rosterById }: { ids: string[]; label: string; rosterById: Record<string, BattlePrepRosterEntry> }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</span>
       <div className="flex items-center gap-1">
         {ids.map((id) => {
-          const entry = battlePrepRosterById[id]
+          const entry = rosterById[id]
           return (
             <div key={`${label}-${id}`} className="h-6 w-6 overflow-hidden rounded-[3px]">
               <CharacterFacePortrait

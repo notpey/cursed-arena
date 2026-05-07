@@ -3,20 +3,16 @@ import { getSupabaseClient } from '@/lib/supabase'
 import { Link } from 'react-router-dom'
 import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
 import { LiveOpsPanel } from '@/pages/admin/LiveOpsPanel'
-import {
-  authoredBattleContent,
-  battleRoster,
-  defaultBattleSetup,
-} from '@/features/battle/data'
+import { authoredBattleContent } from '@/features/battle/data'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { validateImageUrl } from '@/features/images/imageUrl'
 import {
   clearDraftBattleContent,
-  createContentSnapshot,
   publishBattleContent,
   readDraftBattleContent,
   resetPublishedBattleContent,
   saveDraftBattleContent,
+  useBattleContent,
   type BattleContentSnapshot,
 } from '@/features/battle/contentStore'
 import { battleEnergyMeta, battleEnergyOrder, randomEnergyMeta, getAbilityEnergyCost } from '@/features/battle/energy'
@@ -134,10 +130,6 @@ const passiveBlueprintOptions: Array<{ id: PassiveBlueprintId; label: string; hi
   { id: 'execute-drive', label: 'Execute Drive', hint: 'Extra damage when enemies are low.' },
   { id: 'tempo-engine', label: 'Tempo Engine', hint: 'Self cooldown acceleration while alive.' },
 ]
-const liveContent = createContentSnapshot(battleRoster, {
-  playerTeamIds: defaultBattleSetup.playerTeamIds,
-  enemyTeamIds: defaultBattleSetup.enemyTeamIds,
-})
 
 const adminSelectionStorageKey = 'ca-admin-selection-v1'
 
@@ -780,15 +772,99 @@ function sanitizeDefaultSetup(snapshot: BattleContentSnapshot) {
   snapshot.defaultSetup.enemyTeamIds = fillTeam(snapshot.defaultSetup.enemyTeamIds)
 }
 
+function useAdminBattleContentState() {
+  const publishedContent = useBattleContent()
+  const liveContent = publishedContent ?? authoredBattleContent
+  const [draft, setDraft] = useState<BattleContentSnapshot>(() => readDraftBattleContent(liveContent))
+  const draftRef = useRef(draft)
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      saveDraftBattleContent(draft)
+    }, 250)
+    return () => window.clearTimeout(timeout)
+  }, [draft])
+
+  const validationReport = useMemo(
+    () => validateBattleContent(draft.roster, draft.defaultSetup),
+    [draft],
+  )
+  const liveMatchesDraft = useMemo(
+    () => JSON.stringify(liveContent) === JSON.stringify(draft),
+    [draft, liveContent],
+  )
+
+  function updateDraft(mutator: (next: BattleContentSnapshot) => void) {
+    setDraft((current) => {
+      const next = cloneSnapshot(current)
+      mutator(next)
+      next.updatedAt = Date.now()
+      return next
+    })
+  }
+
+  function saveDraft() {
+    const saved = saveDraftBattleContent(draft)
+    setDraft(saved)
+    return saved
+  }
+
+  function resetDraft() {
+    clearDraftBattleContent()
+    const next = cloneSnapshot(liveContent)
+    setDraft(next)
+    return next
+  }
+
+  function restoreAuthored() {
+    clearDraftBattleContent()
+    const next = cloneSnapshot(authoredBattleContent)
+    setDraft(next)
+    return next
+  }
+
+  function replaceDraft(snapshot: BattleContentSnapshot) {
+    const next = cloneSnapshot(snapshot)
+    setDraft(next)
+    return next
+  }
+
+  return {
+    draft,
+    draftRef,
+    updateDraft,
+    validationReport,
+    liveMatchesDraft,
+    saveDraft,
+    resetDraft,
+    restoreAuthored,
+    replaceDraft,
+  }
+}
+
 export function AdminControlPanelPage() {
   const [studioSection, setStudioSection] = useState<StudioSection>('liveops')
-  const [draft, setDraft] = useState<BattleContentSnapshot>(() => readDraftBattleContent(liveContent))
+  const {
+    draft,
+    draftRef,
+    updateDraft,
+    validationReport,
+    liveMatchesDraft,
+    saveDraft,
+    resetDraft,
+    restoreAuthored,
+    replaceDraft,
+  } = useAdminBattleContentState()
   const [selectedFighterId, setSelectedFighterId] = useState(() => {
     const saved = readAdminSelection()
-    if (saved && liveContent.roster.some((fighter) => fighter.id === saved.fighterId)) {
+    if (saved && draft.roster.some((fighter) => fighter.id === saved.fighterId)) {
       return saved.fighterId
     }
-    return liveContent.roster[0]?.id ?? ''
+    return draft.roster[0]?.id ?? ''
   })
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(() => readAdminSelection()?.abilityId ?? null)
   const [selectedPassiveIndex, setSelectedPassiveIndex] = useState(() => readAdminSelection()?.passiveIndex ?? 0)
@@ -797,7 +873,6 @@ export function AdminControlPanelPage() {
   const [statusFlash, setStatusFlash] = useState<string | null>(null)
   const [isPublishing, setIsPublishing] = useState(false)
   const [fighterJsonDraft, setFighterJsonDraft] = useState('')
-  const draftRef = useRef(draft)
 
   const selectedFighter = draft.roster.find((fighter) => fighter.id === selectedFighterId) ?? draft.roster[0] ?? null
   const selectedAbilityIdResolved = selectedFighter
@@ -814,10 +889,6 @@ export function AdminControlPanelPage() {
   const selectedPassive = selectedFighter?.passiveEffects?.[selectedPassiveIndexResolved] ?? null
 
   useEffect(() => {
-    draftRef.current = draft
-  }, [draft])
-
-  useEffect(() => {
     if (!statusFlash) return
     const timeout = window.setTimeout(() => setStatusFlash(null), 1800)
     return () => window.clearTimeout(timeout)
@@ -830,13 +901,6 @@ export function AdminControlPanelPage() {
       passiveIndex: selectedPassiveIndex,
     })
   }, [selectedFighterId, selectedAbilityId, selectedPassiveIndex])
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      saveDraftBattleContent(draft)
-    }, 250)
-    return () => window.clearTimeout(timeout)
-  }, [draft])
 
   useEffect(() => {
     const persistCurrentState = () => {
@@ -860,13 +924,8 @@ export function AdminControlPanelPage() {
       window.removeEventListener('beforeunload', persistCurrentState)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [selectedAbilityId, selectedFighterId, selectedPassiveIndex])
+  }, [draftRef, selectedAbilityId, selectedFighterId, selectedPassiveIndex])
 
-  const validationReport = useMemo(
-    () => validateBattleContent(draft.roster, draft.defaultSetup),
-    [draft],
-  )
-  const liveMatchesDraft = JSON.stringify(liveContent) === JSON.stringify(draft)
   const visibleRoster = useMemo(() => {
     const query = fighterSearch.trim().toLowerCase()
     if (!query) return draft.roster
@@ -876,15 +935,6 @@ export function AdminControlPanelPage() {
       || fighter.id.toLowerCase().includes(query),
     )
   }, [draft.roster, fighterSearch])
-
-  function updateDraft(mutator: (next: BattleContentSnapshot) => void) {
-    setDraft((current) => {
-      const next = cloneSnapshot(current)
-      mutator(next)
-      next.updatedAt = Date.now()
-      return next
-    })
-  }
 
   function updateSelectedFighter(mutator: (fighter: BattleFighterTemplate) => void) {
     if (!selectedFighter) return
@@ -1111,20 +1161,17 @@ export function AdminControlPanelPage() {
   }
 
   function handleSaveDraft() {
-    const saved = saveDraftBattleContent(draft)
-    setDraft(saved)
+    saveDraft()
     setStatusFlash('DRAFT SAVED')
   }
 
   function handleResetDraft() {
-    clearDraftBattleContent()
-    setDraft(cloneSnapshot(liveContent))
+    resetDraft()
     setStatusFlash('DRAFT RESET')
   }
 
   function handleRestoreAuthored() {
-    clearDraftBattleContent()
-    setDraft(cloneSnapshot(authoredBattleContent))
+    restoreAuthored()
     setStatusFlash('AUTHORED RESTORED')
   }
 
@@ -1179,8 +1226,8 @@ export function AdminControlPanelPage() {
         setStatusFlash('SUPABASE REQUIRED FOR LIVE PUBLISH')
         return
       }
+      replaceDraft(result.snapshot)
       setStatusFlash('PUBLISHED LIVE')
-      window.location.reload()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown publish error.'
       console.warn('[ACP] Publish failed:', message)
@@ -1191,9 +1238,9 @@ export function AdminControlPanelPage() {
   }
 
   async function handleRevertPublished() {
-    await resetPublishedBattleContent(authoredBattleContent)
-    setDraft(cloneSnapshot(authoredBattleContent))
-    window.location.reload()
+    const reverted = await resetPublishedBattleContent(authoredBattleContent)
+    replaceDraft(reverted)
+    setStatusFlash('LIVE REVERTED')
   }
 
   const skillSections: SelectedSection[] = ['skill-0', 'skill-1', 'skill-2', 'ultimate']
@@ -1752,7 +1799,7 @@ function CharacterInspectorPanel({
     { id: 'skill-1', label: 'Skill 2' },
     { id: 'skill-2', label: 'Skill 3' },
     { id: 'ultimate', label: 'Ultimate' },
-    { id: 'assets', label: 'Pictures' },
+    { id: 'assets', label: 'Assets' },
     { id: 'qa', label: 'QA' },
     { id: 'advanced', label: 'Advanced' },
   ]
@@ -1810,7 +1857,7 @@ function CharacterInspectorPanel({
         {/* Assets */}
         {selectedSection === 'assets' ? (
           <div className="space-y-3">
-            <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Pictures</p>
+            <p className="ca-mono-label text-[0.44rem] text-ca-text-3">Assets</p>
             <FacePortraitAssetEditor
               fighter={fighter}
               onChange={(value) => onUpdateFighter((f) => { f.facePortrait = value || undefined })}

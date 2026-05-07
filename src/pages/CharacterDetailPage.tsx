@@ -1,9 +1,16 @@
 import { Link, useParams } from 'react-router-dom'
 import { CharacterFacePortrait } from '@/components/characters/CharacterFacePortrait'
-import { battlePrepRosterById } from '@/components/site/siteVisuals'
+import { useBattleRosterById } from '@/features/battle/contentStore'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { getAbilityEnergyCost, battleEnergyMeta, randomEnergyMeta } from '@/features/battle/energy'
 import type { BattleAbilityTemplate } from '@/features/battle/types'
+import { useAuth } from '@/features/auth/useAuth'
+import {
+  useAdminUnlockOverrides,
+  getEffectiveCharacterUnlockState,
+} from '@/features/missions/effectiveUnlocks'
+import { getUnlockMissionForFighter, STARTER_FIGHTER_IDS } from '@/features/missions/unlocks'
+import { useEffectiveMissionProgress } from '@/features/missions/missionProgressStore'
 
 // ─── Energy pip display ───────────────────────────────────────────────────────
 
@@ -100,7 +107,11 @@ function SkillBlock({ ability, isUltimate }: { ability: BattleAbilityTemplate; i
 
 export function CharacterDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const battlePrepRosterById = useBattleRosterById()
   const entry = id ? battlePrepRosterById[id] : null
+  const { user } = useAuth()
+  const missionProgress = useEffectiveMissionProgress(user)
+  const adminOverrides = useAdminUnlockOverrides(user)
 
   if (!entry) {
     return (
@@ -118,7 +129,21 @@ export function CharacterDetailPage() {
   const ultimate = fighter.ultimate
   const allAbilities = [...allSkills, ultimate].filter(Boolean)
   const passives = fighter.passiveEffects ?? []
-  const unlockLabel = fighter.affiliationLabel || (entry.rarity === 'SSR' ? 'Mission required' : 'Available by default')
+  const unlockState = getEffectiveCharacterUnlockState(
+    [entry.id],
+    missionProgress,
+    adminOverrides,
+  )[entry.id]
+  const isStarter = STARTER_FIGHTER_IDS.includes(entry.id)
+  const missionDef = getUnlockMissionForFighter(entry.id)
+  const unlockLabel = (() => {
+    if (!unlockState) return 'Unknown'
+    if (unlockState.source === 'admin-grant') return 'Unlocked (admin override)'
+    if (unlockState.source === 'admin-revoke') return 'Locked (admin override)'
+    if (isStarter) return 'Available by default'
+    if (unlockState.unlocked) return missionDef ? `Unlocked — ${missionDef.name}` : 'Unlocked'
+    return missionDef ? `Mission required — ${missionDef.name}` : 'Mission required'
+  })()
 
   return (
     <div className="p-4 space-y-0">

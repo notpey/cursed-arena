@@ -71,7 +71,7 @@ function SectionHeading({ label, sub }: { label: string; sub?: string }) {
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
 
-function UsersTab() {
+function UsersTab({ onManageUnlocks }: { onManageUnlocks: (userId: string, displayName: string) => void }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ProfileRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -115,7 +115,7 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <SectionHeading label="Users" sub="Search by display name. Edit LP and view stats." />
+      <SectionHeading label="Users" sub="Search by display name. Edit LP, view stats, or jump to unlock management." />
       <div className="flex gap-2">
         <input
           type="text"
@@ -153,13 +153,22 @@ function UsersTab() {
                     <Pill label={`${row.win_streak ?? 0} streak`} tone="muted" />
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => { setEditingId(row.id); setLpEdit(String(row.lp ?? 0)) }}
-                  className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.38rem] text-ca-text-2"
-                >
-                  Edit LP
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onManageUnlocks(row.id, row.display_name ?? row.id)}
+                    className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.38rem] text-ca-text-2 hover:border-ca-teal/25 hover:text-ca-teal transition"
+                  >
+                    Unlocks →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingId(row.id); setLpEdit(String(row.lp ?? 0)) }}
+                    className="ca-mono-label rounded-md border border-white/10 bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5 text-[0.38rem] text-ca-text-2"
+                  >
+                    Edit LP
+                  </button>
+                </div>
               </div>
               {editingId === row.id ? (
                 <div className="mt-3 flex items-center gap-2">
@@ -440,9 +449,13 @@ function MissionsTab() {
 
 // ── Unlocks tab ───────────────────────────────────────────────────────────────
 
-function UnlocksTab() {
-  const [userId, setUserId] = useState('')
+function UnlocksTab({ prefillUserId, prefillDisplayName }: { prefillUserId?: string; prefillDisplayName?: string }) {
+  const [userId, setUserId] = useState(prefillUserId ?? '')
   const [missionId, setMissionId] = useState(UNLOCK_MISSION_DEFS[0]?.id ?? '')
+
+  useEffect(() => {
+    if (prefillUserId) void Promise.resolve().then(() => setUserId(prefillUserId))
+  }, [prefillUserId])
   const [flash, setFlash] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -489,12 +502,14 @@ function UnlocksTab() {
     <div className="space-y-4">
       <SectionHeading
         label="Unlock Overrides"
-        sub="Manually grant or revoke a fighter unlock for a specific user. Requires player_unlock_overrides table."
+        sub={prefillDisplayName ? `Managing unlocks for ${prefillDisplayName}` : 'Manually grant or revoke a fighter unlock for a specific user. Requires player_unlock_overrides table.'}
       />
 
       <div className="space-y-3 rounded-[10px] border border-white/8 bg-[rgba(255,255,255,0.02)] px-4 py-4">
         <div>
-          <label className="ca-mono-label block text-[0.42rem] text-ca-text-3 mb-1">USER ID (UUID)</label>
+          <label className="ca-mono-label block text-[0.42rem] text-ca-text-3 mb-1">
+            {prefillDisplayName ? `USER: ${prefillDisplayName}` : 'USER ID (UUID)'}
+          </label>
           <input
             type="text"
             value={userId}
@@ -576,7 +591,15 @@ const liveOpsTabs: Array<{ id: LiveOpsTab; label: string; hint: string }> = [
 
 export function LiveOpsPanel() {
   const [tab, setTab] = useState<LiveOpsTab>('users')
+  const [selectedUserId, setSelectedUserId] = useState<string | undefined>(undefined)
+  const [selectedDisplayName, setSelectedDisplayName] = useState<string | undefined>(undefined)
   const isConfigured = Boolean(getSupabaseClient())
+
+  function handleManageUnlocks(userId: string, displayName: string) {
+    setSelectedUserId(userId)
+    setSelectedDisplayName(displayName)
+    setTab('unlocks')
+  }
 
   return (
     <div className="space-y-4">
@@ -607,10 +630,10 @@ export function LiveOpsPanel() {
       </div>
 
       <section className="ca-card border-white/8 bg-[rgba(14,15,20,0.16)] p-4 sm:p-5">
-        {tab === 'users' && <UsersTab />}
+        {tab === 'users' && <UsersTab onManageUnlocks={handleManageUnlocks} />}
         {tab === 'matches' && <MatchesTab />}
         {tab === 'missions' && <MissionsTab />}
-        {tab === 'unlocks' && <UnlocksTab />}
+        {tab === 'unlocks' && <UnlocksTab prefillUserId={selectedUserId} prefillDisplayName={selectedDisplayName} />}
       </section>
     </div>
   )

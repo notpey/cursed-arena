@@ -1,4 +1,4 @@
-import type { BattleFighterTemplate } from '@/features/battle/types.ts'
+import type { BattleFighterTemplate, PassiveEffect } from '@/features/battle/types.ts'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets.ts'
 
 // Bump CONTENT_SCHEMA_VERSION whenever the authored roster shape changes in
@@ -282,4 +282,127 @@ export function savePublishedBattleContent(snapshot: BattleContentSnapshot) {
   next.schemaVersion = CONTENT_SCHEMA_VERSION
   writeStorage(publishedContentKey, next)
   return next
+}
+
+export function getPublishedBattleContentStorageKey(): string {
+  return publishedContentKey
+}
+
+const BATTLE_CONTENT_CHANGED_EVENT = 'battle-content-changed'
+
+export function notifyBattleContentChanged() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(BATTLE_CONTENT_CHANGED_EVENT))
+}
+
+export function subscribeToBattleContentChangeEvent(listener: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === publishedContentKey) listener()
+  }
+  const handleCustom = () => listener()
+
+  window.addEventListener('storage', handleStorage)
+  window.addEventListener(BATTLE_CONTENT_CHANGED_EVENT, handleCustom)
+
+  return () => {
+    window.removeEventListener('storage', handleStorage)
+    window.removeEventListener(BATTLE_CONTENT_CHANGED_EVENT, handleCustom)
+  }
+}
+
+/**
+ * Merge only safe asset fields from a stale published snapshot into the
+ * authored content. Gameplay fields (effects, stats, cooldowns, descriptions,
+ * targetRule, energyCost, classes) are always taken from `authored`.
+ *
+ * Asset fields merged by fighter ID match:
+ *   - fighter.facePortrait
+ *   - fighter.boardPortraitSrc
+ *   - ability.icon.src  (matched by ability id)
+ *   - ultimate.icon.src (matched by ultimate id)
+ *   - passiveEffects[].icon.src (matched by passive id)
+ */
+export function mergePublishedAssetFieldsIntoAuthoredContent(
+  authored: BattleContentSnapshot,
+  stale: BattleContentSnapshot | null,
+): BattleContentSnapshot {
+  if (!stale) return cloneSnapshot(authored)
+
+  const staleById: Record<string, BattleFighterTemplate> = {}
+  for (const fighter of stale.roster) {
+    if (fighter.id) staleById[fighter.id] = fighter
+  }
+
+  const mergedRoster: BattleFighterTemplate[] = authored.roster.map((authoredFighter): BattleFighterTemplate => {
+    const staleFighter = staleById[authoredFighter.id]
+    if (!staleFighter) return authoredFighter
+
+    const staleAbilityById: Record<string, (typeof staleFighter.abilities)[number]> = {}
+    for (const ability of staleFighter.abilities ?? []) {
+      if (ability.id) staleAbilityById[ability.id] = ability
+    }
+
+    const mergedAbilities = (authoredFighter.abilities ?? []).map((authoredAbility) => {
+      const staleAbility = staleAbilityById[authoredAbility.id]
+      const staleSrc = staleAbility?.icon?.src
+      if (!staleSrc || staleSrc === authoredAbility.icon?.src) return authoredAbility
+      const normalized = normalizeBattleAssetSrc(staleSrc)
+      if (!normalized) return authoredAbility
+      return { ...authoredAbility, icon: { ...authoredAbility.icon, src: normalized } }
+    })
+
+    const staleUltimate = staleFighter.ultimate?.id === authoredFighter.ultimate?.id
+      ? staleFighter.ultimate
+      : null
+    const mergedUltimateSrc = staleUltimate?.icon?.src
+      ? normalizeBattleAssetSrc(staleUltimate.icon.src)
+      : null
+    const mergedUltimate =
+      authoredFighter.ultimate && mergedUltimateSrc && mergedUltimateSrc !== authoredFighter.ultimate.icon?.src
+        ? { ...authoredFighter.ultimate, icon: { ...authoredFighter.ultimate.icon, src: mergedUltimateSrc } }
+        : authoredFighter.ultimate
+
+    const stalePassiveById: Record<string, PassiveEffect> = {}
+    for (const passive of staleFighter.passiveEffects ?? []) {
+      if (passive.id) stalePassiveById[passive.id] = passive
+    }
+
+    const mergedPassives: PassiveEffect[] = (authoredFighter.passiveEffects ?? []).map((authoredPassive) => {
+      const stalePassive = authoredPassive.id ? stalePassiveById[authoredPassive.id] : undefined
+      const staleSrc = stalePassive?.icon?.src
+      if (!staleSrc || staleSrc === authoredPassive.icon?.src) return authoredPassive
+      const normalized = normalizeBattleAssetSrc(staleSrc)
+      if (!normalized) return authoredPassive
+      const baseIcon = authoredPassive.icon
+      if (!baseIcon) return authoredPassive
+      return { ...authoredPassive, icon: { ...baseIcon, src: normalized } }
+    })
+
+    return {
+      ...authoredFighter,
+      facePortrait: normalizeBattleAssetSrc(staleFighter.facePortrait) || authoredFighter.facePortrait,
+      boardPortraitSrc: normalizeBattleAssetSrc(staleFighter.boardPortraitSrc) || authoredFighter.boardPortraitSrc,
+      abilities: mergedAbilities,
+      ultimate: mergedUltimate,
+      passiveEffects: mergedPassives,
+    }
+  })
+
+  return { ...cloneSnapshot(authored), roster: mergedRoster }
+}
+
+/**
+ * Read published content from localStorage. If the stored snapshot is stale
+ * (schema version mismatch), merge only safe asset fields into the authored
+ * content rather than discarding the snapshot entirely.
+ */
+export function readPublishedBattleContentWithAssetMigration(
+  authored: BattleContentSnapshot,
+): BattleContentSnapshot {
+  const stored = readStorage(publishedContentKey)
+  if (!stored) return cloneSnapshot(authored)
+  if (isSnapshotCurrent(stored)) return cloneSnapshot(stored)
+  return mergePublishedAssetFieldsIntoAuthoredContent(authored, stored)
 }

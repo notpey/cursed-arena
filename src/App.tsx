@@ -3,18 +3,17 @@ import { RouterProvider } from 'react-router-dom'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { router } from '@/app/router'
 import { authoredBattleContent } from '@/features/battle/data'
-import { syncPublishedContentFromSupabase } from '@/features/battle/contentStore'
+import { initBattleContentStore, syncPublishedContentFromSupabase } from '@/features/battle/contentStore'
+
+// Prime the store synchronously so first renders see content immediately.
+initBattleContentStore(authoredBattleContent)
 
 function ContentSync() {
   useEffect(() => {
     // Fetch the latest published content from Supabase on startup.
-    // data.ts loaded synchronously from localStorage; if Supabase has a newer
-    // snapshot we update localStorage and reload so all clients stay in sync.
-    syncPublishedContentFromSupabase(authoredBattleContent).then((wasStale) => {
-      if (wasStale) {
-        window.location.reload()
-      }
-    })
+    // If Supabase has a newer snapshot, the reactive store broadcasts the
+    // update — no page reload needed.
+    void syncPublishedContentFromSupabase(authoredBattleContent)
   }, [])
 
   return null

@@ -5,14 +5,13 @@ import { getTargetLabel } from '@/components/battle/battleDisplay'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { getAbilityEnergyCost } from '@/features/battle/energy'
 import {
-  battlePrepRoster,
-  battlePrepRosterById,
   persistPrepSelection,
   readPrepSelection,
   sanitizePrepTeamIds,
   stageBattleLaunch,
   type BattlePrepRosterEntry,
 } from '@/features/battle/prep'
+import { useBattleRoster, useBattleRosterById } from '@/features/battle/contentStore'
 import type { BattleAbilityTemplate } from '@/features/battle/types'
 import {
   battleMatchModes,
@@ -27,7 +26,12 @@ import {
   type BattleMatchMode,
 } from '@/features/battle/matches'
 import { createInitialBattleState } from '@/features/battle/engine'
-import { getUnlockedFighterIds, getUnlockMissionForFighter } from '@/features/missions/unlocks'
+import { getUnlockMissionForFighter } from '@/features/missions/unlocks'
+import {
+  useAdminUnlockOverrides,
+  getEffectiveUnlockedSet,
+} from '@/features/missions/effectiveUnlocks'
+import { useEffectiveMissionProgress } from '@/features/missions/missionProgressStore'
 import { createBattleSeed } from '@/features/battle/random'
 import homeBgBase from '@/assets/backgrounds/home-bg-base.webp'
 import {
@@ -62,7 +66,6 @@ const loreOrderIds = [
 ]
 
 const sortOptions: PrepSortKey[] = ['LORE', 'NAME', 'RARITY']
-const roleOptions = ['ALL', ...Array.from(new Set(battlePrepRoster.map((entry) => entry.role)))] as PrepRoleFilter[]
 
 const rarityRank: Record<CharacterRarity, number> = {
   SSR: 3,
@@ -88,9 +91,9 @@ const rarityStyles: Record<CharacterRarity, { border: string; wash: string; text
   },
 }
 
-function getExplicitTeamIds(teamIds: Array<string | null>) {
+function getExplicitTeamIds(teamIds: Array<string | null>, rosterById: Record<string, BattlePrepRosterEntry>) {
   return teamIds
-    .filter((teamId): teamId is string => Boolean(teamId && battlePrepRosterById[teamId]))
+    .filter((teamId): teamId is string => Boolean(teamId && rosterById[teamId]))
     .filter((teamId, index, list) => list.indexOf(teamId) === index)
 }
 
@@ -179,27 +182,34 @@ function PortraitThumb({
 export function BattlePrepPage() {
   const navigate = useNavigate()
   const { user, profile: authProfile } = useAuth()
+  const battlePrepRoster = useBattleRoster()
+  const battlePrepRosterById = useBattleRosterById()
+  const roleOptions = useMemo(
+    () => ['ALL', ...Array.from(new Set(battlePrepRoster.map((entry) => entry.role)))] as PrepRoleFilter[],
+    [battlePrepRoster],
+  )
   const [searchValue, setSearchValue] = useState('')
   const [sortBy, setSortBy] = useState<PrepSortKey>('LORE')
   const [roleFilter, setRoleFilter] = useState<PrepRoleFilter>('ALL')
   const [teamIds, setTeamIds] = useState<Array<string | null>>(() => {
-    const initial = readPrepSelection()
+    const initial = readPrepSelection(battlePrepRosterById)
     return [initial[0] ?? null, initial[1] ?? null, initial[2] ?? null]
   })
   const [focusedSlot, setFocusedSlot] = useState(0)
   const [selectedRosterId, setSelectedRosterId] = useState<string>(
-    () => readPrepSelection()[0] ?? battlePrepRoster[0]?.id ?? '',
+    () => readPrepSelection(battlePrepRosterById)[0] ?? battlePrepRoster[0]?.id ?? '',
   )
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [matchMode, setMatchMode] = useState<BattleMatchMode>(() => readSelectedMatchMode())
   const [profileStats] = useState(() => readBattleProfileStats())
 
+  // ── Unlock state (account-backed mission progress + admin overrides) ────
+  const missionProgress = useEffectiveMissionProgress(user)
+  const adminOverrides = useAdminUnlockOverrides(user)
+
   // ── Practice mode state ──────────────────────────────────────────────────
   const [practiceAiEnabled, setPracticeAiEnabled] = useState(true)
-  const [practiceEnemyIds, setPracticeEnemyIds] = useState<Array<string | null>>(() => {
-    const defaults = battlePrepRoster.slice(3, 6).map((e) => e.id)
-    return [defaults[0] ?? null, defaults[1] ?? null, defaults[2] ?? null]
-  })
+  const [practiceEnemyIds, setPracticeEnemyIds] = useState<Array<string | null>>([null, null, null])
   const [practiceOpen, setPracticeOpen] = useState(false)
 
   // ── Multiplayer private match state ─────────────────────────────────────
@@ -243,8 +253,8 @@ export function BattlePrepPage() {
   }, [user])
 
   useEffect(() => {
-    persistPrepSelection(teamIds)
-  }, [teamIds])
+    persistPrepSelection(teamIds, battlePrepRosterById)
+  }, [teamIds, battlePrepRosterById])
 
   useEffect(() => {
     persistSelectedMatchMode(matchMode)
@@ -287,11 +297,14 @@ export function BattlePrepPage() {
 
         return left.name.localeCompare(right.name)
       })
-  }, [roleFilter, searchValue, sortBy])
+  }, [battlePrepRoster, roleFilter, searchValue, sortBy])
 
-  const unlockedFighterIds = useMemo(() => new Set(getUnlockedFighterIds()), [])
+  const unlockedFighterIds = useMemo(
+    () => getEffectiveUnlockedSet(battlePrepRoster.map((e) => e.id), missionProgress, adminOverrides),
+    [battlePrepRoster, missionProgress, adminOverrides],
+  )
 
-  const explicitTeamIds = getExplicitTeamIds(teamIds)
+  const explicitTeamIds = getExplicitTeamIds(teamIds, battlePrepRosterById)
   const teamEntries = teamIds.map((teamId) => (teamId ? battlePrepRosterById[teamId] ?? null : null))
   const winRate = Math.round((profileStats.wins / Math.max(1, profileStats.matchesPlayed)) * 100)
   const selectedEntry =
@@ -398,8 +411,8 @@ export function BattlePrepPage() {
     if (!isReady) return
 
     if (selectedMode === 'practice') {
-      const sanitized = sanitizePrepTeamIds(teamIds)
-      const enemyIds = sanitizePrepTeamIds(practiceEnemyIds)
+      const sanitized = sanitizePrepTeamIds(teamIds, battlePrepRosterById)
+      const enemyIds = sanitizePrepTeamIds(practiceEnemyIds, battlePrepRosterById)
       const session = createPracticeSession(sanitized, { aiEnabled: practiceAiEnabled, enemyTeamIds: enemyIds })
       persistStagedBattleSession(session)
       navigate('/battle')
@@ -416,12 +429,12 @@ export function BattlePrepPage() {
 
     // Ranked / Quick — requires auth; join the matchmaking queue
     if (!user) {
-      stageBattleLaunch(teamIds, selectedMode)
+      stageBattleLaunch(teamIds, selectedMode, battlePrepRosterById)
       navigate('/battle')
       return
     }
 
-    const sanitized = sanitizePrepTeamIds(teamIds)
+    const sanitized = sanitizePrepTeamIds(teamIds, battlePrepRosterById)
     const displayName = authProfile?.display_name ?? 'Player'
     setSearching(true)
     setQueueError(null)
@@ -524,7 +537,7 @@ export function BattlePrepPage() {
           if (sessionId !== searchSessionIdRef.current) return
           setSearching(false)
           setAiFallback(false)
-          stageBattleLaunch(sanitized, mode)
+          stageBattleLaunch(sanitized, mode, battlePrepRosterById)
           navigate('/battle')
         }, 1200)
         return
@@ -550,7 +563,7 @@ export function BattlePrepPage() {
     setMpLoading(true)
     setMpError(null)
 
-    const sanitized = sanitizePrepTeamIds(teamIds)
+    const sanitized = sanitizePrepTeamIds(teamIds, battlePrepRosterById)
     const seed = createBattleSeed('private', sanitized)
     const displayName = authProfile?.display_name ?? 'Player'
 
@@ -579,7 +592,7 @@ export function BattlePrepPage() {
     setMpLoading(true)
     setMpError(null)
 
-    const sanitized = sanitizePrepTeamIds(teamIds)
+    const sanitized = sanitizePrepTeamIds(teamIds, battlePrepRosterById)
     const displayName = authProfile?.display_name ?? 'Player'
 
     const { data, error } = await acceptChallenge({
@@ -805,6 +818,8 @@ export function BattlePrepPage() {
       {practiceOpen ? (
         <PrepDialog title="Practice Setup" onClose={() => setPracticeOpen(false)}>
           <PracticePanel
+            roster={battlePrepRoster}
+            rosterById={battlePrepRosterById}
             aiEnabled={practiceAiEnabled}
             enemyIds={practiceEnemyIds}
             isReady={isReady}
@@ -946,6 +961,8 @@ function PrepMatchButtons({
 }
 
 function PracticePanel({
+  roster,
+  rosterById,
   aiEnabled,
   enemyIds,
   isReady,
@@ -953,6 +970,8 @@ function PracticePanel({
   onSetEnemyIds,
   onStart,
 }: {
+  roster: BattlePrepRosterEntry[]
+  rosterById: Record<string, BattlePrepRosterEntry>
   aiEnabled: boolean
   enemyIds: Array<string | null>
   isReady: boolean
@@ -995,7 +1014,7 @@ function PracticePanel({
         <div className="mt-2 grid grid-cols-3 gap-1.5">
           {([0, 1, 2] as const).map((slot) => {
             const id = enemyIds[slot] ?? null
-            const entry = id ? battlePrepRosterById[id] ?? null : null
+            const entry = id ? rosterById[id] ?? null : null
             return (
               <div key={slot} className="relative">
                 <select
@@ -1008,7 +1027,7 @@ function PracticePanel({
                   className="w-full rounded-[0.25rem] border border-white/12 bg-[rgba(14,14,20,0.9)] px-2 py-1.5 ca-mono-label text-[0.48rem] text-ca-text-2 outline-none transition focus:border-ca-teal/40"
                 >
                   <option value="">— Empty —</option>
-                  {battlePrepRoster.map((r) => (
+                  {roster.map((r) => (
                     <option key={r.id} value={r.id}>{r.battleTemplate.shortName}</option>
                   ))}
                 </select>

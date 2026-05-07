@@ -248,25 +248,8 @@ function createDefault(): UnlockStore {
 
 // ── Public read API ───────────────────────────────────────────────────────────
 
-export function getUnlockMissionProgress(missionId: string): UnlockMissionProgress {
-  const data = readRaw()
-  return data.missions[missionId] ?? { progress: 0, completed: false }
-}
-
 export function getAllUnlockMissionProgress(): Record<string, UnlockMissionProgress> {
   return readRaw().missions
-}
-
-/** Fighter IDs the current player can use: starters + mission reward unlocks. */
-export function getUnlockedFighterIds(): string[] {
-  const data = readRaw()
-  const unlocked = new Set<string>(STARTER_FIGHTER_IDS)
-  for (const def of UNLOCK_MISSION_DEFS) {
-    if (data.missions[def.id]?.completed) {
-      unlocked.add(def.reward.fighterId)
-    }
-  }
-  return [...unlocked]
 }
 
 /**
@@ -293,7 +276,7 @@ export type BattleUnlockContext = {
  * battle. Returns the ids of any missions newly completed this match.
  * Called from matches.ts after settlement.
  */
-export function evaluateUnlockMissions(ctx: BattleUnlockContext): string[] {
+function evaluateUnlockMissions(ctx: BattleUnlockContext): string[] {
   const data = readRaw()
   const newlyCompleted: string[] = []
 
@@ -339,6 +322,20 @@ export function evaluateUnlockMissions(ctx: BattleUnlockContext): string[] {
 
   writeRaw(data)
   return newlyCompleted
+}
+
+export type EvaluateUnlockMissionsResult = {
+  newlyCompletedIds: string[]
+  updatedProgress: Record<string, UnlockMissionProgress>
+}
+
+/**
+ * Like evaluateUnlockMissions but returns full updated progress alongside
+ * newly completed IDs. Used by the Supabase sync path in matches.ts.
+ */
+export function evaluateAndGetUnlockMissions(ctx: BattleUnlockContext): EvaluateUnlockMissionsResult {
+  const newlyCompletedIds = evaluateUnlockMissions(ctx)
+  return { newlyCompletedIds, updatedProgress: readRaw().missions }
 }
 
 // ── Progress label helpers ────────────────────────────────────────────────────

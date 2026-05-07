@@ -1,4 +1,4 @@
-import { useEffect, useState, type PropsWithChildren } from 'react'
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { canAccessAdminPanel } from '@/config/features'
 import { AuthContext, type AuthStatus, type ProfileRow } from '@/features/auth/context'
@@ -122,6 +122,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Track the user ID that was last fully loaded so that silent token refreshes
+  // for the same user don't re-trigger the "loading" spinner in AuthGate.
+  const resolvedUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const client = getSupabaseClient()
@@ -140,6 +143,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setUser(nextUser)
 
       if (!nextUser) {
+        resolvedUserIdRef.current = null
         setProfile(null)
         setStatus('unauthenticated')
         setError(null)
@@ -147,7 +151,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return
       }
 
-      setStatus('loading')
+      // Don't drop to 'loading' for silent token refreshes for the same user —
+      // that triggers AuthGate's full-screen spinner on every tab focus event.
+      const alreadyResolved = resolvedUserIdRef.current === nextUser.id
+      if (!alreadyResolved) {
+        setStatus('loading')
+      }
+
       const result = await fetchProfile(nextUser)
       if (disposed) return
 
@@ -155,6 +165,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setProfile(null)
         setStatus('authenticated')
         setError(result.error)
+        resolvedUserIdRef.current = nextUser.id
         applyAuthenticatedPlayerState(nextUser, null)
         return
       }
@@ -162,6 +173,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setProfile(result.data)
       setStatus('authenticated')
       setError(null)
+      resolvedUserIdRef.current = nextUser.id
       applyAuthenticatedPlayerState(nextUser, result.data)
     }
 

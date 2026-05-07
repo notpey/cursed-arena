@@ -1,18 +1,21 @@
+import { useSyncExternalStore } from 'react'
 import { getSupabaseClient } from '@/lib/supabase.ts'
 import {
   CONTENT_SCHEMA_VERSION,
   createContentSnapshot,
   clearDraftBattleContent,
-  clearPublishedBattleContent,
   isSnapshotCurrent,
   normalizeContentSnapshot,
+  notifyBattleContentChanged,
   readDraftBattleContent,
-  readPublishedBattleContent,
-  saveDraftBattleContent,
+  readPublishedBattleContentWithAssetMigration,
   savePublishedBattleContent,
+  saveDraftBattleContent,
+  subscribeToBattleContentChangeEvent,
   type BattleContentSnapshot,
   type BattleContentSetup,
 } from '@/features/battle/contentSnapshot.ts'
+import { buildPrepRosterEntries, type BattlePrepRosterEntry } from '@/features/battle/prep.ts'
 
 const supabaseContentKey = 'published_roster'
 
@@ -23,14 +26,80 @@ export type PublishBattleContentResult = {
 export {
   createContentSnapshot,
   clearDraftBattleContent,
-  clearPublishedBattleContent,
   readDraftBattleContent,
-  readPublishedBattleContent,
   saveDraftBattleContent,
   savePublishedBattleContent,
   type BattleContentSnapshot,
   type BattleContentSetup,
 }
+
+// ---------------------------------------------------------------------------
+// Runtime store
+// ---------------------------------------------------------------------------
+
+let currentContent: BattleContentSnapshot | null = null
+const listeners = new Set<() => void>()
+
+function notifyListeners() {
+  for (const listener of listeners) {
+    listener()
+  }
+}
+
+export function getCurrentBattleContent(): BattleContentSnapshot | null {
+  return currentContent
+}
+
+export function subscribeToBattleContent(listener: () => void): () => void {
+  listeners.add(listener)
+  const unsubscribeStorage = subscribeToBattleContentChangeEvent(listener)
+  return () => {
+    listeners.delete(listener)
+    unsubscribeStorage()
+  }
+}
+
+/**
+ * Persist a new published snapshot and broadcast the change to all subscribers
+ * so React components re-render without a page reload.
+ */
+export function saveAndBroadcastPublishedBattleContent(
+  snapshot: BattleContentSnapshot,
+): BattleContentSnapshot {
+  const saved = savePublishedBattleContent(snapshot)
+  currentContent = saved
+  notifyListeners()
+  notifyBattleContentChanged()
+  return saved
+}
+
+export function initBattleContentStore(authored: BattleContentSnapshot) {
+  if (currentContent !== null) return
+  currentContent = readPublishedBattleContentWithAssetMigration(authored)
+}
+
+// ---------------------------------------------------------------------------
+// React hooks
+// ---------------------------------------------------------------------------
+
+export function useBattleContent(): BattleContentSnapshot | null {
+  return useSyncExternalStore(subscribeToBattleContent, getCurrentBattleContent, () => null)
+}
+
+export function useBattleRoster(): BattlePrepRosterEntry[] {
+  const content = useBattleContent()
+  if (!content) return []
+  return buildPrepRosterEntries(content.roster)
+}
+
+export function useBattleRosterById(): Record<string, BattlePrepRosterEntry> {
+  const roster = useBattleRoster()
+  return Object.fromEntries(roster.map((entry) => [entry.id, entry]))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers (re-exported for callers that used to import from here)
+// ---------------------------------------------------------------------------
 
 function clonePublishedSnapshot(snapshot: BattleContentSnapshot): BattleContentSnapshot {
   const normalized = normalizeContentSnapshot(snapshot) ?? snapshot
@@ -48,8 +117,8 @@ function clonePublishedSnapshot(snapshot: BattleContentSnapshot): BattleContentS
 
 /**
  * Publish content to Supabase so all users see it, then mirror the confirmed
- * snapshot into localStorage. When Supabase is unavailable, this falls back to
- * a local-only publish.
+ * snapshot into localStorage and broadcast to reactive subscribers.
+ * When Supabase is unavailable, this falls back to a local-only publish.
  */
 export async function publishBattleContent(snapshot: BattleContentSnapshot): Promise<PublishBattleContentResult> {
   const published = clonePublishedSnapshot(snapshot)
@@ -57,7 +126,7 @@ export async function publishBattleContent(snapshot: BattleContentSnapshot): Pro
 
   if (!client) {
     return {
-      snapshot: savePublishedBattleContent(published),
+      snapshot: saveAndBroadcastPublishedBattleContent(published),
       mode: 'local',
     }
   }
@@ -85,7 +154,7 @@ export async function publishBattleContent(snapshot: BattleContentSnapshot): Pro
   }
 
   return {
-    snapshot: savePublishedBattleContent(confirmed.content),
+    snapshot: saveAndBroadcastPublishedBattleContent(confirmed.content),
     mode: 'remote',
   }
 }
@@ -94,25 +163,34 @@ export async function publishBattleContent(snapshot: BattleContentSnapshot): Pro
  * Overwrite the Supabase row (and localStorage) with the given snapshot.
  * Used by "Revert Live" to ensure the remote copy is replaced, not just local storage.
  */
-export async function resetPublishedBattleContent(snapshot: BattleContentSnapshot): Promise<void> {
+export async function resetPublishedBattleContent(snapshot: BattleContentSnapshot): Promise<BattleContentSnapshot> {
   clearDraftBattleContent()
-  clearPublishedBattleContent()
 
   const client = getSupabaseClient()
-  if (!client) return
+  if (!client) {
+    return saveAndBroadcastPublishedBattleContent(snapshot)
+  }
 
   const published = { ...clonePublishedSnapshot(snapshot), updatedAt: Date.now() }
-  await client
+  const { error } = await client
     .from('game_content')
     .upsert({ key: supabaseContentKey, content: published, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return saveAndBroadcastPublishedBattleContent(published)
 }
 
 /**
- * Fetch the latest published content from Supabase and update localStorage.
- * Returns true if the local content was stale and got replaced (caller should
- * reload the page so data.ts picks up the fresh snapshot).
+ * Fetch the latest published content from Supabase and update the reactive
+ * store. Returns true if the local content was stale and got replaced.
+ * No page reload needed — subscribers re-render reactively.
  */
 export async function syncPublishedContentFromSupabase(fallback: BattleContentSnapshot): Promise<boolean> {
+  initBattleContentStore(fallback)
+
   const client = getSupabaseClient()
   if (!client) return false
 
@@ -129,9 +207,6 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
     if (!remote || typeof remote.updatedAt !== 'number') return false
     const remoteWasNormalized = JSON.stringify(remote) !== JSON.stringify(data.content)
 
-    // Reject remote snapshots that don't carry the current schema version.
-    // They were published from an older app build and would re-introduce the
-    // stale roster the moment we wrote them to localStorage.
     if (!isSnapshotCurrent(remote)) return false
 
     if (remoteWasNormalized) {
@@ -140,16 +215,15 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
         .upsert({ key: supabaseContentKey, content: remote, updated_at: new Date().toISOString() }, { onConflict: 'key' })
     }
 
-    const local = readPublishedBattleContent(fallback)
+    const local = currentContent ?? fallback
     const remoteIsNewer = remote.updatedAt > local.updatedAt
     const remoteDiffersFromLocal = JSON.stringify(remote) !== JSON.stringify(local)
     if (!remoteIsNewer && !remoteDiffersFromLocal) {
-      if (remoteWasNormalized) savePublishedBattleContent(remote)
+      if (remoteWasNormalized) saveAndBroadcastPublishedBattleContent(remote)
       return false
     }
 
-    // Remote is newer — update localStorage
-    savePublishedBattleContent(remote)
+    saveAndBroadcastPublishedBattleContent(remote)
     return true
   } catch {
     return false

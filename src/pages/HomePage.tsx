@@ -7,9 +7,8 @@ import {
   SiteDivider,
   SiteListRow,
   SiteNewsPost,
-  battlePrepRoster,
-  battlePrepRosterById,
 } from '@/components/site/siteVisuals'
+import { useBattleRoster, useBattleRosterById } from '@/features/battle/contentStore'
 import { readBattleProfileStats } from '@/features/battle/matches'
 import { useAuth } from '@/features/auth/useAuth'
 import { getMissionCoins, getMissionsWithProgress } from '@/features/missions/store'
@@ -32,6 +31,8 @@ export function HomePage() {
   const missions = useMemo(() => getMissionsWithProgress(), [])
   const missionCoins = useMemo(() => getMissionCoins(), [])
   const [dbProfile, setDbProfile] = useState<PlayerRankProfile | null>(null)
+  const battlePrepRoster = useBattleRoster()
+  const battlePrepRosterById = useBattleRosterById()
 
   useEffect(() => {
     if (!user) return
