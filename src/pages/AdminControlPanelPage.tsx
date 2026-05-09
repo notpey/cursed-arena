@@ -15,6 +15,7 @@ import {
   useBattleContent,
   type BattleContentSnapshot,
 } from '@/features/battle/contentStore'
+import { mergePublishedAssetFieldsIntoAuthoredContent } from '@/features/battle/contentSnapshot'
 import { battleEnergyMeta, battleEnergyOrder, randomEnergyMeta, getAbilityEnergyCost } from '@/features/battle/energy'
 import { validateBattleContent } from '@/features/battle/validation'
 import type {
@@ -828,7 +829,9 @@ function useAdminBattleContentState() {
 
   function restoreAuthored() {
     clearDraftBattleContent()
-    const next = cloneSnapshot(authoredBattleContent)
+    // Rescue image URLs from the current live content so portraits and skill
+    // icons are not lost when loading the authored (code-only) roster.
+    const next = cloneSnapshot(mergePublishedAssetFieldsIntoAuthoredContent(authoredBattleContent, liveContent))
     setDraft(next)
     return next
   }

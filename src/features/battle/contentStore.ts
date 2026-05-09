@@ -5,6 +5,7 @@ import {
   createContentSnapshot,
   clearDraftBattleContent,
   isSnapshotCurrent,
+  mergePublishedAssetFieldsIntoAuthoredContent,
   normalizeContentSnapshot,
   notifyBattleContentChanged,
   readDraftBattleContent,
@@ -207,7 +208,14 @@ export async function syncPublishedContentFromSupabase(fallback: BattleContentSn
     if (!remote || typeof remote.updatedAt !== 'number') return false
     const remoteWasNormalized = JSON.stringify(remote) !== JSON.stringify(data.content)
 
-    if (!isSnapshotCurrent(remote)) return false
+    if (!isSnapshotCurrent(remote)) {
+      // Remote snapshot is stale (schema version mismatch). Rescue its image
+      // URLs into the current authored content so portraits and skill icons
+      // survive version bumps without needing to be re-uploaded.
+      const rescued = mergePublishedAssetFieldsIntoAuthoredContent(fallback, remote)
+      saveAndBroadcastPublishedBattleContent(rescued)
+      return true
+    }
 
     if (remoteWasNormalized) {
       await client
