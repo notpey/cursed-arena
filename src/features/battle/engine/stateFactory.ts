@@ -64,9 +64,10 @@ export function createClassStunState(
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'classStun' }>,
   round: number,
+  seq: number,
 ): BattleClassStunState {
   return {
-    id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
+    id: `classstun-${actor.instanceId}-${abilityId ?? 'passive'}-${seq}`,
     label: `Class Stun (${effect.blockedClasses.join(', ')})`,
     blockedClasses: [...effect.blockedClasses],
     exemptClasses: effect.exemptClasses ? [...effect.exemptClasses] : undefined,
@@ -82,9 +83,10 @@ export function createIntentStunState(
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'intentStun' }>,
   round: number,
+  seq: number,
 ): BattleIntentStunState {
   return {
-    id: `intentstun-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
+    id: `intentstun-${actor.instanceId}-${abilityId ?? 'passive'}-${seq}`,
     label: `${effect.intent === 'harmful' ? 'Harmful' : 'Helpful'} Skill Stun`,
     intent: effect.intent,
     remainingRounds: effect.duration,
@@ -99,10 +101,11 @@ export function createReactionGuardState(
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'counter' | 'reflect' | 'reaction' }>,
   round: number,
+  seq: number,
   linkedTargetId?: string,
 ): BattleReactionGuardState {
   return {
-    id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${Date.now()}`,
+    id: `reaction-${effect.type}-${actor.instanceId}-${abilityId ?? 'passive'}-${seq}`,
     kind: effect.type === 'reaction' ? 'effect' : effect.type,
     label:
       effect.type === 'counter'

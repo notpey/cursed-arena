@@ -9,7 +9,6 @@ import {
   getFighterById,
   getOpposingTeam,
   getTeam,
-  getVisibleAbilities,
   isAlive,
   getAbilityById,
 } from '@/features/battle/engine/selectors.ts'
@@ -27,7 +26,6 @@ import {
 } from '@/features/battle/engine/tick.ts'
 import {
   emitCounterChange,
-  emitFlagChange,
   emitModifierApplied,
   emitModifierRemoved,
   emitResourceChange,
@@ -38,7 +36,6 @@ import {
 } from '@/features/battle/engine/events.ts'
 import {
   consumeCostModifiers,
-  createCostModifierState,
   getResolvedAbilityEnergyCost,
 } from '@/features/battle/engine/costModifier.ts'
 import { buildEnemyCommands } from '@/features/battle/engine/ai.ts'
@@ -53,12 +50,7 @@ import {
   isHarmfulAbility,
 } from '@/features/battle/engine/reactionPredicates.ts'
 import {
-  addAbilityStateDelta,
-  createClassStunState,
   createEffectImmunityState,
-  createIntentStunState,
-  createReactionGuardState,
-  hasBaseAbility,
   isAbilityClassStunned,
   isAbilityIntentStunned,
 } from '@/features/battle/engine/stateFactory.ts'
@@ -71,82 +63,97 @@ import {
   battleEnergyOrder,
   canPayEnergy,
   countEnergyCost,
-  createEnergyAmounts,
   createRoundEnergyPool,
+  formatEnergyAmounts,
+  getEnergyPool,
   getRefreshGain,
   getSpentEnergyAmounts,
+  normalizeEnergyAmount,
+  normalizeEnergyCost,
   refreshRoundEnergy,
   spendEnergy,
   sumEnergyCosts,
   type BattleEnergyCost,
-  type BattleEnergyType,
 } from '@/features/battle/energy.ts'
 import { createSeededRandom } from '@/features/battle/random.ts'
 import {
   cloneAbilityTemplate,
   clonePassiveEffect,
-  getEffectivePassiveTrigger,
-  getPassiveConditions,
 } from '@/features/battle/reactions.ts'
 import {
   createModifierInstance,
   createModifiers,
   getFighterModifierPool,
-  getNumericModifierMultiplier,
-  getNumericModifierMultiplierForClass,
   getTeamModifierBucket,
   hasBooleanModifierValue,
-  hasBooleanModifierForStat,
   hasModifierStatus,
   removeModifiers,
   setTeamModifierBucket,
   sumNumericModifierValues,
-  sumNumericModifierValuesForClass,
   syncFighterStatusesFromModifiers,
   tickModifiers,
   upsertModifier,
 } from '@/features/battle/modifiers.ts'
+import {
+  calculateDamage,
+  calculateHealing,
+  getNumericModifierTotal,
+  getTriggeredPassiveEffects,
+  hasModifierBoolean,
+  matchesReactionCondition,
+  type ReactionContext,
+} from '@/features/battle/engine/effects/modifierContext.ts'
+import { applyDamagePacket } from '@/features/battle/engine/effects/damagePacket.ts'
+import { applyHealPacket } from '@/features/battle/engine/effects/healPacket.ts'
+import { applyEnergyDrain, applyEnergyGain, applyEnergySteal } from '@/features/battle/engine/effects/resourceEffects.ts'
+import { applyShieldDamageToFighter, applyShieldToFighter } from '@/features/battle/engine/effects/shieldPacket.ts'
+import { applyCooldownAdjustEffect, applyModifyAbilityCost } from '@/features/battle/engine/effects/costCooldownEffects.ts'
+import { applyModifyAbilityState, applyReplaceAbilities, applyReplaceAbility } from '@/features/battle/engine/effects/abilityStateEffects.ts'
+import { createRandomEnemyDamageOverTime, createScheduledEffect } from '@/features/battle/engine/effects/scheduledEffects.ts'
+import {
+  applyAttackUpStatus,
+  applyBurnStatus,
+  applyClassStunScaledByCounterStatus,
+  applyClassStunStatus,
+  applyIntentStunStatus,
+  applyInvulnerableStatus,
+  applyMarkStatus,
+  applyStunStatus,
+} from '@/features/battle/engine/effects/statusEffects.ts'
+import {
+  applyAdjustCounterByTriggerAmountEffect,
+  applyAdjustCounterEffect,
+  applyAdjustSourceCounterEffect,
+  applyClearModeEffect,
+  applyResetCounterEffect,
+  applySetCounterEffect,
+  applySetFlagEffect,
+  applySetModeEffect,
+} from '@/features/battle/engine/effects/stateFlagEffects.ts'
+import { resolveRandomEnemyDamageTick } from '@/features/battle/engine/effects/randomEnemyDamageTick.ts'
+import { applyCounterSetupEffect, applyReactionSetupEffect, applyReflectSetupEffect } from '@/features/battle/engine/effects/reactionSetupEffects.ts'
 import { createStatuses } from '@/features/battle/statuses.ts'
 import { BATTLE_STATE_SCHEMA_VERSION } from '@/features/battle/types.ts'
 import type {
-  BattleAbilityStateDelta,
   BattleAbilityTemplate,
   BattleDamagePacket,
   BattleFighterState,
   BattleHealPacket,
   BattleModifierFilter,
-  BattleModifierInstance,
-  BattleModifierStat,
   BattleModifierTemplate,
-  BattleReactionCondition,
   BattleReactionTrigger,
   BattleResolutionResult,
-  BattleResourceKey,
   BattleScheduledPhase,
-  BattleSkillClass,
-  BattleSkillDamageType,
   BattleState,
-  BattleStatusKind,
   BattleTeamId,
   BattleTimelineResult,
   BattleTimelineStep,
   BattleTimelineStepKind,
-  PassiveEffect,
   PassiveTrigger,
   QueuedBattleAction,
   ResolutionContext,
   SkillEffect,
 } from '@/features/battle/types.ts'
-type ReactionContext = {
-  target: BattleFighterState | null
-  ability?: BattleAbilityTemplate
-  effect?: SkillEffect
-  amount?: number
-  isUltimate?: boolean
-  brokenShieldTags?: string[]
-  round?: number
-}
-
 type PreDamageReactionResult = {
   cancelAction: boolean
   reflectedTargetIds: Set<string>
@@ -266,23 +273,11 @@ function instantiateTeam(team: BattleTeamId, templateIds: string[]) {
 }
 
 
-function setFighterFlag(fighter: BattleFighterState, key: string, value: boolean) {
-  fighter.stateFlags[key] = value
-}
-
-function adjustFighterCounter(fighter: BattleFighterState, key: string, amount: number) {
-  fighter.stateCounters[key] = (fighter.stateCounters[key] ?? 0) + amount
-}
-
 function hasRot(fighter: BattleFighterState) {
   return (fighter.stateCounters[ROT_COUNTER_KEY] ?? 0) > 0
 }
 
 
-
-function getModifierSourceFighter(state: BattleState, modifier: { sourceActorId?: string }) {
-  return modifier.sourceActorId ? getFighterById(state, modifier.sourceActorId) : null
-}
 
 function targetHasRequiredTags(state: BattleState, target: BattleFighterState, ability: BattleAbilityTemplate) {
   const requiredTags = ability.requiredTargetTags ?? []
@@ -367,7 +362,7 @@ function runPreDamageReactionWindow(
             tags: ['counter'],
             flags: { cannotBeCountered: true, cannotBeReflected: true },
           }
-          applyDamagePacket(state, ctx, target, actor, packet)
+          applyDamagePacket(state, ctx, target, actor, packet, firePassives, runEffectReactionGuards, applyDefeat)
         }
         makeEvent(
           ctx,
@@ -529,45 +524,6 @@ export function createInitialBattleState(setupOverrides?: BattleStateSetup): Bat
   }
 }
 
-function getEnergyPool(state: BattleState, team: BattleTeamId) {
-  return team === 'player' ? state.playerEnergy : state.enemyEnergy
-}
-
-function setEnergyPool(state: BattleState, team: BattleTeamId, pool: BattleState['playerEnergy']) {
-  if (team === 'player') {
-    state.playerEnergy = pool
-  } else {
-    state.enemyEnergy = pool
-  }
-}
-
-function formatEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
-  const tokens = battleEnergyOrder
-    .map((type) => {
-      const amount = amounts[type] ?? 0
-      if (amount <= 0) return null
-      return `${type.toUpperCase()} +${amount}`
-    })
-    .filter((token): token is string => Boolean(token))
-
-  return tokens.length > 0 ? tokens.join(', ') : 'no gain'
-}
-
-function normalizeEnergyAmount(value: number | undefined) {
-  return Math.max(0, Math.floor(value ?? 0))
-}
-
-function normalizeEnergyCost(cost: BattleEnergyCost) {
-  const next: BattleEnergyCost = {}
-  battleEnergyOrder.forEach((type) => {
-    const value = normalizeEnergyAmount(cost[type])
-    if (value > 0) next[type] = value
-  })
-  const random = normalizeEnergyAmount(cost.random)
-  if (random > 0) next.random = random
-  return next
-}
-
 function getCommandResolvedCost(cost: BattleEnergyCost, command: QueuedBattleAction) {
   const normalized = normalizeEnergyCost(cost)
   const randomRequired = normalizeEnergyAmount(normalized.random)
@@ -600,133 +556,6 @@ function getCommandResolvedCost(cost: BattleEnergyCost, command: QueuedBattleAct
   }
 
   return resolved
-}
-
-function countEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
-  return battleEnergyOrder.reduce((total, type) => total + normalizeEnergyAmount(amounts[type]), 0)
-}
-
-function getEnergyResourceDelta(amounts: Partial<Record<BattleEnergyType, number>>, sign: 1 | -1) {
-  const entries = battleEnergyOrder
-    .map((type) => {
-      const value = normalizeEnergyAmount(amounts[type]) * sign
-      return [type, value] as const
-    })
-    .filter((entry) => entry[1] !== 0)
-
-  return {
-    reserve: countEnergyAmounts(amounts) * sign,
-    ...Object.fromEntries(entries),
-  } as Partial<Record<BattleResourceKey, number>>
-}
-
-function gainEnergyPool(
-  pool: BattleState['playerEnergy'],
-  amount: BattleEnergyCost,
-  seed: string,
-) {
-  const normalized = normalizeEnergyCost(amount)
-  const gained = createEnergyAmounts()
-  const nextAmounts = createEnergyAmounts(pool.amounts)
-
-  battleEnergyOrder.forEach((type) => {
-    const typed = normalizeEnergyAmount(normalized[type])
-    if (typed <= 0) return
-    gained[type] += typed
-    nextAmounts[type] += typed
-  })
-
-  const random = normalizeEnergyAmount(normalized.random)
-  if (random > 0) {
-    const randomizer = createSeededRandom(seed)
-    for (let index = 0; index < random; index += 1) {
-      const rolled = Math.floor(randomizer() * battleEnergyOrder.length) % battleEnergyOrder.length
-      const type = battleEnergyOrder[rolled]
-      gained[type] += 1
-      nextAmounts[type] += 1
-    }
-  }
-
-  return {
-    pool: {
-      amounts: nextAmounts,
-    },
-    gained,
-  }
-}
-
-function drainEnergyPool(
-  pool: BattleState['playerEnergy'],
-  amount: BattleEnergyCost,
-) {
-  const normalized = normalizeEnergyCost(amount)
-  const drained = createEnergyAmounts()
-  const nextAmounts = createEnergyAmounts(pool.amounts)
-
-  battleEnergyOrder.forEach((type) => {
-    const requested = normalizeEnergyAmount(normalized[type])
-    if (requested <= 0) return
-    const taken = Math.min(nextAmounts[type], requested)
-    nextAmounts[type] -= taken
-    drained[type] += taken
-  })
-
-  let randomRemaining = normalizeEnergyAmount(normalized.random)
-  while (randomRemaining > 0) {
-    const sourceType = battleEnergyOrder
-      .filter((type) => nextAmounts[type] > 0)
-      .sort((left, right) => nextAmounts[right] - nextAmounts[left] || battleEnergyOrder.indexOf(left) - battleEnergyOrder.indexOf(right))[0]
-    if (!sourceType) break
-    nextAmounts[sourceType] -= 1
-    drained[sourceType] += 1
-    randomRemaining -= 1
-  }
-
-  return {
-    pool: {
-      amounts: nextAmounts,
-    },
-    drained,
-  }
-}
-
-function getCooldownAdjustAbilityIds(
-  fighter: BattleFighterState,
-  effect: Extract<SkillEffect, { type: 'cooldownAdjust' }>,
-) {
-  if (effect.abilityId) return [effect.abilityId]
-  if (effect.includeReady) {
-    return getVisibleAbilities(fighter)
-      .map((ability) => ability.id)
-      .filter((abilityId) => abilityId !== PASS_ABILITY_ID)
-  }
-  return Object.keys(fighter.cooldowns)
-}
-
-function applyCooldownAdjust(
-  fighter: BattleFighterState,
-  effect: Extract<SkillEffect, { type: 'cooldownAdjust' }>,
-) {
-  const abilityIds = getCooldownAdjustAbilityIds(fighter, effect)
-  const changedAbilityIds: string[] = []
-  let netDelta = 0
-
-  for (const abilityId of abilityIds) {
-    if (abilityId === PASS_ABILITY_ID) continue
-    if (!getAbilityById(fighter, abilityId)) continue
-
-    const current = fighter.cooldowns[abilityId] ?? 0
-    if (!effect.includeReady && current <= 0) continue
-
-    const next = Math.max(0, current + effect.amount)
-    if (next === current) continue
-
-    fighter.cooldowns[abilityId] = next
-    changedAbilityIds.push(abilityId)
-    netDelta += next - current
-  }
-
-  return { changedAbilityIds, netDelta }
 }
 
 function getCommandEnergyCost(state: BattleState, command: QueuedBattleAction) {
@@ -811,6 +640,60 @@ export function getQueueAbilityBlockReason(
   return null
 }
 
+/**
+ * Canonical command validator for a fully-formed QueuedBattleAction.
+ * Returns null when the command is legal, or a human-readable reason string
+ * when it should be rejected.
+ *
+ * `queued` is the map of already-queued commands for the same turn, used to
+ * detect team-energy overcommit across multiple actors.  Omit (or pass {})
+ * when validating in isolation.
+ */
+export function getBattleCommandBlockReason(
+  state: BattleState,
+  command: QueuedBattleAction,
+  queued: Record<string, QueuedBattleAction> = {},
+): string | null {
+  const actor = getFighterById(state, command.actorId)
+  if (!actor) return 'Actor not found'
+  if (!isAlive(actor)) return 'Fighter is KO'
+  if (actor.team !== command.team) return 'Actor does not belong to command team'
+
+  const ability = getAbilityById(actor, command.abilityId)
+  if (!ability) return 'Technique unavailable'
+
+  if (command.abilityId === PASS_ABILITY_ID) return null
+
+  if (hasModifierStatus(actor.modifiers, 'stun')) return 'Stunned this turn'
+  if (isAbilityIntentStunned(actor, ability)) return 'Skill intent sealed'
+  if (isAbilityClassStunned(actor, ability)) return 'Technique class sealed'
+
+  const cooldown = getCooldown(actor, command.abilityId)
+  if (cooldown > 0) return `Cooldown ${cooldown} turn${cooldown === 1 ? '' : 's'}`
+
+  if (ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single') {
+    const validIds = getValidTargetIds(state, actor.instanceId, command.abilityId)
+    if (validIds.length === 0) return 'No valid targets'
+    if (!command.targetId) return 'No target selected'
+    if (!validIds.includes(command.targetId)) return 'Invalid target'
+  }
+
+  // Validate random energy allocation before checking the projected pool.
+  const { cost } = getResolvedAbilityEnergyCost(actor, ability)
+  const resolvedCost = getCommandResolvedCost(cost, command)
+  if (!canPayEnergy(getEnergyPool(state, actor.team), resolvedCost)) {
+    return 'Insufficient cursed energy'
+  }
+
+  // Projected check: account for all already-queued commands from the same team.
+  const projectedPool = getProjectedTeamEnergy(state, queued, actor.team, actor.instanceId)
+  if (!canPayEnergy(projectedPool, resolvedCost)) {
+    return 'Insufficient cursed energy'
+  }
+
+  return null
+}
+
 export function getValidTargetIds(state: BattleState, actorId: string, abilityId: string) {
   const actor = getFighterById(state, actorId)
   if (!actor) return []
@@ -868,73 +751,6 @@ export function isEnemyCommandPhase(state: BattleState): boolean {
   return false
 }
 
-function matchesReactionCondition(
-  actor: BattleFighterState,
-  condition: BattleReactionCondition,
-  context: ReactionContext,
-) {
-  switch (condition.type) {
-    case 'selfHpBelow':
-      return actor.maxHp > 0 && actor.hp / actor.maxHp <= condition.threshold
-    case 'targetHpBelow':
-      return Boolean(context.target && context.target.maxHp > 0 && context.target.hp / context.target.maxHp <= condition.threshold)
-    case 'actorHasStatus':
-      return hasModifierStatus(actor.modifiers, condition.status)
-    case 'targetHasStatus':
-      return Boolean(context.target && hasModifierStatus(context.target.modifiers, condition.status))
-    case 'actorHasModifierTag':
-      return actor.modifiers.some((modifier) => modifier.tags.includes(condition.tag))
-    case 'targetHasModifierTag':
-      return Boolean(context.target && context.target.modifiers.some((modifier) => modifier.tags.includes(condition.tag)))
-    case 'abilityId':
-      return context.ability?.id === condition.abilityId
-    case 'abilityClass':
-      return Boolean(context.ability?.classes.includes(condition.class))
-    case 'fighterFlag':
-      return (actor.stateFlags[condition.key] ?? false) === condition.value
-    case 'actorModeIs':
-      return actor.stateModes[condition.key] === condition.value
-    case 'targetModeIs':
-      return context.target?.stateModes[condition.key] === condition.value
-    case 'counterAtLeast':
-      return (actor.stateCounters[condition.key] ?? 0) >= condition.value
-    case 'targetCounterAtLeast':
-      return Boolean(context.target && (context.target.stateCounters[condition.key] ?? 0) >= condition.value)
-    case 'usedAbilityLastTurn':
-      return actor.lastUsedAbilityId === condition.abilityId
-    case 'usedDifferentAbilityLastTurn':
-      return actor.lastUsedAbilityId !== null && actor.lastUsedAbilityId !== condition.abilityId
-    case 'usedAbilityWithinRounds':
-      return actor.lastUsedAbilityId === condition.abilityId ||
-        actor.previousUsedAbilityId === condition.abilityId ||
-        actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.round >= Math.max(1, context.round ?? 0) - condition.rounds)
-    case 'usedAbilityOnTarget':
-      return Boolean(context.target && actor.abilityHistory.some((entry) => entry.abilityId === condition.abilityId && entry.targetId === context.target?.instanceId))
-    case 'firstAbilityOnTarget':
-      return Boolean(context.target && !actor.abilityHistory.some((entry) =>
-        entry.targetId === context.target?.instanceId && (!condition.abilityId || entry.abilityId === condition.abilityId),
-      ))
-    case 'shieldActive':
-      return Boolean(actor.shield && (!condition.tag || actor.shield.tags.includes(condition.tag)))
-    case 'brokenShieldTag':
-      return Boolean(context.brokenShieldTags?.includes(condition.tag))
-    case 'isUltimate':
-      return context.isUltimate ?? Boolean(context.ability?.classes.includes('Ultimate'))
-  }
-}
-
-function getTriggeredPassiveEffects(
-  actor: BattleFighterState,
-  trigger: Exclude<PassiveTrigger, 'onTargetBelow'>,
-  context: ReactionContext,
-) {
-  if (trigger === 'whileAlive' && !isAlive(actor)) return [] as Array<{ passive: PassiveEffect; effects: SkillEffect[] }>
-
-  return (actor.passiveEffects ?? [])
-    .filter((passive) => getEffectivePassiveTrigger(passive) === trigger)
-    .filter((passive) => getPassiveConditions(passive).every((condition) => matchesReactionCondition(actor, condition, context)))
-    .map((passive) => ({ passive, effects: passive.effects }))
-}
 
 function firePassives(
   state: BattleState,
@@ -962,84 +778,6 @@ function firePassives(
   })
 }
 
-function createPassiveModifier(actor: BattleFighterState, passiveId: string, effect: Extract<SkillEffect, { type: 'damageBoost' | 'cooldownReduction' }>): BattleModifierInstance {
-  return createModifierInstance(
-    effect.type === 'damageBoost'
-      ? {
-          label: 'Passive Damage Boost',
-          stat: 'damageDealt',
-          mode: 'percentAdd',
-          value: effect.amount,
-          duration: { kind: 'untilRemoved' },
-          tags: ['passive', 'damageBoost'],
-          visible: false,
-          stacking: 'stack',
-        }
-      : {
-          label: 'Passive Cooldown Reduction',
-          stat: 'cooldownTick',
-          mode: 'flat',
-          value: effect.amount,
-          duration: { kind: 'untilRemoved' },
-          tags: ['passive', 'cooldownReduction'],
-          visible: false,
-          stacking: 'stack',
-        },
-    {
-      scope: 'fighter',
-      targetId: actor.instanceId,
-      sourceActorId: actor.instanceId,
-      sourceAbilityId: passiveId,
-    },
-  )
-}
-
-function getPassiveModifiers(actor: BattleFighterState, context: ReactionContext) {
-  return getTriggeredPassiveEffects(actor, 'whileAlive', context)
-    .flatMap((entry) => entry.effects.map((effect) => ({ passive: entry.passive, effect })))
-    .flatMap(({ passive, effect }) => {
-      if (effect.type === 'damageBoost' || effect.type === 'cooldownReduction') {
-        const passiveId = passive.id ?? passive.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        return [createPassiveModifier(actor, passiveId, effect)]
-      }
-      return []
-    })
-}
-
-function getModifierPool(state: BattleState, fighter: BattleFighterState, context: ReactionContext) {
-  return getFighterModifierPool(state, fighter).concat(getPassiveModifiers(fighter, context))
-}
-
-function getNumericModifierTotal(
-  state: BattleState,
-  fighter: BattleFighterState,
-  stat: BattleModifierStat,
-  mode: 'flat' | 'percentAdd',
-  context: ReactionContext,
-  filter: { tags?: string[]; statusKind?: BattleStatusKind } = {},
-) {
-  return sumNumericModifierValues(getModifierPool(state, fighter, context), stat, mode, filter)
-}
-
-function getModifierMultiplier(
-  state: BattleState,
-  fighter: BattleFighterState,
-  stat: BattleModifierStat,
-  context: ReactionContext,
-  filter: { tags?: string[]; statusKind?: BattleStatusKind } = {},
-) {
-  return getNumericModifierMultiplier(getModifierPool(state, fighter, context), stat, filter)
-}
-
-function hasModifierBoolean(
-  state: BattleState,
-  fighter: BattleFighterState,
-  stat: BattleModifierStat,
-  expected: boolean,
-  filter: { statusKind?: BattleStatusKind } = {},
-) {
-  return hasBooleanModifierValue(getModifierPool(state, fighter, { target: null }), stat, expected, filter)
-}
 
 function resolveEffectTargets(
   targetMode: SkillEffect['target'],
@@ -1084,53 +822,6 @@ function resolveEffectTargets(
     default:
       return selectedTarget ? [selectedTarget] : []
   }
-}
-
-function resolveRandomEnemyDamageTick(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  effect: Extract<SkillEffect, { type: 'randomEnemyDamageTick' }>,
-  abilityId?: string,
-  abilityClasses?: BattleAbilityTemplate['classes'],
-) {
-  const aliveEnemies = getOpposingTeam(state, actor.team).filter(isAlive)
-  if (aliveEnemies.length === 0) return
-
-  const unhitEnemies = aliveEnemies.filter((enemy) => (actor.stateCounters[`${effect.historyKey}:${enemy.templateId}`] ?? 0) <= 0)
-  const candidates = unhitEnemies.length > 0 ? unhitEnemies : aliveEnemies
-  state.randomTickCount = (state.randomTickCount ?? 0) + 1
-  const rng = createSeededRandom(`${state.battleSeed}:${effect.historyKey}:${state.round}:${state.randomTickCount}`)
-  const target = candidates[Math.floor(rng() * candidates.length)] ?? candidates[0]
-  if (!target) return
-
-  const wasRepeat = (actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0) > 0
-  actor.stateCounters[`${effect.historyKey}:${target.templateId}`] = (actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0) + 1
-  emitCounterChange(ctx, state.round, actor, `${effect.historyKey}:${target.templateId}`, actor.stateCounters[`${effect.historyKey}:${target.templateId}`] ?? 0, actor.instanceId, abilityId)
-
-  if (wasRepeat && effect.repeatCounterKey && effect.repeatCounterAmount) {
-    adjustFighterCounter(actor, effect.repeatCounterKey, effect.repeatCounterAmount)
-    emitCounterChange(ctx, state.round, actor, effect.repeatCounterKey, actor.stateCounters[effect.repeatCounterKey] ?? 0, actor.instanceId, abilityId)
-  }
-
-  if (!wasRepeat && effect.newTargetCounterKey && effect.newTargetCounterAmount) {
-    adjustFighterCounter(actor, effect.newTargetCounterKey, effect.newTargetCounterAmount)
-    emitCounterChange(ctx, state.round, actor, effect.newTargetCounterKey, actor.stateCounters[effect.newTargetCounterKey] ?? 0, actor.instanceId, abilityId)
-  }
-
-  const effectivePower = wasRepeat && effect.repeatPowerBonus ? effect.power + effect.repeatPowerBonus : effect.power
-  const amount = calculateDamage(state, actor, target, effectivePower, abilityClasses?.includes('Ultimate') ?? false, false, abilityId, abilityClasses)
-  applyDamagePacket(state, ctx, actor, target, {
-    kind: 'damage',
-    sourceActorId: actor.instanceId,
-    targetId: target.instanceId,
-    abilityId,
-    baseAmount: effectivePower,
-    amount,
-    damageType: 'normal',
-    tags: abilityClasses ?? [],
-    flags: {},
-  }, effect)
 }
 
 function applyModifierToFighter(
@@ -1310,69 +1001,6 @@ function removeModifiersFromScope(
   return removeModifiersFromFighter(state, ctx, target, filter, actorId, abilityId)
 }
 
-function applyAbilityStateDeltaToFighter(
-  state: BattleState,
-  ctx: ResolutionContext,
-  target: BattleFighterState,
-  delta: BattleAbilityStateDelta,
-  actorId?: string,
-  abilityId?: string,
-) {
-  addAbilityStateDelta(target, delta)
-  makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
-    actorId,
-    targetId: target.instanceId,
-    team: target.team,
-    abilityId,
-    meta: {
-      abilityStateMode: delta.mode,
-      slotAbilityId: delta.mode === 'grant' ? null : delta.slotAbilityId,
-      grantedAbilityId: delta.mode === 'grant' ? delta.grantedAbility.id : null,
-      replacementAbilityId: delta.mode === 'replace' ? delta.replacement.id : null,
-      duration: delta.duration,
-    },
-  })
-}
-
-function applyShieldToFighter(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  target: BattleFighterState,
-  effect: Extract<SkillEffect, { type: 'shield' }>,
-  abilityId?: string,
-) {
-  const label = effect.label?.trim() || 'Barrier'
-  const tags = effect.tags ?? []
-  const previous = target.shield
-  target.shield = previous
-    ? {
-        ...previous,
-        amount: previous.amount + effect.amount,
-        label,
-        sourceActorId: actor.instanceId,
-        sourceAbilityId: abilityId,
-        tags: Array.from(new Set(previous.tags.concat(tags))),
-      }
-    : {
-        amount: effect.amount,
-        label,
-        sourceActorId: actor.instanceId,
-        sourceAbilityId: abilityId,
-        tags: [...tags],
-      }
-
-  emitShieldEvent(ctx, state.round, 'shield_applied', target, {
-    actorId: actor.instanceId,
-    abilityId,
-    amount: effect.amount,
-    label,
-    tags,
-  })
-  const shieldAbility = abilityId ? getAbilityById(target, abilityId) ?? undefined : undefined
-  firePassives(state, ctx, target, actor, 'onShieldGain', shieldAbility, undefined, effect.amount)
-}
-
 function applyRotMarkerAndRewards(
   state: BattleState,
   ctx: ResolutionContext,
@@ -1404,7 +1032,7 @@ function applyRotMarkerAndRewards(
       label: 'Blood Brothers',
       tags: ['blood-brothers'],
       target: 'self',
-    }, 'eso-blood-brothers')
+    }, 'eso-blood-brothers', firePassives)
     makeEvent(ctx, state.round, 'system', 'teal', `${alliedEso.shortName} gained blood-bound defense.`, alliedEso.instanceId, alliedEso.instanceId, 5 * amount, 'eso-blood-brothers')
   }
 }
@@ -1442,32 +1070,6 @@ function applyRotOutgoingPenalty(
     excludedDamageClass: 'Affliction',
   }, actor.instanceId, ability.id)
   makeEvent(ctx, state.round, 'status', 'red', `${actor.shortName}'s Rot reduced non-affliction damage by ${Math.abs(amount)}.`, actor.instanceId, actor.instanceId, Math.abs(amount), ability.id)
-}
-
-function applyCostModifierToFighter(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  target: BattleFighterState,
-  effect: Extract<SkillEffect, { type: 'modifyAbilityCost' }>,
-  abilityId?: string,
-) {
-  const modifier = createCostModifierState(actor, abilityId, effect.modifier)
-  target.costModifiers.push(modifier)
-  makeRuntimeEvent(ctx, state.round, 'ability_cost_modified', {
-    actorId: actor.instanceId,
-    targetId: target.instanceId,
-    team: target.team,
-    abilityId,
-    meta: {
-      label: modifier.label,
-      mode: modifier.mode,
-      duration: modifier.duration,
-      uses: modifier.uses ?? null,
-      abilityId: modifier.abilityId ?? null,
-      abilityClass: modifier.abilityClass ?? null,
-    },
-  })
 }
 
 function applyEffectImmunityToFighter(
@@ -1519,273 +1121,10 @@ function applyDefeat(
   }
 }
 
-function applyDamagePacket(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState | null,
-  target: BattleFighterState,
-  packet: BattleDamagePacket,
-  effect?: SkillEffect,
-) {
-  if (!isAlive(target)) return 0
-
-  makeRuntimeEvent(ctx, state.round, 'damage_would_apply', {
-    actorId: packet.sourceActorId,
-    targetId: packet.targetId,
-    team: target.team,
-    abilityId: packet.abilityId,
-    amount: packet.amount,
-    tags: packet.tags,
-    packet,
-  })
-
-  if (hasModifierBoolean(state, target, 'isInvulnerable', true, { statusKind: 'invincible' }) && !packet.flags.ignoresInvulnerability) {
-    const packetAbility = actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
-    if (target.modifiers.some((modifier) => modifier.tags.includes('yuji-sukuna-bonus-on-blocked-damage'))) {
-      adjustFighterCounter(target, 'sukuna_bonus_hp', 5)
-      emitCounterChange(ctx, state.round, target, 'sukuna_bonus_hp', target.stateCounters.sukuna_bonus_hp ?? 0, actor?.instanceId, packet.abilityId)
-    }
-    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName} nullified ${actor?.shortName ?? 'the attack'}.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
-    makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
-      actorId: packet.sourceActorId,
-      targetId: packet.targetId,
-      team: target.team,
-      abilityId: packet.abilityId,
-      amount: 0,
-      tags: packet.tags,
-      packet,
-      meta: { blockedByInvincible: true },
-    })
-    runEffectReactionGuards(state, ctx, target, 'onDamageBlocked', actor, packetAbility)
-    return 0
-  }
-
-  let remainingDamage = packet.amount
-  if (target.shield && target.shield.amount > 0 && !packet.flags.ignoresShield) {
-    const absorbed = Math.min(target.shield.amount, remainingDamage)
-    target.shield.amount -= absorbed
-    remainingDamage -= absorbed
-    emitShieldEvent(ctx, state.round, 'shield_damaged', target, {
-      actorId: actor?.instanceId,
-      abilityId: packet.abilityId,
-      amount: absorbed,
-      label: target.shield.label,
-      tags: target.shield.tags,
-    })
-
-    if (target.shield.amount <= 0) {
-      const brokenShield = target.shield
-      target.shield = null
-      emitShieldEvent(ctx, state.round, 'shield_broken', target, {
-        actorId: actor?.instanceId,
-        abilityId: packet.abilityId,
-        amount: absorbed,
-        label: brokenShield.label,
-        tags: brokenShield.tags,
-      })
-      firePassives(
-        state,
-        ctx,
-        target,
-        actor,
-        'onShieldBroken',
-        actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
-        effect,
-        absorbed,
-        { brokenShieldTags: brokenShield.tags },
-      )
-      runEffectReactionGuards(
-        state,
-        ctx,
-        target,
-        'onShieldBroken',
-        actor,
-        actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
-      )
-    }
-  }
-
-  if (remainingDamage <= 0) {
-    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s shield absorbed the hit.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
-    makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
-      actorId: packet.sourceActorId,
-      targetId: packet.targetId,
-      team: target.team,
-      abilityId: packet.abilityId,
-      amount: 0,
-      tags: packet.tags,
-      packet: { ...packet, amount: 0 },
-      meta: { blockedByShield: true },
-    })
-    runEffectReactionGuards(
-      state,
-      ctx,
-      target,
-      'onDamageBlocked',
-      actor,
-      actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
-    )
-    return 0
-  }
-
-  const nextHp = Math.max(0, target.hp - remainingDamage)
-  const isUndying = hasBooleanModifierForStat(getFighterModifierPool(state, target), 'isUndying', true)
-  target.hp = isUndying && nextHp <= 0 ? 1 : nextHp
-  makeEvent(ctx, state.round, 'damage', 'red', `${actor?.shortName ?? target.shortName} hit ${target.shortName} for ${remainingDamage}.`, actor?.instanceId, target.instanceId, remainingDamage, packet.abilityId)
-  makeRuntimeEvent(ctx, state.round, 'damage_applied', {
-    actorId: packet.sourceActorId,
-    targetId: packet.targetId,
-    team: target.team,
-    abilityId: packet.abilityId,
-    amount: remainingDamage,
-    tags: packet.tags,
-    packet: { ...packet, amount: remainingDamage },
-  })
-  runEffectReactionGuards(
-    state,
-    ctx,
-    target,
-    'onDamageApplied',
-    actor,
-    actor && packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined,
-  )
-
-  if (actor) {
-    const ability = packet.abilityId ? getAbilityById(actor, packet.abilityId) ?? undefined : undefined
-    target.lastAttackerId = actor.instanceId
-    firePassives(state, ctx, actor, target, 'onDealDamage', ability, effect, remainingDamage)
-    firePassives(state, ctx, target, actor, 'onTakeDamage', ability, effect, remainingDamage)
-    if (target.hp <= 0) {
-      applyDefeat(state, ctx, target, actor, ability)
-    }
-  } else if (target.hp <= 0) {
-    applyDefeat(state, ctx, target, null)
-  }
-
-  return remainingDamage
-}
-
-function applyHealPacket(
-  state: BattleState,
-  ctx: ResolutionContext,
-  actor: BattleFighterState,
-  target: BattleFighterState,
-  packet: BattleHealPacket,
-) {
-  if (!isAlive(target)) return 0
-
-  makeRuntimeEvent(ctx, state.round, 'heal_would_apply', {
-    actorId: packet.sourceActorId,
-    targetId: packet.targetId,
-    team: target.team,
-    abilityId: packet.abilityId,
-    amount: packet.amount,
-    tags: packet.tags,
-    packet,
-  })
-
-  const before = target.hp
-  target.hp = Math.min(target.maxHp, target.hp + packet.amount)
-  const healed = target.hp - before
-  if (healed > 0) {
-    makeEvent(ctx, state.round, 'heal', 'teal', `${actor.shortName} restored ${healed} HP to ${target.shortName}.`, actor.instanceId, target.instanceId, healed, packet.abilityId)
-    makeRuntimeEvent(ctx, state.round, 'heal_applied', {
-      actorId: packet.sourceActorId,
-      targetId: packet.targetId,
-      team: target.team,
-      abilityId: packet.abilityId,
-      amount: healed,
-      tags: packet.tags,
-      packet: { ...packet, amount: healed },
-    })
-    const healAbility = packet.abilityId ? getAbilityById(target, packet.abilityId) ?? undefined : undefined
-    firePassives(state, ctx, target, actor, 'onHeal', healAbility, undefined, healed)
-  }
-  return healed
-}
-
 function setCooldown(fighter: BattleFighterState, ability: BattleAbilityTemplate) {
   fighter.cooldowns[ability.id] = ability.cooldown
 }
 
-function calculateDamage(
-  state: BattleState,
-  actor: BattleFighterState,
-  target: BattleFighterState,
-  basePower: number,
-  isUltimate: boolean,
-  isPiercing = false,
-  abilityId?: string,
-  abilityClasses?: BattleSkillClass[],
-) {
-  let amount = basePower
-  const ability = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
-  const actorContext: ReactionContext = { target, ability, isUltimate }
-  const targetContext: ReactionContext = { target: actor, ability, isUltimate }
-  const damageClass = (abilityClasses ?? ability?.classes ?? []).find(
-    (cls): cls is BattleSkillDamageType => ['Physical', 'Piercing', 'Energy', 'Affliction', 'Mental'].includes(cls),
-  )
-
-  const actorModifierPool = getModifierPool(state, actor, actorContext)
-  amount += sumNumericModifierValuesForClass(actorModifierPool, 'damageDealt', 'flat', damageClass)
-
-  amount = Math.round(amount * (1 + sumNumericModifierValuesForClass(actorModifierPool, 'damageDealt', 'percentAdd', damageClass)))
-  amount = Math.round(amount * getNumericModifierMultiplierForClass(actorModifierPool, 'damageDealt', damageClass))
-
-  if (isUltimate) {
-    amount = Math.round(amount * (1 + state.battlefield.ultimateDamageBoost))
-  }
-
-  const targetModifierPool = getModifierPool(state, target, targetContext)
-  const canReduceDamage = !hasBooleanModifierForStat(targetModifierPool, 'canReduceDamageTaken', false)
-  const effectiveTargetPool = canReduceDamage
-    ? targetModifierPool
-    : targetModifierPool.filter((m) => {
-        if (m.stat !== 'damageTaken') return true
-        if (m.mode === 'flat' && typeof m.value === 'number' && m.value < 0) return false
-        if (m.mode === 'percentAdd' && typeof m.value === 'number' && m.value < 0) return false
-        if (m.mode === 'multiplier' && typeof m.value === 'number' && m.value < 1) return false
-        return true
-      })
-  const piercingAdjustedTargetPool = isPiercing
-    ? effectiveTargetPool.filter((m) => {
-        if (m.stat !== 'damageTaken') return true
-        if (m.tags.includes('unpierceable')) return true
-        if (m.mode === 'flat' && typeof m.value === 'number' && m.value < 0) return false
-        if (m.mode === 'percentAdd' && typeof m.value === 'number' && m.value < 0) return false
-        if (m.mode === 'multiplier' && typeof m.value === 'number' && m.value < 1) return false
-        return true
-      })
-    : effectiveTargetPool
-  amount += sumNumericModifierValuesForClass(piercingAdjustedTargetPool, 'damageTaken', 'flat', damageClass)
-  amount = Math.round(amount * (1 + sumNumericModifierValuesForClass(piercingAdjustedTargetPool, 'damageTaken', 'percentAdd', damageClass)))
-  amount = Math.round(amount * getNumericModifierMultiplierForClass(piercingAdjustedTargetPool, 'damageTaken', damageClass))
-
-  return Math.max(0, amount)
-}
-
-function calculateHealing(
-  state: BattleState,
-  actor: BattleFighterState,
-  target: BattleFighterState,
-  basePower: number,
-  abilityId?: string,
-) {
-  let amount = basePower
-  const ability = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
-  const actorContext: ReactionContext = { target, ability, isUltimate: ability?.classes.includes('Ultimate') ?? false }
-  const targetContext: ReactionContext = { target: actor, ability, isUltimate: ability?.classes.includes('Ultimate') ?? false }
-
-  amount += getNumericModifierTotal(state, actor, 'healDone', 'flat', actorContext)
-  amount = Math.round(amount * (1 + getNumericModifierTotal(state, actor, 'healDone', 'percentAdd', actorContext)))
-  amount = Math.round(amount * getModifierMultiplier(state, actor, 'healDone', actorContext))
-
-  amount += getNumericModifierTotal(state, target, 'healTaken', 'flat', targetContext)
-  amount = Math.round(amount * (1 + getNumericModifierTotal(state, target, 'healTaken', 'percentAdd', targetContext)))
-  amount = Math.round(amount * getModifierMultiplier(state, target, 'healTaken', targetContext))
-
-  return Math.max(0, amount)
-}
 
 function resolveEffects(
   state: BattleState,
@@ -1803,55 +1142,22 @@ function resolveEffects(
   const enemies = getOpposingTeam(state, actor.team).filter(isAlive)
   const isUlt = abilityClasses?.includes('Ultimate') ?? false
   const resolvedAbility = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
+  const rotCounterCallbacks = {
+    counterKey: ROT_COUNTER_KEY,
+    applyMarkerAndRewards: applyRotMarkerAndRewards,
+    removeMarkerIfEmpty: removeRotMarkerIfEmpty,
+  }
 
   for (const effect of effects) {
     const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies, state, linkedTargetId)
 
     if (effect.type === 'schedule') {
-      if (targets.length === 0) continue
-      state.scheduledEffects.push({
-        id: `scheduled-${state.round}-${state.scheduledEffects.length}`,
-        actorId: actor.instanceId,
-        targetIds: targets.map((entry) => entry.instanceId),
-        abilityId,
-        dueRound: state.round + effect.delay,
-        phase: effect.phase,
-        effects: effect.effects.map(cloneEffect),
-      })
-      makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} armed a delayed effect for round ${state.round + effect.delay} ${effect.phase === 'roundStart' ? 'start' : 'end'}.`, actor.instanceId, targets[0]?.instanceId, undefined, abilityId)
-      makeRuntimeEvent(ctx, state.round, 'scheduled_effect_created', {
-        actorId: actor.instanceId,
-        targetId: targets[0]?.instanceId,
-        team: actor.team,
-        abilityId,
-        meta: { dueRound: state.round + effect.delay, phase: effect.phase },
-      })
+      createScheduledEffect(state, ctx, actor, targets, effect, abilityId)
       continue
     }
 
     if (effect.type === 'randomEnemyDamageOverTime') {
-      for (let delay = 1; delay <= effect.duration; delay += 1) {
-        state.scheduledEffects.push({
-          id: `scheduled-${state.round}-${state.scheduledEffects.length}`,
-          actorId: actor.instanceId,
-          targetIds: [actor.instanceId],
-          abilityId,
-          dueRound: state.round + delay,
-          phase: 'roundStart',
-          effects: [{
-            type: 'randomEnemyDamageTick',
-            power: effect.power,
-            historyKey: `${abilityId ?? 'effect'}:${effect.historyKey}`,
-            repeatPowerBonus: effect.repeatPowerBonus,
-            repeatCounterKey: effect.repeatCounterKey,
-            repeatCounterAmount: effect.repeatCounterAmount,
-            newTargetCounterKey: effect.newTargetCounterKey,
-            newTargetCounterAmount: effect.newTargetCounterAmount,
-            target: 'self',
-          }],
-        })
-      }
-      makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} set a roaming strike for ${effect.duration} turns.`, actor.instanceId, undefined, undefined, abilityId)
+      createRandomEnemyDamageOverTime(state, ctx, actor, effect, abilityId)
       continue
     }
 
@@ -1883,7 +1189,7 @@ function resolveEffects(
         scopedTargets.add(scopeKey)
       }
 
-      if (isEffectBlocked(effectTarget, effect)) {
+      if (isEffectBlocked(effectTarget, effect, effectActor.instanceId)) {
         makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
           actorId: effectActor.instanceId,
           targetId: effectTarget.instanceId,
@@ -1900,7 +1206,7 @@ function resolveEffects(
 
       switch (effect.type) {
         case 'randomEnemyDamageTick':
-          resolveRandomEnemyDamageTick(state, ctx, actor, effect, abilityId, abilityClasses)
+          resolveRandomEnemyDamageTick(state, ctx, actor, effect, abilityId, abilityClasses, firePassives, runEffectReactionGuards, applyDefeat)
           break
         case 'damage': {
           const isPiercing = effect.piercing ?? false
@@ -1925,7 +1231,7 @@ function resolveEffects(
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
             },
           }
-          applyDamagePacket(state, ctx, packetActor, packetTarget, packet, effect)
+          applyDamagePacket(state, ctx, packetActor, packetTarget, packet, firePassives, runEffectReactionGuards, applyDefeat, effect)
           break
         }
         case 'damageFiltered': {
@@ -1951,113 +1257,19 @@ function resolveEffects(
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
             },
           }
-          applyDamagePacket(state, ctx, effectActor, effectTarget, packet, effect)
+          applyDamagePacket(state, ctx, effectActor, effectTarget, packet, firePassives, runEffectReactionGuards, applyDefeat, effect)
           break
         }
         case 'energyGain': {
-          const currentPool = getEnergyPool(state, effectTarget.team)
-          const { pool: nextPool, gained } = gainEnergyPool(
-            currentPool,
-            effect.amount,
-            `${state.battleSeed}:energyGain:${state.round}:${ctx.runtimeEvents.length}:${effectTarget.team}`,
-          )
-          if (countEnergyAmounts(gained) <= 0) break
-          setEnergyPool(state, effectTarget.team, nextPool)
-          emitResourceChange(ctx, state.round, {
-            kind: 'resource',
-            sourceActorId: effectActor.instanceId,
-            targetTeam: effectTarget.team,
-            abilityId,
-            mode: 'gain',
-            amounts: getEnergyResourceDelta(gained, 1),
-            tags: abilityClasses ?? [],
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            'teal',
-            `${effectTarget.shortName}'s team gained ${formatEnergyAmounts(gained)} cursed energy.`,
-            effectActor.instanceId,
-            effectTarget.instanceId,
-            countEnergyAmounts(gained),
-            abilityId,
-          )
+          applyEnergyGain(state, ctx, effectActor, effectTarget, effect, abilityId, abilityClasses)
           break
         }
         case 'energyDrain': {
-          const currentPool = getEnergyPool(state, effectTarget.team)
-          const { pool: nextPool, drained } = drainEnergyPool(currentPool, effect.amount)
-          if (countEnergyAmounts(drained) <= 0) break
-          setEnergyPool(state, effectTarget.team, nextPool)
-          emitResourceChange(ctx, state.round, {
-            kind: 'resource',
-            sourceActorId: effectActor.instanceId,
-            targetTeam: effectTarget.team,
-            abilityId,
-            mode: 'spend',
-            amounts: getEnergyResourceDelta(drained, -1),
-            tags: abilityClasses ?? [],
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            'red',
-            `${effectTarget.shortName}'s team lost ${formatEnergyAmounts(drained)} cursed energy.`,
-            effectActor.instanceId,
-            effectTarget.instanceId,
-            countEnergyAmounts(drained),
-            abilityId,
-          )
+          applyEnergyDrain(state, ctx, effectActor, effectTarget, effect, abilityId, abilityClasses)
           break
         }
         case 'energySteal': {
-          const currentPool = getEnergyPool(state, effectTarget.team)
-          const { pool: drainedPool, drained } = drainEnergyPool(currentPool, effect.amount)
-          if (countEnergyAmounts(drained) <= 0) break
-
-          setEnergyPool(state, effectTarget.team, drainedPool)
-          emitResourceChange(ctx, state.round, {
-            kind: 'resource',
-            sourceActorId: effectActor.instanceId,
-            targetTeam: effectTarget.team,
-            abilityId,
-            mode: 'spend',
-            amounts: getEnergyResourceDelta(drained, -1),
-            tags: abilityClasses ?? [],
-          })
-
-          if (effectActor.team !== effectTarget.team) {
-            const actorPool = getEnergyPool(state, effectActor.team)
-            const { pool: actorNextPool, gained } = gainEnergyPool(
-              actorPool,
-              drained,
-              `${state.battleSeed}:energySteal:${state.round}:${ctx.runtimeEvents.length}:${effectActor.team}`,
-            )
-            setEnergyPool(state, effectActor.team, actorNextPool)
-            emitResourceChange(ctx, state.round, {
-              kind: 'resource',
-              sourceActorId: effectActor.instanceId,
-              targetTeam: effectActor.team,
-              abilityId,
-              mode: 'gain',
-              amounts: getEnergyResourceDelta(gained, 1),
-              tags: abilityClasses ?? [],
-            })
-          }
-
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            'teal',
-            `${effectActor.shortName} stole ${formatEnergyAmounts(drained)} cursed energy from ${effectTarget.shortName}'s team.`,
-            effectActor.instanceId,
-            effectTarget.instanceId,
-            countEnergyAmounts(drained),
-            abilityId,
-          )
+          applyEnergySteal(state, ctx, effectActor, effectTarget, effect, abilityId, abilityClasses)
           break
         }
         case 'damageEqualToActorShield': {
@@ -2085,7 +1297,7 @@ function resolveEffects(
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
             },
           }
-          applyDamagePacket(state, ctx, effectActor, effectTarget, dePacket, effect)
+          applyDamagePacket(state, ctx, effectActor, effectTarget, dePacket, firePassives, runEffectReactionGuards, applyDefeat, effect)
           break
         }
         case 'damageScaledByCounter': {
@@ -2116,7 +1328,7 @@ function resolveEffects(
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
             },
           }
-          applyDamagePacket(state, ctx, packetActor, packetTarget, packet, effect)
+          applyDamagePacket(state, ctx, packetActor, packetTarget, packet, firePassives, runEffectReactionGuards, applyDefeat, effect)
           if (effect.consumeStacks) {
             counterOwner.stateCounters[effect.counterKey] = 0
             emitCounterChange(ctx, state.round, counterOwner, effect.counterKey, 0, effectActor.instanceId, abilityId)
@@ -2138,7 +1350,7 @@ function resolveEffects(
             tags: abilityClasses ?? [],
             flags: {},
           }
-          applyHealPacket(state, ctx, effectActor, effectTarget, packet)
+          applyHealPacket(state, ctx, effectActor, effectTarget, packet, firePassives)
           break
         }
         case 'setHpFromCounter': {
@@ -2172,7 +1384,7 @@ function resolveEffects(
               tags: abilityClasses ?? [],
               flags: {},
             }
-            applyHealPacket(state, ctx, effectActor, effectTarget, overhealPacket)
+            applyHealPacket(state, ctx, effectActor, effectTarget, overhealPacket, firePassives)
           }
           if (overflow > 0) {
             applyShieldToFighter(state, ctx, effectActor, effectTarget, {
@@ -2181,132 +1393,34 @@ function resolveEffects(
               label: effect.shieldLabel ?? 'Overheal',
               tags: effect.shieldTags ?? [],
               target: effect.target,
-            }, abilityId)
+            }, abilityId, firePassives)
             makeEvent(ctx, state.round, 'system', 'teal', `${effectTarget.shortName} gained ${overflow} shield from overheal.`, effectActor.instanceId, effectTarget.instanceId, overflow, abilityId)
           }
           break
         }
         case 'stun':
-          applyModifierToFighter(state, ctx, effectTarget, {
-            label: 'Stun',
-            stat: 'canAct',
-            mode: 'set',
-            value: false,
-            duration: { kind: 'rounds', rounds: effect.duration },
-            tags: ['status', 'stun'],
-            visible: true,
-            stacking: 'max',
-            statusKind: 'stun',
-          }, effectActor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName} is stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
+          applyStunStatus(state, ctx, effectActor, effectTarget, effect, abilityId, applyModifierToFighter)
           break
-        case 'classStun': {
-          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, effect, state.round))
-          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: effectActor.instanceId,
-            targetId: effectTarget.instanceId,
-            team: effectTarget.team,
-            abilityId,
-            meta: { label: 'Class Stun', stat: 'classStun', mode: 'set', scope: 'fighter', status: null },
-          })
+        case 'classStun':
+          applyClassStunStatus(state, ctx, effectActor, effectTarget, effect, abilityId)
           break
-        }
-        case 'intentStun': {
-          effectTarget.intentStuns.push(createIntentStunState(effectActor, abilityId, effect, state.round))
-          const label = effect.intent === 'harmful' ? 'harmful' : 'helpful'
-          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${label} skills are stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.duration, abilityId)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: effectActor.instanceId,
-            targetId: effectTarget.instanceId,
-            team: effectTarget.team,
-            abilityId,
-            meta: { label: 'Intent Stun', stat: 'intentStun', mode: 'set', scope: 'fighter', status: null, intent: effect.intent },
-          })
+        case 'intentStun':
+          applyIntentStunStatus(state, ctx, effectActor, effectTarget, effect, abilityId)
           break
-        }
-        case 'classStunScaledByCounter': {
-          const stackCount = effectTarget.stateCounters[effect.counterKey] ?? 0
-          const duration = effect.baseDuration + stackCount * effect.durationPerStack
-          effectTarget.classStuns.push(createClassStunState(effectActor, abilityId, { type: 'classStun', duration, blockedClasses: effect.blockedClasses, exemptClasses: effect.exemptClasses, target: effect.target }, state.round))
-          makeEvent(ctx, state.round, 'status', 'gold', `${effectTarget.shortName}'s ${effect.blockedClasses.join('/')} techniques are sealed for ${duration} turn${duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, duration, abilityId)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: effectActor.instanceId,
-            targetId: effectTarget.instanceId,
-            team: effectTarget.team,
-            abilityId,
-            meta: { label: 'Class Stun', stat: 'classStun', mode: 'set', scope: 'fighter', status: null },
-          })
-          if (effect.consumeStacks) {
-            effectTarget.stateCounters[effect.counterKey] = 0
-            emitCounterChange(ctx, state.round, effectTarget, effect.counterKey, 0, effectActor.instanceId, abilityId)
-            if (effect.modifierTag) {
-              removeModifiersFromFighter(state, ctx, effectTarget, { tags: [effect.modifierTag] }, effectActor.instanceId, abilityId)
-            }
-          }
+        case 'classStunScaledByCounter':
+          applyClassStunScaledByCounterStatus(state, ctx, effectActor, effectTarget, effect, abilityId, removeModifiersFromFighter)
           break
-        }
-        case 'invulnerable': {
-          const canGain = !hasBooleanModifierForStat(getFighterModifierPool(state, t), 'canGainInvulnerable', false)
-          if (!canGain) {
-            makeEvent(ctx, state.round, 'system', 'frost', `${t.shortName} cannot become invulnerable.`, actor.instanceId, t.instanceId, undefined, abilityId)
-            break
-          }
-          applyModifierToFighter(state, ctx, t, {
-            label: 'Invulnerable',
-            stat: 'isInvulnerable',
-            mode: 'set',
-            value: true,
-            duration: { kind: 'rounds', rounds: effect.duration },
-            tags: ['status', 'invincible'],
-            visible: true,
-            stacking: 'max',
-            statusKind: 'invincible',
-          }, actor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} became untouchable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+        case 'invulnerable':
+          applyInvulnerableStatus(state, ctx, actor, t, effect, abilityId, applyModifierToFighter)
           break
-        }
         case 'attackUp':
-          applyModifierToFighter(state, ctx, t, {
-            label: 'Attack Up',
-            stat: 'damageDealt',
-            mode: 'flat',
-            value: effect.amount,
-            duration: { kind: 'rounds', rounds: effect.duration },
-            tags: ['status', 'attackUp'],
-            visible: true,
-            stacking: 'max',
-            statusKind: 'attackUp',
-          }, actor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} gained +${effect.amount} ATK for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
+          applyAttackUpStatus(state, ctx, actor, t, effect, abilityId, applyModifierToFighter)
           break
         case 'mark':
-          applyModifierToFighter(state, ctx, effectTarget, {
-            label: 'Mark',
-            stat: 'damageTaken',
-            mode: 'flat',
-            value: effect.bonus,
-            duration: { kind: 'rounds', rounds: effect.duration },
-            tags: ['status', 'mark'],
-            visible: true,
-            stacking: 'max',
-            statusKind: 'mark',
-          }, effectActor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'status', 'red', `${effectTarget.shortName} was marked for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.bonus, abilityId)
+          applyMarkStatus(state, ctx, effectActor, effectTarget, effect, abilityId, applyModifierToFighter)
           break
         case 'burn':
-          applyModifierToFighter(state, ctx, effectTarget, {
-            label: 'Burn',
-            stat: 'dotDamage',
-            mode: 'flat',
-            value: effect.damage,
-            duration: { kind: 'rounds', rounds: effect.duration },
-            tags: ['status', 'burn'],
-            visible: true,
-            stacking: 'max',
-            statusKind: 'burn',
-          }, effectActor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'status', 'red', `${effectTarget.shortName} is burning for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, effectActor.instanceId, effectTarget.instanceId, effect.damage, abilityId)
+          applyBurnStatus(state, ctx, effectActor, effectTarget, effect, abilityId, applyModifierToFighter)
           break
         case 'addModifier': {
           const scope = effect.modifier.scope ?? 'fighter'
@@ -2325,114 +1439,25 @@ function resolveEffects(
           break
         }
         case 'modifyAbilityState':
-          if ((effect.delta.mode === 'replace' || effect.delta.mode === 'lock') && !hasBaseAbility(t, effect.delta.slotAbilityId)) break
-          applyAbilityStateDeltaToFighter(state, ctx, t, effect.delta, actor.instanceId, abilityId)
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            'teal',
-            effect.delta.mode === 'replace'
-              ? `${t.shortName} replaced ${effect.delta.slotAbilityId} with ${effect.delta.replacement.name} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
-              : effect.delta.mode === 'grant'
-                ? `${t.shortName} gained ${effect.delta.grantedAbility.name} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`
-                : `${t.shortName} locked ${effect.delta.slotAbilityId} for ${effect.delta.duration} round${effect.delta.duration === 1 ? '' : 's'}.`,
-            actor.instanceId,
-            t.instanceId,
-            undefined,
-            abilityId,
-          )
+          applyModifyAbilityState(state, ctx, actor, t, effect, abilityId)
           break
         case 'replaceAbility':
-          if (!hasBaseAbility(t, effect.slotAbilityId)) break
-          applyAbilityStateDeltaToFighter(state, ctx, t, {
-            mode: 'replace',
-            slotAbilityId: effect.slotAbilityId,
-            replacement: effect.ability,
-            duration: effect.duration,
-          }, actor.instanceId, abilityId)
-          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} replaced ${effect.slotAbilityId} with ${effect.ability.name} for ${effect.duration} round${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          applyReplaceAbility(state, ctx, actor, t, effect, abilityId)
           break
         case 'replaceAbilities': {
-          const applied: string[] = []
-          for (const r of effect.replacements) {
-            if (!hasBaseAbility(t, r.slotAbilityId)) continue
-            applyAbilityStateDeltaToFighter(state, ctx, t, {
-              mode: 'replace',
-              slotAbilityId: r.slotAbilityId,
-              replacement: r.ability,
-              duration: r.duration,
-            }, actor.instanceId, abilityId)
-            applied.push(r.ability.name)
-          }
-          if (applied.length > 0) {
-            makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} transformed: ${applied.join(', ')}.`, actor.instanceId, t.instanceId, undefined, abilityId)
-          }
+          applyReplaceAbilities(state, ctx, actor, t, effect, abilityId)
           break
         }
         case 'shield':
-          applyShieldToFighter(state, ctx, actor, t, effect, abilityId)
+          applyShieldToFighter(state, ctx, actor, t, effect, abilityId, firePassives)
           makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.amount} shield.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
           break
         case 'shieldDamage': {
-          if (!effectTarget.shield) break
-          if (effect.tag && !effectTarget.shield.tags.includes(effect.tag)) break
-          const shield = effectTarget.shield
-          const drained = Math.min(shield.amount, effect.amount)
-          shield.amount -= drained
-          emitShieldEvent(ctx, state.round, 'shield_damaged', effectTarget, {
-            actorId: effectActor.instanceId,
-            abilityId,
-            amount: drained,
-            label: shield.label,
-            tags: shield.tags,
-          })
-          if (shield.amount <= 0) {
-            const brokenShield = shield
-            effectTarget.shield = null
-            emitShieldEvent(ctx, state.round, 'shield_broken', effectTarget, {
-              actorId: effectActor.instanceId,
-              abilityId,
-              amount: brokenShield.amount,
-              label: brokenShield.label,
-              tags: brokenShield.tags,
-            })
-            firePassives(
-              state,
-              ctx,
-              effectTarget,
-              effectActor,
-              'onShieldBroken',
-              abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined,
-              effect,
-              brokenShield.amount,
-              { brokenShieldTags: brokenShield.tags },
-            )
-            runEffectReactionGuards(
-              state,
-              ctx,
-              effectTarget,
-              'onShieldBroken',
-              effectActor,
-              abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined,
-            )
-          }
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            'frost',
-            `${effectActor.shortName} damaged ${effectTarget.shortName}'s shield by ${drained}.`,
-            effectActor.instanceId,
-            effectTarget.instanceId,
-            drained,
-            abilityId,
-          )
+          applyShieldDamageToFighter(state, ctx, effectActor, effectTarget, effect, abilityId, firePassives, runEffectReactionGuards)
           break
         }
         case 'modifyAbilityCost':
-          applyCostModifierToFighter(state, ctx, actor, t, effect, abilityId)
-          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName}'s technique cost shifted via ${effect.modifier.label}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          applyModifyAbilityCost(state, ctx, actor, t, effect, abilityId)
           break
         case 'effectImmunity':
           applyEffectImmunityToFighter(state, ctx, actor, t, effect, abilityId)
@@ -2495,153 +1520,40 @@ function resolveEffects(
           break
         }
         case 'counter': {
-          t.reactionGuards = t.reactionGuards.filter((guard) => guard.kind !== 'counter')
-          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
-          t.reactionGuards.push(guard)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: actor.instanceId,
-            targetId: t.instanceId,
-            team: t.team,
-            abilityId,
-            meta: { label: guard.label, stat: 'counter', mode: 'set', scope: 'fighter', status: null },
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'status',
-            'gold',
-            `${t.shortName} is ready to counter a harmful skill for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`,
-            actor.instanceId,
-            t.instanceId,
-            effect.counterDamage,
-            abilityId,
-          )
+          applyCounterSetupEffect(state, ctx, actor, t, effect, abilityId)
           break
         }
         case 'reflect': {
-          t.reactionGuards = t.reactionGuards.filter((guard) => guard.kind !== 'reflect')
-          const guard = createReactionGuardState(actor, abilityId, effect, state.round)
-          t.reactionGuards.push(guard)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: actor.instanceId,
-            targetId: t.instanceId,
-            team: t.team,
-            abilityId,
-            meta: { label: guard.label, stat: 'reflect', mode: 'set', scope: 'fighter', status: null },
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'status',
-            'teal',
-            `${t.shortName} is ready to reflect a harmful skill for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`,
-            actor.instanceId,
-            t.instanceId,
-            undefined,
-            abilityId,
-          )
+          applyReflectSetupEffect(state, ctx, actor, t, effect, abilityId)
           break
         }
         case 'reaction': {
-          const guard = createReactionGuardState(actor, abilityId, effect, state.round, target?.instanceId)
-          t.reactionGuards = t.reactionGuards.filter(
-            (existing) => !(existing.kind === 'effect' && existing.label === guard.label && existing.sourceActorId === guard.sourceActorId),
-          )
-          t.reactionGuards.push(guard)
-          makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
-            actorId: actor.instanceId,
-            targetId: t.instanceId,
-            team: t.team,
-            abilityId,
-            meta: { label: guard.label, stat: 'reaction', mode: 'set', scope: 'fighter', status: null },
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'status',
-            'teal',
-            `${t.shortName} is affected by ${guard.label} for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`,
-            actor.instanceId,
-            t.instanceId,
-            undefined,
-            abilityId,
-          )
+          applyReactionSetupEffect(state, ctx, actor, t, effect, abilityId, target?.instanceId)
           break
         }
         case 'setFlag':
-          setFighterFlag(t, effect.key, effect.value)
-          emitFlagChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
+          applySetFlagEffect(state, ctx, actor, t, effect, abilityId)
           break
         case 'setMode':
-          t.stateModeDurations ??= {}
-          t.stateModes[effect.key] = effect.value
-          if (effect.duration && effect.duration > 0) {
-            t.stateModeDurations[effect.key] = { remainingRounds: effect.duration, appliedInRound: state.round }
-          } else {
-            delete t.stateModeDurations[effect.key]
-          }
-          makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
-            actorId: actor.instanceId,
-            targetId: t.instanceId,
-            team: t.team,
-            abilityId,
-            meta: { key: effect.key, value: effect.value, duration: effect.duration ?? null },
-          })
-          makeEvent(ctx, state.round, 'status', 'teal', `${t.shortName} entered ${effect.value}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          applySetModeEffect(state, ctx, actor, t, effect, abilityId)
           break
         case 'clearMode':
-          delete t.stateModes[effect.key]
-          delete t.stateModeDurations?.[effect.key]
-          makeRuntimeEvent(ctx, state.round, 'fighter_flag_changed', {
-            actorId: actor.instanceId,
-            targetId: t.instanceId,
-            team: t.team,
-            abilityId,
-            meta: { key: effect.key, value: null },
-          })
-          makeEvent(ctx, state.round, 'status', 'frost', `${t.shortName} left ${effect.key}.`, actor.instanceId, t.instanceId, undefined, abilityId)
+          applyClearModeEffect(state, ctx, actor, t, effect, abilityId)
           break
         case 'adjustCounter':
-          if (effect.requiresTag && !getFighterModifierPool(state, t).some((modifier) => modifier.tags.includes(effect.requiresTag!))) break
-          adjustFighterCounter(t, effect.key, effect.amount)
-          if (effect.min != null || effect.max != null) {
-            const current = t.stateCounters[effect.key] ?? 0
-            t.stateCounters[effect.key] = Math.min(effect.max ?? current, Math.max(effect.min ?? current, current))
-          }
-          emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
-          if (effect.key === ROT_COUNTER_KEY) {
-            applyRotMarkerAndRewards(state, ctx, actor, t, effect.amount, abilityId)
-            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
-          }
+          applyAdjustCounterEffect(state, ctx, actor, t, effect, abilityId, rotCounterCallbacks)
           break
         case 'setCounter':
-          t.stateCounters[effect.key] = effect.value
-          emitCounterChange(ctx, state.round, t, effect.key, effect.value, actor.instanceId, abilityId)
-          if (effect.key === ROT_COUNTER_KEY) {
-            if (effect.value > 0) applyRotMarkerAndRewards(state, ctx, actor, t, effect.value, abilityId)
-            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
-          }
+          applySetCounterEffect(state, ctx, actor, t, effect, abilityId, rotCounterCallbacks)
           break
-        case 'adjustSourceCounter': {
-          const source = getModifierSourceFighter(state, { sourceActorId: t.modifiers.find((modifier) => modifier.sourceActorId === actor.instanceId)?.sourceActorId }) ?? actor
-          adjustFighterCounter(source, effect.key, effect.amount)
-          emitCounterChange(ctx, state.round, source, effect.key, source.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
+        case 'adjustSourceCounter':
+          applyAdjustSourceCounterEffect(state, ctx, actor, t, effect, abilityId)
           break
-        }
-        case 'adjustCounterByTriggerAmount': {
-          const delta = Math.floor(triggerAmount ?? 0)
-          if (delta > 0) {
-            adjustFighterCounter(t, effect.key, delta)
-            emitCounterChange(ctx, state.round, t, effect.key, t.stateCounters[effect.key] ?? 0, actor.instanceId, abilityId)
-          }
+        case 'adjustCounterByTriggerAmount':
+          applyAdjustCounterByTriggerAmountEffect(state, ctx, actor, t, effect, abilityId, triggerAmount)
           break
-        }
         case 'resetCounter':
-          t.stateCounters[effect.key] = 0
-          emitCounterChange(ctx, state.round, t, effect.key, 0, actor.instanceId, abilityId)
-          if (effect.key === ROT_COUNTER_KEY) {
-            removeRotMarkerIfEmpty(state, ctx, t, actor.instanceId, abilityId)
-          }
+          applyResetCounterEffect(state, ctx, actor, t, effect, abilityId, rotCounterCallbacks)
           break
         case 'conditional': {
           const conditionAbility = abilityId ? getAbilityById(effectActor, abilityId) ?? undefined : undefined
@@ -2662,32 +1574,7 @@ function resolveEffects(
         case 'damageBoost':
           break
         case 'cooldownAdjust': {
-          const { changedAbilityIds, netDelta } = applyCooldownAdjust(effectTarget, effect)
-          if (changedAbilityIds.length === 0) break
-          makeRuntimeEvent(ctx, state.round, 'ability_resolved', {
-            actorId: effectActor.instanceId,
-            targetId: effectTarget.instanceId,
-            team: effectTarget.team,
-            abilityId,
-            amount: netDelta,
-            meta: {
-              cooldownAdjust: effect.amount,
-              abilityId: effect.abilityId ?? null,
-              includeReady: effect.includeReady ?? false,
-              changedAbilityIds: changedAbilityIds.join(','),
-            },
-          })
-          makeEvent(
-            ctx,
-            state.round,
-            'system',
-            effect.amount < 0 ? 'teal' : 'gold',
-            `${effectTarget.shortName}'s cooldowns ${effect.amount < 0 ? 'reduced' : 'increased'} by ${Math.abs(effect.amount)}.`,
-            effectActor.instanceId,
-            effectTarget.instanceId,
-            Math.abs(effect.amount),
-            abilityId,
-          )
+          applyCooldownAdjustEffect(state, ctx, effectActor, effectTarget, effect, abilityId)
           break
         }
       }
@@ -2748,6 +1635,16 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
 
   const ability = getAbilityById(actor, command.abilityId)
   if (!ability) return
+
+  // Reject commands where the actor's actual team does not match the command's
+  // declared team.  All other structural checks (target validity, energy,
+  // cooldown, stun) are handled by the existing guards below; invulnerable
+  // targets are intentionally allowed through so that damage-blocking mechanics
+  // (e.g. Brink Control) can still fire on the correct unit.
+  if (actor.team !== command.team) {
+    makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} couldn't activate ${ability.name}.`, actor.instanceId, undefined, undefined, ability.id)
+    return
+  }
 
   if (hasModifierBoolean(state, actor, 'canAct', false, { statusKind: 'stun' })) {
     makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName} is stunned and passed the turn.`, actor.instanceId)
@@ -2820,19 +1717,25 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   })
   applyRotOutgoingPenalty(state, ctx, actor, ability)
 
-  const allies = getTeam(state, actor.team)
-  const enemies = getOpposingTeam(state, actor.team)
   const explicitTarget = command.targetId ? getFighterById(state, command.targetId) : null
-  const validTargetIds = new Set(getValidTargetIds(state, actor.instanceId, ability.id))
   const requiresValidatedSingleTarget = ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single'
-  const fallbackSingleTarget = ability.targetRule === 'enemy-single'
-    ? enemies.find((fighter) => isAlive(fighter) && targetHasRequiredTags(state, fighter, ability)) ?? null
-    : ability.targetRule === 'ally-single'
-      ? allies.find((fighter) => isAlive(fighter) && targetHasRequiredTags(state, fighter, ability)) ?? null
-      : null
-  const singleTarget: BattleFighterState | null =
-    (explicitTarget && isAlive(explicitTarget) && (!requiresValidatedSingleTarget || validTargetIds.has(explicitTarget.instanceId)) ? explicitTarget : null) ??
-    fallbackSingleTarget
+  const singleTarget: BattleFighterState | null = (() => {
+    if (!requiresValidatedSingleTarget) {
+      return explicitTarget && isAlive(explicitTarget) ? explicitTarget : null
+    }
+    // Missing or dead target → no fallback; action resolves with no target.
+    if (!explicitTarget || !isAlive(explicitTarget)) return null
+    // Valid explicit target — use it directly.
+    const validTargetIds = new Set(getValidTargetIds(state, actor.instanceId, ability.id))
+    if (validTargetIds.has(explicitTarget.instanceId)) return explicitTarget
+    // Target is alive but not in getValidTargetIds (e.g. invulnerable). Allow it so that
+    // damage-blocking mechanics (e.g. Brink Control) still trigger on the correct unit,
+    // but only if it's on the correct side of the field.
+    const isCorrectSide = ability.targetRule === 'enemy-single'
+      ? getOpposingTeam(state, actor.team).some((f) => f.instanceId === explicitTarget.instanceId)
+      : getTeam(state, actor.team).some((f) => f.instanceId === explicitTarget.instanceId)
+    return isCorrectSide ? explicitTarget : null
+  })()
   const allTargeted = ability.targetRule === 'enemy-all'
     ? getOpposingTeam(state, actor.team).filter(isAlive)
     : ability.targetRule === 'ally-all'
@@ -2919,7 +1822,7 @@ function applyRoundStartEffects(state: BattleState, ctx: ResolutionContext) {
         tags: ['burn'],
         flags: { isStatusTick: true },
       }
-      applyDamagePacket(state, ctx, null, fighter, packet)
+      applyDamagePacket(state, ctx, null, fighter, packet, firePassives, runEffectReactionGuards, applyDefeat)
     }
 
     if (isAlive(fighter)) {
@@ -3002,7 +1905,7 @@ function applyFatigue(state: BattleState, ctx: ResolutionContext) {
       tags: ['fatigue'],
       flags: { isStatusTick: true },
     }
-    applyDamagePacket(state, ctx, null, fighter, packet)
+    applyDamagePacket(state, ctx, null, fighter, packet, firePassives, runEffectReactionGuards, applyDefeat)
     if (isAlive(fighter)) {
       makeEvent(ctx, state.round, 'system', 'red', `Domain pressure dealt ${damage} to ${fighter.shortName}.`, undefined, fighter.instanceId, damage)
     }
@@ -3262,6 +2165,20 @@ export function endRoundTimeline(previousState: BattleState): BattleTimelineResu
   }
 }
 
+/**
+ * @deprecated Legacy single-call round resolver.  Use the phased team-turn
+ * flow instead:
+ *   1. resolveTeamTurn(state, playerCommands, 'player' | 'enemy')
+ *   2. transitionToSecondPlayer(state)
+ *   3. resolveTeamTurn(state, secondCommands, secondTeam)
+ *   4. endRound / beginNewRound as applicable
+ *
+ * resolveRound collapses both halves and the round boundary into one call,
+ * which makes it unsuitable for the multiplayer turn-submission model where
+ * each half-round is submitted and validated separately.  It is kept here only
+ * for offline tooling / tests that have not yet been migrated.  New production
+ * code should not call this function.
+ */
 export function resolveRound(
   previousState: BattleState,
   playerCommands: Record<string, QueuedBattleAction>,

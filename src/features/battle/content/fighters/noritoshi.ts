@@ -39,7 +39,7 @@ export const noritoshi = fighter({
     skill({
       id: 'noritoshi-piercing-blood',
       name: 'Piercing Blood',
-      description: 'Deals 20 damage to one enemy. If used after Blood Draw, it deals additional piercing damage.',
+      description: 'Deals 20 damage to one enemy. If used after Blood Draw, it deals 15 additional piercing damage.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Ranged', 'Instant'],
@@ -48,7 +48,12 @@ export const noritoshi = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
-        { type: 'damageFiltered', power: 15, requiresTag: 'blood-draw', target: 'inherit', piercing: true },
+        {
+          type: 'conditional',
+          target: 'inherit',
+          conditions: [{ type: 'usedAbilityLastTurn', abilityId: 'noritoshi-blood-draw' }],
+          effects: [{ type: 'damage', power: 15, target: 'inherit', piercing: true }],
+        },
       ],
     }),
     skill({

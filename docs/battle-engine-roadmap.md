@@ -1,5 +1,48 @@
 # Battle Engine Roadmap
 
+## Phase 1: Engine Hardening (in progress)
+
+Goal: make the local battle engine safe to use as the foundation for server-side match resolution.
+
+### Step 1 — Invalid target fallback removed ✓
+`resolveAction` no longer silently retargets to a different unit when the
+commanded target is missing or dead.  Actions with no valid target resolve as
+a no-op.  Invulnerable targets are still forwarded to `applyDamagePacket` so
+blocking mechanics (e.g. Brink Control) fire correctly.
+
+### Step 2 — Canonical command validator ✓
+`getBattleCommandBlockReason(state, command, queued?)` in `engine.ts` is the
+single authoritative check for whether a `QueuedBattleAction` is legal.  It
+covers: actor existence/liveness/team, ability existence, pass shortcut, stun,
+intent-stun, class-stun, cooldown, single-target validity, random-cost
+allocation, current-pool energy, and projected overcommit across queued
+actions.  The UI, AI, and future Edge Function should all route through this
+helper rather than re-implementing the checks.
+
+### Step 3 — Deterministic runtime IDs ✓
+`createClassStunState`, `createIntentStunState`, and `createReactionGuardState`
+in `engine/stateFactory.ts` no longer use `Date.now()`.  IDs are derived from
+the target array length at creation time (the same pattern already used by
+`createEffectImmunityState`).  Identical inputs now produce identical
+`BattleState` output, which is required for replay verification and server-side
+validation.
+
+### Step 4 — Shared energy documented; resolveRound deprecated ✓
+See `docs/game-design.md` §Shared Pool Model and the `@deprecated` JSDoc on
+`resolveRound` in `engine.ts`.
+
+#### Canonical production flow (use this, not resolveRound)
+```
+resolveTeamTurn(state, firstCommands, firstTeam)
+transitionToSecondPlayer(state)       // or equivalent phase gate
+resolveTeamTurn(state, secondCommands, secondTeam)
+endRound(state) / beginNewRound(state)
+```
+`resolveRound` collapses both halves into one call and is not suitable for the
+multiplayer submission model.  It is kept for offline tooling only.
+
+---
+
 ## Milestone 2: Conditional Effects and Counter Rules
 
 - Status: partially implemented.
@@ -81,6 +124,54 @@ Remaining Milestone 3 work:
   - Gojo Blue/Red/Purple exactness.
   - Maki/Nanami/Panda mode and cost behavior.
 - Add tests for Gojo Blue/Red/Purple, Kamo sequencing, Panda form upgrades, Shoko death prevention, and Toge strain.
+
+## Phase 2 Preparation: Signature Mechanic Tests ✓
+
+Added 19 focused mechanic-level tests to `engine.test.ts` covering:
+
+- **Jogo**: Disaster Heat onTakeDamage accumulation (25-damage threshold → Scorched trigger); Cataclysmic Eruption scaled damage with stack consumption.
+- **Sukuna**: King's Vessel energy gain per ability; reduceRandom costModifier lifecycle (applied by onAbilityResolve, consumed before next ability activation, gone after tickTeamTurn).
+- **Nanami**: Overtime one-shot HP threshold passive; Ratio Follow-Through chained execution bonus (20 piercing via onAbilityResolve inherit target).
+- **Toge**: Vocal Strain self-damage counter; Throat Spray flag lifecycle (flag set and consumed within same turn by passive — observable state is always reset).
+- **Todo**: Besto Friendo target marking; Brutal Swing damage filter on marked target.
+- **Panda**: Three Cores gorilla-mode trigger below 30% HP; flag prevents second trigger.
+- **Kamo**: Refined Technique +10 modifier added after Blood Draw → applied to next ability (not the current one, since onAbilityResolve fires after damage); damageFiltered on Piercing Blood never fires (requires enemy to hold blood-draw tag, not Kamo).
+- **Gojo**: Infinity passive invulnerability at round start; ignoresInvulnerability damage pierces it.
+
+**Engine bug fixed**: `isEffectBlocked` in `reactionPredicates.ts` was blocking self-applied effects when the actor's own `effectImmunity` was applied first in the same passive chain. Fixed by passing `actorId` to `isEffectBlocked` and skipping immunity when actor equals target. This manifested as Gojo's `invulnerable` effect being silently blocked by his own `Infinity` effectImmunity.
+
+**Content bug fixed (Kamo Piercing Blood)**: `damageFiltered` checks the *target's* modifier pool. Blood Draw gave Kamo himself the `blood-draw` tag, not the enemy — so the +15 piercing bonus never fired. Fixed by replacing `damageFiltered` with a `conditional { type: 'usedAbilityLastTurn', abilityId: 'noritoshi-blood-draw' }` on `target: 'inherit'`. Tests updated to assert 35 damage after Blood Draw (20 base + 15 piercing conditional). Also note: the Refined Technique passive fires `onAbilityResolve` AFTER damage, so its +10 modifier boosts the *following* ability, not Piercing Blood itself.
+
+## Focused Mechanic Audit ✓
+
+Reviewed all `damageFiltered` uses, `usedAbilityLastTurn` timing, `onAbilityResolve` ordering, and `effectImmunity`+`invulnerable` co-occurrence across the full roster.
+
+### Confirmed intentional / acceptable
+
+- **Todo Besto Friendo**: `onAbilityResolve` marks target with `todo-type` and applies `damageTaken +5`. The mark fires *after* the damage of the current ability — the +5 bonus applies to future hits. By design.
+- **Nanami Ratio Follow-Through**: `onAbilityResolve` with `abilityId('nanami-execution')` fires 20 piercing damage on `inherit` after Execution's own damage. The double-check (`abilityId` + `usedAbilityLastTurn`) is intentional gating.
+- **Toge Vocal Strain / Throat Spray flag**: flag is set and consumed within the same turn (Throat Spray sets it, Vocal Strain passive consumes it). Observable state is always flag=false. This is intentional by-design; the flag is a within-turn signal.
+- **Sukuna King's Vessel `reduceRandom` lifetime**: `duration: 1, uses: 1` cost modifier is applied by `onAbilityResolve`, then ticked away by `tickCostModifiers` at end of `resolveTeamTurn`. It is consumed before the tick if the next ability uses it in the same turn. One-use-per-turn is intentional.
+- **Jogo Disaster Heat trigger description**: says "Ember Insects will trigger on all enemies" but the `onTakeDamage` passive only applies `adjustCounter(scorched, +1)` + `markerEffect(Scorched, 5 turns)` — not the full Ember Insects skill (which also grants a shield and a `onShieldBroken` reaction). The description is approximate; the mechanic is functionally correct. Description wording could be improved but this is not a bug.
+- **Gojo Reversal Red `damageFiltered` (requiresTag `pulled`)**: correct — Lapse Blue applies `pulled` marker to the *enemy target*, and Reversal Red checks the same enemy target. Works correctly.
+- **All other `damageFiltered` uses** (Todo Boogie-Woogie, Junpei Moon Dregs, Mahito Idle Transfiguration, Momo Disrupting Gust, Nobara Hairpin, Ijichi Barrier Tagging): all correctly apply the tag to the *enemy target* and check the same enemy target. No issues.
+
+### Confirmed bugs fixed in this pass
+
+- **Engine**: `isEffectBlocked` self-blocks self-applied effects — fixed (see above).
+- **Kamo Piercing Blood**: `damageFiltered` with `requiresTag: 'blood-draw'` never fired — fixed with `usedAbilityLastTurn` conditional.
+
+### Known issues documented but not fixed (deferred to Milestone 3 / Milestone 4)
+
+- **Panda Core Shift**: sets `form = gorilla` with no duration, permanently forcing Gorilla Mode after use. Should expire after 1 round. Already listed in Milestone 3 remaining work.
+- **Toge Blast Away nested condition**: the "Don't Move used last turn" bonus inside the Throat Spray branch is architecturally unreachable — `usedAbilityLastTurn` can only match one prior ability at a time. The two bonuses cannot combine. Not a crash bug, but the description implies they should stack. Deferred.
+
+### Description wording to update (low priority)
+
+- **Jogo Disaster Heat**: "Ember Insects will trigger" → say "all enemies gain 1 Scorched stack" instead, to match actual engine behavior.
+- **Kamo Piercing Blood**: already updated to "deals 15 additional piercing damage" (was "additional piercing damage" without amount).
+
+---
 
 ## Milestone 4: Roster Fidelity and UI Polish
 

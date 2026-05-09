@@ -1,4 +1,23 @@
-import type { BattleAbilityTemplate } from '@/features/battle/types.ts'
+// Shared Team Energy — intentional design
+//
+// Cursed Arena uses Naruto-Arena-style shared team energy: each team has a
+// single pool that all three fighters draw from.  Individual fighters do NOT
+// own separate energy pools.
+//
+// Rules that follow from this:
+//   • Ability costs are deducted from the acting fighter's TEAM pool.
+//   • All queued actions for a team compete for the same pool; the UI and
+//     getBattleCommandBlockReason enforce that queued actions never overcommit
+//     the projected pool balance.
+//   • Energy generation: +1 random type per living fighter per round, credited
+//     to the team pool, not the individual.
+//   • Character-specific resources (charges, ammo, stacks) MUST use counters,
+//     modes, flags, passives, or modifiers — NOT a separate energy pool.
+//
+// Do not refactor into per-character energy unless product direction explicitly
+// changes.  Future character kits should be balanced around the shared pool.
+
+import type { BattleAbilityTemplate, BattleResourceKey, BattleState, BattleTeamId } from '@/features/battle/types.ts'
 import { createSeededRandom } from '@/features/battle/random.ts'
 
 export const battleEnergyOrder = ['physical', 'technique', 'vow', 'mental'] as const
@@ -73,6 +92,37 @@ export const battleEnergyMeta: Record<
 
 function sanitizeCount(value: number | undefined) {
   return Math.max(0, Math.floor(value ?? 0))
+}
+
+export function normalizeEnergyAmount(value: number | undefined) {
+  return Math.max(0, Math.floor(value ?? 0))
+}
+
+export function normalizeEnergyCost(cost: BattleEnergyCost) {
+  const next: BattleEnergyCost = {}
+  battleEnergyOrder.forEach((type) => {
+    const value = normalizeEnergyAmount(cost[type])
+    if (value > 0) next[type] = value
+  })
+  const random = normalizeEnergyAmount(cost.random)
+  if (random > 0) next.random = random
+  return next
+}
+
+export function formatEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
+  const tokens = battleEnergyOrder
+    .map((type) => {
+      const amount = amounts[type] ?? 0
+      if (amount <= 0) return null
+      return `${type.toUpperCase()} +${amount}`
+    })
+    .filter((token): token is string => Boolean(token))
+
+  return tokens.length > 0 ? tokens.join(', ') : 'no gain'
+}
+
+export function countEnergyAmounts(amounts: Partial<Record<BattleEnergyType, number>>) {
+  return battleEnergyOrder.reduce((total, type) => total + normalizeEnergyAmount(amounts[type]), 0)
 }
 
 export function createEnergyAmounts(values: Partial<Record<BattleEnergyType, number>> = {}): BattleEnergyAmounts {
@@ -299,6 +349,102 @@ function buildExchangeSpendAmounts(pool: BattleEnergyPool, targetType: BattleEne
 
 export function canPayEnergy(pool: BattleEnergyPool, cost: BattleEnergyCost) {
   return getSpentEnergyAmountsInternal(pool, cost) !== null
+}
+
+export function getEnergyResourceDelta(amounts: Partial<Record<BattleEnergyType, number>>, sign: 1 | -1) {
+  const entries = battleEnergyOrder
+    .map((type) => {
+      const value = normalizeEnergyAmount(amounts[type]) * sign
+      return [type, value] as const
+    })
+    .filter((entry) => entry[1] !== 0)
+
+  return {
+    reserve: countEnergyAmounts(amounts) * sign,
+    ...Object.fromEntries(entries),
+  } as Partial<Record<BattleResourceKey, number>>
+}
+
+export function gainEnergyPool(
+  pool: BattleEnergyPool,
+  amount: BattleEnergyCost,
+  seed: string,
+) {
+  const normalized = normalizeEnergyCost(amount)
+  const gained = createEnergyAmounts()
+  const nextAmounts = createEnergyAmounts(pool.amounts)
+
+  battleEnergyOrder.forEach((type) => {
+    const typed = normalizeEnergyAmount(normalized[type])
+    if (typed <= 0) return
+    gained[type] += typed
+    nextAmounts[type] += typed
+  })
+
+  const random = normalizeEnergyAmount(normalized.random)
+  if (random > 0) {
+    const randomizer = createSeededRandom(seed)
+    for (let index = 0; index < random; index += 1) {
+      const rolled = Math.floor(randomizer() * battleEnergyOrder.length) % battleEnergyOrder.length
+      const type = battleEnergyOrder[rolled]
+      gained[type] += 1
+      nextAmounts[type] += 1
+    }
+  }
+
+  return {
+    pool: {
+      amounts: nextAmounts,
+    },
+    gained,
+  }
+}
+
+export function drainEnergyPool(
+  pool: BattleEnergyPool,
+  amount: BattleEnergyCost,
+) {
+  const normalized = normalizeEnergyCost(amount)
+  const drained = createEnergyAmounts()
+  const nextAmounts = createEnergyAmounts(pool.amounts)
+
+  battleEnergyOrder.forEach((type) => {
+    const requested = normalizeEnergyAmount(normalized[type])
+    if (requested <= 0) return
+    const taken = Math.min(nextAmounts[type], requested)
+    nextAmounts[type] -= taken
+    drained[type] += taken
+  })
+
+  let randomRemaining = normalizeEnergyAmount(normalized.random)
+  while (randomRemaining > 0) {
+    const sourceType = battleEnergyOrder
+      .filter((type) => nextAmounts[type] > 0)
+      .sort((left, right) => nextAmounts[right] - nextAmounts[left] || battleEnergyOrder.indexOf(left) - battleEnergyOrder.indexOf(right))[0]
+    if (!sourceType) break
+    nextAmounts[sourceType] -= 1
+    drained[sourceType] += 1
+    randomRemaining -= 1
+  }
+
+  return {
+    pool: {
+      amounts: nextAmounts,
+    },
+    drained,
+  }
+}
+
+export function getEnergyPool(state: BattleState, team: BattleTeamId) {
+  return team === 'player' ? state.playerEnergy : state.enemyEnergy
+}
+
+export function setEnergyPool(state: BattleState, team: BattleTeamId, pool: BattleState['playerEnergy']) {
+  if (team === 'player') {
+    state.playerEnergy = pool
+  } else {
+    state.enemyEnergy = pool
+  }
 }
 
 export function canExchangeEnergy(pool: BattleEnergyPool, exchangeCost = battleEnergyExchangeCost) {

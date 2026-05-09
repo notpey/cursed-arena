@@ -43,6 +43,16 @@ At the start of each round, each living character generates **1 Cursed Energy** 
 
 **Energy drain / steal:** Some skills remove or transfer energy from the opponent's pool. If the opponent doesn't have the specific type being drained, nothing happens.
 
+### Shared Pool Model (implementation rule)
+
+Energy is tracked as **one pool per team**, shared by all three fighters on that team. Individual characters do not have separate energy budgets.
+
+- All three fighters draw from the same pool when their skills are queued.
+- Queuing two skills in the same turn competes for the same pool; the UI prevents overcommit before submission.
+- Character-specific resources (charges, ammo, stacks, transformations) must be implemented with **counters, modes, flags, passives, or modifiers** — not a separate energy pool.
+- New character kits must be balanced around the shared pool and must not assume private energy.
+- Do not change this model without an explicit product decision. Per-character energy would require changes to validation, AI, UI, and the multiplayer submission flow.
+
 ---
 
 ## Health

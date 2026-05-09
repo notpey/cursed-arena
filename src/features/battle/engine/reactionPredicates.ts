@@ -14,7 +14,10 @@ export const damageEffectTypes = new Set([
   'damageEqualToActorShield',
 ])
 
-export function isEffectBlocked(target: BattleFighterState, effect: SkillEffect) {
+// actorId is the fighter applying the effect. Self-applied effects bypass the
+// target's own immunity (immunity blocks incoming effects from others, not self).
+export function isEffectBlocked(target: BattleFighterState, effect: SkillEffect, actorId?: string) {
+  if (actorId !== undefined && actorId === target.instanceId) return false
   return target.effectImmunities.some(
     (immunity) =>
       (immunity.blocks as string[]).includes(effect.type)

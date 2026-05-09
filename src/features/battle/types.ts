@@ -680,6 +680,8 @@ export type BattleState = {
   firstPlayer: BattleTeamId
   activePlayer: BattleTeamId
   battlefield: BattlefieldEffect
+  // Shared team energy pools — one per team, shared by all three fighters.
+  // See energy.ts for the full design rationale.
   playerEnergy: BattleEnergyPool
   enemyEnergy: BattleEnergyPool
   playerTeam: BattleFighterState[]
