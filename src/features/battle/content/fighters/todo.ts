@@ -49,7 +49,7 @@ export const todo = fighter({
     skill({
       id: 'todo-boogie-woogie',
       name: 'Boogie Woogie',
-      description: 'This skill targets one enemy. Their skills will deal 10 less damage and they cannot become invulnerable. Additionally, for 1 turn if Todo is targeted by a harmful skill, he will become invulnerable and reflect 10 damage to the attacker.',
+      description: 'This skill targets one enemy. Their skills will deal 10 less damage and they cannot become invulnerable. Additionally, for 1 turn if Todo is targeted by a harmful skill, he will become invulnerable and reflect the skill back at the attacker.',
       kind: 'utility',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Ranged', 'Instant'],

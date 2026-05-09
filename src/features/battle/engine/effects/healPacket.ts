@@ -1,5 +1,5 @@
 import { getAbilityById, isAlive } from '@/features/battle/engine/selectors.ts'
-import { makeEvent, makeRuntimeEvent } from '@/features/battle/engine/events.ts'
+import { emitCounterChange, makeEvent, makeRuntimeEvent } from '@/features/battle/engine/events.ts'
 import type {
   BattleAbilityTemplate,
   BattleFighterState,
@@ -20,6 +20,36 @@ type FirePassivesFn = (
   effect?: SkillEffect,
   amount?: number,
 ) => void
+
+export function applyHealScaledByCounter(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'healScaledByCounter' }>,
+  abilityId: string | undefined,
+  firePassives: FirePassivesFn,
+): void {
+  const counterOwner = (effect.counterSource ?? 'actor') === 'actor' ? actor : target
+  const stackCount = counterOwner.stateCounters[effect.counterKey] ?? 0
+  if (stackCount <= 0) return
+  const power = stackCount * effect.powerPerStack
+  const packet: BattleHealPacket = {
+    kind: 'heal',
+    sourceActorId: actor.instanceId,
+    targetId: target.instanceId,
+    abilityId,
+    baseAmount: power,
+    amount: power,
+    tags: [],
+    flags: {},
+  }
+  applyHealPacket(state, ctx, actor, target, packet, firePassives)
+  if (effect.consumeStacks) {
+    counterOwner.stateCounters[effect.counterKey] = 0
+    emitCounterChange(ctx, state.round, counterOwner, effect.counterKey, 0, actor.instanceId, abilityId)
+  }
+}
 
 export function applyHealPacket(
   state: BattleState,

@@ -175,6 +175,7 @@ export function fighter(
 
 export const skill = defineAbility
 
+// For percentAdd modifiers, author decimal fractions: 0.25 = +25%, -0.25 = -25%.
 export function modifierEffect(
   label: string,
   stat: BattleModifierStat,

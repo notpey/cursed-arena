@@ -104,9 +104,9 @@ import {
   type ReactionContext,
 } from '@/features/battle/engine/effects/modifierContext.ts'
 import { applyDamagePacket } from '@/features/battle/engine/effects/damagePacket.ts'
-import { applyHealPacket } from '@/features/battle/engine/effects/healPacket.ts'
+import { applyHealPacket, applyHealScaledByCounter } from '@/features/battle/engine/effects/healPacket.ts'
 import { applyEnergyDrain, applyEnergyGain, applyEnergySteal } from '@/features/battle/engine/effects/resourceEffects.ts'
-import { applyShieldDamageToFighter, applyShieldToFighter } from '@/features/battle/engine/effects/shieldPacket.ts'
+import { applyShieldDamageToFighter, applyShieldScaledByCounter, applyShieldToFighter } from '@/features/battle/engine/effects/shieldPacket.ts'
 import { applyCooldownAdjustEffect, applyModifyAbilityCost } from '@/features/battle/engine/effects/costCooldownEffects.ts'
 import { applyModifyAbilityState, applyReplaceAbilities, applyReplaceAbility } from '@/features/battle/engine/effects/abilityStateEffects.ts'
 import { createRandomEnemyDamageOverTime, createScheduledEffect } from '@/features/battle/engine/effects/scheduledEffects.ts'
@@ -584,12 +584,19 @@ export function getProjectedTeamEnergy(
   return spendEnergy(getEnergyPool(state, team), totalQueuedCost)
 }
 
+function actorConditionsMet(actor: BattleFighterState, ability: BattleAbilityTemplate, round: number): boolean {
+  const conditions = ability.requiredActorConditions
+  if (!conditions || conditions.length === 0) return true
+  return conditions.every((condition) => matchesReactionCondition(actor, condition, { target: null, round }))
+}
+
 export function canUseAbility(state: BattleState, fighter: BattleFighterState, abilityId: string) {
   const ability = getAbilityById(fighter, abilityId)
   if (!ability) return false
   if (!isAlive(fighter)) return false
   if (abilityId === PASS_ABILITY_ID) return true
   if (isAbilityIntentStunned(fighter, ability)) return false
+  if (!actorConditionsMet(fighter, ability, state.round)) return false
   if (!canPayEnergy(getEnergyPool(state, fighter.team), getResolvedAbilityEnergyCost(fighter, ability).cost)) return false
   return getCooldown(fighter, abilityId) <= 0
 }
@@ -619,6 +626,8 @@ export function getQueueAbilityBlockReason(
 
   const cooldown = getCooldown(fighter, abilityId)
   if (cooldown > 0) return `Cooldown ${cooldown} turn${cooldown === 1 ? '' : 's'}`
+
+  if (!actorConditionsMet(fighter, ability, state.round)) return 'Not available'
 
   if (
     (
@@ -670,6 +679,8 @@ export function getBattleCommandBlockReason(
 
   const cooldown = getCooldown(actor, command.abilityId)
   if (cooldown > 0) return `Cooldown ${cooldown} turn${cooldown === 1 ? '' : 's'}`
+
+  if (!actorConditionsMet(actor, ability, state.round)) return 'Not available'
 
   if (ability.targetRule === 'enemy-single' || ability.targetRule === 'ally-single') {
     const validIds = getValidTargetIds(state, actor.instanceId, command.abilityId)
@@ -1353,6 +1364,12 @@ function resolveEffects(
           applyHealPacket(state, ctx, effectActor, effectTarget, packet, firePassives)
           break
         }
+        case 'healScaledByCounter':
+          applyHealScaledByCounter(state, ctx, effectActor, effectTarget, effect, abilityId, firePassives)
+          break
+        case 'shieldScaledByCounter':
+          applyShieldScaledByCounter(state, ctx, effectActor, effectTarget, effect, abilityId, firePassives)
+          break
         case 'setHpFromCounter': {
           const amount = Math.min(t.maxHp, effect.base + (t.stateCounters[effect.counterKey] ?? 0))
           t.hp = Math.max(t.hp, amount)

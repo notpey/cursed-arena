@@ -32,16 +32,15 @@ export const toge = fighter({
         },
       ],
       label: 'Vocal Strain',
-      description: "Each time Toge uses a skill, he takes 5 affliction damage. This damage increases by 5 each time Toge uses \"Don't Move\" or \"Blast Away\", and resets when he uses Throat Spray on himself.",
+      description: "Each time Toge uses a skill, he takes affliction damage equal to his Vocal Strain counter. This counter starts at 5 and increases by 5 each time Toge uses \"Don't Move\" or \"Blast Away\". It resets to 5 when he uses Throat Spray on himself.",
       icon: { label: 'VS', tone: 'red' },
-      counterKey: 'vocal_strain_damage',
     }),
   ],
   abilities: [
     skill({
       id: 'toge-dont-move',
       name: "Don't Move.",
-      description: "This skill targets one enemy, dealing 20 damage and reducing their non-affliction damage by 10 for 1 turn. For one turn, if the target uses a new skill, \"Blast Away\" will deal 5 additional damage to them permanently; this effect stacks.",
+      description: "This skill targets one enemy, dealing 20 damage and reducing their damage by 10 for 1 turn. For one turn, if the target uses a new skill, \"Blast Away\" will deal 5 additional damage to them permanently; this effect stacks.",
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Special', 'Ranged', 'Instant'],

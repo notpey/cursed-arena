@@ -333,6 +333,14 @@ function validateSkillEffect(
       if (effect.powerPerStack <= 0) pushIssue(issues, scope, 'damageScaledByCounter powerPerStack must be positive')
       if (effect.requiresTag != null && !effect.requiresTag.trim()) pushIssue(issues, scope, 'damageScaledByCounter requiresTag cannot be empty')
       return
+    case 'healScaledByCounter':
+      if (!effect.counterKey.trim()) pushIssue(issues, scope, 'healScaledByCounter counterKey is required')
+      if (effect.powerPerStack <= 0) pushIssue(issues, scope, 'healScaledByCounter powerPerStack must be positive')
+      return
+    case 'shieldScaledByCounter':
+      if (!effect.counterKey.trim()) pushIssue(issues, scope, 'shieldScaledByCounter counterKey is required')
+      if (effect.powerPerStack <= 0) pushIssue(issues, scope, 'shieldScaledByCounter powerPerStack must be positive')
+      return
     case 'classStun':
       if (effect.duration <= 0) pushIssue(issues, scope, 'classStun duration must be positive')
       if (effect.blockedClasses.length === 0) pushIssue(issues, scope, 'classStun requires at least one blocked class')
@@ -398,6 +406,12 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   if (!ability.description.trim()) pushIssue(issues, scope, 'ability description is required')
   if (ability.intent && !supportedAbilityIntents.includes(ability.intent)) pushIssue(issues, scope, `unsupported ability intent "${ability.intent}"`)
   if (ability.cooldown < 0) pushIssue(issues, scope, 'cooldown cannot be negative')
+  if (ability.requiredActorConditions !== undefined) {
+    if (ability.requiredActorConditions.length === 0) pushIssue(issues, scope, 'requiredActorConditions must not be empty when present')
+    ability.requiredActorConditions.forEach((condition, index) =>
+      validateCondition(`${scope} requiredActorConditions ${index + 1}`, condition, issues),
+    )
+  }
   if (classes.length === 0) pushIssue(issues, scope, 'ability requires at least one class')
   if (ability.targetRule === 'none' && ability.kind !== 'pass') {
     pushIssue(issues, scope, 'only pass abilities should use targetRule "none"')
@@ -440,7 +454,7 @@ function validateAbility(fighter: BattleFighterTemplate, ability: BattleAbilityT
   if (ability.kind === 'attack' && !containsEffectType(effects, damageEffectTypes)) {
     pushIssue(issues, scope, 'attack abilities require at least one damage effect')
   }
-  const healEffectTypes = ['heal', 'overhealToShield'] as const
+  const healEffectTypes = ['heal', 'overhealToShield', 'healScaledByCounter'] as const
   if (ability.kind === 'heal' && !containsEffectType(effects, healEffectTypes)) {
     pushIssue(issues, scope, 'heal abilities require at least one heal effect')
   }

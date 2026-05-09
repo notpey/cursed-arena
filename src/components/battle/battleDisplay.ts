@@ -44,12 +44,89 @@ export type ActiveEffectPip = {
   tone: ActivePipTone
 }
 
+type VisibleCounterPresenter = {
+  label: string
+  iconLabel: string
+  iconTone: BattleBoardAccent
+  tone: ActivePipTone
+  priority: number
+  suppressModifierTags?: string[]
+  lines: (value: number, fighter: BattleFighterState) => ActiveEffectLine[]
+}
+
+const visibleCounterPresenters: Record<string, VisibleCounterPresenter> = {
+  yuji_black_flash_bonus: {
+    label: 'Black Flash Bonus',
+    iconLabel: 'BF',
+    iconTone: 'red',
+    tone: 'buff',
+    priority: 6,
+    lines: (value) => [
+      { text: `Black Flash Bonus: +${value} damage.`, turnsLeft: null },
+      { text: 'Accumulated via Divergent Fist during Soul Charge and by being targeted while Soul Charge is active.', turnsLeft: null },
+      { text: 'Black Flash deals 20 + bonus damage. Stuns the target if total damage reaches 40.', turnsLeft: null },
+    ],
+  },
+  shikigami: {
+    label: 'Shikigami',
+    iconLabel: 'SH',
+    iconTone: 'teal',
+    tone: 'buff',
+    priority: 6,
+    lines: (value) => [
+      { text: `${value} Shikigami stack${value === 1 ? '' : 's'} gathered.`, turnsLeft: null },
+      { text: `Shikigami Recall restores ${value * 5} HP and ${value * 5} shield, then consumes all stacks.`, turnsLeft: null },
+    ],
+  },
+  straw_doll_ritual_stacks: {
+    label: 'Straw Doll Ritual',
+    iconLabel: 'SD',
+    iconTone: 'teal',
+    tone: 'debuff',
+    priority: 4,
+    suppressModifierTags: ['straw-doll-ritual'],
+    lines: (value) => [
+      { text: `${value} Straw Doll stack${value === 1 ? '' : 's'}.`, turnsLeft: null },
+      { text: `Takes ${value * 2} piercing damage at round start while Nobara is alive.`, turnsLeft: null },
+      { text: `Soul Resonance deals ${value * 5} piercing damage.`, turnsLeft: null },
+      { text: 'Hairpin can target this fighter.', turnsLeft: null },
+    ],
+  },
+  vocal_strain_damage: {
+    label: 'Vocal Strain',
+    iconLabel: 'VS',
+    iconTone: 'red',
+    tone: 'debuff',
+    priority: 4,
+    lines: (value) => [
+      { text: `Toge takes ${value} affliction damage each time he uses a skill.`, turnsLeft: null },
+      { text: 'Increases by 5 after Don\'t Move or Blast Away. Resets when Throat Spray is used on Toge.', turnsLeft: null },
+    ],
+  },
+  blast_away_bonus: {
+    label: 'Blast Away Bonus',
+    iconLabel: 'BA',
+    iconTone: 'teal',
+    tone: 'debuff',
+    priority: 4,
+    lines: (value) => [
+      { text: `Blast Away deals +${value} damage to this fighter.`, turnsLeft: null },
+      { text: 'Stacks permanently each time this fighter uses a skill while under Don\'t Move.', turnsLeft: null },
+    ],
+  },
+}
+
 // ── Duration helpers ──────────────────────────────────────────────────────────
 
 function modDuration(mod: BattleModifierInstance): { turnsLeft: number | null; permanent: boolean } {
   if (mod.duration.kind === 'rounds') return { turnsLeft: mod.duration.remaining, permanent: false }
   if (mod.duration.kind === 'permanent' || mod.duration.kind === 'untilRemoved') return { turnsLeft: null, permanent: true }
   return { turnsLeft: null, permanent: false }
+}
+
+function formatPercentAdd(value: number) {
+  const percent = Math.round(value * 100)
+  return `${percent > 0 ? '+' : ''}${percent}%`
 }
 
 // ── Per-modifier effect line ──────────────────────────────────────────────────
@@ -70,7 +147,7 @@ function modEffectLine(mod: BattleModifierInstance): { line: string; tone: Activ
       return { line, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft, permanent }
     }
     if (mod.mode === 'percentAdd') {
-      return { line: `Damage taken ${mod.value > 0 ? '+' : ''}${mod.value}%`, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft, permanent }
+      return { line: `Damage taken ${formatPercentAdd(mod.value)}`, tone: mod.value < 0 ? 'buff' : 'debuff', turnsLeft, permanent }
     }
   }
   if (mod.stat === 'damageDealt' && typeof mod.value === 'number') {
@@ -92,7 +169,7 @@ function modEffectLine(mod: BattleModifierInstance): { line: string; tone: Activ
       return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft, permanent }
     }
     if (mod.mode === 'percentAdd') {
-      const line = `Healing ${mod.stat === 'healDone' ? 'done' : 'received'} ${mod.value > 0 ? '+' : ''}${mod.value}%`
+      const line = `Healing ${mod.stat === 'healDone' ? 'done' : 'received'} ${formatPercentAdd(mod.value)}`
       return { line, tone: mod.value < 0 ? 'debuff' : 'heal', turnsLeft, permanent }
     }
   }
@@ -228,6 +305,10 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
         : `have cooldowns increased by ${effect.amount}`
     case 'heal':
       return `restore ${effect.power} HP`
+    case 'healScaledByCounter':
+      return `restore HP for each stack`
+    case 'shieldScaledByCounter':
+      return `gain shield for each stack`
     case 'setHpFromCounter':
       return `have HP set to a fixed value`
     case 'stun':
@@ -452,6 +533,11 @@ export function getActivePips(fighter: BattleFighterState): ActiveEffectPip[] {
   }
 
   const groups = new Map<string, Group>()
+  const activeVisibleCounterModifierTags = new Set(
+    Object.entries(fighter.stateCounters)
+      .filter(([, value]) => value > 0)
+      .flatMap(([key]) => visibleCounterPresenters[key]?.suppressModifierTags ?? []),
+  )
 
   function ensureGroup(sourceId: string): Group {
     if (groups.has(sourceId)) return groups.get(sourceId)!
@@ -534,6 +620,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   // ── Visible modifiers grouped by sourceAbilityId ─────────────────────────
   for (const mod of fighter.modifiers) {
     if (!mod.visible) continue
+    if (mod.tags.some((tag) => activeVisibleCounterModifierTags.has(tag))) continue
     const sourceId = mod.sourceAbilityId ?? '__engine__'
     const group = ensureGroup(sourceId)
     const { line, tone, turnsLeft, permanent } = modEffectLine(mod)
@@ -747,6 +834,20 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   // ── Counters: attach to their owning passive (or best-match source group) ──
   for (const [key, value] of Object.entries(fighter.stateCounters)) {
     if (value <= 0) continue
+
+    const presenter = visibleCounterPresenters[key]
+    if (presenter) {
+      const group = ensureGroup(`counter-${key}`)
+      group.label = presenter.label
+      group.iconLabel = presenter.iconLabel
+      group.iconTone = presenter.iconTone
+      group.lines = presenter.lines(value, fighter)
+      group.turnsLeft = null
+      group.stackCount = value
+      group.tone = presenter.tone
+      mergePriority(group, presenter.priority)
+      continue
+    }
 
     const explicitGroupId = counterKeyToGroupId.get(key)
     if (explicitGroupId) {

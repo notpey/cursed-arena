@@ -1,5 +1,5 @@
 import { getAbilityById } from '@/features/battle/engine/selectors.ts'
-import { emitShieldEvent, makeEvent } from '@/features/battle/engine/events.ts'
+import { emitCounterChange, emitShieldEvent, makeEvent } from '@/features/battle/engine/events.ts'
 import type { ReactionContext } from '@/features/battle/engine/effects/modifierContext.ts'
 import type {
   BattleAbilityTemplate,
@@ -31,6 +31,32 @@ type RunEffectReactionGuardsFn = (
   source: BattleFighterState | null,
   ability?: BattleAbilityTemplate,
 ) => void
+
+export function applyShieldScaledByCounter(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  target: BattleFighterState,
+  effect: Extract<SkillEffect, { type: 'shieldScaledByCounter' }>,
+  abilityId: string | undefined,
+  firePassives: FirePassivesFn,
+): void {
+  const counterOwner = (effect.counterSource ?? 'actor') === 'actor' ? actor : target
+  const stackCount = counterOwner.stateCounters[effect.counterKey] ?? 0
+  if (stackCount <= 0) return
+  const amount = stackCount * effect.powerPerStack
+  applyShieldToFighter(state, ctx, actor, target, {
+    type: 'shield',
+    amount,
+    label: effect.shieldLabel,
+    tags: effect.shieldTags,
+    target: effect.target,
+  }, abilityId, firePassives)
+  if (effect.consumeStacks) {
+    counterOwner.stateCounters[effect.counterKey] = 0
+    emitCounterChange(ctx, state.round, counterOwner, effect.counterKey, 0, actor.instanceId, abilityId)
+  }
+}
 
 export function applyShieldToFighter(
   state: BattleState,

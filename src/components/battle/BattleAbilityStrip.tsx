@@ -35,6 +35,7 @@ function SkillTile({
       : lockReason?.includes('energy') ? 'NO CE'
       : lockReason?.includes('Stunned') ? 'STUN'
       : lockReason?.includes('sealed') ? 'SEALED'
+      : lockReason?.includes('Not available') ? 'LOCKED'
       : lockReason?.includes('targets') ? 'NO TARGET'
       : null
 

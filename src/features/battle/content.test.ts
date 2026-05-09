@@ -63,18 +63,20 @@ describe('battle content validation', () => {
   test('targeted content lint catches fixed kit semantics', () => {
     const nobara = battleRoster.find((fighter) => fighter.id === 'nobara')
     const megumi = battleRoster.find((fighter) => fighter.id === 'megumi')
-    const ritual = nobara?.abilities.find((ability) => ability.id === 'nobara-straw-doll-ritual')
+    const resonance = nobara?.abilities.find((ability) => ability.id === 'nobara-soul-resonance')
+    const hammer = nobara?.abilities.find((ability) => ability.id === 'nobara-hammer-and-nails')
     const nue = megumi?.abilities.find((ability) => ability.id === 'megumi-nue')
 
-    const ritualHealModifier = ritual?.effects?.find(
-      (effect) => effect.type === 'addModifier' && effect.modifier.stat === 'healTaken',
+    const hammerStack = hammer?.effects?.find(
+      (effect) => effect.type === 'adjustCounter' && effect.key === 'straw_doll_ritual_stacks',
     )
-    const nueClassStun = nue?.effects?.find((effect) => effect.type === 'classStun')
+    const resonancePayoff = resonance?.effects?.find((effect) => effect.type === 'damageScaledByCounter')
 
-    expect(ritual?.description.toLowerCase()).toContain('stacks')
-    expect(ritualHealModifier?.type === 'addModifier' ? ritualHealModifier.modifier.stacking : null).toBe('stack')
-    expect(nue?.description).toContain('non-Mental')
-    expect(nueClassStun?.type === 'classStun' ? nueClassStun.exemptClasses : []).toContain('Mental')
+    expect(hammerStack?.type === 'adjustCounter' ? hammerStack.amount : null).toBe(1)
+    expect(resonance?.requiredTargetTags).toContain('straw-doll-ritual')
+    expect(resonancePayoff?.type === 'damageScaledByCounter' ? resonancePayoff.powerPerStack : null).toBe(5)
+    expect(nue?.description).toContain('25 piercing damage')
+    expect(nue?.effects?.some((effect) => effect.type === 'adjustCounter' && effect.key === 'shikigami')).toBe(true)
   })
 
   test('Eso and Kechizu are authored as playable Rot fighters', () => {
@@ -184,21 +186,111 @@ describe('battle content validation', () => {
     expect(fallback.roster.some((fighter) => fighter.id === 'kechizu')).toBe(true)
   })
 
-  test('passive tracker pips only appear when their counter is active', () => {
+  test('Black Flash Bonus counter gets its own pip, not attached to Sukuna\'s Vessel', () => {
     const state = createInitialBattleState()
     const yuji = state.playerTeam.find((fighter) => fighter.templateId === 'yuji')
     expect(yuji).toBeDefined()
 
+    // No counter: neither pip appears
     expect(getActivePips(yuji!).some((pip) => pip.label === "Sukuna's Vessel")).toBe(false)
+    expect(getActivePips(yuji!).some((pip) => pip.label === 'Black Flash Bonus')).toBe(false)
 
-    yuji!.stateCounters.sukuna_bonus_hp = 10
+    yuji!.stateCounters.yuji_black_flash_bonus = 10
     const pips = getActivePips(yuji!)
 
-    const vessel = pips.find((pip) => pip.label === "Sukuna's Vessel")
-    expect(vessel?.stackCount).toBe(10)
-    expect(vessel?.lines.some((line) => line.text.includes('Transformation bonus: +10 HP'))).toBe(true)
-    expect(vessel?.lines.some((line) => line.text === yuji!.passiveEffects?.[0]?.description)).toBe(true)
-    expect(vessel?.lines.some((line) => line.text.includes('sukuna_vessel_used'))).toBe(false)
-    expect(vessel?.lines.some((line) => line.text.includes('Unknown effect'))).toBe(false)
+    // Counter gets its own dedicated pip, not attached to Sukuna's Vessel
+    const bfPip = pips.find((pip) => pip.label === 'Black Flash Bonus')
+    expect(bfPip).toBeDefined()
+    expect(bfPip?.stackCount).toBe(10)
+    expect(bfPip?.lines.some((line) => line.text.includes('+10 damage'))).toBe(true)
+
+    // Sukuna's Vessel is not present (passive only shows when its own modifier is on the fighter)
+    expect(pips.some((pip) => pip.label === "Sukuna's Vessel")).toBe(false)
+  })
+
+  test('percentAdd modifier pips display decimal values as percentages', () => {
+    const state = createInitialBattleState()
+    const yuji = state.playerTeam.find((fighter) => fighter.templateId === 'yuji')
+    expect(yuji).toBeDefined()
+
+    yuji!.modifiers.push({
+      id: 'test-percent-guard',
+      label: 'Percent Guard',
+      scope: 'fighter',
+      targetId: yuji!.instanceId,
+      stat: 'damageTaken',
+      mode: 'percentAdd',
+      value: -0.25,
+      duration: { kind: 'permanent' },
+      tags: ['test-percent-guard'],
+      visible: true,
+      stacking: 'replace',
+    })
+
+    const lines = getActivePips(yuji!).flatMap((pip) => pip.lines.map((line) => line.text))
+    expect(lines.some((line) => line.includes('-25%'))).toBe(true)
+    expect(lines.some((line) => line.includes('-0.25%'))).toBe(false)
+  })
+
+  test('Straw Doll counters display as one consolidated visible stack pip', () => {
+    const state = createInitialBattleState()
+    const target = state.enemyTeam.find((fighter) => fighter.templateId === 'yuji')
+    expect(target).toBeDefined()
+
+    target!.stateCounters.straw_doll_ritual_stacks = 3
+    target!.modifiers.push({
+      id: 'test-straw-doll-marker',
+      label: 'Straw Doll Ritual',
+      scope: 'fighter',
+      targetId: target!.instanceId,
+      stat: 'cooldownTick',
+      mode: 'flat',
+      value: 0,
+      duration: { kind: 'permanent' },
+      tags: ['straw-doll-ritual'],
+      visible: true,
+      stacking: 'replace',
+    })
+
+    const pips = getActivePips(target!)
+    const strawDollPips = pips.filter((pip) => pip.label === 'Straw Doll Ritual')
+    expect(strawDollPips).toHaveLength(1)
+    expect(strawDollPips[0]?.stackCount).toBe(3)
+
+    const text = strawDollPips[0]?.lines.map((line) => line.text).join(' ') ?? ''
+    expect(text).toContain('3 Straw Doll stacks.')
+    expect(text).toContain('6 piercing damage at round start')
+    expect(text).toContain('15 piercing damage')
+    expect(text).toContain('Hairpin can target this fighter.')
+  })
+
+  test('vocal_strain_damage counter gets its own pip with self-damage description', () => {
+    const state = createInitialBattleState({
+      playerTeamIds: ['toge', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const toge = state.playerTeam.find((fighter) => fighter.templateId === 'toge')
+    expect(toge).toBeDefined()
+
+    // Counter starts at 5 from initialStateCounters
+    expect(toge!.stateCounters.vocal_strain_damage).toBe(5)
+    const pips = getActivePips(toge!)
+    const strainPip = pips.find((pip) => pip.label === 'Vocal Strain')
+    expect(strainPip).toBeDefined()
+    expect(strainPip?.stackCount).toBe(5)
+    expect(strainPip?.lines.some((line) => line.text.includes('5 affliction damage'))).toBe(true)
+  })
+
+  test('blast_away_bonus counter gets its own pip on the enemy target', () => {
+    const state = createInitialBattleState()
+    const target = state.enemyTeam.find((fighter) => fighter.templateId === 'yuji')
+    expect(target).toBeDefined()
+
+    target!.stateCounters.blast_away_bonus = 10
+    const pips = getActivePips(target!)
+    const baPip = pips.find((pip) => pip.label === 'Blast Away Bonus')
+    expect(baPip).toBeDefined()
+    expect(baPip?.stackCount).toBe(10)
+    expect(baPip?.lines.some((line) => line.text.includes('+10 damage'))).toBe(true)
   })
 })

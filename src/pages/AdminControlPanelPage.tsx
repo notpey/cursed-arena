@@ -100,6 +100,8 @@ const effectTypeMeta: Record<SkillEffect['type'], { label: string; hint: string 
   randomEnemyDamageTick: { label: 'Random Enemy Damage Tick', hint: 'Resolve one tracked random enemy hit.' },
   replaceAbility: { label: 'Replace Ability', hint: 'Legacy sugar for a temporary slot replacement.' },
   damageScaledByCounter: { label: 'Counter-Scaled Damage', hint: 'Deal damage multiplied by a named counter value, optionally consuming stacks.' },
+  healScaledByCounter: { label: 'Counter-Scaled Heal', hint: 'Restore HP multiplied by a named counter value, optionally consuming stacks.' },
+  shieldScaledByCounter: { label: 'Counter-Scaled Shield', hint: 'Grant shield multiplied by a named counter value, optionally consuming stacks.' },
   classStun: { label: 'Class Stun', hint: 'Seal abilities of specific skill classes for a duration.' },
   classStunScaledByCounter: { label: 'Counter-Scaled Class Stun', hint: 'Seal ability classes for a duration scaled by a named counter, optionally consuming stacks.' },
   replaceAbilities: { label: 'Replace Abilities (Batch)', hint: 'Swap multiple ability slots at once from a single effect.' },
@@ -398,6 +400,10 @@ function createEffect(type: SkillEffect['type'] = 'damage'): SkillEffect {
       return { type: 'damageFiltered', power: 15, requiresTag: 'modifier-tag', target: 'inherit', piercing: false, cannotBeCountered: false, cannotBeReflected: false }
     case 'classStunScaledByCounter':
       return { type: 'classStunScaledByCounter', counterKey: 'state-counter', baseDuration: 1, durationPerStack: 1, consumeStacks: true, blockedClasses: ['Physical', 'Melee'], target: 'inherit' }
+    case 'healScaledByCounter':
+      return { type: 'healScaledByCounter', counterKey: 'stack-counter', counterSource: 'actor' as const, powerPerStack: 5, consumeStacks: false, target: 'self' }
+    case 'shieldScaledByCounter':
+      return { type: 'shieldScaledByCounter', counterKey: 'stack-counter', counterSource: 'actor' as const, powerPerStack: 5, consumeStacks: true, shieldLabel: 'Barrier', shieldTags: [], target: 'self' }
     case 'replaceAbilities':
       return {
         type: 'replaceAbilities',

@@ -59,6 +59,7 @@ export type BattleAbilityTemplate = {
   cannotBeCountered?: boolean
   cannotBeReflected?: boolean
   requiredTargetTags?: string[]
+  requiredActorConditions?: BattleReactionCondition[]
   energyCost?: BattleEnergyCost
   effects?: SkillEffect[]
   power?: number
@@ -195,6 +196,7 @@ export type BattleModifierStat =
   | 'canGainInvulnerable'
   | 'canReduceDamageTaken'
 
+// percentAdd values are decimal fractions: 0.25 = +25%, -0.25 = -25%.
 export type BattleModifierMode = 'flat' | 'percentAdd' | 'multiplier' | 'set'
 
 export type BattleModifierStacking = 'max' | 'replace' | 'stack'
@@ -585,6 +587,8 @@ export type SkillEffect =
   | { type: 'energySteal'; amount: BattleEnergyCost; target: EffectTarget }
   | { type: 'cooldownAdjust'; amount: number; abilityId?: string; includeReady?: boolean; target: EffectTarget }
   | { type: 'heal'; power: number; target: EffectTarget }
+  | { type: 'healScaledByCounter'; counterKey: string; counterSource?: 'actor' | 'target'; powerPerStack: number; consumeStacks?: boolean; target: EffectTarget }
+  | { type: 'shieldScaledByCounter'; counterKey: string; counterSource?: 'actor' | 'target'; powerPerStack: number; consumeStacks?: boolean; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
   | { type: 'setHpFromCounter'; base: number; counterKey: string; target: EffectTarget }
   | { type: 'invulnerable'; duration: number; target: EffectTarget }
   | { type: 'attackUp'; amount: number; duration: number; target: EffectTarget }

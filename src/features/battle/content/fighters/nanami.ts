@@ -19,10 +19,12 @@ export const nanami = fighter({
       ],
       effects: [
         { type: 'setFlag', key: 'nanami_overtime', value: true, target: 'self' },
-        modifierEffect('Overtime', 'damageDealt', 10, 'permanent', 'self', ['overtime']),
+        { type: 'setMode', key: 'overtime', value: 'active', duration: 3, target: 'self' },
+        { type: 'energyGain', amount: { random: 1 }, target: 'self' },
+        modifierEffect('Overtime', 'damageDealt', 10, 3, 'self', ['overtime']),
       ],
       label: 'Overtime',
-      description: 'The first time Nanami drops below 60 health, his skills deal 10 more damage for the rest of the game.',
+      description: 'The first time Nanami drops below 60 health, he enters Overtime for 3 turns: his skills deal 10 more damage and he gains 1 random energy.',
       icon: { label: 'OT', tone: 'gold' },
     }),
     definePassive({
@@ -55,7 +57,7 @@ export const nanami = fighter({
     skill({
       id: 'nanami-execution',
       name: '7:3 Execution',
-      description: 'Deals 20 piercing damage and weakens enemy affliction damage for 1 turn.',
+      description: 'Deals 20 piercing damage and reduces the target\'s non-affliction damage by 5 for 1 turn.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -64,13 +66,13 @@ export const nanami = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit', piercing: true },
-        modifierEffect('7:3 Execution', 'dotDamage', -5, 1, 'inherit', ['execution']),
+        modifierEffect('7:3 Execution', 'damageDealt', -5, 1, 'inherit', ['execution'], { excludedDamageClass: 'Affliction' }),
       ],
     }),
     skill({
       id: 'nanami-collapse-point',
       name: 'Collapse Point',
-      description: 'Deals 5 piercing damage and marks the target for future execution pressure.',
+      description: 'Deals 5 piercing damage. The target permanently takes 5 more damage from all sources.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
