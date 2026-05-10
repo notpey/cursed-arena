@@ -27,34 +27,40 @@ import {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function EnergyRow({ type, value, muted }: { type: BattleEnergyType; value: number; muted?: boolean }) {
+/**
+ * Compact resource cell — small color square + short code + tabular number.
+ * Mirrors the Naruto-Arena compact resource row, kept Cursed-Arena-skinned.
+ */
+function EnergyCell({ type, value, muted, dim }: { type: BattleEnergyType; value: number; muted?: boolean; dim?: boolean }) {
   const meta = battleEnergyMeta[type]
   return (
     <div
       className={[
-        'relative grid grid-cols-[2.4rem_minmax(0,1fr)_1.6rem] items-center gap-2 border border-white/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02))] px-2 py-1.5',
+        'flex items-center justify-between gap-2 border border-white/8 bg-[rgba(20,18,24,0.6)] px-1.5 py-1',
         muted ? 'opacity-45 saturate-75' : '',
       ].join(' ')}
     >
-      <div className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: meta.color }} />
-      <div className="relative grid h-9 w-9 place-items-center pl-1">
-        <div
-          className="absolute inset-1 rotate-45 border-2 bg-[rgba(228,230,239,0.92)]"
-          style={{ borderColor: meta.color }}
-        />
-        <span className="relative ca-display text-[1rem] leading-none text-[#17151c]">{value}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="h-2.5 w-2.5 shrink-0 rotate-45 border border-black/40" style={{ backgroundColor: meta.color }} />
+        <span className="ca-mono-label text-[0.46rem] tracking-[0.1em] text-ca-text-2 truncate">{meta.short}</span>
       </div>
-      <p className="ca-display truncate text-[0.95rem] leading-none text-ca-text">{meta.label}</p>
-      <span className="ca-mono-label text-[0.42rem] tracking-[0.12em] text-ca-text-3">{meta.short}</span>
+      <span className={['ca-display tabular-nums text-[0.95rem] leading-none', dim && value === 0 ? 'text-ca-text-3' : 'text-ca-text'].join(' ')}>
+        {value}
+      </span>
     </div>
   )
 }
 
+/**
+ * A single draggable queue tile.  Only command and scheduled entries — the
+ * two kinds the engine actually dispatches through queueOrder — are rendered
+ * by the modal.  Passives and reaction guards are NOT shown here: they are
+ * board-state effects, not queue-resolution entries.
+ */
 function QueueIcon({
   entry,
   state,
   index,
-  draggable: isDraggable,
   isDragging,
   isDropTarget,
   onDragStart,
@@ -68,16 +74,15 @@ function QueueIcon({
   entry: ActiveEffectInstance
   state: BattleState
   index: number
-  draggable: boolean
   isDragging?: boolean
   isDropTarget?: boolean
-  onDragStart?: () => void
-  onDragOver?: (e: DragEvent<HTMLDivElement>) => void
-  onDrop?: (e: DragEvent<HTMLDivElement>) => void
-  onDragEnd?: () => void
-  onTouchStart?: (e: TouchEvent<HTMLDivElement>) => void
-  onTouchMove?: (e: TouchEvent<HTMLDivElement>) => void
-  onTouchEnd?: () => void
+  onDragStart: () => void
+  onDragOver: (e: DragEvent<HTMLDivElement>) => void
+  onDrop: (e: DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
+  onTouchStart: (e: TouchEvent<HTMLDivElement>) => void
+  onTouchMove: (e: TouchEvent<HTMLDivElement>) => void
+  onTouchEnd: () => void
 }) {
   const isEnemy = entry.ownerTeam === 'enemy'
   const actorName = getFighterById(state, entry.sourceActorId)?.shortName ?? '?'
@@ -85,47 +90,28 @@ function QueueIcon({
     .map((id) => getFighterById(state, id)?.shortName)
     .filter((n): n is string => Boolean(n))
   const targetLine = targetNames.length > 0 ? `→ ${targetNames.join(', ')}` : null
-  const fixedHint = !isDraggable
-    ? entry.kind === 'reaction'
-      ? 'Triggers reactively'
-      : entry.timing === 'preTurn'
-        ? 'Auto-resolves before actions'
-        : 'Auto-resolves'
-    : null
-  const tooltip = [actorName, entry.label, entry.summary, targetLine, fixedHint].filter(Boolean).join(' · ')
+  const tooltip = [actorName, entry.label, entry.summary, targetLine].filter(Boolean).join(' · ')
 
-  const kindBadge =
-    entry.kind === 'scheduled' ? 'SCH' :
-    entry.kind === 'reaction'  ? 'REACT' :
-    entry.kind === 'command'   ? 'CMD' : 'PASS'
-
-  const kindBadgeColor =
-    entry.kind === 'scheduled' ? 'text-amber-300' :
-    entry.kind === 'reaction'  ? 'text-ca-red'    :
-    entry.kind === 'command'   ? 'text-ca-teal'   : 'text-ca-teal'
-
-  // Border colour communicates source-owned identity even when fixed.
-  const borderClass = isDraggable
-    ? entry.kind === 'scheduled' ? 'border-amber-300/35' : 'border-ca-teal/35'
-    : entry.kind === 'reaction' ? 'border-ca-red/35' : 'border-white/15'
+  const kindBadge      = entry.kind === 'scheduled' ? 'SCH' : 'CMD'
+  const kindBadgeColor = entry.kind === 'scheduled' ? 'text-amber-300' : 'text-ca-teal'
+  const borderClass    = entry.kind === 'scheduled' ? 'border-amber-300/35' : 'border-ca-teal/35'
 
   return (
     <div className="flex shrink-0 flex-col items-center gap-1">
       <div
-        data-queue-order-index={isDraggable ? index : undefined}
-        draggable={isDraggable}
-        onDragStart={isDraggable ? onDragStart : undefined}
-        onDragOver={isDraggable ? onDragOver : undefined}
-        onDrop={isDraggable ? onDrop : undefined}
-        onDragEnd={isDraggable ? onDragEnd : undefined}
-        onTouchStart={isDraggable ? onTouchStart : undefined}
-        onTouchMove={isDraggable ? onTouchMove : undefined}
-        onTouchEnd={isDraggable ? onTouchEnd : undefined}
+        data-queue-order-index={index}
+        draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onDragEnd={onDragEnd}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
         title={tooltip}
         className={[
-          'relative h-[3.15rem] w-[3.15rem] overflow-hidden border-2 bg-[#1e1c24] shadow-[0_4px_10px_rgba(0,0,0,0.3)] transition',
+          'relative h-[3.15rem] w-[3.15rem] cursor-grab touch-none overflow-hidden border-2 bg-[#1e1c24] shadow-[0_4px_10px_rgba(0,0,0,0.3)] transition',
           borderClass,
-          isDraggable ? 'cursor-grab touch-none' : 'cursor-default opacity-70',
           isDragging ? 'opacity-35' : '',
           isDropTarget ? 'scale-[1.05] border-ca-red' : '',
         ].join(' ')}
@@ -155,12 +141,10 @@ function QueueIcon({
           </div>
         ) : null}
 
-        {/* Drag affordance for reorderable icons */}
-        {isDraggable ? (
-          <div className="absolute bottom-0 right-0 bg-black/72 px-[3px] py-[1px]">
-            <span className="ca-mono-label text-[0.42rem] tracking-[0.05em] text-ca-text-2">⋮⋮</span>
-          </div>
-        ) : null}
+        {/* Drag affordance */}
+        <div className="absolute bottom-0 right-0 bg-black/72 px-[3px] py-[1px]">
+          <span className="ca-mono-label text-[0.42rem] tracking-[0.05em] text-ca-text-2">⋮⋮</span>
+        </div>
       </div>
       <p className="w-[3.15rem] truncate text-center ca-mono-label text-[0.44rem] text-ca-text-3">
         {actorName.toUpperCase()}
@@ -190,17 +174,13 @@ export function NarutoQueueCommitModal({
   onConfirm: (queueOrder: QueueOrderEntry[], randomAlloc: PerActorRandomAllocation) => void
   onBack: () => void
 }) {
-  // ── Queue preview — single source of truth, mixed display order ─────────────
+  // ── Queue preview — only the kinds the engine actually dispatches ───────────
+  // resolveInterleavedPlayerTurnTimeline handles 'command' and 'scheduled' only.
+  // Passive/reaction entries (still produced by buildQueuePreview for future
+  // non-queue surfaces like portrait pips) are intentionally excluded here:
+  // they are board-state effects, not queue-resolution entries.
   const queueEntries = useMemo(() => buildQueuePreview(state, queued), [state, queued])
-
-  // Fixed (locked) entries appear first — passives, then reactions. They are
-  // source-owned skill icons, NOT a separate report. They stay in the same
-  // strip as commands so the player sees one continuous resolution order.
-  const fixedEntries = useMemo(
-    () => queueEntries.filter((e) => e.kind === 'passive' || e.kind === 'reaction'),
-    [queueEntries],
-  )
-  const reorderableEntries = useMemo(
+  const dispatchableEntries = useMemo(
     () => queueEntries.filter((e) => e.kind === 'command' || e.kind === 'scheduled'),
     [queueEntries],
   )
@@ -213,8 +193,8 @@ export function NarutoQueueCommitModal({
         .filter((c) => c.team === 'player' && c.abilityId !== PASS_ABILITY_ID)
         .map((c) => c.actorId),
     )
-    const scheduled = reorderableEntries.filter((e) => e.kind === 'scheduled')
-    const commands = reorderableEntries.filter((e) => e.kind === 'command')
+    const scheduled = dispatchableEntries.filter((e) => e.kind === 'scheduled')
+    const commands = dispatchableEntries.filter((e) => e.kind === 'command')
     const orderedCmdIds = [
       ...initialOrder.filter((id) => aliveIds.has(id) && queuedCmdIds.has(id)),
       ...[...queuedCmdIds].filter((id) => aliveIds.has(id) && !initialOrder.includes(id)),
@@ -228,9 +208,9 @@ export function NarutoQueueCommitModal({
     ]
   })
 
-  const orderedReorderableEntries = useMemo(() => {
-    const scheduledById = new Map(reorderableEntries.filter((e) => e.kind === 'scheduled').map((e) => [e.scheduledEffectId!, e] as const))
-    const commandById   = new Map(reorderableEntries.filter((e) => e.kind === 'command'  ).map((e) => [e.commandActorId!, e]   as const))
+  const queueRowEntries = useMemo(() => {
+    const scheduledById = new Map(dispatchableEntries.filter((e) => e.kind === 'scheduled').map((e) => [e.scheduledEffectId!, e] as const))
+    const commandById   = new Map(dispatchableEntries.filter((e) => e.kind === 'command'  ).map((e) => [e.commandActorId!, e]   as const))
     return queueOrder.flatMap((entry): ActiveEffectInstance[] => {
       if (entry.kind === 'scheduled') {
         const found = scheduledById.get(entry.scheduledEffectId)
@@ -239,7 +219,7 @@ export function NarutoQueueCommitModal({
       const found = commandById.get(entry.actorId)
       return found ? [found] : []
     })
-  }, [queueOrder, reorderableEntries])
+  }, [queueOrder, dispatchableEntries])
 
   // ── Energy bookkeeping ─────────────────────────────────────────────────────
   const fixedByType    = useMemo(() => sumFixedCostsByType(state.playerTeam, queued), [state.playerTeam, queued])
@@ -339,151 +319,134 @@ export function NarutoQueueCommitModal({
 
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.72)] px-3 backdrop-blur-[2px] animate-ca-fade-in">
-      <div className="relative w-full max-w-[39rem] overflow-hidden border border-white/14 bg-[linear-gradient(180deg,#302e3a,#17151c)] shadow-[0_24px_70px_rgba(0,0,0,0.62)] animate-ca-slide-up">
-        {/* ── Header ── */}
-        <header className="border-b border-black/30 bg-[linear-gradient(180deg,rgba(130,45,51,0.95),rgba(88,32,38,0.98))] px-4 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-          <div className="flex items-center justify-between gap-3">
-            <span className="ca-mono-label text-[0.52rem] tracking-[0.14em] text-white/65">ROUND {round}</span>
-            <h2 className="ca-display text-[1.55rem] leading-none tracking-[0.06em] text-white">{title}</h2>
-            <span className={['ca-mono-label text-[0.52rem] tracking-[0.14em]', timerCritical ? 'text-ca-red' : 'text-white/65'].join(' ')}>
-              {String(turnSecondsLeft).padStart(2, '0')}S
-            </span>
-          </div>
-          {requiredRandom > 0 ? (
-            <p className="mt-1 ca-mono-label text-[0.48rem] tracking-[0.14em] text-white/55">
-              FIXED COSTS ALREADY RESERVED — ASSIGN THE RANDOM SLOTS BELOW
-            </p>
-          ) : (
-            <p className="mt-1 ca-mono-label text-[0.48rem] tracking-[0.14em] text-white/55">
-              FIXED COSTS ALREADY RESERVED
-            </p>
-          )}
+      <div className="relative w-full max-w-[34rem] overflow-hidden border border-white/14 bg-[linear-gradient(180deg,#302e3a,#17151c)] shadow-[0_24px_70px_rgba(0,0,0,0.62)] animate-ca-slide-up">
+        {/* ── Header — single line, compact ── */}
+        <header className="flex items-center justify-between gap-2 border-b border-black/30 bg-[linear-gradient(180deg,rgba(130,45,51,0.95),rgba(88,32,38,0.98))] px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
+          <span className="ca-mono-label shrink-0 text-[0.5rem] tracking-[0.14em] text-white/65">R{round}</span>
+          <h2 className="ca-display truncate text-[1.2rem] leading-none tracking-[0.04em] text-white">{title}</h2>
+          <span className={['ca-mono-label shrink-0 tabular-nums text-[0.5rem] tracking-[0.14em]', timerCritical ? 'text-ca-red' : 'text-white/65'].join(' ')}>
+            {String(turnSecondsLeft).padStart(2, '0')}S
+          </span>
         </header>
 
-        <div className="relative bg-[linear-gradient(135deg,rgba(228,218,191,0.1),rgba(255,255,255,0.02))] p-3">
-          {/* ── Energy panels (LEFT / CONTROLS / RIGHT) ── */}
-          <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)_12rem]">
-            {/* LEFT — Energy Left after fixed + manual deductions */}
-            <section className="border border-black/35 bg-[rgba(18,15,16,0.42)] p-1.5">
-              <p className="mb-1 bg-[rgba(130,45,51,0.92)] px-2 py-1 ca-display text-[1.05rem] leading-none text-white">Energy Left</p>
-              <div className="space-y-1.5">
+        <div className="relative bg-[linear-gradient(135deg,rgba(228,218,191,0.07),rgba(255,255,255,0.015))] p-2.5">
+          {/* Caption — fixed costs reserved hint */}
+          <p className="mb-2 ca-mono-label text-center text-[0.46rem] tracking-[0.12em] text-ca-text-3">
+            {requiredRandom > 0
+              ? 'FIXED COSTS RESERVED — ASSIGN RANDOM ENERGY BELOW'
+              : 'FIXED COSTS RESERVED'}
+          </p>
+
+          {/* ── Compact Energy panels (LEFT / CONTROLS / RIGHT) ── */}
+          <div className="grid gap-2 sm:grid-cols-[8.5rem_minmax(0,1fr)_8.5rem]">
+            {/* LEFT — Energy Left */}
+            <section>
+              <p className="mb-1 ca-mono-label text-[0.46rem] tracking-[0.14em] text-ca-text-3">ENERGY LEFT</p>
+              <div className="space-y-1">
                 {battleEnergyOrder.map((type) => (
-                  <EnergyRow key={type} type={type} value={energyLeft[type]} muted={energyLeft[type] <= 0} />
+                  <EnergyCell key={type} type={type} value={energyLeft[type]} muted={energyLeft[type] <= 0} />
                 ))}
               </div>
             </section>
 
-            {/* MIDDLE — USE / UNDO controls per type */}
-            <section className="flex flex-col justify-center gap-3 py-2">
+            {/* MIDDLE — compact +/- per type */}
+            <section className="flex flex-col gap-1 pt-[1.05rem]">
               {battleEnergyOrder.map((type) => {
+                const meta        = battleEnergyMeta[type]
                 const useEnabled  = canAssignRandom(type, energyLeft, requiredRandom, assignedRandomTotal)
                 const undoEnabled = canUndoRandom(type, randomByType)
                 return (
-                  <div key={type} className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleAssign(type, 1)}
-                      disabled={!useEnabled}
-                      title={`Assign 1 ${battleEnergyMeta[type].label} as Random Energy`}
-                      className="ca-display border border-black/40 bg-[rgba(228,230,239,0.9)] px-2 py-2 text-[1.08rem] leading-none text-[#17151c] shadow-[inset_0_3px_0_rgba(255,255,255,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-35"
-                      style={{ borderLeft: `5px solid ${battleEnergyMeta[type].color}` }}
-                    >
-                      USE
-                    </button>
+                  <div key={type} className="flex items-center justify-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleAssign(type, -1)}
                       disabled={!undoEnabled}
-                      title={`Remove 1 ${battleEnergyMeta[type].label} from Random Energy`}
-                      className="ca-display border border-black/40 bg-[rgba(228,230,239,0.9)] px-2 py-2 text-[1.08rem] leading-none text-[#17151c] shadow-[inset_0_3px_0_rgba(255,255,255,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-35"
-                      style={{ borderRight: `5px solid ${battleEnergyMeta[type].color}` }}
+                      title={`Remove 1 ${meta.label} from Random Energy`}
+                      aria-label={`Remove ${meta.label}`}
+                      className="ca-display grid h-6 w-6 place-items-center border border-black/40 bg-[rgba(228,230,239,0.92)] text-[0.95rem] leading-none text-[#17151c] shadow-[inset_0_2px_0_rgba(255,255,255,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-30"
                     >
-                      UNDO
+                      −
+                    </button>
+                    <span
+                      className="ca-mono-label inline-block w-12 text-center text-[0.46rem] tracking-[0.1em]"
+                      style={{ color: meta.color }}
+                    >
+                      {meta.short}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleAssign(type, 1)}
+                      disabled={!useEnabled}
+                      title={`Assign 1 ${meta.label} as Random Energy`}
+                      aria-label={`Assign ${meta.label}`}
+                      className="ca-display grid h-6 w-6 place-items-center border border-black/40 bg-[rgba(228,230,239,0.92)] text-[0.95rem] leading-none text-[#17151c] shadow-[inset_0_2px_0_rgba(255,255,255,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      +
                     </button>
                   </div>
                 )
               })}
-
-              <div className="mt-1 border border-white/10 bg-[rgba(13,12,17,0.58)] px-2 py-2 text-center">
-                <p className={['ca-mono-label text-[0.54rem] tracking-[0.12em]', okEnabled ? 'text-ca-teal' : 'text-ca-red'].join(' ')}>
-                  {allocationStatus}
-                </p>
-              </div>
             </section>
 
-            {/* RIGHT — Random Energy currently assigned */}
-            <section className="border border-black/35 bg-[rgba(18,15,16,0.42)] p-1.5">
-              <p className="mb-1 bg-[rgba(130,45,51,0.92)] px-2 py-1 ca-display text-[1.05rem] leading-none text-white">Random Energy</p>
-              <div className="space-y-1.5">
+            {/* RIGHT — Random Energy assigned */}
+            <section>
+              <p className="mb-1 ca-mono-label text-[0.46rem] tracking-[0.14em] text-ca-text-3">RANDOM ENERGY</p>
+              <div className="space-y-1">
                 {battleEnergyOrder.map((type) => (
-                  <EnergyRow key={type} type={type} value={randomByType[type]} />
+                  <EnergyCell key={type} type={type} value={randomByType[type]} dim />
                 ))}
               </div>
             </section>
           </div>
 
-          {/* ── Single continuous queue strip ── */}
-          <section className="mt-3 border border-black/35 bg-[rgba(13,12,17,0.7)] p-2">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="ca-mono-label text-[0.5rem] tracking-[0.14em] text-ca-text-3">QUEUE — RESOLVES LEFT TO RIGHT</p>
-              <p className="ca-mono-label text-[0.46rem] tracking-[0.1em] text-ca-text-3">
-                {orderedReorderableEntries.length > 0 ? 'DRAG TO REORDER' : fixedEntries.length > 0 ? 'AUTO-RESOLVES' : 'NO ACTIONS'}
-              </p>
-            </div>
+          {/* ── Allocation status — single line ── */}
+          <p className={['mt-2 ca-mono-label text-center text-[0.5rem] tracking-[0.12em]', okEnabled ? 'text-ca-teal' : 'text-ca-red'].join(' ')}>
+            {allocationStatus}
+          </p>
 
-            <div className="flex items-end gap-2 overflow-x-auto pb-1">
-              {/* Fixed source-owned icons (passives + active reactions) — same strip,
-                  not a separate section. They render with the same kind badge and
-                  borders as draggable icons; only the drag handle differs. */}
-              {fixedEntries.map((entry, i) => (
-                <QueueIcon
-                  key={entry.id}
-                  entry={entry}
-                  state={state}
-                  index={i}
-                  draggable={false}
-                />
-              ))}
-
-              {/* Reorderable scheduled + command icons — one continuous segment. */}
-              {orderedReorderableEntries.map((entry, i) => {
-                const index = fixedEntries.length + i
-                return (
-                  <QueueIcon
-                    key={entry.id}
-                    entry={entry}
-                    state={state}
-                    index={index}
-                    draggable
-                    isDragging={dragIndex === i}
-                    isDropTarget={dragOverIndex === i && dragIndex !== i}
-                    onDragStart={() => handleDragStart(i)}
-                    onDragOver={(e) => handleDragOver(e, i)}
-                    onDrop={(e) => handleDrop(e, i)}
-                    onDragEnd={clearDrag}
-                    onTouchStart={(e) => handleTouchStart(e, i)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                  />
-                )
-              })}
-            </div>
-          </section>
+          {/* ── Queue strip ── */}
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="ca-mono-label text-[0.46rem] tracking-[0.14em] text-ca-text-3">QUEUE — RESOLVES LEFT TO RIGHT</p>
+            <p className="ca-mono-label text-[0.42rem] tracking-[0.1em] text-ca-text-3">
+              {queueRowEntries.length > 0 ? 'DRAG TO REORDER' : 'NO ACTIONS'}
+            </p>
+          </div>
+          <div className="mt-1 flex min-h-[3.6rem] items-end gap-1.5 overflow-x-auto border-t border-white/8 pt-1.5 pb-0.5">
+            {/* Selected commands and due scheduled effects only — passive and
+                reaction effects belong on portrait pips, not the queue. */}
+            {queueRowEntries.map((entry, i) => (
+              <QueueIcon
+                key={entry.id}
+                entry={entry}
+                state={state}
+                index={i}
+                isDragging={dragIndex === i}
+                isDropTarget={dragOverIndex === i && dragIndex !== i}
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={(e) => handleDrop(e, i)}
+                onDragEnd={clearDrag}
+                onTouchStart={(e) => handleTouchStart(e, i)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              />
+            ))}
+          </div>
 
           {/* ── OK / CANCEL ── */}
-          <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="mt-2.5 grid grid-cols-[1fr_1fr] gap-2">
             <button
               type="button"
               disabled={!okEnabled}
               onClick={handleConfirm}
-              className="ca-display border border-ca-red/45 bg-ca-red px-4 py-2.5 text-[1.1rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.2)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              className="ca-display border border-ca-red/45 bg-ca-red px-3 py-1.5 text-[1rem] tracking-[0.05em] text-white shadow-[0_0_18px_rgba(250,39,66,0.2)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
             >
               OK
             </button>
             <button
               type="button"
               onClick={onBack}
-              className="ca-display border border-white/14 bg-[rgba(255,255,255,0.08)] px-4 py-2.5 text-[1.1rem] tracking-[0.05em] text-ca-text transition hover:border-ca-teal/35 hover:text-ca-teal"
+              className="ca-display border border-white/14 bg-[rgba(255,255,255,0.08)] px-3 py-1.5 text-[1rem] tracking-[0.05em] text-ca-text transition hover:border-ca-teal/35 hover:text-ca-teal"
             >
               CANCEL
             </button>
