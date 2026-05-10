@@ -1,24 +1,25 @@
 import { definePassive, defendSkill } from '@/features/battle/content.ts'
-import { fighter, skill, modifierEffect } from './_helpers.ts'
+import { fighter, skill, markerEffect, modifierEffect } from './_helpers.ts'
+
+const SIMPLE_DOMAIN_MODE = 'simple_domain'
+const DEFENSIVE_STANCE_MODE = 'defensive_stance_ready'
 
 export const miwa = fighter({
   id: 'miwa',
   name: 'Kasumi Miwa',
   shortName: 'Miwa',
   rarity: 'R',
-  role: 'Simple Domain Defender',
+  role: 'Defensive Counter-Control / Anti-Technique',
   portraitFrame: { scale: 2.08, y: '-12%' },
   maxHp: 100,
   passiveEffects: [
     definePassive({
       id: 'miwa-steady-discipline',
       trigger: 'onRoundStart',
-      effects: [
-        { type: 'effectImmunity', label: 'Steady Discipline', blocks: ['nonDamage'], duration: 1, tags: ['steady-discipline'], target: 'self' },
-        modifierEffect('Steady Discipline', 'damageTaken', -5, 1, 'self', ['steady-discipline']),
-      ],
+      conditions: [{ type: 'counterAtLeast', key: '__never_miwa_display_only', value: 1 }],
+      effects: [markerEffect('Steady Discipline', 'permanent', 'self', ['steady-discipline'])],
       label: 'Steady Discipline',
-      description: 'While Miwa is not affected by any non-damage effects, she takes 5 less damage from all sources.',
+      description: 'Adapted: while Simple Domain is active, Miwa takes 5 less damage from all sources.',
       icon: { label: 'SD', tone: 'teal' },
     }),
   ],
@@ -26,22 +27,24 @@ export const miwa = fighter({
     skill({
       id: 'miwa-simple-domain',
       name: 'Simple Domain',
-      description: 'For 2 turns, Miwa will ignore all non-damage effects from enemy skills and will reduce all damage she takes by 10. During this time, enemies cannot ignore damage reduction or become invulnerable.',
+      description: 'For 2 turns, Miwa enters Simple Domain, ignores non-damage effects, takes 15 less damage, and enemies cannot become invulnerable. If Defensive Stance is prepared, this skill reduces its cooldown by 1.',
       kind: 'utility',
       targetRule: 'self',
       classes: ['Strategic', 'Instant'],
       cooldown: 4,
       energyCost: { physical: 1, mental: 1 },
       effects: [
+        { type: 'setMode', key: SIMPLE_DOMAIN_MODE, value: 'active', duration: 2, target: 'self' },
         { type: 'effectImmunity', label: 'Simple Domain', blocks: ['nonDamage'], duration: 2, tags: ['simple-domain'], target: 'self' },
         modifierEffect('Simple Domain', 'damageTaken', -10, 2, 'self', ['simple-domain']),
+        modifierEffect('Steady Discipline', 'damageTaken', -5, 2, 'self', ['steady-discipline', 'simple-domain']),
         modifierEffect('Simple Domain', 'canGainInvulnerable', false, 2, 'all-enemies', ['simple-domain']),
         {
           type: 'conditional',
           target: 'self',
-          conditions: [{ type: 'fighterFlag', key: 'defensive_stance_used', value: true }],
+          conditions: [{ type: 'actorModeIs', key: DEFENSIVE_STANCE_MODE, value: 'active' }],
           effects: [
-            { type: 'setFlag', key: 'defensive_stance_used', value: false, target: 'self' },
+            { type: 'clearMode', key: DEFENSIVE_STANCE_MODE, target: 'self' },
             { type: 'cooldownAdjust', amount: -1, abilityId: 'miwa-simple-domain', target: 'self' },
           ],
         },
@@ -50,7 +53,7 @@ export const miwa = fighter({
     skill({
       id: 'miwa-quick-draw',
       name: 'Quick Draw',
-      description: 'This skill targets one enemy, dealing 15 damage to them. If Simple Domain is active, this skill will deal 30 damage and ignore destructible defense.',
+      description: 'This skill targets one enemy, dealing 15 damage. While Simple Domain is active, it deals 30 damage and ignores destructible defense.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -60,8 +63,8 @@ export const miwa = fighter({
       effects: [
         {
           type: 'conditional',
-          target: 'self',
-          conditions: [{ type: 'actorHasModifierTag', tag: 'simple-domain' }],
+          target: 'inherit',
+          conditions: [{ type: 'actorModeIs', key: SIMPLE_DOMAIN_MODE, value: 'active' }],
           effects: [{ type: 'damage', power: 30, target: 'inherit', ignoresShield: true }],
           elseEffects: [{ type: 'damage', power: 15, target: 'inherit' }],
         },
@@ -70,7 +73,7 @@ export const miwa = fighter({
     skill({
       id: 'miwa-counter-slash',
       name: 'Counter Slash',
-      description: 'For 1 turn, Miwa will counter the next harmful skill used on her. The attacker will take 25 damage and become stunned for 1 turn. If Simple Domain is active, this skill will counter all harmful skills used on Miwa during this turn.',
+      description: 'For 1 turn, Miwa counters the next harmful skill used on her, dealing 25 damage to the attacker and stunning them for 1 turn. While Simple Domain is active, this counters every harmful skill used on her during the turn.',
       kind: 'utility',
       targetRule: 'self',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -80,7 +83,7 @@ export const miwa = fighter({
         {
           type: 'conditional',
           target: 'self',
-          conditions: [{ type: 'actorHasModifierTag', tag: 'simple-domain' }],
+          conditions: [{ type: 'actorModeIs', key: SIMPLE_DOMAIN_MODE, value: 'active' }],
           effects: [{
             type: 'reaction',
             label: 'Counter Slash',
@@ -114,7 +117,7 @@ export const miwa = fighter({
   ultimate: defendSkill({
     id: 'miwa-defensive-stance',
     name: 'Defensive Stance',
-    description: 'Miwa becomes invulnerable for 1 turn. If she uses Simple Domain on the following turn, its cooldown will be reduced by 1.',
+    description: 'Miwa becomes invulnerable for 1 turn. While this preparation is active, her next Simple Domain reduces its cooldown by 1.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,
@@ -122,7 +125,7 @@ export const miwa = fighter({
     energyCost: { mental: 1 },
     effects: [
       { type: 'invulnerable', duration: 1, target: 'self' },
-      { type: 'setFlag', key: 'defensive_stance_used', value: true, target: 'self' },
+      { type: 'setMode', key: DEFENSIVE_STANCE_MODE, value: 'active', duration: 1, target: 'self' },
     ],
   }),
 })

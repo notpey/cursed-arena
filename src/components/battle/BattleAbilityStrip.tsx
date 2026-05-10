@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { ActiveEffectPips, BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
 import { ProgressBar } from '@/components/ui/ProgressBar'
@@ -8,6 +9,16 @@ import { hasStatus } from '@/features/battle/statuses'
 import { getAbilityById } from '@/features/battle/engine'
 import type { BattleAbilityTemplate, BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
 import type { BattlePresentationMode } from '@/features/battle/presentationPreference'
+
+function lockReasonTag(reason: string): string {
+  if (reason.includes('Cooldown')) return 'CD'
+  if (reason.includes('energy')) return 'CE'
+  if (reason.includes('Stunned') || reason.includes('stunned')) return 'STUN'
+  if (reason.includes('sealed')) return 'SEAL'
+  if (reason.includes('targets')) return 'NO TGT'
+  if (reason.includes('Not available') || reason.includes('Locked')) return 'LOCK'
+  return 'N/A'
+}
 
 function SkillTile({
   ability,
@@ -28,54 +39,73 @@ function SkillTile({
   onHover?: () => void
   onLeave?: () => void
 }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false)
   const cost = getAbilityEnergyCost(ability)
   const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
-  const reasonTag =
-    lockReason?.includes('Cooldown') ? 'CD'
-      : lockReason?.includes('energy') ? 'NO CE'
-      : lockReason?.includes('Stunned') ? 'STUN'
-      : lockReason?.includes('sealed') ? 'SEALED'
-      : lockReason?.includes('Not available') ? 'LOCKED'
-      : lockReason?.includes('targets') ? 'NO TARGET'
-      : null
+
+  function handleMouseEnter() {
+    setTooltipVisible(true)
+    onHover?.()
+  }
+
+  function handleMouseLeave() {
+    setTooltipVisible(false)
+    onLeave?.()
+  }
 
   return (
-    <button
-      type="button"
-      onClick={locked ? undefined : onSelect}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onFocus={onHover}
-      onBlur={onLeave}
-      disabled={locked}
-      title={lockReason ? `${ability.name} - ${lockReason}` : ability.name}
-      className={cn(
-        'group relative h-[3.2rem] w-[3.2rem] shrink-0 overflow-hidden rounded-[0.14rem] border-2 bg-[rgba(20,20,28,0.9)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
-        active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
-        queued && 'border-ca-teal/55 shadow-[0_0_8px_rgba(5,216,189,0.16)]',
-        locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
-        !locked && !active && !queued && 'hover:border-white/30',
-        !locked && 'active:scale-[0.93]',
-      )}
-    >
-      <div className="absolute inset-0 grid place-items-center">
-        {iconSrc ? (
-          <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="grid h-full w-full place-items-center bg-[rgba(15,15,20,0.95)] text-[1.2rem] font-black text-white/30">?</div>
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={locked ? undefined : onSelect}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onFocus={handleMouseEnter}
+        onBlur={handleMouseLeave}
+        disabled={locked}
+        aria-label={lockReason ? `${ability.name} — ${lockReason}` : ability.name}
+        className={cn(
+          'group relative h-[3.2rem] w-[3.2rem] overflow-hidden rounded-[0.14rem] border-2 bg-[rgba(20,20,28,0.9)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
+          active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
+          queued && 'border-ca-teal/55 shadow-[0_0_8px_rgba(5,216,189,0.16)]',
+          locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
+          !locked && !active && !queued && 'hover:border-white/30',
+          !locked && 'active:scale-[0.93]',
         )}
-      </div>
+      >
+        <div className="absolute inset-0 grid place-items-center">
+          {iconSrc ? (
+            <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center bg-[rgba(15,15,20,0.95)] text-[1.2rem] font-black text-white/30">?</div>
+          )}
+        </div>
 
-      <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
-        <EnergyCostRow cost={cost} compact />
-      </div>
+        <div className="absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.7)] px-1 py-0.5">
+          <EnergyCostRow cost={cost} compact />
+        </div>
 
-      {locked && reasonTag ? (
-        <div className="absolute left-0.5 top-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.76)] px-1 py-0.5">
-          <span className="ca-mono-label text-[0.34rem] text-ca-red">{reasonTag}</span>
+        {locked && lockReason ? (
+          <div className="absolute left-0.5 top-0.5 rounded-[0.1rem] bg-[rgba(0,0,0,0.76)] px-1 py-0.5">
+            <span className="ca-mono-label text-[0.34rem] text-ca-red">{lockReasonTag(lockReason)}</span>
+          </div>
+        ) : null}
+      </button>
+
+      {/* Styled block-reason tooltip — only shown when locked and hovered */}
+      {locked && lockReason && tooltipVisible ? (
+        <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 z-[110] -translate-x-1/2">
+          <div className="relative min-w-[8rem] max-w-[14rem] rounded-[0.4rem] border border-ca-red/40 bg-[linear-gradient(180deg,rgba(24,10,14,0.98),rgba(14,6,10,0.99))] px-2.5 py-2 shadow-[0_14px_32px_rgba(0,0,0,0.6)] backdrop-blur-md">
+            <p className="ca-mono-label text-[0.48rem] leading-none text-ca-red">{lockReasonTag(lockReason)}</p>
+            <p className="mt-1 text-[0.65rem] leading-snug text-ca-text-2">{lockReason}</p>
+            {/* Arrow pointing down */}
+            <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[1px]">
+              <div className="h-0 w-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-[rgba(24,10,14,0.98)]" />
+            </div>
+          </div>
         </div>
       ) : null}
-    </button>
+    </div>
   )
 }
 
@@ -223,6 +253,12 @@ export function BattleAbilityStrip({
           )}
         >
           <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_72%,rgba(5,216,189,0.012)_100%)]" />
+
+          {isActiveSide && fighter.hp > 0 && hasStatus(fighter.statuses, 'stun') ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[rgba(0,0,0,0.55)]">
+              <span className="ca-mono-label text-[0.7rem] tracking-[0.14em] text-amber-200">STUNNED</span>
+            </div>
+          ) : null}
 
           <div className="relative border-b border-white/6 bg-black/40">
             <ProgressBar value={hpValue} tone="green-muted" className="h-[1.1rem] bg-black/50" />

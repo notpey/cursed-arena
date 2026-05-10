@@ -1,6 +1,39 @@
 import { definePassive, defendSkill } from '@/features/battle/content.ts'
 import { fighter, skill, modifierEffect, markerEffect } from './_helpers.ts'
 
+const MOON_DREGS_TAG = 'moon-dregs-injection'
+const moonDregsMarker = (target: 'inherit' | 'attacker') =>
+  markerEffect('Moon Dregs: Injection', 2, target, [MOON_DREGS_TAG])
+
+const moonDregsReaction = (target: 'inherit' | 'attacker') => ({
+  type: 'reaction' as const,
+  label: 'Moon Dregs: Injection',
+  trigger: 'onAbilityUse' as const,
+  duration: 2,
+  harmfulOnly: true,
+  consumeOnTrigger: false,
+  oncePerRound: true,
+  target,
+  effects: [{ type: 'damage' as const, power: 10, target: 'inherit' as const }],
+})
+
+const moonDregsScheduledDamage = [
+  {
+    type: 'schedule' as const,
+    delay: 1,
+    phase: 'roundStart' as const,
+    target: 'inherit' as const,
+    effects: [{ type: 'damage' as const, power: 10, target: 'inherit' as const }],
+  },
+  {
+    type: 'schedule' as const,
+    delay: 2,
+    phase: 'roundStart' as const,
+    target: 'inherit' as const,
+    effects: [{ type: 'damage' as const, power: 10, target: 'inherit' as const }],
+  },
+]
+
 export const junpei = fighter({
   id: 'junpei',
   name: 'Junpei Yoshino',
@@ -31,7 +64,7 @@ export const junpei = fighter({
     skill({
       id: 'junpei-moon-dregs-injection',
       name: 'Moon Dregs: Injection',
-      description: 'This skill targets one enemy, dealing 10 damage to them. For 2 turns, the target will take 10 affliction damage at the start of each turn. During this time, the first time the target uses a harmful skill each turn, they will take 10 additional affliction damage.',
+      description: 'This skill targets one enemy, dealing 10 damage to them. For 2 rounds, the target will take 10 affliction damage at round start. During this time, the first time the target uses a harmful skill each round, they will take 10 additional affliction damage.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Affliction', 'Ranged', 'Instant'],
@@ -40,19 +73,9 @@ export const junpei = fighter({
       power: 10,
       effects: [
         { type: 'damage', power: 10, target: 'inherit' },
-        { type: 'burn', damage: 10, duration: 2, target: 'inherit' },
-        markerEffect('Moon Dregs: Injection', 2, 'inherit', ['moon-dregs-injection']),
-        {
-          type: 'reaction',
-          label: 'Moon Dregs: Injection',
-          trigger: 'onAbilityUse',
-          duration: 2,
-          harmfulOnly: true,
-          consumeOnTrigger: false,
-          oncePerRound: true,
-          target: 'inherit',
-          effects: [{ type: 'damage', power: 10, target: 'inherit' }],
-        },
+        moonDregsMarker('inherit'),
+        ...moonDregsScheduledDamage,
+        moonDregsReaction('inherit'),
       ],
     }),
     skill({
@@ -91,15 +114,22 @@ export const junpei = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
-        { type: 'damageFiltered', power: 15, requiresTag: 'moon-dregs-injection', piercing: true, target: 'inherit' },
-        modifierEffect('Toxic Break', 'damageTaken', 5, 'permanent', 'inherit', ['toxic-break']),
+        {
+          type: 'conditional',
+          target: 'inherit',
+          conditions: [{ type: 'targetHasModifierTag', tag: MOON_DREGS_TAG }],
+          effects: [
+            { type: 'damage', power: 15, piercing: true, target: 'inherit' },
+            modifierEffect('Toxic Break Toxicity', 'damageTaken', 5, 'permanent', 'inherit', ['toxic-break-toxicity'], { damageClass: 'Affliction' }),
+          ],
+        },
       ],
     }),
   ],
   ultimate: defendSkill({
     id: 'junpei-moon-dregs-guard',
     name: 'Moon Dregs: Guard',
-    description: 'For 1 turn, Junpei becomes invulnerable. During this time, the first enemy that uses a harmful skill will take 15 affliction damage and have Moon Dregs: Injection applied to them.',
+    description: 'For 1 turn, Junpei becomes invulnerable. During this time, the first enemy that targets Junpei with a harmful skill will take 15 affliction damage and become affected by the Moon Dregs marker and harmful-skill punishment.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,
@@ -117,19 +147,8 @@ export const junpei = fighter({
         target: 'self',
         effects: [
           { type: 'damage', power: 15, target: 'attacker' },
-          { type: 'burn', damage: 10, duration: 2, target: 'attacker' },
-          markerEffect('Moon Dregs: Injection', 2, 'attacker', ['moon-dregs-injection']),
-          {
-            type: 'reaction',
-            label: 'Moon Dregs: Injection',
-            trigger: 'onAbilityUse',
-            duration: 2,
-            harmfulOnly: true,
-            consumeOnTrigger: false,
-            oncePerRound: true,
-            target: 'attacker',
-            effects: [{ type: 'damage', power: 10, target: 'inherit' }],
-          },
+          moonDregsMarker('attacker'),
+          moonDregsReaction('attacker'),
         ],
       },
     ],

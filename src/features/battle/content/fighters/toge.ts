@@ -50,7 +50,7 @@ export const toge = fighter({
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
         modifierEffect("Don't Move", 'damageDealt', -10, 1, 'inherit', ['dont-move']),
-        { type: 'adjustCounter', key: 'vocal_strain_damage', amount: 5, target: 'self' },
+        { type: 'adjustCounter', key: 'vocal_strain_damage', amount: 5, max: 15, target: 'self' },
         {
           type: 'reaction',
           label: "Don't Move Curse",
@@ -101,7 +101,7 @@ export const toge = fighter({
             },
           ],
         },
-        { type: 'adjustCounter', key: 'vocal_strain_damage', amount: 5, target: 'self' },
+        { type: 'adjustCounter', key: 'vocal_strain_damage', amount: 5, max: 15, target: 'self' },
       ],
     }),
     healSkill({
@@ -116,7 +116,7 @@ export const toge = fighter({
       effects: [
         { type: 'heal', power: 10, target: 'inherit' },
         { type: 'shield', amount: 10, label: 'Throat Spray', tags: ['throat-spray'], target: 'inherit' },
-        { type: 'setFlag', key: 'throat_spray_self_used', value: true, target: 'self' },
+        { type: 'setFlag', key: 'throat_spray_self_used', value: true, target: 'inherit' },
       ],
     }),
   ],

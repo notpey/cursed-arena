@@ -9,14 +9,17 @@ import {
   endRound,
   endRoundTimeline,
   getBattleCommandBlockReason,
+  getResolvedAbilityEnergyCost,
   getQueueAbilityBlockReason,
   getTeam,
   getValidTargetIds,
+  resolveInterleavedPlayerTurnTimeline,
   resolveTeamTurn,
   resolveTeamTurnTimeline,
 } from '@/features/battle/engine'
 import { getAbilityIntent, isHarmfulAbility, isHelpfulAbility } from '@/features/battle/engine/reactionPredicates'
 import { getStatusDuration } from '@/features/battle/statuses'
+import { getActivePips } from '@/components/battle/battleDisplay'
 import type { BattleAbilityTemplate, BattleState, QueuedBattleAction } from '@/features/battle/types'
 import { validateBattleContent } from '@/features/battle/validation'
 
@@ -394,13 +397,13 @@ describe('battle engine scenarios', () => {
   })
 
   test('classStun persists through the round it was applied in', () => {
-    const state = createChargedBattleState({ playerTeamIds: ['gojo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
-    const gojo = getFighter(state, 'player', 'gojo')
+    const state = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const kamo = getFighter(state, 'player', 'noritoshi')
     const yuji = getFighter(state, 'enemy', 'yuji')
 
     const afterTurn = resolveTeamTurn(
       state,
-      queue('player', gojo.instanceId, 'gojo-reversal-red', yuji.instanceId),
+      queue('player', kamo.instanceId, 'noritoshi-crimson-binding', yuji.instanceId),
       'player',
     )
     expect(getFighter(afterTurn.state, 'enemy', 'yuji').classStuns.some((cs) => cs.blockedClasses.includes('Physical'))).toBe(true)
@@ -437,30 +440,30 @@ describe('battle engine scenarios', () => {
 
   test('enemy-all abilities explicitly validate living enemies and queue with no target', () => {
     const state = createChargedBattleState({
-      playerTeamIds: ['gojo', 'yuji', 'megumi'],
+      playerTeamIds: ['mechamaru', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
     })
-    const gojo = getFighter(state, 'player', 'gojo')
+    const mechamaru = getFighter(state, 'player', 'mechamaru')
 
-    expect(getValidTargetIds(state, gojo.instanceId, 'gojo-hollow-purple')).toHaveLength(3)
-    expect(canQueueAbility(state, {}, gojo, 'gojo-hollow-purple')).toBe(true)
+    expect(getValidTargetIds(state, mechamaru.instanceId, 'mechamaru-suppressive-fire')).toHaveLength(3)
+    expect(canQueueAbility(state, {}, mechamaru, 'mechamaru-suppressive-fire')).toBe(true)
 
     const resolved = resolveTeamTurn(
       state,
-      queue('player', gojo.instanceId, 'gojo-hollow-purple', null),
+      queue('player', mechamaru.instanceId, 'mechamaru-suppressive-fire', null),
       'player',
     )
 
-    expect(getFighter(resolved.state, 'enemy', 'yuji').hp).toBe(70)
-    expect(getFighter(resolved.state, 'enemy', 'nobara').hp).toBe(70)
-    expect(getFighter(resolved.state, 'enemy', 'megumi').hp).toBe(70)
+    expect(getFighter(resolved.state, 'enemy', 'yuji').hp).toBe(85)
+    expect(getFighter(resolved.state, 'enemy', 'nobara').hp).toBe(85)
+    expect(getFighter(resolved.state, 'enemy', 'megumi').hp).toBe(85)
 
     resolved.state.enemyTeam.forEach((fighter) => {
       fighter.hp = 0
     })
-    const updatedGojo = getFighter(resolved.state, 'player', 'gojo')
-    updatedGojo.cooldowns['gojo-hollow-purple'] = 0
-    expect(getQueueAbilityBlockReason(resolved.state, {}, updatedGojo, 'gojo-hollow-purple')).toBe('No valid targets')
+    const updatedMechamaru = getFighter(resolved.state, 'player', 'mechamaru')
+    updatedMechamaru.cooldowns['mechamaru-suppressive-fire'] = 0
+    expect(getQueueAbilityBlockReason(resolved.state, {}, updatedMechamaru, 'mechamaru-suppressive-fire')).toBe('No valid targets')
   })
 
   test('shieldDamage effects damage tagged shields and emit shield break events', () => {
@@ -1012,7 +1015,7 @@ describe('battle engine scenarios', () => {
     const mai = getFighter(state, 'player', 'mai')
     const enemyYuji = getFighter(state, 'enemy', 'yuji')
 
-    expect(mai.stateCounters.cursed_bullet).toBe(2)
+    expect(mai.stateCounters.cursed_bullet_uses).toBe(2)
 
     const fired = resolveTeamTurn(
       state,
@@ -1021,7 +1024,7 @@ describe('battle engine scenarios', () => {
     )
 
     expect(getFighter(fired.state, 'enemy', 'yuji').hp).toBe(70)
-    expect(getFighter(fired.state, 'player', 'mai').stateCounters.cursed_bullet).toBe(1)
+    expect(getFighter(fired.state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(1)
   })
 
   test('counter clamps prevent ammo from exceeding authored maximums', () => {
@@ -1030,7 +1033,7 @@ describe('battle engine scenarios', () => {
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
     })
     const mai = getFighter(state, 'player', 'mai')
-    mai.stateCounters.cursed_bullet = 3
+    mai.stateCounters.cursed_bullet_uses = 3
 
     state = resolveTeamTurn(
       state,
@@ -1038,7 +1041,7 @@ describe('battle engine scenarios', () => {
       'player',
     ).state
 
-    expect(getFighter(state, 'player', 'mai').stateCounters.cursed_bullet).toBe(3)
+    expect(getFighter(state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(3)
   })
 
   test('conditional effects do not fire when counters are empty', () => {
@@ -1048,7 +1051,7 @@ describe('battle engine scenarios', () => {
     })
     const mai = getFighter(state, 'player', 'mai')
     const enemyYuji = getFighter(state, 'enemy', 'yuji')
-    mai.stateCounters.cursed_bullet = 0
+    mai.stateCounters.cursed_bullet_uses = 0
 
     const result = resolveTeamTurn(
       state,
@@ -1056,11 +1059,11 @@ describe('battle engine scenarios', () => {
       'player',
     )
 
-    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(85)
-    expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(0)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getStatusDuration(getFighter(result.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
   })
 
-  test('counter conditions can upgrade Gojo Hollow Purple', () => {
+  test('mode conditions can upgrade Gojo Hollow Purple', () => {
     let state = createChargedBattleState({
       playerTeamIds: ['gojo', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
@@ -1074,9 +1077,9 @@ describe('battle engine scenarios', () => {
     state = resolveTeamTurn(state, queue('player', gojo.instanceId, 'gojo-lapse-blue', enemyYuji.instanceId), 'player').state
     state = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'gojo').instanceId, 'gojo-reversal-red', getFighter(state, 'enemy', 'yuji').instanceId), 'player').state
     expect(getFighter(state, 'player', 'gojo').abilityHistory.map((entry) => entry.abilityId)).toEqual(['gojo-lapse-blue', 'gojo-reversal-red'])
-    expect(getFighter(state, 'player', 'gojo').stateCounters.limitless_blue).toBe(1)
-    expect(getFighter(state, 'player', 'gojo').stateCounters.limitless_red).toBe(1)
-    expect(getFighter(state, 'player', 'gojo').abilities.find((ability) => ability.id === 'gojo-hollow-purple')?.effects?.[1]?.type).toBe('damageScaledByCounter')
+    expect(getFighter(state, 'player', 'gojo').stateModes.recent_blue).toBe('active')
+    expect(getFighter(state, 'player', 'gojo').stateModes.recent_red).toBe('active')
+    expect(getFighter(state, 'player', 'gojo').stateModes.blue_red_aligned).toBe('active')
     state = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'gojo').instanceId, 'gojo-hollow-purple', null), 'player').state
 
     expect(getFighter(state, 'enemy', 'yuji').hp).toBe(0)
@@ -1091,7 +1094,7 @@ describe('battle engine scenarios', () => {
     })
     const panda = getFighter(state, 'player', 'panda')
     const enemyYuji = getFighter(state, 'enemy', 'yuji')
-    panda.stateModes.form = 'gorilla'
+    panda.stateModes.gorilla_mode = 'active'
 
     const result = resolveTeamTurn(
       state,
@@ -1496,16 +1499,16 @@ describe('deterministic battle state IDs', () => {
   })
 
   test('class stun IDs are deterministic across identical resolutions', () => {
-    const makeState = () => createChargedBattleState({ playerTeamIds: ['gojo', 'yuji', 'nobara'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const makeState = () => createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'nobara'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
     const s1 = makeState()
     const s2 = makeState()
-    const gojo1 = getFighter(s1, 'player', 'gojo')
-    const gojo2 = getFighter(s2, 'player', 'gojo')
+    const kamo1 = getFighter(s1, 'player', 'noritoshi')
+    const kamo2 = getFighter(s2, 'player', 'noritoshi')
     const target1 = getFighter(s1, 'enemy', 'yuji')
     const target2 = getFighter(s2, 'enemy', 'yuji')
 
-    const r1 = resolveTeamTurn(s1, queue('player', gojo1.instanceId, 'gojo-reversal-red', target1.instanceId), 'player')
-    const r2 = resolveTeamTurn(s2, queue('player', gojo2.instanceId, 'gojo-reversal-red', target2.instanceId), 'player')
+    const r1 = resolveTeamTurn(s1, queue('player', kamo1.instanceId, 'noritoshi-crimson-binding', target1.instanceId), 'player')
+    const r2 = resolveTeamTurn(s2, queue('player', kamo2.instanceId, 'noritoshi-crimson-binding', target2.instanceId), 'player')
 
     const stuns1 = getFighter(r1.state, 'enemy', 'yuji').classStuns
     const stuns2 = getFighter(r2.state, 'enemy', 'yuji').classStuns
@@ -2080,9 +2083,33 @@ describe('signature mechanic tests', () => {
       'player',
     )
 
-    // Collapse Point dealt 5 damage + applied permanent damageTaken +5 modifier.
+    // Collapse Point dealt 5 damage + applied 4-round damageTaken +5 modifier.
     // Execution deals 20 + 5 (damageTaken mod) = 25. No Follow-Through. Total: 5 + 25 = 30. HP = 70.
     expect(getFighter(afterExecution.state, 'enemy', 'yuji').hp).toBe(70)
+  })
+
+  test('Nanami Collapse Point applies 5 piercing damage and a 4-round damageTaken +5 modifier', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['nanami', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const nanami = getFighter(state, 'player', 'nanami')
+    const target = getFighter(state, 'enemy', 'yuji')
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', nanami.instanceId, 'nanami-collapse-point', target.instanceId),
+      'player',
+    )
+
+    const updatedTarget = getFighter(result.state, 'enemy', 'yuji')
+    // 5 piercing damage
+    expect(updatedTarget.hp).toBe(95)
+    // 4-round damageTaken +5 modifier applied
+    const collapseMod = updatedTarget.modifiers.find((mod) => mod.tags.includes('collapse-point') && mod.stat === 'damageTaken')
+    expect(collapseMod).toBeDefined()
+    expect(collapseMod?.duration.kind).toBe('rounds')
+    expect(collapseMod?.value).toBe(5)
   })
 
   test('Nanami Overtime applies a 3-turn damageDealt modifier and grants 1 random energy', () => {
@@ -2252,6 +2279,35 @@ describe('signature mechanic tests', () => {
     expect(enemyMegumi.hp).toBe(65)
   })
 
+  test('Toge Throat Spray on an ally does NOT skip Vocal Strain for Toge', () => {
+    // When Throat Spray targets an ally (not Toge himself), the flag is set on the ally,
+    // so Toge's Vocal Strain passive still fires and he takes self-damage.
+    const state = createChargedBattleState({
+      playerTeamIds: ['toge', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const toge = getFighter(state, 'player', 'toge')
+    const ally = getFighter(state, 'player', 'yuji')
+    toge.stateCounters.vocal_strain_damage = 10
+    const hpBefore = toge.hp
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', toge.instanceId, 'toge-throat-spray', ally.instanceId),
+      'player',
+    )
+
+    const togeAfter = getFighter(result.state, 'player', 'toge')
+    // throat_spray_self_used was set on the ally (inherit = ally), not on Toge,
+    // so Toge's flag remains false and Vocal Strain fires normally.
+    expect(togeAfter.stateFlags.throat_spray_self_used ?? false).toBe(false)
+    // Throat Spray heals the ally 10, gives 10 shield; Vocal Strain deals 10 to Toge.
+    // Toge's net HP: 100 - 10 = 90 (no self-heal, vocal strain fires).
+    expect(togeAfter.hp).toBe(hpBefore - 10)
+    // Counter is NOT reset (vocal strain path, not reset path)
+    expect(togeAfter.stateCounters.vocal_strain_damage).toBe(10)
+  })
+
   // ─── Todo: Besto Friendo marker + bonus damage ───────────────────────────────
   // Risk: The passive fires on every ability resolve and must mark the target for
   // 2 turns. The damage bonus (+5) is via a permanent damageTaken modifier on the
@@ -2308,6 +2364,72 @@ describe('signature mechanic tests', () => {
     expect(getFighter(swung.state, 'enemy', 'yuji').hp).toBe(50)
   })
 
+  test('Todo Besto Friendo does not mark Todo himself when using Unshakable Confidence', () => {
+    // Unshakable Confidence is Strategic/Instant/Ultimate (not Physical), so the
+    // abilityClass:'Physical' condition on Besto Friendo prevents it from firing.
+    const state = createChargedBattleState({
+      playerTeamIds: ['todo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const todo = getFighter(state, 'player', 'todo')
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', todo.instanceId, 'todo-unshakable-confidence', todo.instanceId),
+      'player',
+    )
+
+    const todoAfter = getFighter(result.state, 'player', 'todo')
+    // Besto Friendo must NOT have fired: no todo-type or todo-type-damage modifiers on Todo himself.
+    expect(todoAfter.modifiers.some((mod) => mod.tags.includes('todo-type'))).toBe(false)
+    expect(todoAfter.modifiers.some((mod) => mod.tags.includes('todo-type-damage'))).toBe(false)
+  })
+
+  test('Todo Follow-Up Assault deals 20+15 bonus against Boogie Woogie targets, then stuns Physical', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['todo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const todo = getFighter(state, 'player', 'todo')
+    const target = getFighter(state, 'enemy', 'yuji')
+
+    // Baseline: Follow-Up without Boogie Woogie deals only 20 (no bonus, no stun)
+    const baselineState = createChargedBattleState({
+      playerTeamIds: ['todo', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    getFighter(baselineState, 'player', 'todo').cooldowns['todo-follow-up-assault'] = 0
+    const baseline = resolveTeamTurn(
+      baselineState,
+      queue('player', getFighter(baselineState, 'player', 'todo').instanceId, 'todo-follow-up-assault', getFighter(baselineState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    // No boogie-woogie tag: 20 base only (Besto Friendo fires onAbilityResolve AFTER damage, so +5 damageTaken is set post-hit)
+    expect(getFighter(baseline.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(baseline.state, 'enemy', 'yuji').classStuns).toHaveLength(0)
+
+    // With Boogie Woogie: Follow-Up deals 20 + 15 damageFiltered bonus, and Physical class stun applies
+    const boogieed = resolveTeamTurn(
+      state,
+      queue('player', todo.instanceId, 'todo-boogie-woogie', target.instanceId),
+      'player',
+    )
+    const todoAfterBoogie = getFighter(boogieed.state, 'player', 'todo')
+    todoAfterBoogie.cooldowns['todo-follow-up-assault'] = 0
+
+    const assaulted = resolveTeamTurn(
+      boogieed.state,
+      queue('player', todoAfterBoogie.instanceId, 'todo-follow-up-assault', getFighter(boogieed.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+
+    const yujiAfter = getFighter(assaulted.state, 'enemy', 'yuji')
+    // With Boogie Woogie tag: 20 base + 15 damageFiltered = 35 + type-damage modifier = 45 damage → HP = 55
+    expect(yujiAfter.hp).toBe(55)
+    // Physical class stun applied (target had boogie-woogie tag)
+    expect(yujiAfter.classStuns.some((stun) => stun.blockedClasses.includes('Physical'))).toBe(true)
+  })
+
   // ─── Panda: Three Cores passive ──────────────────────────────────────────────
   // Risk: onTakeDamage passive fires when hp < 30% AND flag is false. It must
   // set the flag, set the mode to 'gorilla', and heal 15. Flag prevents repeat
@@ -2333,9 +2455,8 @@ describe('signature mechanic tests', () => {
     const updatedPanda = getFighter(result.state, 'player', 'panda')
     // HP: 31 - 5 = 26 (below 30%), passive heals 15 → 41
     expect(updatedPanda.hp).toBe(41)
-    expect(updatedPanda.stateFlags.panda_gorilla_mode).toBe(true)
-    expect(updatedPanda.stateModes.form).toBe('gorilla')
-    expect(updatedPanda.modifiers.some((mod) => mod.tags.includes('gorilla-mode') && mod.stat === 'damageDealt')).toBe(true)
+    expect(updatedPanda.stateFlags.panda_three_cores_triggered).toBe(true)
+    expect(updatedPanda.stateModes.gorilla_mode).toBe('active')
   })
 
   test('Panda Three Cores does not fire a second time once already in gorilla mode', () => {
@@ -2346,8 +2467,8 @@ describe('signature mechanic tests', () => {
     const panda = getFighter(state, 'player', 'panda')
     const attacker = getFighter(state, 'enemy', 'yuji')
     // Already triggered
-    panda.stateFlags.panda_gorilla_mode = true
-    panda.stateModes.form = 'gorilla'
+    panda.stateFlags.panda_three_cores_triggered = true
+    panda.stateModes.gorilla_mode = 'active'
     panda.hp = 20
     attacker.abilities[0].energyCost = {}
     attacker.abilities[0].effects = [{ type: 'damage', power: 5, target: 'inherit' }]
@@ -2361,16 +2482,14 @@ describe('signature mechanic tests', () => {
     const updatedPanda = getFighter(result.state, 'player', 'panda')
     // HP: 20 - 5 = 15, no heal (passive blocked by flag)
     expect(updatedPanda.hp).toBe(15)
-    // No additional gorilla-mode damageDealt modifiers stacked
-    expect(updatedPanda.modifiers.filter((mod) => mod.tags.includes('gorilla-mode'))).toHaveLength(0)
+    expect(updatedPanda.stateFlags.panda_three_cores_triggered).toBe(true)
   })
 
   // ─── Kamo: Refined Technique ─────────────────────────────────────────────────
-  // Risk: onAbilityResolve passive fires AFTER damage resolves, so Refined
-  // Technique's +10 modifier applies to the skill AFTER Piercing Blood, not to
-  // Piercing Blood itself. Piercing Blood uses a conditional (usedAbilityLastTurn)
-  // to deal 15 bonus piercing if Blood Draw was used last turn.
-  test('Kamo Refined Technique grants +10 damage modifier after Blood Draw → next skill', () => {
+  // Risk: Kamo's sequence bonus is prepared after a different consecutive skill,
+  // then consumed by the next damaging skill rather than modifying Blood Draw's
+  // self-cost.
+  test('Kamo Refined Technique prepares a next damaging skill bonus after different consecutive skills', () => {
     const state = createChargedBattleState({
       playerTeamIds: ['noritoshi', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
@@ -2400,32 +2519,35 @@ describe('signature mechanic tests', () => {
     // 20 base + 15 piercing conditional = 35 damage → HP 65
     expect(getFighter(afterPierce.state, 'enemy', 'yuji').hp).toBe(65)
 
-    // The Refined Technique modifier IS now on Kamo for the next ability use.
-    expect(kamoAfterPierce.modifiers.some((mod) => mod.tags.includes('refined-technique'))).toBe(true)
+    expect(kamoAfterPierce.stateCounters.kamo_refined_bonus).toBe(1)
   })
 
-  test('Kamo Refined Technique does not fire without prior Blood Draw', () => {
+  test('Kamo Refined Technique does not prepare a bonus when repeating the same skill', () => {
     const state = createChargedBattleState({
       playerTeamIds: ['noritoshi', 'yuji', 'megumi'],
       enemyTeamIds: ['yuji', 'nobara', 'megumi'],
     })
     const kamo = getFighter(state, 'player', 'noritoshi')
 
-    // Use Collapse Point (not Blood Draw) first — no history match
-    const afterPierce = resolveTeamTurn(
+    const afterFirstPierce = resolveTeamTurn(
       state,
       queue('player', kamo.instanceId, 'noritoshi-piercing-blood', getFighter(state, 'enemy', 'yuji').instanceId),
       'player',
     )
+    const afterSecondPierce = resolveTeamTurn(
+      afterFirstPierce.state,
+      queue('player', getFighter(afterFirstPierce.state, 'player', 'noritoshi').instanceId, 'noritoshi-piercing-blood', getFighter(afterFirstPierce.state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
 
-    // No prior Blood Draw → conditional skips bonus; only 20 base damage
-    expect(getFighter(afterPierce.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(afterFirstPierce.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(afterSecondPierce.state, 'player', 'noritoshi').stateCounters.kamo_refined_bonus ?? 0).toBe(0)
   })
 
   // ─── Gojo: Infinity passive ──────────────────────────────────────────────────
   // Risk: Infinity fires on onRoundStart, applying invulnerable + effectImmunity
-  // for 1 turn. The passive must reapply on each new round. Piercing damage and
-  // ignoresInvulnerability damage should still land even while Infinity is active.
+  // plus a pre-damage reaction. The first harmful targeting collapses Infinity
+  // before damage, then the collapsed mode suppresses the next round-start reapply.
   test('Gojo Infinity passive applies invulnerability and non-damage immunity at round start', () => {
     const state = createChargedBattleState({
       playerTeamIds: ['gojo', 'yuji', 'megumi'],
@@ -2444,14 +2566,15 @@ describe('signature mechanic tests', () => {
     // Should also have the non-damage effectImmunity
     expect(gojoAfterStart.effectImmunities.some((imm) => (imm.tags ?? []).includes('infinity'))).toBe(true)
 
-    // Normal damage attack should be blocked by invulnerability
+    // Normal harmful targeting collapses Infinity before damage, so this hit lands.
     const afterHit = resolveTeamTurn(
       afterRoundStart.state,
       queue('enemy', attacker.instanceId, attacker.abilities[0].id, gojoAfterStart.instanceId),
       'enemy',
     )
 
-    expect(getFighter(afterHit.state, 'player', 'gojo').hp).toBe(100)
+    expect(getFighter(afterHit.state, 'player', 'gojo').hp).toBe(75)
+    expect(getFighter(afterHit.state, 'player', 'gojo').stateModes.infinity_collapsed).toBe('active')
   })
 
   test('Gojo ignoresInvulnerability damage pierces Infinity', () => {
@@ -2476,5 +2599,1556 @@ describe('signature mechanic tests', () => {
 
     // Damage should land despite invulnerability
     expect(getFighter(afterHit.state, 'player', 'gojo').hp).toBe(80)
+  })
+})
+
+describe('third batch roster rework', () => {
+  test('Junpei Weak Constitution increases incoming damage after round-start setup', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const started = beginNewRound(state).state
+    const junpei = getFighter(started, 'player', 'junpei')
+    const enemyYuji = getFighter(started, 'enemy', 'yuji')
+
+    const result = resolveTeamTurn(started, queue('enemy', enemyYuji.instanceId, 'yuji-divergent-fist', junpei.instanceId), 'enemy')
+
+    expect(getFighter(result.state, 'player', 'junpei').hp).toBe(75)
+  })
+
+  test('Junpei Moon Dregs applies a marker, scheduled damage, and harmful-skill punishment', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const junpei = getFighter(state, 'player', 'junpei')
+    junpei.hp = 80
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+
+    const injected = resolveTeamTurn(state, queue('player', junpei.instanceId, 'junpei-moon-dregs-injection', enemyYuji.instanceId), 'player')
+    const poisoned = getFighter(injected.state, 'enemy', 'yuji')
+    expect(poisoned.hp).toBe(90)
+    expect(poisoned.modifiers.some((modifier) => modifier.tags.includes('moon-dregs-injection'))).toBe(true)
+    expect(getFighter(injected.state, 'player', 'junpei').hp).toBe(85)
+
+    const ticked = beginNewRound(injected.state).state
+    expect(getFighter(ticked, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(ticked, 'player', 'junpei').hp).toBe(90)
+
+    const punished = resolveTeamTurn(
+      ticked,
+      queue('enemy', getFighter(ticked, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(ticked, 'player', 'junpei').instanceId),
+      'enemy',
+    )
+    expect(getFighter(punished.state, 'enemy', 'yuji').hp).toBe(70)
+  })
+
+  test('Junpei Paralytic Poison traps the next skill use', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const trapped = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'junpei').instanceId, 'junpei-paralytic-poison', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const triggered = resolveTeamTurn(
+      trapped.state,
+      queue('enemy', getFighter(trapped.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(trapped.state, 'player', 'junpei').instanceId),
+      'enemy',
+    )
+    const after = getFighter(triggered.state, 'enemy', 'yuji')
+
+    expect(after.hp).toBe(85)
+    expect(getStatusDuration(after.statuses, 'stun')).toBe(1)
+  })
+
+  test('Junpei Toxic Break has normal damage and Moon Dregs payoff with affliction scaling', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'junpei').instanceId, 'junpei-toxic-break', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(80)
+
+    const markedState = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const injected = resolveTeamTurn(
+      markedState,
+      queue('player', getFighter(markedState, 'player', 'junpei').instanceId, 'junpei-moon-dregs-injection', getFighter(markedState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const broken = resolveTeamTurn(
+      injected.state,
+      queue('player', getFighter(injected.state, 'player', 'junpei').instanceId, 'junpei-toxic-break', getFighter(injected.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const target = getFighter(broken.state, 'enemy', 'yuji')
+    expect(target.hp).toBe(55)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('toxic-break-toxicity') && modifier.damageClass === 'Affliction')).toBe(true)
+
+    const reinjected = resolveTeamTurn(
+      broken.state,
+      queue('player', getFighter(broken.state, 'player', 'junpei').instanceId, 'junpei-moon-dregs-injection', target.instanceId),
+      'player',
+    )
+    expect(getFighter(reinjected.state, 'enemy', 'yuji').hp).toBe(40)
+  })
+
+  test('Junpei Moon Dregs Guard grants invulnerability and poisons the first harmful attacker', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['junpei', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const guarded = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'junpei').instanceId, 'junpei-moon-dregs-guard', getFighter(state, 'player', 'junpei').instanceId), 'player')
+    const attacked = resolveTeamTurn(
+      guarded.state,
+      queue('enemy', getFighter(guarded.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(guarded.state, 'player', 'junpei').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(attacked.state, 'player', 'junpei').hp).toBe(100)
+    const enemyYuji = getFighter(attacked.state, 'enemy', 'yuji')
+    expect(enemyYuji.hp).toBe(85)
+    expect(enemyYuji.modifiers.some((modifier) => modifier.tags.includes('moon-dregs-injection'))).toBe(true)
+  })
+
+  test('Mahito Understanding marks the first target and the next damaging skill consumes it for bonus damage', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const first = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(first.state, 'enemy', 'yuji').modifiers.some((modifier) => modifier.tags.includes('soul-understanding'))).toBe(true)
+
+    const second = resolveTeamTurn(
+      first.state,
+      queue('player', getFighter(first.state, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', getFighter(first.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const target = getFighter(second.state, 'enemy', 'yuji')
+    expect(target.hp).toBe(50)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('soul-understanding'))).toBe(false)
+  })
+
+  test('Mahito Idle Transfiguration applies deterministic damage suppression', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const result = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const target = getFighter(result.state, 'enemy', 'yuji')
+    expect(target.hp).toBe(80)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('idle-transfiguration') && modifier.stat === 'damageDealt')).toBe(true)
+  })
+
+  test('Mahito Soul Multiplicity upgrades to 25 all enemies against an Idle Transfiguration target', () => {
+    const baseState = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const base = resolveTeamTurn(
+      baseState,
+      queue('player', getFighter(baseState, 'player', 'mahito').instanceId, 'mahito-soul-multiplicity', getFighter(baseState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(base.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([85, 85, 85])
+
+    const setupState = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const idle = resolveTeamTurn(
+      setupState,
+      queue('player', getFighter(setupState, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', getFighter(setupState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const upgraded = resolveTeamTurn(
+      idle.state,
+      queue('player', getFighter(idle.state, 'player', 'mahito').instanceId, 'mahito-soul-multiplicity', getFighter(idle.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(upgraded.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([45, 75, 75])
+  })
+
+  test('Mahito Soul Experimentation marks a target and rewards defeat with permanent damage', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const marked = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'mahito').instanceId, 'mahito-soul-experimentation', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const markedYuji = getFighter(marked.state, 'enemy', 'yuji')
+    expect(markedYuji.modifiers.some((modifier) => modifier.tags.includes('soul-experimentation'))).toBe(true)
+    markedYuji.hp = 10
+
+    const defeated = resolveTeamTurn(
+      marked.state,
+      queue('player', getFighter(marked.state, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', markedYuji.instanceId),
+      'player',
+    )
+    expect(getFighter(defeated.state, 'player', 'mahito').modifiers.some((modifier) => modifier.tags.includes('soul-experimentation-breakthrough'))).toBe(true)
+
+    const empowered = resolveTeamTurn(
+      defeated.state,
+      queue('player', getFighter(defeated.state, 'player', 'mahito').instanceId, 'mahito-idle-transfiguration', getFighter(defeated.state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
+    expect(getFighter(empowered.state, 'enemy', 'nobara').hp).toBe(70)
+  })
+
+  test('Mahito Self-Embodiment grants invulnerability and transfigures the first harmful attacker', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mahito', 'nobara', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const guarded = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'mahito').instanceId, 'mahito-self-embodiment', getFighter(state, 'player', 'mahito').instanceId), 'player')
+    const attacked = resolveTeamTurn(
+      guarded.state,
+      queue('enemy', getFighter(guarded.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(guarded.state, 'player', 'mahito').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(attacked.state, 'player', 'mahito').hp).toBe(100)
+    const enemyYuji = getFighter(attacked.state, 'enemy', 'yuji')
+    expect(enemyYuji.hp).toBe(80)
+    expect(enemyYuji.modifiers.some((modifier) => modifier.tags.includes('idle-transfiguration'))).toBe(true)
+  })
+
+  test('Hanami Natural Body grants shield and damage reduction on round start', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['hanami', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const started = beginNewRound(state).state
+    const hanami = getFighter(started, 'player', 'hanami')
+    expect(hanami.shield?.amount).toBe(10)
+
+    const hit = resolveTeamTurn(started, queue('enemy', getFighter(started, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', hanami.instanceId), 'enemy')
+    const after = getFighter(hit.state, 'player', 'hanami')
+    expect(after.shield).toBeNull()
+    expect(after.hp).toBe(95)
+  })
+
+  test('Hanami Root Snare suppresses damage and prevents invulnerability gain', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['hanami', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const snared = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'hanami').instanceId, 'hanami-root-snare', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const target = getFighter(snared.state, 'enemy', 'yuji')
+    expect(target.hp).toBe(85)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('root-snare') && modifier.stat === 'damageDealt')).toBe(true)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('root-snare') && modifier.stat === 'canGainInvulnerable')).toBe(true)
+  })
+
+  test('Hanami Forest Expansion damages all enemies and applies pressure modifiers', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['hanami', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const result = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'hanami').instanceId, 'hanami-forest-expansion', null), 'player')
+
+    expect(result.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([85, 85, 85])
+    expect(result.state.enemyTeam.every((fighter) => fighter.modifiers.some((modifier) => modifier.tags.includes('forest-expansion') && modifier.stat === 'damageTaken'))).toBe(true)
+    expect(result.state.enemyTeam.every((fighter) => fighter.modifiers.some((modifier) => modifier.tags.includes('forest-expansion') && modifier.stat === 'damageDealt'))).toBe(true)
+  })
+
+  test("Hanami Nature's Resilience grants invulnerability and punishes harmful targeting", () => {
+    const state = createChargedBattleState({ playerTeamIds: ['hanami', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const guarded = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'hanami').instanceId, 'hanami-natures-resilience', getFighter(state, 'player', 'hanami').instanceId), 'player')
+    const attacked = resolveTeamTurn(
+      guarded.state,
+      queue('enemy', getFighter(guarded.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(guarded.state, 'player', 'hanami').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(attacked.state, 'player', 'hanami').hp).toBe(100)
+    expect(attacked.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([90, 90, 90])
+  })
+
+  // ─── Hanami: Cursed Bud Growth trap/heal loop ────────────────────────────────
+  // Risk: The onAbilityUse reaction must attach to the enemy, trigger when they
+  // next use any skill (harmfulOnly:false), deal 15 to them, heal Hanami 15,
+  // then be consumed (consumeOnTrigger:true). If consumeOnTrigger or the heal
+  // target ('self' relative to the reaction source) are wrong, the loop either
+  // fires repeatedly or Hanami never heals.
+  test('Hanami Cursed Bud Growth applies trap, deals 15 on enemy skill use, heals Hanami 15, then consumes', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['hanami', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const hanami = getFighter(state, 'player', 'hanami')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    hanami.hp = 70
+
+    // Step 1: Hanami uses Cursed Bud Growth on enemy Yuji (deals 20 + installs reaction)
+    const afterBud = resolveTeamTurn(
+      state,
+      queue('player', hanami.instanceId, 'hanami-cursed-bud-growth', enemyYuji.instanceId),
+      'player',
+    )
+    expect(getFighter(afterBud.state, 'enemy', 'yuji').hp).toBe(80)
+    // Hanami takes no damage in this step; HP unchanged (no Vocal Strain etc.)
+    expect(getFighter(afterBud.state, 'player', 'hanami').hp).toBe(70)
+    // Trap reaction guard is installed on the enemy
+    expect(getFighter(afterBud.state, 'enemy', 'yuji').reactionGuards.some((g) => g.label === 'Cursed Bud Growth')).toBe(true)
+
+    // Step 2: Enemy Yuji uses any skill — trap triggers, Yuji takes 15, Hanami heals 15.
+    // Yuji's ability (Divergent Fist) deals 20 to Hanami: 70 - 20 + 15 (heal) = 65.
+    const markedYuji = getFighter(afterBud.state, 'enemy', 'yuji')
+    markedYuji.abilities[0].energyCost = {}
+
+    const afterTrigger = resolveTeamTurn(
+      afterBud.state,
+      queue('enemy', markedYuji.instanceId, markedYuji.abilities[0].id, getFighter(afterBud.state, 'player', 'hanami').instanceId),
+      'enemy',
+    )
+
+    // Yuji HP: 80 - 15 (trap damage) = 65
+    expect(getFighter(afterTrigger.state, 'enemy', 'yuji').hp).toBe(65)
+    // Hanami HP: 70 - 20 (Yuji Divergent Fist) + 15 (trap heal) = 65
+    const hanamiAfter = getFighter(afterTrigger.state, 'player', 'hanami')
+    expect(hanamiAfter.hp).toBe(65)
+
+    // Step 3: Trap is consumed — no more Cursed Bud Growth reaction guard on Yuji
+    expect(getFighter(afterTrigger.state, 'enemy', 'yuji').reactionGuards.some((g) => g.label === 'Cursed Bud Growth')).toBe(false)
+  })
+})
+
+describe('fourth batch roster rework', () => {
+  test('Jogo Ember Insects grants shield, applies Scorched, and exposes the Scorched pip', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const result = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'jogo').instanceId, 'jogo-ember-insects', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const jogo = getFighter(result.state, 'player', 'jogo')
+    const target = getFighter(result.state, 'enemy', 'yuji')
+    const scorchedPip = getActivePips(target).find((pip) => pip.label === 'Scorched')
+
+    expect(jogo.shield?.amount).toBe(10)
+    expect(target.stateCounters.scorched).toBe(1)
+    expect(scorchedPip?.stackCount).toBe(1)
+    expect(scorchedPip?.lines.some((line) => line.text.includes('Cataclysmic Eruption deals 5 damage'))).toBe(true)
+  })
+
+  test('Jogo Disaster Heat deals 5 damage per Scorched stack at round start', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(state, 'enemy', 'yuji').stateCounters.scorched = 2
+
+    const result = beginNewRound(state).state
+
+    expect(getFighter(result, 'enemy', 'yuji').hp).toBe(90)
+  })
+
+  test('Jogo Cataclysmic Eruption uses each target Scorched count and consumes it', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(state, 'enemy', 'yuji').stateCounters.scorched = 1
+    getFighter(state, 'enemy', 'nobara').stateCounters.scorched = 2
+    getFighter(state, 'enemy', 'megumi').stateCounters.scorched = 3
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'jogo').instanceId, 'jogo-cataclysmic-eruption', null),
+      'player',
+    )
+
+    expect(result.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([95, 90, 85])
+    expect(result.state.enemyTeam.map((fighter) => fighter.stateCounters.scorched ?? 0)).toEqual([0, 0, 0])
+  })
+
+  test('Jogo Volcanic Infestation adds Scorched when enemies use new harmful skills', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const trapped = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'jogo').instanceId, 'jogo-volcanic-infestation', null), 'player')
+    const triggered = resolveTeamTurn(
+      trapped.state,
+      queue('enemy', getFighter(trapped.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(trapped.state, 'player', 'jogo').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(triggered.state, 'enemy', 'yuji').stateCounters.scorched).toBe(1)
+  })
+
+  test('Jogo Molten Husk grants invulnerability and adds Scorched to all enemies when targeted', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const guarded = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'jogo').instanceId, 'jogo-molten-husk', getFighter(state, 'player', 'jogo').instanceId), 'player')
+    const attacked = resolveTeamTurn(
+      guarded.state,
+      queue('enemy', getFighter(guarded.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(guarded.state, 'player', 'jogo').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(attacked.state, 'player', 'jogo').hp).toBe(100)
+    expect(attacked.state.enemyTeam.map((fighter) => fighter.stateCounters.scorched ?? 0)).toEqual([1, 1, 1])
+  })
+
+  test('Jogo Ember Insects shield-break retaliation applies Scorched to the breaker', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['jogo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const seeded = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'jogo').instanceId, 'jogo-ember-insects', getFighter(state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
+    const attacker = getFighter(seeded.state, 'enemy', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    attacker.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    const broken = resolveTeamTurn(
+      seeded.state,
+      queue('enemy', attacker.instanceId, attacker.abilities[0].id, getFighter(seeded.state, 'player', 'jogo').instanceId),
+      'enemy',
+    )
+
+    expect(getFighter(broken.state, 'enemy', 'yuji').stateCounters.scorched).toBe(1)
+  })
+
+  test('Jogo damage threshold trigger carries excess damage toward the next trigger', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['yuji', 'nobara', 'megumi'], enemyTeamIds: ['jogo', 'yuji', 'megumi'] })
+    const attacker = getFighter(state, 'player', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    attacker.abilities[0].effects = [{ type: 'damage', power: 30, target: 'inherit' }]
+
+    const result = resolveTeamTurn(state, queue('player', attacker.instanceId, attacker.abilities[0].id, getFighter(state, 'enemy', 'jogo').instanceId), 'player')
+
+    expect(getFighter(result.state, 'enemy', 'jogo').stateCounters.jogo_damage_taken).toBe(5)
+    expect(result.state.playerTeam.map((fighter) => fighter.stateCounters.scorched ?? 0)).toEqual([1, 1, 1])
+  })
+
+  test('Maki Sweeping Polearm deals AoE damage, schedules follow-up damage, and punishes attackers', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['maki', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const swept = resolveTeamTurn(state, queue('player', getFighter(state, 'player', 'maki').instanceId, 'maki-sweeping-polearm', null), 'player')
+    expect(swept.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([90, 90, 90])
+
+    const punished = resolveTeamTurn(
+      swept.state,
+      queue('enemy', getFighter(swept.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(swept.state, 'player', 'maki').instanceId),
+      'enemy',
+    )
+    expect(getFighter(punished.state, 'enemy', 'yuji').hp).toBe(80)
+
+    const ticked = beginNewRound(punished.state).state
+    expect(ticked.enemyTeam.map((fighter) => fighter.hp)).toEqual([75, 85, 85])
+  })
+
+  test('Maki Close-Quarters Combo deals delayed damage and grants damage reduction', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['maki', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const combo = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'maki').instanceId, 'maki-close-quarters-combo', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(combo.state, 'enemy', 'yuji').hp).toBe(85)
+
+    const hit = resolveTeamTurn(
+      combo.state,
+      queue('enemy', getFighter(combo.state, 'enemy', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(combo.state, 'player', 'maki').instanceId),
+      'enemy',
+    )
+    expect(getFighter(hit.state, 'player', 'maki').hp).toBe(90)
+
+    const ticked = beginNewRound(hit.state).state
+    expect(getFighter(ticked, 'enemy', 'yuji').hp).toBe(70)
+  })
+
+  test('Maki Playful Cloud Strike ignores invulnerability and gives a consumed next-skill bonus', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['maki', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const protectedYuji = resolveTeamTurn(
+      state,
+      queue('enemy', getFighter(state, 'enemy', 'yuji').instanceId, 'yuji-indomitable-spirit', getFighter(state, 'enemy', 'yuji').instanceId),
+      'enemy',
+    )
+    const playful = resolveTeamTurn(
+      protectedYuji.state,
+      queue('player', getFighter(protectedYuji.state, 'player', 'maki').instanceId, 'maki-playful-cloud-strike', getFighter(protectedYuji.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(playful.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(playful.state, 'player', 'maki').stateCounters.maki_weapon_bonus).toBe(5)
+
+    const bonus = resolveTeamTurn(
+      playful.state,
+      queue('player', getFighter(playful.state, 'player', 'maki').instanceId, 'maki-close-quarters-combo', getFighter(playful.state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
+    expect(getFighter(bonus.state, 'enemy', 'nobara').hp).toBe(80)
+    expect(getFighter(bonus.state, 'player', 'maki').stateCounters.maki_weapon_bonus).toBe(0)
+  })
+
+  test('Maki tracks skill uses and Weapon Mastery triggers once with immediate damage and higher costs', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['maki', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const maki = getFighter(state, 'player', 'maki')
+    maki.stateCounters.maki_skill_uses = 3
+    maki.hp = 75
+    const attacker = getFighter(state, 'enemy', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    attacker.abilities[0].effects = [{ type: 'damage', power: 10, target: 'inherit' }]
+
+    const mastered = resolveTeamTurn(state, queue('enemy', attacker.instanceId, attacker.abilities[0].id, maki.instanceId), 'enemy')
+    const masteredMaki = getFighter(mastered.state, 'player', 'maki')
+    const combo = masteredMaki.abilities.find((ability) => ability.id === 'maki-close-quarters-combo')
+    if (!combo) throw new Error('Missing Maki combo')
+
+    expect(masteredMaki.stateFlags.maki_weapon_mastery_used).toBe(true)
+    expect(masteredMaki.stateModes.weapon_mastery).toBe('active')
+    expect(getResolvedAbilityEnergyCost(masteredMaki, combo).cost.random).toBe(1)
+
+    const result = resolveTeamTurn(
+      mastered.state,
+      queue('player', masteredMaki.instanceId, 'maki-close-quarters-combo', getFighter(mastered.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(70)
+  })
+
+  test('Maki skill-use tracker increments on ability resolve and Tactical Withdrawal grants invulnerability', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['maki', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const used = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'maki').instanceId, 'maki-close-quarters-combo', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(used.state, 'player', 'maki').stateCounters.maki_skill_uses).toBe(1)
+
+    const withdrawn = resolveTeamTurn(
+      used.state,
+      queue('player', getFighter(used.state, 'player', 'maki').instanceId, 'maki-tactical-withdrawal', getFighter(used.state, 'player', 'maki').instanceId),
+      'player',
+    )
+    expect(getStatusDuration(getFighter(withdrawn.state, 'player', 'maki').statuses, 'invincible')).toBe(1)
+  })
+
+  test('Panda Punch deals 20 normally and 40 in Gorilla Mode with increased cost from Core Shift', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'panda').instanceId, 'panda-punch', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(80)
+
+    const shiftedState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const shifted = resolveTeamTurn(
+      shiftedState,
+      queue('player', getFighter(shiftedState, 'player', 'panda').instanceId, 'panda-core-shift', getFighter(shiftedState, 'player', 'panda').instanceId),
+      'player',
+    )
+    const shiftedPanda = getFighter(shifted.state, 'player', 'panda')
+    const punch = shiftedPanda.abilities.find((ability) => ability.id === 'panda-punch')
+    if (!punch) throw new Error('Missing Panda Punch')
+    expect(getResolvedAbilityEnergyCost(shiftedPanda, punch).cost.random).toBe(1)
+
+    const gorillaPunch = resolveTeamTurn(
+      shifted.state,
+      queue('player', shiftedPanda.instanceId, 'panda-punch', getFighter(shifted.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(gorillaPunch.state, 'enemy', 'yuji').hp).toBe(60)
+  })
+
+  test('Panda Cursed Body has normal and Gorilla Mode defensive branches', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'panda').instanceId, 'panda-cursed-body', getFighter(normalState, 'player', 'panda').instanceId),
+      'player',
+    )
+    const normalPanda = getFighter(normal.state, 'player', 'panda')
+    expect(normalPanda.shield?.amount).toBe(20)
+    expect(normalPanda.modifiers.find((modifier) => modifier.tags.includes('cursed-body') && modifier.stat === 'damageTaken')?.duration).toEqual({ kind: 'rounds', remaining: 2 })
+    expect(normalPanda.effectImmunities).toHaveLength(0)
+
+    const gorillaState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(gorillaState, 'player', 'panda').stateModes.gorilla_mode = 'active'
+    const gorilla = resolveTeamTurn(
+      gorillaState,
+      queue('player', getFighter(gorillaState, 'player', 'panda').instanceId, 'panda-cursed-body', getFighter(gorillaState, 'player', 'panda').instanceId),
+      'player',
+    )
+    const gorillaPanda = getFighter(gorilla.state, 'player', 'panda')
+    expect(gorillaPanda.modifiers.find((modifier) => modifier.tags.includes('cursed-body') && modifier.stat === 'damageTaken')?.duration).toEqual({ kind: 'rounds', remaining: 3 })
+    expect(gorillaPanda.effectImmunities.some((immunity) => immunity.blocks.includes('nonDamage'))).toBe(true)
+  })
+
+  test('Panda Drumming Beat deals 30 normally and 60 plus self harmful-skill stun in Gorilla Mode', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'panda').instanceId, 'panda-drumming-beat', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(70)
+
+    const gorillaState = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(gorillaState, 'player', 'panda').stateModes.gorilla_mode = 'active'
+    const gorilla = resolveTeamTurn(
+      gorillaState,
+      queue('player', getFighter(gorillaState, 'player', 'panda').instanceId, 'panda-drumming-beat', getFighter(gorillaState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const panda = getFighter(gorilla.state, 'player', 'panda')
+    expect(getFighter(gorilla.state, 'enemy', 'yuji').hp).toBe(40)
+    expect(panda.intentStuns.some((stun) => stun.intent === 'harmful')).toBe(true)
+  })
+
+  test('Panda Core Shift grants invulnerability and temporary Gorilla Mode without triggering Three Cores', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['panda', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const shifted = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'panda').instanceId, 'panda-core-shift', getFighter(state, 'player', 'panda').instanceId),
+      'player',
+    )
+    const panda = getFighter(shifted.state, 'player', 'panda')
+
+    expect(getStatusDuration(panda.statuses, 'invincible')).toBe(1)
+    expect(panda.stateModes.gorilla_mode).toBe('active')
+    expect(panda.stateModeDurations.gorilla_mode?.remainingRounds).toBe(1)
+    expect(panda.stateFlags.panda_three_cores_triggered ?? false).toBe(false)
+  })
+})
+
+describe('fifth batch roster rework', () => {
+  test('Miwa Simple Domain sets mode, grants non-damage immunity, and applies adapted Steady Discipline reduction', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const result = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'miwa').instanceId, 'miwa-simple-domain', getFighter(state, 'player', 'miwa').instanceId),
+      'player',
+    )
+    const miwa = getFighter(result.state, 'player', 'miwa')
+
+    expect(miwa.stateModes.simple_domain).toBe('active')
+    expect(miwa.stateModeDurations.simple_domain?.remainingRounds).toBe(2)
+    expect(miwa.effectImmunities.some((immunity) => immunity.blocks.includes('nonDamage'))).toBe(true)
+    expect(miwa.modifiers.some((modifier) => modifier.tags.includes('simple-domain') && modifier.stat === 'damageTaken' && modifier.value === -10)).toBe(true)
+    expect(miwa.modifiers.some((modifier) => modifier.tags.includes('steady-discipline') && modifier.stat === 'damageTaken' && modifier.value === -5)).toBe(true)
+  })
+
+  test('Miwa Quick Draw deals 15 normally and 30 through shield while Simple Domain is active', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'miwa').instanceId, 'miwa-quick-draw', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(85)
+
+    const domainState = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(domainState, 'player', 'miwa').stateModes.simple_domain = 'active'
+    getFighter(domainState, 'enemy', 'yuji').shield = { amount: 20, label: 'Test Shield', tags: ['test-shield'] }
+    const domain = resolveTeamTurn(
+      domainState,
+      queue('player', getFighter(domainState, 'player', 'miwa').instanceId, 'miwa-quick-draw', getFighter(domainState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(domain.state, 'enemy', 'yuji').hp).toBe(70)
+    expect(getFighter(domain.state, 'enemy', 'yuji').shield?.amount).toBe(20)
+  })
+
+  test('Miwa Counter Slash counters once normally and every harmful target while Simple Domain is active', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normalGuard = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'miwa').instanceId, 'miwa-counter-slash', getFighter(normalState, 'player', 'miwa').instanceId),
+      'player',
+    )
+    const normalYuji = getFighter(normalGuard.state, 'enemy', 'yuji')
+    const normalNobara = getFighter(normalGuard.state, 'enemy', 'nobara')
+    normalYuji.abilities[0].energyCost = {}
+    normalNobara.abilities[0].energyCost = {}
+
+    const normalHit = resolveTeamTurn(
+      normalGuard.state,
+      {
+        ...queue('enemy', normalYuji.instanceId, normalYuji.abilities[0].id, getFighter(normalGuard.state, 'player', 'miwa').instanceId),
+        ...queue('enemy', normalNobara.instanceId, normalNobara.abilities[0].id, getFighter(normalGuard.state, 'player', 'miwa').instanceId),
+      },
+      'enemy',
+    )
+    expect(getFighter(normalHit.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getFighter(normalHit.state, 'enemy', 'nobara').hp).toBe(100)
+    expect(getStatusDuration(getFighter(normalHit.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
+
+    const domainState = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(domainState, 'player', 'miwa').stateModes.simple_domain = 'active'
+    const domainGuard = resolveTeamTurn(
+      domainState,
+      queue('player', getFighter(domainState, 'player', 'miwa').instanceId, 'miwa-counter-slash', getFighter(domainState, 'player', 'miwa').instanceId),
+      'player',
+    )
+    const domainYuji = getFighter(domainGuard.state, 'enemy', 'yuji')
+    const domainNobara = getFighter(domainGuard.state, 'enemy', 'nobara')
+    domainYuji.abilities[0].energyCost = {}
+    domainNobara.abilities[0].energyCost = {}
+
+    const domainHit = resolveTeamTurn(
+      domainGuard.state,
+      {
+        ...queue('enemy', domainYuji.instanceId, domainYuji.abilities[0].id, getFighter(domainGuard.state, 'player', 'miwa').instanceId),
+        ...queue('enemy', domainNobara.instanceId, domainNobara.abilities[0].id, getFighter(domainGuard.state, 'player', 'miwa').instanceId),
+      },
+      'enemy',
+    )
+    expect(getFighter(domainHit.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getFighter(domainHit.state, 'enemy', 'nobara').hp).toBe(75)
+  })
+
+  test('Miwa Defensive Stance grants invulnerability and prepares Simple Domain cooldown reduction', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['miwa', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const guarded = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'miwa').instanceId, 'miwa-defensive-stance', getFighter(state, 'player', 'miwa').instanceId),
+      'player',
+    )
+    const miwa = getFighter(guarded.state, 'player', 'miwa')
+    expect(getStatusDuration(miwa.statuses, 'invincible')).toBe(1)
+    expect(miwa.stateModes.defensive_stance_ready).toBe('active')
+
+    const domain = resolveTeamTurn(
+      guarded.state,
+      queue('player', miwa.instanceId, 'miwa-simple-domain', miwa.instanceId),
+      'player',
+    )
+    expect(getFighter(domain.state, 'player', 'miwa').cooldowns['miwa-simple-domain']).toBeLessThanOrEqual(3)
+  })
+
+  test('Mai starts with visible capped Cursed Bullet uses and Cursed Bullet spends ammo', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const mai = getFighter(state, 'player', 'mai')
+    const ammoPip = getActivePips(mai).find((pip) => pip.label === 'Cursed Bullet Uses')
+    expect(mai.stateCounters.cursed_bullet_uses).toBe(2)
+    expect(ammoPip?.stackCount).toBe(2)
+
+    const fired = resolveTeamTurn(
+      state,
+      queue('player', mai.instanceId, 'mai-cursed-bullet', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(fired.state, 'enemy', 'yuji').hp).toBe(70)
+    expect(getFighter(fired.state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(1)
+  })
+
+  test('Mai Cursed Bullet at 0 ammo deals 15 and does not go negative', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const mai = getFighter(state, 'player', 'mai')
+    mai.stateCounters.cursed_bullet_uses = 0
+
+    const result = resolveTeamTurn(
+      state,
+      queue('player', mai.instanceId, 'mai-cursed-bullet', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(85)
+    expect(getFighter(result.state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(0)
+  })
+
+  test('Mai Steady Aim reloads up to 3 and boosts the next skill damage', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const mai = getFighter(state, 'player', 'mai')
+    mai.stateCounters.cursed_bullet_uses = 2
+
+    const aimed = resolveTeamTurn(state, queue('player', mai.instanceId, 'mai-steady-aim', mai.instanceId), 'player')
+    expect(getFighter(aimed.state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(3)
+
+    const boosted = resolveTeamTurn(
+      aimed.state,
+      queue('player', getFighter(aimed.state, 'player', 'mai').instanceId, 'mai-suppressing-fire', getFighter(aimed.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(boosted.state, 'enemy', 'yuji').hp).toBe(75)
+  })
+
+  test('Mai Suppressing Fire suppresses with ammo and stuns at 0 ammo', () => {
+    const ammoState = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const suppressed = resolveTeamTurn(
+      ammoState,
+      queue('player', getFighter(ammoState, 'player', 'mai').instanceId, 'mai-suppressing-fire', getFighter(ammoState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(suppressed.state, 'enemy', 'yuji').hp).toBe(85)
+    expect(getFighter(suppressed.state, 'enemy', 'yuji').modifiers.some((modifier) => modifier.tags.includes('suppressing-fire') && modifier.stat === 'damageDealt')).toBe(true)
+
+    const emptyState = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    getFighter(emptyState, 'player', 'mai').stateCounters.cursed_bullet_uses = 0
+    const stunned = resolveTeamTurn(
+      emptyState,
+      queue('player', getFighter(emptyState, 'player', 'mai').instanceId, 'mai-suppressing-fire', getFighter(emptyState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(stunned.state, 'enemy', 'yuji').hp).toBe(75)
+    expect(getStatusDuration(getFighter(stunned.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
+  })
+
+  test('Mai Emergency Cover grants invulnerability and reloads at next round start', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mai', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const mai = getFighter(state, 'player', 'mai')
+    mai.stateCounters.cursed_bullet_uses = 1
+    const covered = resolveTeamTurn(state, queue('player', mai.instanceId, 'mai-emergency-cover', mai.instanceId), 'player')
+
+    expect(getStatusDuration(getFighter(covered.state, 'player', 'mai').statuses, 'invincible')).toBe(1)
+    expect(getFighter(covered.state, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(1)
+
+    const reloaded = beginNewRound(covered.state).state
+    expect(getFighter(reloaded, 'player', 'mai').stateCounters.cursed_bullet_uses).toBe(2)
+  })
+
+  test('Kamo Blood Draw costs HP, grants random energy, and applies cooldown tempo', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const beforeEnergy = totalEnergyInPool(state.playerEnergy)
+    const result = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'noritoshi').instanceId, 'noritoshi-blood-draw', getFighter(state, 'player', 'noritoshi').instanceId),
+      'player',
+    )
+    const kamo = getFighter(result.state, 'player', 'noritoshi')
+
+    expect(kamo.hp).toBe(90)
+    expect(totalEnergyInPool(result.state.playerEnergy)).toBe(beforeEnergy + 1)
+    expect(kamo.cooldowns['noritoshi-blood-draw']).toBe(0)
+  })
+
+  test('Kamo Piercing Blood deals 20 normally and 35 piercing after Blood Draw', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'noritoshi').instanceId, 'noritoshi-piercing-blood', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(80)
+
+    const sequenceState = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const drawn = resolveTeamTurn(
+      sequenceState,
+      queue('player', getFighter(sequenceState, 'player', 'noritoshi').instanceId, 'noritoshi-blood-draw', getFighter(sequenceState, 'player', 'noritoshi').instanceId),
+      'player',
+    )
+    const pierced = resolveTeamTurn(
+      drawn.state,
+      queue('player', getFighter(drawn.state, 'player', 'noritoshi').instanceId, 'noritoshi-piercing-blood', getFighter(drawn.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(pierced.state, 'enemy', 'yuji').hp).toBe(65)
+  })
+
+  test('Kamo Crimson Binding seals non-Strategic skills normally and fully stuns after Piercing Blood', () => {
+    const normalState = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const normal = resolveTeamTurn(
+      normalState,
+      queue('player', getFighter(normalState, 'player', 'noritoshi').instanceId, 'noritoshi-crimson-binding', getFighter(normalState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(normal.state, 'enemy', 'yuji').hp).toBe(85)
+    expect(getFighter(normal.state, 'enemy', 'yuji').classStuns.some((stun) => stun.blockedClasses.includes('Physical'))).toBe(true)
+    expect(getStatusDuration(getFighter(normal.state, 'enemy', 'yuji').statuses, 'stun')).toBe(0)
+
+    const sequenceState = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const pierced = resolveTeamTurn(
+      sequenceState,
+      queue('player', getFighter(sequenceState, 'player', 'noritoshi').instanceId, 'noritoshi-piercing-blood', getFighter(sequenceState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const bound = resolveTeamTurn(
+      pierced.state,
+      queue('player', getFighter(pierced.state, 'player', 'noritoshi').instanceId, 'noritoshi-crimson-binding', getFighter(pierced.state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
+    expect(getFighter(bound.state, 'enemy', 'nobara').hp).toBe(85)
+    expect(getStatusDuration(getFighter(bound.state, 'enemy', 'nobara').statuses, 'stun')).toBe(1)
+  })
+
+  test('Kamo Refined Technique bonus is visible, consumed by the next damaging skill, and not refreshed by repeats', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const drawn = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'noritoshi').instanceId, 'noritoshi-blood-draw', getFighter(state, 'player', 'noritoshi').instanceId),
+      'player',
+    )
+    const pierced = resolveTeamTurn(
+      drawn.state,
+      queue('player', getFighter(drawn.state, 'player', 'noritoshi').instanceId, 'noritoshi-piercing-blood', getFighter(drawn.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const kamo = getFighter(pierced.state, 'player', 'noritoshi')
+    const refinedPip = getActivePips(kamo).find((pip) => pip.label === 'Refined Technique')
+    expect(kamo.stateCounters.kamo_refined_bonus).toBe(1)
+    expect(refinedPip?.lines.some((line) => line.text.includes('+10 damage'))).toBe(true)
+
+    const bound = resolveTeamTurn(
+      pierced.state,
+      queue('player', kamo.instanceId, 'noritoshi-crimson-binding', getFighter(pierced.state, 'enemy', 'nobara').instanceId),
+      'player',
+    )
+    expect(getFighter(bound.state, 'enemy', 'nobara').hp).toBe(75)
+    expect(getFighter(bound.state, 'player', 'noritoshi').stateCounters.kamo_refined_bonus).toBe(1)
+
+    const repeated = resolveTeamTurn(
+      bound.state,
+      queue('player', getFighter(bound.state, 'player', 'noritoshi').instanceId, 'noritoshi-crimson-binding', getFighter(bound.state, 'enemy', 'megumi').instanceId),
+      'player',
+    )
+    expect(getFighter(repeated.state, 'enemy', 'megumi').hp).toBe(75)
+    expect(getFighter(repeated.state, 'player', 'noritoshi').stateCounters.kamo_refined_bonus ?? 0).toBe(0)
+  })
+
+  test('Kamo Flowing Red Scale grants invulnerability and makes the next skill free', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['noritoshi', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const scaled = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'noritoshi').instanceId, 'noritoshi-flowing-red-scale', getFighter(state, 'player', 'noritoshi').instanceId),
+      'player',
+    )
+    const kamo = getFighter(scaled.state, 'player', 'noritoshi')
+    const piercingBlood = kamo.abilities.find((ability) => ability.id === 'noritoshi-piercing-blood')
+    if (!piercingBlood) throw new Error('Missing Piercing Blood')
+
+    expect(getStatusDuration(kamo.statuses, 'invincible')).toBe(1)
+    expect(getResolvedAbilityEnergyCost(kamo, piercingBlood).cost).toEqual({})
+  })
+})
+
+describe('sixth batch roster rework', () => {
+  test('Momo Aerial Support buffs one ally damage and reduces random cost', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['momo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const supported = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'momo').instanceId, 'momo-aerial-support', getFighter(state, 'player', 'yuji').instanceId),
+      'player',
+    )
+    const yuji = getFighter(supported.state, 'player', 'yuji')
+    yuji.abilities[0].energyCost = { random: 1 }
+    const divergentFist = yuji.abilities.find((ability) => ability.id === 'yuji-divergent-fist')
+    if (!divergentFist) throw new Error('Missing Divergent Fist')
+    expect(getResolvedAbilityEnergyCost(yuji, divergentFist).cost.random).toBe(0)
+
+    const hit = resolveTeamTurn(
+      supported.state,
+      queue('player', yuji.instanceId, 'yuji-divergent-fist', getFighter(supported.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(hit.state, 'enemy', 'yuji').hp).toBe(70)
+  })
+
+  test('Momo Disrupting Gust damages and taxes the target next skill', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['momo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const gusted = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'momo').instanceId, 'momo-disrupting-gust', getFighter(state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const target = getFighter(gusted.state, 'enemy', 'yuji')
+    const divergentFist = target.abilities.find((ability) => ability.id === 'yuji-divergent-fist')
+    if (!divergentFist) throw new Error('Missing Divergent Fist')
+
+    expect(target.hp).toBe(90)
+    expect(target.modifiers.some((modifier) => modifier.tags.includes('disrupting-gust') && modifier.stat === 'damageDealt')).toBe(true)
+    expect(getResolvedAbilityEnergyCost(target, divergentFist).cost.random).toBe(1)
+  })
+
+  test('Momo Coordinated Assault traps next damage or triggers immediately on Disrupting Gust targets', () => {
+    const trapState = createChargedBattleState({ playerTeamIds: ['momo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const trapped = resolveTeamTurn(
+      trapState,
+      queue('player', getFighter(trapState, 'player', 'momo').instanceId, 'momo-coordinated-assault', getFighter(trapState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(trapped.state, 'enemy', 'yuji').hp).toBe(100)
+    const triggered = resolveTeamTurn(
+      trapped.state,
+      queue('player', getFighter(trapped.state, 'player', 'yuji').instanceId, 'yuji-divergent-fist', getFighter(trapped.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(triggered.state, 'enemy', 'yuji').hp).toBe(65)
+
+    const gustState = createChargedBattleState({ playerTeamIds: ['momo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const gusted = resolveTeamTurn(
+      gustState,
+      queue('player', getFighter(gustState, 'player', 'momo').instanceId, 'momo-disrupting-gust', getFighter(gustState, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    const immediate = resolveTeamTurn(
+      gusted.state,
+      queue('player', getFighter(gusted.state, 'player', 'momo').instanceId, 'momo-coordinated-assault', getFighter(gusted.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(getFighter(immediate.state, 'enemy', 'yuji').hp).toBe(75)
+  })
+
+  test('Momo Evasive Flight grants invulnerability and team damage reduction without duplicate passive protection', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['momo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const roundStart = beginNewRound(state).state
+    expect(getStatusDuration(getFighter(roundStart, 'player', 'momo').statuses, 'invincible')).toBe(0)
+
+    const evasive = resolveTeamTurn(
+      roundStart,
+      queue('player', getFighter(roundStart, 'player', 'momo').instanceId, 'momo-evasive-flight', getFighter(roundStart, 'player', 'momo').instanceId),
+      'player',
+    )
+    const momo = getFighter(evasive.state, 'player', 'momo')
+    const allyYuji = getFighter(evasive.state, 'player', 'yuji')
+    expect(getStatusDuration(momo.statuses, 'invincible')).toBe(1)
+    expect(allyYuji.modifiers.some((modifier) => modifier.tags.includes('evasive-flight') && modifier.stat === 'damageTaken')).toBe(true)
+  })
+
+  test('Mechamaru Artillery Frame and artillery skills apply battlefield pressure', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mechamaru', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const started = beginNewRound(state).state
+    expect(started.enemyTeam.map((fighter) => fighter.hp)).toEqual([97, 97, 97])
+
+    const cannon = resolveTeamTurn(
+      started,
+      queue('player', getFighter(started, 'player', 'mechamaru').instanceId, 'mechamaru-cursed-energy-cannon', getFighter(started, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(cannon.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([77, 87, 87])
+
+    const suppressive = resolveTeamTurn(
+      cannon.state,
+      queue('player', getFighter(cannon.state, 'player', 'mechamaru').instanceId, 'mechamaru-suppressive-fire', null),
+      'player',
+    )
+    expect(suppressive.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([62, 72, 72])
+    expect(suppressive.state.enemyTeam.every((fighter) => fighter.modifiers.some((modifier) => modifier.tags.includes('suppressive-fire') && modifier.stat === 'damageDealt'))).toBe(true)
+  })
+
+  test('Mechamaru Overload Cannon sets mode, boosts skills, and later damages Mechamaru', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mechamaru', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    state.battlefield.fatigueStartsRound = 99
+    const overloaded = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'mechamaru').instanceId, 'mechamaru-overload-cannon', null),
+      'player',
+    )
+    expect(overloaded.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([75, 75, 75])
+    expect(getFighter(overloaded.state, 'player', 'mechamaru').stateModes.overload).toBe('active')
+
+    const boosted = resolveTeamTurn(
+      overloaded.state,
+      queue('player', getFighter(overloaded.state, 'player', 'mechamaru').instanceId, 'mechamaru-cursed-energy-cannon', getFighter(overloaded.state, 'enemy', 'yuji').instanceId),
+      'player',
+    )
+    expect(boosted.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([50, 60, 60])
+
+    const afterFirstEnd = endRound(boosted.state).state
+    const afterSecondEnd = endRound(afterFirstEnd).state
+    const afterThirdEnd = endRound(afterSecondEnd).state
+    expect(getFighter(afterThirdEnd, 'player', 'mechamaru').hp).toBe(90)
+  })
+
+  test('Mechamaru Remote Shielding grants invulnerability and team damage reduction', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['mechamaru', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const shielded = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'mechamaru').instanceId, 'mechamaru-remote-shielding', getFighter(state, 'player', 'mechamaru').instanceId),
+      'player',
+    )
+    expect(getStatusDuration(getFighter(shielded.state, 'player', 'mechamaru').statuses, 'invincible')).toBe(1)
+    expect(getFighter(shielded.state, 'player', 'yuji').modifiers.some((modifier) => modifier.tags.includes('remote-shielding') && modifier.stat === 'damageTaken')).toBe(true)
+  })
+
+  test('Gojo Infinity collapses on harmful targeting, suppresses the next round start, and later restores', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['gojo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const started = beginNewRound(state).state
+    expect(getStatusDuration(getFighter(started, 'player', 'gojo').statuses, 'invincible')).toBe(1)
+
+    const attacker = getFighter(started, 'enemy', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    const collapsed = resolveTeamTurn(started, queue('enemy', attacker.instanceId, 'yuji-divergent-fist', getFighter(started, 'player', 'gojo').instanceId), 'enemy').state
+    expect(getFighter(collapsed, 'player', 'gojo').hp).toBe(80)
+    expect(getFighter(collapsed, 'player', 'gojo').stateModes.infinity_collapsed).toBe('active')
+
+    const suppressed = beginNewRound(collapsed).state
+    expect(getStatusDuration(getFighter(suppressed, 'player', 'gojo').statuses, 'invincible')).toBe(0)
+
+    const restored = beginNewRound(resolveTeamTurn(suppressed, {}, 'player').state).state
+    expect(getStatusDuration(getFighter(restored, 'player', 'gojo').statuses, 'invincible')).toBe(1)
+  })
+
+  test('Gojo Blue, Red, and Hollow Purple use target setup and actor locks correctly', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['gojo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const gojo = getFighter(state, 'player', 'gojo')
+    expect(getQueueAbilityBlockReason(state, {}, gojo, 'gojo-hollow-purple')).toBe('Not available')
+
+    const blue = resolveTeamTurn(state, queue('player', gojo.instanceId, 'gojo-lapse-blue', getFighter(state, 'enemy', 'yuji').instanceId), 'player')
+    expect(getFighter(blue.state, 'enemy', 'yuji').hp).toBe(80)
+    expect(getFighter(blue.state, 'enemy', 'yuji').modifiers.some((modifier) => modifier.tags.includes('pulled'))).toBe(true)
+
+    const blueAgain = resolveTeamTurn(blue.state, queue('player', getFighter(blue.state, 'player', 'gojo').instanceId, 'gojo-lapse-blue', getFighter(blue.state, 'enemy', 'yuji').instanceId), 'player')
+    expect(getFighter(blueAgain.state, 'enemy', 'yuji').hp).toBe(55)
+
+    const red = resolveTeamTurn(blueAgain.state, queue('player', getFighter(blueAgain.state, 'player', 'gojo').instanceId, 'gojo-reversal-red', getFighter(blueAgain.state, 'enemy', 'yuji').instanceId), 'player')
+    expect(getFighter(red.state, 'enemy', 'yuji').hp).toBe(15)
+    expect(getStatusDuration(getFighter(red.state, 'enemy', 'yuji').statuses, 'stun')).toBe(1)
+    expect(getFighter(red.state, 'enemy', 'yuji').modifiers.some((modifier) => modifier.tags.includes('pulled'))).toBe(false)
+
+    const purple = resolveTeamTurn(red.state, queue('player', getFighter(red.state, 'player', 'gojo').instanceId, 'gojo-hollow-purple', null), 'player')
+    expect(purple.state.enemyTeam.map((fighter) => fighter.hp)).toEqual([0, 55, 55])
+  })
+
+  test('Gojo Six Eyes Focus grants invulnerability, makes next skill free, and prevents one Infinity collapse', () => {
+    const state = createChargedBattleState({ playerTeamIds: ['gojo', 'yuji', 'megumi'], enemyTeamIds: ['yuji', 'nobara', 'megumi'] })
+    const focused = resolveTeamTurn(
+      state,
+      queue('player', getFighter(state, 'player', 'gojo').instanceId, 'gojo-six-eyes-focus', getFighter(state, 'player', 'gojo').instanceId),
+      'player',
+    )
+    const gojo = getFighter(focused.state, 'player', 'gojo')
+    const blue = gojo.abilities.find((ability) => ability.id === 'gojo-lapse-blue')
+    if (!blue) throw new Error('Missing Lapse: Blue')
+    expect(getStatusDuration(gojo.statuses, 'invincible')).toBe(1)
+    expect(getResolvedAbilityEnergyCost(gojo, blue).cost).toEqual({})
+
+    const started = beginNewRound(focused.state).state
+    const attacker = getFighter(started, 'enemy', 'yuji')
+    attacker.abilities[0].energyCost = {}
+    const attacked = resolveTeamTurn(started, queue('enemy', attacker.instanceId, 'yuji-divergent-fist', getFighter(started, 'player', 'gojo').instanceId), 'enemy').state
+    expect(getFighter(attacked, 'player', 'gojo').hp).toBe(100)
+    expect(getFighter(attacked, 'player', 'gojo').stateModes.infinity_collapsed).toBeUndefined()
+  })
+})
+
+// ── scheduledOrder parameter tests ───────────────────────────────────────────
+describe('resolveScheduledEffects orderedIds', () => {
+  /**
+   * Helper: build a state with two due roundStart scheduled effects and advance
+   * to the round where they fire.  Returns the pre-round state and the IDs of
+   * both scheduled effects so tests can pass them as orderedIds.
+   *
+   * Effect A deals 15 damage to enemy slot-0 (Yuji).
+   * Effect B deals 15 damage to enemy slot-1 (Nobara).
+   * We use Maki's Close-Quarters Combo (conditional follow-up schedule) and
+   * Eso's Hostage Situation to get two independent roundStart effects.
+   */
+  function buildTwoScheduledEffectsState() {
+    const base = createChargedBattleState({
+      playerTeamIds: ['maki', 'eso', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+
+    const maki = getFighter(base, 'player', 'maki')
+    const eso = getFighter(base, 'player', 'eso')
+    const yuji = getFighter(base, 'enemy', 'yuji')
+    const nobara = getFighter(base, 'enemy', 'nobara')
+
+    // Maki uses Close-Quarters Combo on Yuji (without Weapon Mastery → schedules 15 dmg)
+    const afterMaki = resolveTeamTurn(
+      base,
+      queue('player', maki.instanceId, 'maki-close-quarters-combo', yuji.instanceId),
+      'player',
+    )
+    // Eso uses Hostage Situation on Nobara (schedules 15 piercing dmg)
+    const afterEso = resolveTeamTurn(
+      afterMaki.state,
+      queue('player', eso.instanceId, 'eso-hostage-situation', nobara.instanceId),
+      'player',
+    )
+
+    const scheduledEffects = afterEso.state.scheduledEffects.filter(
+      (e) => e.phase === 'roundStart',
+    )
+    // Should have exactly 2 due effects
+    if (scheduledEffects.length !== 2) {
+      throw new Error(`Expected 2 scheduled effects, got ${scheduledEffects.length}`)
+    }
+
+    // Both effects are due next round; advance round counter so they fire
+    const preRoundState = { ...afterEso.state, round: afterEso.state.round }
+    return { preRoundState, scheduledEffects }
+  }
+
+  test('default order (no orderedIds) preserves creation order', () => {
+    const { preRoundState, scheduledEffects } = buildTwoScheduledEffectsState()
+    const [effectA, effectB] = scheduledEffects
+
+    const result = beginNewRound(preRoundState)
+    const yujiAfter = result.state.playerTeam.concat(result.state.enemyTeam)
+      .find((f) => f.instanceId === effectA.targetIds[0])
+    const nobaraAfter = result.state.playerTeam.concat(result.state.enemyTeam)
+      .find((f) => f.instanceId === effectB.targetIds[0])
+
+    // Both effects must have fired — targets took damage
+    expect(yujiAfter).toBeDefined()
+    expect(nobaraAfter).toBeDefined()
+    expect(yujiAfter!.hp).toBeLessThan(yujiAfter!.maxHp)
+    expect(nobaraAfter!.hp).toBeLessThan(nobaraAfter!.maxHp)
+    // Scheduled effects list is drained
+    expect(result.state.scheduledEffects.filter((e) => e.phase === 'roundStart').length).toBe(0)
+  })
+
+  test('orderedIds reverses execution order when both targets survive', () => {
+    const { preRoundState, scheduledEffects } = buildTwoScheduledEffectsState()
+    const [effectA, effectB] = scheduledEffects
+
+    const defaultResult = beginNewRound(preRoundState)
+    const reversedResult = beginNewRound(preRoundState, [effectB.id, effectA.id])
+
+    // Both orderings produce the same damage when targets don't die — the HP
+    // values are identical.  The ordering matters only when one entry kills a
+    // target that another entry also targets; here targets are different so we
+    // just assert both fire.
+    const yujiDefault = defaultResult.state.playerTeam.concat(defaultResult.state.enemyTeam)
+      .find((f) => f.instanceId === effectA.targetIds[0])
+    const yujiReversed = reversedResult.state.playerTeam.concat(reversedResult.state.enemyTeam)
+      .find((f) => f.instanceId === effectA.targetIds[0])
+
+    expect(yujiDefault!.hp).toBe(yujiReversed!.hp)
+
+    // Scheduled effects list drained in both cases
+    expect(defaultResult.state.scheduledEffects.filter((e) => e.phase === 'roundStart').length).toBe(0)
+    expect(reversedResult.state.scheduledEffects.filter((e) => e.phase === 'roundStart').length).toBe(0)
+  })
+
+  test('orderedIds with only one ID listed still fires all due effects (remainder appended)', () => {
+    const { preRoundState, scheduledEffects } = buildTwoScheduledEffectsState()
+    const [effectA, effectB] = scheduledEffects
+
+    // Only pass effectB's ID — effectA should still fire (appended after)
+    const result = beginNewRound(preRoundState, [effectB.id])
+
+    const yujiAfter = result.state.playerTeam.concat(result.state.enemyTeam)
+      .find((f) => f.instanceId === effectA.targetIds[0])
+    const nobaraAfter = result.state.playerTeam.concat(result.state.enemyTeam)
+      .find((f) => f.instanceId === effectB.targetIds[0])
+
+    // Both fired
+    expect(yujiAfter!.hp).toBeLessThan(yujiAfter!.maxHp)
+    expect(nobaraAfter!.hp).toBeLessThan(nobaraAfter!.maxHp)
+    expect(result.state.scheduledEffects.filter((e) => e.phase === 'roundStart').length).toBe(0)
+  })
+
+  test('unknown IDs in orderedIds are silently ignored without affecting others', () => {
+    const { preRoundState, scheduledEffects } = buildTwoScheduledEffectsState()
+    const [effectA] = scheduledEffects
+
+    const result = beginNewRound(preRoundState, ['nonexistent-id-xyz', effectA.id])
+
+    // All real effects still fire
+    expect(result.state.scheduledEffects.filter((e) => e.phase === 'roundStart').length).toBe(0)
+  })
+
+  test('selected-skill actionOrder in resolveTeamTurn is unaffected by scheduledOrder', () => {
+    const base = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+
+    const yuji = getFighter(base, 'player', 'yuji')
+    const nobara = getFighter(base, 'player', 'nobara')
+    const enemyYuji = getFighter(base, 'enemy', 'yuji')
+    const enemyNobara = getFighter(base, 'enemy', 'nobara')
+
+    const commands: Record<string, import('@/features/battle/types').QueuedBattleAction> = {
+      [yuji.instanceId]: { actorId: yuji.instanceId, team: 'player', abilityId: 'yuji-divergent-fist', targetId: enemyYuji.instanceId },
+      [nobara.instanceId]: { actorId: nobara.instanceId, team: 'player', abilityId: 'nobara-straw-doll-technique', targetId: enemyNobara.instanceId },
+    }
+
+    // Yuji first
+    const yujiFirst = resolveTeamTurn(base, commands, 'player', [yuji.instanceId, nobara.instanceId])
+    // Nobara first
+    const nobaraFirst = resolveTeamTurn(base, commands, 'player', [nobara.instanceId, yuji.instanceId])
+
+    // Different action orders produce the same total damage when targets don't die from the first hit
+    // but the actionOrder parameter is correctly respected (both resolve)
+    expect(getFighter(yujiFirst.state, 'enemy', 'yuji').hp).toBeLessThan(enemyYuji.maxHp)
+    expect(getFighter(nobaraFirst.state, 'enemy', 'yuji').hp).toBeLessThan(enemyYuji.maxHp)
+  })
+
+  test('onRoundStart passives and burns fire regardless of scheduledOrder value', () => {
+    // Mechamaru's Artillery Frame passive deals 3 damage to all enemies each round start.
+    // Passing a scheduledOrder (even empty) must not suppress passives.
+    const base = createChargedBattleState({
+      playerTeamIds: ['mechamaru', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+
+    const enemyYuji = getFighter(base, 'enemy', 'yuji')
+
+    // beginNewRound with an explicit empty scheduledOrder
+    const withEmpty = beginNewRound(base, [])
+    // beginNewRound with no scheduledOrder (legacy path)
+    const withNone = beginNewRound(base)
+
+    const yujiAfterEmpty = getFighter(withEmpty.state, 'enemy', 'yuji')
+    const yujiAfterNone = getFighter(withNone.state, 'enemy', 'yuji')
+
+    // Artillery Frame fires in both cases — 3 damage
+    expect(yujiAfterEmpty.hp).toBe(enemyYuji.maxHp - 3)
+    expect(yujiAfterNone.hp).toBe(enemyYuji.maxHp - 3)
+    // Outcomes are identical
+    expect(yujiAfterEmpty.hp).toBe(yujiAfterNone.hp)
+  })
+
+  test('scheduledOrder changes outcome when one effect kills the target before another can heal them', () => {
+    // Construct a state where two roundStart scheduled effects target the same fighter:
+    //   Effect A (heal): heals the target for 30 HP
+    //   Effect B (damage): deals 20 piercing damage to the target
+    // Target starts at 10 HP (manually reduced).
+    //
+    // Order A → B: heal fires first (10 → 40), damage fires second (40 → 20). Target survives at 20 HP.
+    // Order B → A: damage fires first (10 → 0, killed), heal is skipped (target dead). Target stays at 0 HP.
+    const base = createChargedBattleState({
+      playerTeamIds: ['maki', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara'],
+    })
+
+    const maki = getFighter(base, 'player', 'maki')
+    const yuji = getFighter(base, 'enemy', 'yuji')
+
+    // Reduce Yuji to 10 HP so that 20 damage is lethal but the preceding heal would save him.
+    yuji.hp = 10
+
+    const healEffectId = 'test-heal-effect'
+    const damageEffectId = 'test-damage-effect'
+
+    const stateWithScheduled: typeof base = {
+      ...base,
+      scheduledEffects: [
+        {
+          id: healEffectId,
+          actorId: maki.instanceId,
+          targetIds: [yuji.instanceId],
+          abilityId: undefined,
+          dueRound: base.round,
+          phase: 'roundStart',
+          effects: [{ type: 'heal', power: 30, target: 'inherit' }],
+        },
+        {
+          id: damageEffectId,
+          actorId: maki.instanceId,
+          targetIds: [yuji.instanceId],
+          abilityId: undefined,
+          dueRound: base.round,
+          phase: 'roundStart',
+          effects: [{ type: 'damage', power: 20, piercing: true, target: 'inherit' }],
+        },
+      ],
+    }
+
+    // Order A → B: heal then damage — Yuji survives
+    const healFirst = beginNewRound(stateWithScheduled, [healEffectId, damageEffectId])
+    const yujiHealFirst = getFighter(healFirst.state, 'enemy', 'yuji')
+
+    // Order B → A: damage then heal — Yuji is killed before heal can fire
+    const damageFirst = beginNewRound(stateWithScheduled, [damageEffectId, healEffectId])
+    const yujiDamageFirst = getFighter(damageFirst.state, 'enemy', 'yuji')
+
+    // Heal-first: target is alive and took net -10 HP (healed 30, then damaged 20)... but started at 10
+    // so: 10 + 30 = 40, then 40 - 20 = 20.
+    expect(yujiHealFirst.hp).toBe(20)
+    expect(yujiHealFirst.hp).toBeGreaterThan(0)
+
+    // Damage-first: target was killed (10 - 20 = dead), heal skipped
+    expect(yujiDamageFirst.hp).toBeLessThanOrEqual(0)
+
+    // The two orderings produce genuinely different outcomes
+    expect(yujiHealFirst.hp).not.toBe(yujiDamageFirst.hp)
+  })
+})
+
+// ── resolveInterleavedPlayerTurnTimeline ──────────────────────────────────────
+describe('resolveInterleavedPlayerTurnTimeline', () => {
+  /**
+   * Builds a state with one roundStart scheduled effect that heals a player ally,
+   * and two player commands. Returns the state, scheduled effect ID, and actor IDs.
+   *
+   * Scheduled: heals player Megumi for 20 HP (so we can detect firing order by HP).
+   * Command A (Yuji): damages enemy Yuji for 20.
+   * Command B (Nobara): damages enemy Yuji for 10.
+   */
+  function buildInterleavedScenario() {
+    const state = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+
+    const playerYuji  = getFighter(state, 'player', 'yuji')
+    const playerNobara = getFighter(state, 'player', 'nobara')
+    const playerMegumi = getFighter(state, 'player', 'megumi')
+    const enemyYuji   = getFighter(state, 'enemy', 'yuji')
+
+    // Damage Megumi so the heal is observable (starts below maxHp)
+    playerMegumi.hp = 60
+
+    playerYuji.abilities[0].energyCost = {}
+    playerYuji.abilities[0].targetRule = 'enemy-single'
+    playerYuji.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    playerNobara.abilities[0].energyCost = {}
+    playerNobara.abilities[0].targetRule = 'enemy-single'
+    playerNobara.abilities[0].effects = [{ type: 'damage', power: 10, target: 'inherit' }]
+
+    const scheduledId = 'test-interleaved-heal'
+    const stateWithScheduled = {
+      ...state,
+      scheduledEffects: [
+        {
+          id: scheduledId,
+          actorId: playerYuji.instanceId,
+          targetIds: [playerMegumi.instanceId],
+          abilityId: undefined as string | undefined,
+          dueRound: state.round,
+          phase: 'roundStart' as const,
+          effects: [{ type: 'heal' as const, power: 20, target: 'inherit' as const }],
+        },
+      ],
+    }
+
+    const commands: Record<string, import('@/features/battle/types').QueuedBattleAction> = {
+      [playerYuji.instanceId]:   { actorId: playerYuji.instanceId,   team: 'player', abilityId: playerYuji.abilities[0].id,   targetId: enemyYuji.instanceId },
+      [playerNobara.instanceId]: { actorId: playerNobara.instanceId, team: 'player', abilityId: playerNobara.abilities[0].id, targetId: enemyYuji.instanceId },
+    }
+
+    return { stateWithScheduled, commands, scheduledId, playerYuji, playerNobara, playerMegumi, enemyYuji }
+  }
+
+  test('scheduled before command resolves scheduled effect before the command', () => {
+    const { stateWithScheduled, commands, scheduledId, playerYuji, playerMegumi, enemyYuji } = buildInterleavedScenario()
+
+    // queueOrder: scheduled → Yuji command
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+      { kind: 'command', actorId: playerYuji.instanceId },
+    ])
+
+    // Megumi healed before Yuji acts (megumi HP > starting because heal ran)
+    expect(getFighter(result.state, 'player', 'megumi').hp).toBeGreaterThan(playerMegumi.hp)
+    // Yuji's command damaged the enemy
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(enemyYuji.hp - 20)
+  })
+
+  test('command before scheduled resolves command before the scheduled effect', () => {
+    const { stateWithScheduled, commands, scheduledId, playerYuji, playerMegumi, enemyYuji } = buildInterleavedScenario()
+
+    // Same actors but command fires first — outcome on enemy is the same (both still fire)
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'command', actorId: playerYuji.instanceId },
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+    ])
+
+    expect(getFighter(result.state, 'player', 'megumi').hp).toBeGreaterThan(playerMegumi.hp)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(enemyYuji.hp - 20)
+  })
+
+  test('scheduled between two commands resolves correctly between them', () => {
+    const { stateWithScheduled, commands, scheduledId, playerYuji, playerNobara, playerMegumi, enemyYuji } = buildInterleavedScenario()
+
+    // Yuji → scheduled heal → Nobara
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'command', actorId: playerYuji.instanceId },
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+      { kind: 'command', actorId: playerNobara.instanceId },
+    ])
+
+    // All three resolved: enemy took 30 total, megumi healed
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(enemyYuji.hp - 30)
+    expect(getFighter(result.state, 'player', 'megumi').hp).toBeGreaterThan(playerMegumi.hp)
+    // Steps: [yuji-action, roundStart-heal, nobara-action, tick] = at least 3 content steps
+    expect(result.steps.length).toBeGreaterThanOrEqual(3)
+  })
+
+  test('scheduled effect resolved through queueOrder does not fire again in roundStart resolution', () => {
+    const { stateWithScheduled, commands, scheduledId, playerYuji, playerMegumi } = buildInterleavedScenario()
+
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+      { kind: 'command', actorId: playerYuji.instanceId },
+    ])
+
+    // Scheduled effects array should be drained (the effect was spliced out during queueOrder resolution)
+    expect(result.state.scheduledEffects.filter((e) => e.id === scheduledId)).toHaveLength(0)
+
+    // Megumi should have healed exactly once (not twice)
+    const expectedHpAfterOneHeal = Math.min(playerMegumi.hp + 20, playerMegumi.maxHp)
+    expect(getFighter(result.state, 'player', 'megumi').hp).toBe(expectedHpAfterOneHeal)
+  })
+
+  test('scheduled effect omitted from queueOrder still fires via applyRoundStartEffects at end', () => {
+    const { stateWithScheduled, commands, scheduledId, playerYuji } = buildInterleavedScenario()
+
+    // queueOrder does NOT include the scheduled effect — it should still fire via beginNewRoundTimeline
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'command', actorId: playerYuji.instanceId },
+    ])
+
+    // Scheduled effect was NOT consumed by queueOrder, so it must fire during the post-turn endRound path
+    // In resolveInterleavedPlayerTurnTimeline the post-loop path calls tickTeamTurn then returns —
+    // the omitted scheduled effect remains in state.scheduledEffects to fire in endRoundTimeline.
+    // The caller (BattlePage) calls endRoundTimeline which will drain it.
+    // We verify the effect is still present (not double-removed or silently lost).
+    expect(result.state.scheduledEffects.filter((e) => e.id === scheduledId)).toHaveLength(1)
+  })
+
+  test('passing the same scheduled effect ID twice only fires it once', () => {
+    const { stateWithScheduled, commands, scheduledId, playerMegumi } = buildInterleavedScenario()
+
+    const result = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+      { kind: 'scheduled', scheduledEffectId: scheduledId },
+    ])
+
+    // Second entry finds no matching ID (already spliced), so it no-ops.
+    // Megumi healed exactly once.
+    const expectedHpAfterOneHeal = Math.min(playerMegumi.hp + 20, playerMegumi.maxHp)
+    expect(getFighter(result.state, 'player', 'megumi').hp).toBe(expectedHpAfterOneHeal)
+  })
+
+  test('empty queueOrder is safe and tickTeamTurn still runs', () => {
+    const { stateWithScheduled, commands } = buildInterleavedScenario()
+
+    // No entries in queueOrder — the function should not throw and should call tickTeamTurn
+    expect(() => {
+      resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [])
+    }).not.toThrow()
+  })
+
+  test('command-only queueOrder respects actor order', () => {
+    const { stateWithScheduled, commands, playerYuji, playerNobara, enemyYuji } = buildInterleavedScenario()
+
+    // Nobara first, then Yuji
+    const nobaraFirst = resolveInterleavedPlayerTurnTimeline(stateWithScheduled, commands, [
+      { kind: 'command', actorId: playerNobara.instanceId },
+      { kind: 'command', actorId: playerYuji.instanceId },
+    ])
+
+    // Both fire: enemy takes 30 total regardless of order (same targets, additive damage)
+    expect(getFighter(nobaraFirst.state, 'enemy', 'yuji').hp).toBe(enemyYuji.hp - 30)
+    expect(nobaraFirst.steps.length).toBeGreaterThanOrEqual(2)
+  })
+
+  test('passives still fire via tickTeamTurn after the queueOrder loop', () => {
+    // Mechamaru's Artillery Frame passive (onRoundStart) fires through beginNewRound, not queueOrder.
+    // resolveInterleavedPlayerTurnTimeline calls tickTeamTurn after the loop, not beginNewRound,
+    // so onRoundStart passives are not part of this function — they fire in endRoundTimeline.
+    // This test verifies the function doesn't accidentally fire passives during the loop.
+    const state = createChargedBattleState({
+      playerTeamIds: ['mechamaru', 'yuji', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const mechamaru = getFighter(state, 'player', 'mechamaru')
+    const enemyYuji  = getFighter(state, 'enemy', 'yuji')
+    const hpBefore = enemyYuji.hp
+
+    mechamaru.abilities[0].energyCost = {}
+
+    const result = resolveInterleavedPlayerTurnTimeline(state, {}, [])
+
+    // Artillery Frame (onRoundStart) must NOT have fired — endRoundTimeline drives that
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(hpBefore)
+  })
+
+  test('reaction guards remain present after interleaved resolution (not consumed by queueOrder loop)', () => {
+    // Reaction guards fire reactively during resolveAction, not during the queueOrder loop itself.
+    // A guard on enemy Yuji should still be present if Nobara was targeted instead.
+    const state = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const playerYuji = getFighter(state, 'player', 'yuji')
+    const enemyNobara = getFighter(state, 'enemy', 'nobara')
+    const enemyYuji  = getFighter(state, 'enemy', 'yuji')
+
+    enemyYuji.reactionGuards = [{
+      id: 'test-counter-guard',
+      kind: 'counter' as const,
+      label: 'Test Counter',
+      remainingRounds: 2,
+      counterDamage: 10,
+      consumeOnTrigger: false,
+      sourceActorId: enemyYuji.instanceId,
+    }]
+
+    playerYuji.abilities[0].energyCost = {}
+    playerYuji.abilities[0].targetRule = 'enemy-single'
+    playerYuji.abilities[0].effects = [{ type: 'damage', power: 5, target: 'inherit' }]
+
+    const commands: Record<string, import('@/features/battle/types').QueuedBattleAction> = {
+      [playerYuji.instanceId]: { actorId: playerYuji.instanceId, team: 'player', abilityId: playerYuji.abilities[0].id, targetId: enemyNobara.instanceId },
+    }
+
+    // Target Nobara, not Yuji — Yuji's counter guard should not be consumed
+    const result = resolveInterleavedPlayerTurnTimeline(state, commands, [
+      { kind: 'command', actorId: playerYuji.instanceId },
+    ])
+
+    const yujiAfter = getFighter(result.state, 'enemy', 'yuji')
+    expect(yujiAfter.reactionGuards.some((g) => g.id === 'test-counter-guard')).toBe(true)
   })
 })

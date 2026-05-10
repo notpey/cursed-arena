@@ -176,7 +176,10 @@ export function useMultiplayerMatch(
   const [opponentName, setOpponentName]       = useState('')
   const [status, setStatus]                   = useState<MultiplayerStatus>('loading')
   const [error, setError]                     = useState<string | null>(null)
-  const [lastOpponentActionAt, setLastOpponentActionAt] = useState<number>(0)
+  // Initialized to Date.now() so the 90-second disconnect window starts from
+  // page load, not the epoch. Without this, both clients see "opponent
+  // disconnected" immediately before the initial fetchMatch resolves.
+  const [lastOpponentActionAt, setLastOpponentActionAt] = useState<number>(() => Date.now())
   const [latestResolution, setLatestResolution] = useState<MultiplayerResolutionReplay | null>(null)
 
   // Keep refs in sync so callbacks don't close over stale state

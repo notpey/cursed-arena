@@ -1,6 +1,24 @@
 import { definePassive, defendSkill } from '@/features/battle/content.ts'
 import { fighter, skill, modifierEffect, markerEffect } from './_helpers.ts'
 
+const SOUL_UNDERSTANDING_TAG = 'soul-understanding'
+const IDLE_TRANSFIGURATION_TAG = 'idle-transfiguration'
+const SOUL_EXPERIMENTATION_TAG = 'soul-experimentation'
+
+const understandingPayoff = [
+  { type: 'damageFiltered' as const, power: 10, requiresTag: SOUL_UNDERSTANDING_TAG, target: 'inherit' as const },
+  { type: 'removeModifier' as const, target: 'inherit' as const, filter: { tags: [SOUL_UNDERSTANDING_TAG] } },
+]
+
+const idleTransfigurationEffects = (target: 'inherit' | 'attacker') => [
+  modifierEffect('Idle Transfiguration', 'damageDealt', -15, 1, target, [IDLE_TRANSFIGURATION_TAG]),
+  markerEffect('Idle Transfiguration', 2, target, [IDLE_TRANSFIGURATION_TAG]),
+]
+
+const experimentationPayoff = [
+  { type: 'damageFiltered' as const, power: 10, requiresTag: SOUL_EXPERIMENTATION_TAG, target: 'inherit' as const },
+]
+
 export const mahito = fighter({
   id: 'mahito',
   name: 'Mahito',
@@ -13,9 +31,10 @@ export const mahito = fighter({
     definePassive({
       id: 'mahito-understanding-the-soul',
       trigger: 'onAbilityResolve',
-      effects: [markerEffect('Soul Read', 2, 'inherit', ['soul-read'])],
+      conditions: [{ type: 'firstAbilityOnTarget' }],
+      effects: [markerEffect('Soul Understanding', 'permanent', 'inherit', [SOUL_UNDERSTANDING_TAG])],
       label: 'Understanding the Soul',
-      description: 'Mahito reads enemies he targets, setting them up for additional punishment.',
+      description: 'The first time Mahito uses a skill on each enemy, that enemy is marked. His next damaging skill against that target deals 10 additional damage and consumes the mark.',
       icon: { label: 'US', tone: 'teal' },
     }),
   ],
@@ -23,7 +42,7 @@ export const mahito = fighter({
     skill({
       id: 'mahito-idle-transfiguration',
       name: 'Idle Transfiguration',
-      description: 'Deals 20 damage and warps the target, reducing their damage for 1 turn.',
+      description: 'This skill targets one enemy, dealing 20 damage to them and reducing their damage by 15 for 1 turn. Random transfiguration effects are adapted to this deterministic control rider.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Mental', 'Melee', 'Instant'],
@@ -32,14 +51,15 @@ export const mahito = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
-        modifierEffect('Idle Transfiguration', 'damageDealt', -15, 1, 'inherit', ['idle-transfiguration']),
-        markerEffect('Idle Transfiguration', 2, 'inherit', ['idle-transfiguration']),
+        ...understandingPayoff,
+        ...experimentationPayoff,
+        ...idleTransfigurationEffects('inherit'),
       ],
     }),
     skill({
       id: 'mahito-soul-multiplicity',
       name: 'Soul Multiplicity',
-      description: 'Deals 15 damage to one enemy and 15 damage to all other enemies. Transfigured targets take more damage.',
+      description: 'This skill targets one enemy, dealing 15 damage to all enemies. If the main target is affected by Idle Transfiguration, this skill deals 25 damage to all enemies instead.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Mental', 'Ranged', 'Instant'],
@@ -47,30 +67,47 @@ export const mahito = fighter({
       energyCost: { random: 2 },
       power: 15,
       effects: [
-        { type: 'damage', power: 15, target: 'inherit' },
-        { type: 'damage', power: 15, target: 'other-enemies' },
-        { type: 'damageFiltered', power: 10, requiresTag: 'idle-transfiguration', target: 'inherit' },
+        {
+          type: 'conditional',
+          target: 'inherit',
+          conditions: [{ type: 'targetHasModifierTag', tag: IDLE_TRANSFIGURATION_TAG }],
+          effects: [{ type: 'damage', power: 25, target: 'all-enemies' }],
+          elseEffects: [
+            { type: 'damage', power: 15, target: 'inherit' },
+            { type: 'damage', power: 15, target: 'other-enemies' },
+          ],
+        },
+        ...understandingPayoff,
+        ...experimentationPayoff,
       ],
     }),
     skill({
       id: 'mahito-soul-experimentation',
       name: 'Soul Experimentation',
-      description: 'Marks one enemy for 3 turns and makes them take 10 more damage from Mahito.',
+      description: 'This skill marks one enemy for 3 turns. Mahito deals 10 additional damage with damaging skills against that target. If the target is defeated while marked, Mahito permanently deals 10 more damage.',
       kind: 'utility',
       targetRule: 'enemy-single',
       classes: ['Mental', 'Melee', 'Action'],
       cooldown: 4,
       energyCost: { random: 1, technique: 1 },
       effects: [
-        markerEffect('Soul Experimentation', 3, 'inherit', ['soul-experimentation']),
-        modifierEffect('Soul Experimentation', 'damageTaken', 10, 3, 'inherit', ['soul-experimentation']),
+        markerEffect('Soul Experimentation', 3, 'inherit', [SOUL_EXPERIMENTATION_TAG]),
+        {
+          type: 'reaction',
+          label: 'Soul Experimentation',
+          trigger: 'onDefeat',
+          duration: 3,
+          consumeOnTrigger: true,
+          target: 'inherit',
+          effects: [modifierEffect('Soul Experimentation Breakthrough', 'damageDealt', 10, 'permanent', 'self', ['soul-experimentation-breakthrough'])],
+        },
       ],
     }),
   ],
   ultimate: defendSkill({
     id: 'mahito-self-embodiment',
     name: 'Self-Embodiment',
-    description: 'Mahito becomes invulnerable for 1 turn and counters the next harmful skill.',
+    description: 'Mahito becomes invulnerable for 1 turn. During this turn, the first enemy that uses a harmful skill on him takes 20 damage and is affected by Idle Transfiguration.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,
@@ -78,7 +115,19 @@ export const mahito = fighter({
     energyCost: { random: 1 },
     effects: [
       { type: 'invulnerable', duration: 1, target: 'self' },
-      { type: 'counter', duration: 1, counterDamage: 20, consumeOnTrigger: true, target: 'self' },
+      {
+        type: 'reaction',
+        label: 'Self-Embodiment',
+        trigger: 'onBeingTargeted',
+        duration: 1,
+        harmfulOnly: true,
+        consumeOnTrigger: true,
+        target: 'self',
+        effects: [
+          { type: 'damage', power: 20, target: 'attacker' },
+          ...idleTransfigurationEffects('attacker'),
+        ],
+      },
     ],
   }),
 })

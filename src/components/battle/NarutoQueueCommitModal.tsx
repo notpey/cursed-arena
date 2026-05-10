@@ -1,6 +1,5 @@
 import { type DragEvent, type TouchEvent, useMemo, useRef, useState } from 'react'
-import { describePassiveForUi, getCommandSummary } from '@/components/battle/battleDisplay'
-import { normalizeBattleAssetSrc } from '@/features/battle/assets'
+import { getCommandSummary } from '@/components/battle/battleDisplay'
 import { PASS_ABILITY_ID } from '@/features/battle/data'
 import {
   battleEnergyMeta,
@@ -13,21 +12,11 @@ import {
   type BattleEnergyPool,
   type BattleEnergyType,
 } from '@/features/battle/energy'
-import { getAbilityById, isAlive } from '@/features/battle/engine'
-import type { BattleFighterState, BattleState, PassiveEffect, QueuedBattleAction } from '@/features/battle/types'
+import { getFighterById } from '@/features/battle/engine'
+import { buildQueuePreview, type ActiveEffectInstance, type QueueOrderEntry } from '@/features/battle/queuePreview'
+import type { BattleFighterState, BattleState, QueuedBattleAction } from '@/features/battle/types'
 
-function buildRoundStartPreview(team: BattleFighterState[]): Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> {
-  const rows: Array<{ fighter: BattleFighterState; passive: PassiveEffect; text: string }> = []
-  for (const fighter of team) {
-    if (!isAlive(fighter)) continue
-    for (const passive of fighter.passiveEffects ?? []) {
-      if (passive.trigger !== 'onRoundStart') continue
-      if (passive.hidden) continue
-      rows.push({ fighter, passive, text: describePassiveForUi(passive) })
-    }
-  }
-  return rows
-}
+// ── Energy allocation helpers ─────────────────────────────────────────────────
 
 type RandomAllocation = Record<string, Partial<Record<BattleEnergyType, number>>>
 type EnergyAllocation = Partial<Record<BattleEnergyType, number>>
@@ -39,11 +28,6 @@ type QueueRow = {
   cost: BattleEnergyCost
   isPass: boolean
   summary: string
-}
-
-function getQueueTileLabel(row: QueueRow) {
-  if (row.isPass) return 'PASS'
-  return row.abilityName.slice(0, 10).toUpperCase()
 }
 
 function resolveRandomCost(cost: BattleEnergyCost, allocation: EnergyAllocation) {
@@ -115,6 +99,8 @@ function distributeGlobalAllocation(rows: QueueRow[], globalAllocation: EnergyAl
   return allocation
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
 function EnergyDiamond({ value, color }: { value: number; color: string }) {
   return (
     <div className="relative grid h-10 w-10 shrink-0 place-items-center">
@@ -160,6 +146,104 @@ function EnergyPanel({
   )
 }
 
+// Tile for ActiveEffectInstance entries — covers draggable (command/scheduled) and locked (passive/reaction) tiles.
+function ActiveEffectTile({
+  entry,
+  state,
+  draggable: isDraggable,
+  index,
+  isDragging,
+  isDropTarget,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+}: {
+  entry: ActiveEffectInstance
+  state: BattleState
+  draggable: boolean
+  index: number
+  isDragging?: boolean
+  isDropTarget?: boolean
+  onDragStart?: () => void
+  onDragOver?: (e: DragEvent<HTMLDivElement>) => void
+  onDrop?: (e: DragEvent<HTMLDivElement>) => void
+  onDragEnd?: () => void
+  onTouchStart?: (e: TouchEvent<HTMLDivElement>) => void
+  onTouchMove?: (e: TouchEvent<HTMLDivElement>) => void
+  onTouchEnd?: () => void
+}) {
+  const isEnemy = entry.ownerTeam === 'enemy'
+  const kindBadge = entry.kind === 'scheduled' ? 'SCH' : entry.kind === 'reaction' ? 'REACT' : entry.kind === 'command' ? 'CMD' : 'PASS'
+  const kindBadgeColor = entry.kind === 'scheduled' ? 'text-amber-300' : entry.kind === 'reaction' ? 'text-ca-red' : entry.kind === 'command' ? 'text-ca-teal' : 'text-ca-teal'
+  const teamColor = isEnemy ? 'text-ca-red' : 'text-ca-teal'
+  const teamBg = isEnemy
+    ? 'border-ca-red/30 bg-[rgba(250,39,66,0.12)]'
+    : 'border-ca-teal/30 bg-ca-teal-wash/60'
+
+  const actorName = getFighterById(state, entry.sourceActorId)?.shortName ?? '?'
+  const targetNames = entry.targetIds
+    .map((id) => getFighterById(state, id)?.shortName)
+    .filter((n): n is string => Boolean(n))
+  const targetLine = targetNames.length > 0 ? `→ ${targetNames.join(', ')}` : null
+  const tooltip = [actorName, entry.label, entry.summary, targetLine].filter(Boolean).join(' · ')
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1">
+      <div
+        data-queue-order-index={isDraggable ? index : undefined}
+        draggable={isDraggable}
+        onDragStart={isDraggable ? onDragStart : undefined}
+        onDragOver={isDraggable ? onDragOver : undefined}
+        onDrop={isDraggable ? onDrop : undefined}
+        onDragEnd={isDraggable ? onDragEnd : undefined}
+        onTouchStart={isDraggable ? onTouchStart : undefined}
+        onTouchMove={isDraggable ? onTouchMove : undefined}
+        onTouchEnd={isDraggable ? onTouchEnd : undefined}
+        title={tooltip}
+        className={[
+          'relative h-[3.15rem] w-[3.15rem] overflow-hidden border-2 bg-[#1e1c24] shadow-[0_4px_10px_rgba(0,0,0,0.28)] transition',
+          isDraggable
+            ? 'cursor-grab touch-none border-ca-teal/35 shadow-[0_6px_14px_rgba(0,0,0,0.3)]'
+            : 'cursor-default border-white/12 opacity-55 saturate-50',
+          isDragging ? 'opacity-35' : '',
+          isDropTarget ? 'scale-[1.05] border-ca-red' : '',
+        ].join(' ')}
+      >
+        {entry.sourceIcon.src ? (
+          <img src={entry.sourceIcon.src} alt={entry.label} className="h-full w-full object-cover" draggable={false} />
+        ) : (
+          <div className="grid h-full w-full place-items-center">
+            <span className="ca-display text-[0.68rem] text-ca-text">{entry.sourceIcon.label}</span>
+          </div>
+        )}
+        {/* Kind badge — top-left */}
+        <div className="absolute left-0 top-0 bg-black/72 px-1 py-0.5">
+          <span className={`ca-mono-label text-[0.32rem] ${kindBadgeColor}`}>{kindBadge}</span>
+        </div>
+        {/* Team chip — bottom-left */}
+        <div className={`absolute bottom-0 left-0 border px-1 py-[1px] ${teamBg}`}>
+          <span className={`ca-mono-label text-[0.3rem] ${teamColor}`}>{isEnemy ? 'ENM' : 'ALY'}</span>
+        </div>
+        {/* Position number for reorderable entries */}
+        {isDraggable ? (
+          <div className="absolute right-0 top-0 bg-black/72 px-1 py-0.5">
+            <span className="ca-mono-label text-[0.3rem] text-amber-300">#{index + 1}</span>
+          </div>
+        ) : null}
+      </div>
+      <p className="w-[3.15rem] truncate text-center ca-mono-label text-[0.44rem] text-ca-text-3">
+        {actorName.toUpperCase()}
+      </p>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function NarutoQueueCommitModal({
   round,
   state,
@@ -176,29 +260,82 @@ export function NarutoQueueCommitModal({
   initialOrder: string[]
   energy: BattleEnergyPool
   turnSecondsLeft: number
-  onConfirm: (actionOrder: string[], randomAlloc: RandomAllocation) => void
+  onConfirm: (queueOrder: QueueOrderEntry[], randomAlloc: RandomAllocation) => void
   onBack: () => void
 }) {
-  const [order, setOrder] = useState<string[]>(() => {
-    const aliveIds = new Set(state.playerTeam.filter((fighter) => fighter.hp > 0).map((fighter) => fighter.instanceId))
-    const queuedIds = new Set(
+  // ── Queue preview ─────────────────────────────────────────────────────────
+  const queueEntries = useMemo(() => buildQueuePreview(state, queued), [state, queued])
+  const passiveEntries = useMemo(() => queueEntries.filter((e) => e.kind === 'passive'), [queueEntries])
+  const reactionEntries = useMemo(() => queueEntries.filter((e) => e.kind === 'reaction'), [queueEntries])
+  const draggableEntries = useMemo(() => queueEntries.filter((e) => e.kind === 'scheduled' || e.kind === 'command'), [queueEntries])
+
+  // ── Unified queue order state ─────────────────────────────────────────────
+  // Initialize from initialOrder for commands; scheduled effects appear first by default.
+  const [queueOrder, setQueueOrder] = useState<QueueOrderEntry[]>(() => {
+    const aliveIds = new Set(state.playerTeam.filter((f) => f.hp > 0).map((f) => f.instanceId))
+    const queuedCommandIds = new Set(
       Object.values(queued)
-        .filter((command) => command.team === 'player' && command.abilityId !== PASS_ABILITY_ID)
-        .map((command) => command.actorId),
+        .filter((cmd) => cmd.team === 'player' && cmd.abilityId !== PASS_ABILITY_ID)
+        .map((cmd) => cmd.actorId),
     )
-    const ordered = initialOrder.filter((id) => aliveIds.has(id) && queuedIds.has(id))
-    const remaining = [...queuedIds].filter((id) => aliveIds.has(id) && !ordered.includes(id))
-    return [...ordered, ...remaining]
+
+    const scheduledEntries = draggableEntries.filter((e) => e.kind === 'scheduled')
+    const commandEntries = draggableEntries.filter((e) => e.kind === 'command')
+
+    // Respect initialOrder for commands; scheduled entries appear before commands
+    const orderedCommandIds = [
+      ...initialOrder.filter((id) => aliveIds.has(id) && queuedCommandIds.has(id)),
+      ...[...queuedCommandIds].filter((id) => aliveIds.has(id) && !initialOrder.includes(id)),
+    ]
+
+    const result: QueueOrderEntry[] = [
+      ...scheduledEntries.map((e): QueueOrderEntry => ({ kind: 'scheduled', scheduledEffectId: e.scheduledEffectId! })),
+      ...orderedCommandIds.flatMap((actorId): QueueOrderEntry[] => {
+        const entry = commandEntries.find((e) => e.commandActorId === actorId)
+        return entry ? [{ kind: 'command', actorId }] : []
+      }),
+    ]
+    return result
   })
+
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const touchDragFromRef = useRef<number | null>(null)
 
+  // Derive the ordered draggable entries for rendering from queueOrder
+  const orderedDraggableEntries = useMemo(() => {
+    const scheduledById = new Map(
+      draggableEntries
+        .filter((e) => e.kind === 'scheduled')
+        .map((e) => [e.scheduledEffectId!, e]),
+    )
+    const commandByActorId = new Map(
+      draggableEntries
+        .filter((e) => e.kind === 'command')
+        .map((e) => [e.commandActorId!, e]),
+    )
+
+    return queueOrder.flatMap((entry): ActiveEffectInstance[] => {
+      if (entry.kind === 'scheduled') {
+        const found = scheduledById.get(entry.scheduledEffectId)
+        return found ? [found] : []
+      }
+      const found = commandByActorId.get(entry.actorId)
+      return found ? [found] : []
+    })
+  }, [queueOrder, draggableEntries])
+
+  const hasAutoEntries = passiveEntries.length > 0 || reactionEntries.length > 0
+  const hasDraggableEntries = orderedDraggableEntries.length > 0
+
+  // ── Command rows (for energy calculation) ────────────────────────────────
   const rows = useMemo(() => {
     const rowMap = new Map(
       state.playerTeam.flatMap((fighter) => {
         const command = queued[fighter.instanceId]
-        const ability = command ? getAbilityById(fighter, command.abilityId) : null
+        const ability = command
+          ? (fighter.abilities.concat(fighter.ultimate)).find((a) => a.id === command.abilityId) ?? null
+          : null
         const isPass = !ability || ability.id === PASS_ABILITY_ID
         if (isPass) return []
 
@@ -213,11 +350,18 @@ export function NarutoQueueCommitModal({
       }),
     )
 
-    return order.flatMap((id) => {
+    // Order by queueOrder's command entries
+    const orderedIds = queueOrder.flatMap((e) => e.kind === 'command' ? [e.actorId] : [])
+    const result = orderedIds.flatMap((id) => {
       const row = rowMap.get(id)
       return row ? [row] : []
     })
-  }, [order, queued, state])
+    // Append any queued commands not in queueOrder
+    rowMap.forEach((row, id) => {
+      if (!orderedIds.includes(id)) result.push(row)
+    })
+    return result
+  }, [queueOrder, queued, state])
 
   const activeRows = useMemo(() => rows.filter((row) => !row.isPass), [rows])
   const totalRandomNeeded = activeRows.reduce((sum, row) => sum + (row.cost.random ?? 0), 0)
@@ -244,9 +388,9 @@ export function NarutoQueueCommitModal({
     activeRows.map((row) => resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {})),
   )
   const canAfford = canPayEnergy(energy, aggregateCost)
-  const orderedActionIds = rows.filter((row) => !row.isPass).map((row) => row.fighter.instanceId)
   const timerCritical = turnSecondsLeft <= 10
 
+  // ── Unified drag handlers ─────────────────────────────────────────────────
   function clearDrag() {
     setDragIndex(null)
     setDragOverIndex(null)
@@ -255,15 +399,15 @@ export function NarutoQueueCommitModal({
 
   function applyReorder(from: number, to: number) {
     if (from === to) return
-    const next = [...order]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    setOrder(next)
+    setQueueOrder((current) => {
+      const next = [...current]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
   }
 
-  function handleDragStart(index: number) {
-    setDragIndex(index)
-  }
+  function handleDragStart(index: number) { setDragIndex(index) }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>, index: number) {
     event.preventDefault()
@@ -284,9 +428,9 @@ export function NarutoQueueCommitModal({
   function handleTouchMove(event: TouchEvent<HTMLDivElement>) {
     if (touchDragFromRef.current === null) return
     const point = event.touches[0]
-    const tile = document.elementFromPoint(point.clientX, point.clientY)?.closest('[data-queue-index]')
+    const tile = document.elementFromPoint(point.clientX, point.clientY)?.closest('[data-queue-order-index]')
     if (!tile) return
-    const index = parseInt((tile as HTMLElement).dataset.queueIndex ?? '-1', 10)
+    const index = parseInt((tile as HTMLElement).dataset.queueOrderIndex ?? '-1', 10)
     if (index >= 0) setDragOverIndex(index)
   }
 
@@ -297,6 +441,7 @@ export function NarutoQueueCommitModal({
     clearDrag()
   }
 
+  // ── Energy allocation ─────────────────────────────────────────────────────
   function adjustGlobalAllocation(type: BattleEnergyType, delta: number) {
     setGlobalAllocation((current) => {
       const currentValue = current[type] ?? 0
@@ -317,6 +462,13 @@ export function NarutoQueueCommitModal({
     })
   }
 
+  // ── Hint text ─────────────────────────────────────────────────────────────
+  const stripHint = (() => {
+    if (hasDraggableEntries) return 'DRAG TO REORDER'
+    if (hasAutoEntries) return 'LOCKED'
+    return 'NO ACTIONS'
+  })()
+
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.72)] px-3 backdrop-blur-[2px] animate-ca-fade-in">
       <div className="relative w-full max-w-[39rem] overflow-hidden border border-white/14 bg-[linear-gradient(180deg,#302e3a,#17151c)] shadow-[0_24px_70px_rgba(0,0,0,0.62)] animate-ca-slide-up">
@@ -324,7 +476,7 @@ export function NarutoQueueCommitModal({
           <div className="flex items-center justify-between gap-3">
             <span className="ca-mono-label text-[0.52rem] tracking-[0.14em] text-white/65">ROUND {round}</span>
             <h2 className="ca-display text-[1.55rem] leading-none tracking-[0.06em] text-white">
-              Choose {totalRandomNeeded} Random Energy(s)
+              {totalRandomNeeded > 0 ? `Choose ${totalRandomNeeded} Random Energy${totalRandomNeeded === 1 ? '' : '(s)'}` : 'Confirm Skills'}
             </h2>
             <span className={['ca-mono-label text-[0.52rem] tracking-[0.14em]', timerCritical ? 'text-ca-red' : 'text-white/65'].join(' ')}>
               {String(turnSecondsLeft).padStart(2, '0')}S
@@ -333,6 +485,7 @@ export function NarutoQueueCommitModal({
         </header>
 
         <div className="relative bg-[linear-gradient(135deg,rgba(228,218,191,0.1),rgba(255,255,255,0.02))] p-3">
+          {/* ── Energy allocation grid ── */}
           <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)_12rem]">
             <section className="border border-black/35 bg-[rgba(18,15,16,0.42)] p-1.5">
               <p className="mb-1 bg-[rgba(130,45,51,0.92)] px-2 py-1 ca-display text-[1.05rem] leading-none text-white">Energy Pool</p>
@@ -395,87 +548,119 @@ export function NarutoQueueCommitModal({
             </section>
           </div>
 
-          {(() => {
-            const roundStartRows = buildRoundStartPreview(state.playerTeam)
-            if (roundStartRows.length === 0) return null
-            return (
-              <section className="mt-3 border border-black/35 bg-[rgba(13,12,17,0.7)] p-2">
-                <p className="ca-mono-label text-[0.48rem] tracking-[0.12em] text-ca-teal">ROUND START — RESOLVES BEFORE YOUR SKILLS</p>
-                <div className="mt-2 space-y-1">
-                  {roundStartRows.map(({ fighter, passive, text }) => (
-                    <div key={`${fighter.instanceId}-${passive.id ?? passive.label}`} className="flex items-center gap-2 border border-ca-teal/20 bg-ca-teal-wash/40 px-2 py-1.5">
-                      <span className="ca-mono-label w-[3rem] shrink-0 text-[0.42rem] text-ca-teal">{fighter.shortName.toUpperCase()}</span>
-                      <span className="ca-mono-label shrink-0 text-[0.42rem] text-ca-text-3">{passive.label.toUpperCase()}</span>
-                      <span className="truncate text-[0.72rem] text-ca-text-2">{text}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )
-          })()}
-
+          {/* ── Unified resolution queue strip ── */}
           <section className="mt-3 border border-black/35 bg-[rgba(13,12,17,0.7)] p-2">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="ca-display border border-black/40 bg-[rgba(228,230,239,0.92)] px-3 py-1 text-[1rem] leading-none text-[#17151c]">
-                Skill Reorder
-              </p>
-              <p className="ca-mono-label text-[0.48rem] tracking-[0.12em] text-ca-text-3">DRAG SKILLS TO CHANGE ORDER</p>
+              <p className="ca-mono-label text-[0.5rem] tracking-[0.14em] text-ca-text-3">RESOLVES IN ORDER →</p>
+              <p className="ca-mono-label text-[0.46rem] tracking-[0.1em] text-ca-text-3">{stripHint}</p>
             </div>
 
-            <div className="flex items-center justify-center gap-2">
-              {rows.map((row, index) => {
-                const isDragging = dragIndex === index
-                const isTarget = dragOverIndex === index && dragIndex !== index
-                const resolvedCost = resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {})
+            <div className="flex items-end gap-2 overflow-x-auto pb-1">
+              {/* Locked passive tiles — always before draggable strip */}
+              {passiveEntries.map((entry) => (
+                <ActiveEffectTile
+                  key={entry.id}
+                  entry={entry}
+                  state={state}
+                  draggable={false}
+                  index={0}
+                />
+              ))}
+
+              {/* Locked reaction tiles */}
+              {reactionEntries.map((entry) => (
+                <ActiveEffectTile
+                  key={entry.id}
+                  entry={entry}
+                  state={state}
+                  draggable={false}
+                  index={0}
+                />
+              ))}
+
+              {/* Divider — only when locked entries and draggable entries both exist */}
+              {hasAutoEntries && hasDraggableEntries ? (
+                <div className="flex shrink-0 flex-col items-center gap-1 self-stretch">
+                  <div className="flex-1" />
+                  <div className="mx-1 h-8 w-px self-center bg-white/15" />
+                  <p className="ca-mono-label text-[0.38rem] text-ca-text-3">DRAG</p>
+                  <p className="ca-mono-label text-[0.38rem] text-ca-text-3">ZONE</p>
+                </div>
+              ) : null}
+
+              {/* Single unified draggable strip (scheduled + commands interleaved) */}
+              {orderedDraggableEntries.map((entry, index) => {
+                const isCmd = entry.kind === 'command'
+                const actorId = isCmd ? entry.commandActorId : undefined
+                const row = actorId ? rows.find((r) => r.fighter.instanceId === actorId) : undefined
+                const resolvedCost = row ? resolveRandomCost(row.cost, perActorAlloc[row.fighter.instanceId] ?? {}) : null
 
                 return (
-                  <div
-                    key={row.fighter.instanceId}
-                    data-queue-index={index}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(event) => handleDragOver(event, index)}
-                    onDrop={(event) => handleDrop(event, index)}
-                    onDragEnd={clearDrag}
-                    onTouchStart={(event) => handleTouchStart(event, index)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    className={[
-                      'relative h-[3.15rem] w-[3.15rem] cursor-grab overflow-hidden border-2 bg-[#1e1c24] touch-none shadow-[0_8px_16px_rgba(0,0,0,0.34)] transition',
-                      row.isPass ? 'border-white/15' : 'border-ca-teal/35',
-                      isTarget ? 'scale-[1.05] border-ca-red' : '',
-                      isDragging ? 'opacity-35' : 'opacity-100',
-                    ].join(' ')}
-                    title={`${index + 1}. ${row.summary}`}
-                  >
-                    {normalizeBattleAssetSrc(row.iconSrc) ? (
-                      <img src={normalizeBattleAssetSrc(row.iconSrc)} alt={row.abilityName} className="h-full w-full object-cover" draggable={false} />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center">
-                        <span className="ca-display text-[0.68rem] text-ca-text">{getQueueTileLabel(row)}</span>
+                  <div key={entry.id} className="flex shrink-0 flex-col items-center gap-1">
+                    <div
+                      data-queue-order-index={index}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(event) => handleDragOver(event, index)}
+                      onDrop={(event) => handleDrop(event, index)}
+                      onDragEnd={clearDrag}
+                      onTouchStart={(event) => handleTouchStart(event, index)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      title={[
+                        getFighterById(state, entry.sourceActorId)?.shortName ?? '?',
+                        entry.label,
+                        entry.summary,
+                      ].filter(Boolean).join(' · ')}
+                      className={[
+                        'relative h-[3.15rem] w-[3.15rem] cursor-grab overflow-hidden border-2 bg-[#1e1c24] touch-none shadow-[0_8px_16px_rgba(0,0,0,0.34)] transition',
+                        isCmd ? 'border-ca-teal/35' : 'border-amber-300/30',
+                        dragOverIndex === index && dragIndex !== index ? 'scale-[1.05] border-ca-red' : '',
+                        dragIndex === index ? 'opacity-35' : 'opacity-100',
+                      ].join(' ')}
+                    >
+                      {entry.sourceIcon.src ? (
+                        <img src={entry.sourceIcon.src} alt={entry.label} className="h-full w-full object-cover" draggable={false} />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center">
+                          <span className="ca-display text-[0.68rem] text-ca-text">{entry.sourceIcon.label}</span>
+                        </div>
+                      )}
+                      <div className="absolute left-0 top-0 bg-black/72 px-1 py-0.5">
+                        <span className={`ca-mono-label text-[0.32rem] ${isCmd ? 'text-ca-teal' : 'text-amber-300'}`}>
+                          {isCmd ? 'CMD' : 'SCH'}
+                        </span>
                       </div>
-                    )}
-                    <div className="absolute left-0 top-0 bg-black/72 px-1 py-0.5 ca-mono-label text-[0.34rem] text-ca-text">#{index + 1}</div>
-                    {!row.isPass ? (
-                      <div className="absolute bottom-0 right-0 flex gap-[2px] bg-black/72 px-1 py-0.5">
-                        {battleEnergyOrder.flatMap((type) =>
-                          Array.from({ length: resolvedCost[type] ?? 0 }, (_, pipIndex) => (
-                            <span key={`${type}-${pipIndex}`} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: battleEnergyMeta[type].color }} />
-                          )),
-                        )}
+                      <div className="absolute right-0 top-0 bg-black/72 px-1 py-0.5 ca-mono-label text-[0.34rem] text-ca-text">
+                        #{index + 1}
                       </div>
-                    ) : null}
+                      {/* Energy pips for command tiles */}
+                      {resolvedCost && !row?.isPass ? (
+                        <div className="absolute bottom-0 right-0 flex gap-[2px] bg-black/72 px-1 py-0.5">
+                          {battleEnergyOrder.flatMap((type) =>
+                            Array.from({ length: resolvedCost[type] ?? 0 }, (_, pipIndex) => (
+                              <span key={`${type}-${pipIndex}`} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: battleEnergyMeta[type].color }} />
+                            )),
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <p className="w-[3.15rem] truncate text-center ca-mono-label text-[0.44rem] text-ca-text-2">
+                      {(getFighterById(state, entry.sourceActorId)?.shortName ?? '?').toUpperCase()}
+                    </p>
                   </div>
                 )
               })}
             </div>
           </section>
 
+          {/* ── OK / CANCEL ── */}
           <div className="mt-3 grid grid-cols-2 gap-3">
             <button
               type="button"
               disabled={!canAfford || hasUnallocated}
-              onClick={() => onConfirm(orderedActionIds, perActorAlloc)}
+              onClick={() => onConfirm(queueOrder, perActorAlloc)}
               className="ca-display border border-ca-red/45 bg-ca-red px-4 py-2.5 text-[1.1rem] tracking-[0.05em] text-white shadow-[0_0_24px_rgba(250,39,66,0.2)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
             >
               OK

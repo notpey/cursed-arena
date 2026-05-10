@@ -3,6 +3,8 @@ import {
   buildCompletionId,
   cacheLastBattleResult,
   cacheMatchHistoryEntry,
+  createPracticeSession,
+  createStagedBattleSession,
   lastBattleResultFromHistoryEntry,
   readBattleProfileStats,
   readLastBattleResult,
@@ -439,5 +441,73 @@ describe('old LP data migration', () => {
     expect(stats.experience).toBe(1480)
     expect(stats.level).toBeGreaterThanOrEqual(1)
     expect(typeof stats.rankTitle).toBe('string')
+  })
+})
+
+// ── Bot team mirroring ────────────────────────────────────────────────────────
+
+const PLAYER_TEAM = ['yuji', 'nobara', 'megumi']
+
+describe('createStagedBattleSession — bot team mirroring', () => {
+  test('quick bot session mirrors the player team', () => {
+    const session = createStagedBattleSession('quick', PLAYER_TEAM)
+    expect(session.enemyTeamIds).toEqual(PLAYER_TEAM)
+  })
+
+  test('private bot session mirrors the player team', () => {
+    const session = createStagedBattleSession('private', PLAYER_TEAM)
+    expect(session.enemyTeamIds).toEqual(PLAYER_TEAM)
+  })
+
+  test('ranked session uses pool team — opponentName is set and playerTeamIds are preserved', () => {
+    const session = createStagedBattleSession('ranked', PLAYER_TEAM)
+    // Player team is always preserved as-is
+    expect(session.playerTeamIds).toEqual(PLAYER_TEAM)
+    // Opponent metadata comes from the pool (not a mirrored anonymous bot)
+    expect(session.opponentName).toBeTruthy()
+    expect(session.opponentRankLabel).toBeTruthy()
+    // Enemy team IDs come from the ranked pool (3-element array)
+    expect(session.enemyTeamIds).toHaveLength(3)
+  })
+
+  test('mirrored enemy is a copy, not a reference — mutating one does not affect the other', () => {
+    const playerTeam = ['yuji', 'nobara', 'megumi']
+    const session = createStagedBattleSession('quick', playerTeam)
+    session.enemyTeamIds[0] = 'gojo'
+    expect(playerTeam[0]).toBe('yuji')
+    expect(session.playerTeamIds[0]).toBe('yuji')
+  })
+
+  test('player and enemy teamId arrays are separate array instances', () => {
+    const session = createStagedBattleSession('quick', PLAYER_TEAM)
+    expect(session.playerTeamIds).not.toBe(session.enemyTeamIds)
+  })
+
+  test('different player teams produce different mirrored enemy teams', () => {
+    const teamA = createStagedBattleSession('quick', ['yuji', 'nobara', 'megumi'])
+    const teamB = createStagedBattleSession('quick', ['gojo', 'nanami', 'todo'])
+    expect(teamA.enemyTeamIds).toEqual(['yuji', 'nobara', 'megumi'])
+    expect(teamB.enemyTeamIds).toEqual(['gojo', 'nanami', 'todo'])
+  })
+})
+
+describe('createPracticeSession — bot team mirroring', () => {
+  test('practice session with empty enemyTeamIds mirrors the player team', () => {
+    const session = createPracticeSession(PLAYER_TEAM, { aiEnabled: true, enemyTeamIds: [] })
+    expect(session.enemyTeamIds).toEqual(PLAYER_TEAM)
+    expect(session.practiceOptions?.enemyTeamIds).toEqual(PLAYER_TEAM)
+  })
+
+  test('practice session with explicit enemyTeamIds uses them, not the player team', () => {
+    const custom = ['gojo', 'nanami', 'todo']
+    const session = createPracticeSession(PLAYER_TEAM, { aiEnabled: true, enemyTeamIds: custom })
+    expect(session.enemyTeamIds).toEqual(custom)
+  })
+
+  test('practice mirrored enemy is a copy, not a reference', () => {
+    const playerTeam = ['yuji', 'nobara', 'megumi']
+    const session = createPracticeSession(playerTeam, { aiEnabled: true, enemyTeamIds: [] })
+    session.enemyTeamIds[0] = 'gojo'
+    expect(playerTeam[0]).toBe('yuji')
   })
 })

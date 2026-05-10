@@ -92,6 +92,53 @@ const visibleCounterPresenters: Record<string, VisibleCounterPresenter> = {
       { text: 'Hairpin can target this fighter.', turnsLeft: null },
     ],
   },
+  scorched: {
+    label: 'Scorched',
+    iconLabel: 'SC',
+    iconTone: 'red',
+    tone: 'burn',
+    priority: 4,
+    lines: (value) => [
+      { text: `${value} Scorched stack${value === 1 ? '' : 's'}.`, turnsLeft: null },
+      { text: `Takes ${value * 5} damage from Disaster Heat at round start while Jogo is alive.`, turnsLeft: null },
+      { text: `Cataclysmic Eruption deals ${value * 5} damage and consumes these stacks.`, turnsLeft: null },
+    ],
+  },
+  maki_weapon_bonus: {
+    label: 'Weapon Bonus',
+    iconLabel: 'WB',
+    iconTone: 'gold',
+    tone: 'buff',
+    priority: 6,
+    lines: (value) => [
+      { text: `Maki's next damaging skill deals +${value} damage.`, turnsLeft: null },
+      { text: 'Gained from Playful Cloud Strike and consumed after the next damaging skill resolves.', turnsLeft: null },
+    ],
+  },
+  cursed_bullet_uses: {
+    label: 'Cursed Bullet Uses',
+    iconLabel: 'CB',
+    iconTone: 'gold',
+    tone: 'buff',
+    priority: 6,
+    lines: (value) => [
+      { text: `${value} Cursed Bullet use${value === 1 ? '' : 's'} remaining.`, turnsLeft: null },
+      { text: 'Cursed Bullet deals 30 damage and consumes 1 use while ammo remains.', turnsLeft: null },
+      { text: 'At 0 uses, Cursed Bullet deals 15 damage and Suppressing Fire upgrades to 25 damage plus stun.', turnsLeft: null },
+    ],
+  },
+  kamo_refined_bonus: {
+    label: 'Refined Technique',
+    iconLabel: 'RT',
+    iconTone: 'teal',
+    tone: 'buff',
+    priority: 6,
+    lines: (value) => [
+      { text: `Kamo's next damaging skill deals +${value * 10} damage.`, turnsLeft: null },
+      { text: 'Gained after Kamo uses a different skill than his previous skill.', turnsLeft: null },
+      { text: 'Consumed when Piercing Blood or Crimson Binding resolves.', turnsLeft: null },
+    ],
+  },
   vocal_strain_damage: {
     label: 'Vocal Strain',
     iconLabel: 'VS',
@@ -596,7 +643,7 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
   if (key === 'straw_doll_damage_taken') {
     return `Straw Doll damage vulnerability: +${value * 5}`
   }
-  if (key === 'cursed_bullet') {
+  if (key === 'cursed_bullet' || key === 'cursed_bullet_uses') {
     return `${value} Cursed Bullet use${value === 1 ? '' : 's'} remaining`
   }
   if (key === 'scorched') {

@@ -1,5 +1,5 @@
 import { definePassive, defendSkill } from '@/features/battle/content.ts'
-import { fighter, skill, modifierEffect } from './_helpers.ts'
+import { fighter, skill, markerEffect, modifierEffect } from './_helpers.ts'
 
 export const momo = fighter({
   id: 'momo',
@@ -13,12 +13,10 @@ export const momo = fighter({
     definePassive({
       id: 'momo-battlefield-awareness',
       trigger: 'onRoundStart',
-      effects: [
-        { type: 'invulnerable', duration: 1, target: 'self' },
-        modifierEffect('Battlefield Awareness', 'damageTaken', -5, 1, 'all-allies', ['battlefield-awareness']),
-      ],
+      conditions: [{ type: 'counterAtLeast', key: '__never_momo_display_only', value: 1 }],
+      effects: [markerEffect('Battlefield Awareness', 'permanent', 'self', ['battlefield-awareness'])],
       label: 'Battlefield Awareness',
-      description: 'Each turn, Momo briefly becomes invulnerable and her allies take 5 less damage.',
+      description: 'Source note: Battlefield Awareness duplicated Evasive Flight, so the active protection is authored only on Evasive Flight.',
       icon: { label: 'BA', tone: 'teal' },
     }),
   ],
@@ -26,7 +24,7 @@ export const momo = fighter({
     skill({
       id: 'momo-aerial-support',
       name: 'Aerial Support',
-      description: 'One ally deals 10 more damage and has random energy costs reduced for 2 turns.',
+      description: 'One ally deals 10 additional damage and their skills cost 1 less random Energy for 2 turns.',
       kind: 'utility',
       targetRule: 'ally-single',
       classes: ['Strategic', 'Instant'],
@@ -56,7 +54,7 @@ export const momo = fighter({
     skill({
       id: 'momo-coordinated-assault',
       name: 'Coordinated Assault',
-      description: 'The next time the target takes damage, they take 15 additional damage. Disrupted targets take the damage immediately.',
+      description: 'For 1 turn, the next time the target takes damage, they take 15 additional damage. If the target is affected by Disrupting Gust, they take 15 damage immediately instead.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Ranged', 'Instant'],
@@ -65,22 +63,27 @@ export const momo = fighter({
       power: 15,
       effects: [
         {
-          type: 'reaction',
-          label: 'Coordinated Assault',
-          trigger: 'onDamageApplied',
-          duration: 1,
-          consumeOnTrigger: true,
           target: 'inherit',
+          type: 'conditional',
+          conditions: [{ type: 'targetHasModifierTag', tag: 'disrupting-gust' }],
           effects: [{ type: 'damage', power: 15, target: 'inherit' }],
+          elseEffects: [{
+            type: 'reaction',
+            label: 'Coordinated Assault',
+            trigger: 'onDamageApplied',
+            duration: 1,
+            consumeOnTrigger: true,
+            target: 'inherit',
+            effects: [{ type: 'damage', power: 15, target: 'inherit' }],
+          }],
         },
-        { type: 'damageFiltered', power: 15, requiresTag: 'disrupting-gust', target: 'inherit' },
       ],
     }),
   ],
   ultimate: defendSkill({
     id: 'momo-evasive-flight',
     name: 'Evasive Flight',
-    description: 'Momo becomes invulnerable for 1 turn. During that turn, allies take 5 less damage.',
+    description: 'Momo becomes invulnerable for 1 turn. During that turn, her team takes 5 less damage.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,

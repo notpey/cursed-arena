@@ -40,6 +40,7 @@ import {
   getQueueAbilityBlockReason,
   getValidTargetIds,
   isAlive,
+  resolveInterleavedPlayerTurnTimeline,
   resolveTeamTurn,
   resolveTeamTurnTimeline,
   endRoundTimeline,
@@ -58,6 +59,7 @@ import {
   buildTimeoutCommands,
 } from '@/features/multiplayer/useMultiplayerMatch'
 import { resolveAbilityName } from '@/features/battle/presentation'
+import type { QueueOrderEntry } from '@/features/battle/queuePreview'
 import { readPresentationMode, togglePresentationMode, type BattlePresentationMode } from '@/features/battle/presentationPreference'
 
 type BattleViewState = {
@@ -1222,11 +1224,13 @@ export function BattlePage() {
     queuedActions: Record<string, QueuedBattleAction>,
     preludeEvents: BattleEvent[] = [],
     playerActionOrder?: string[],
+    queueOrder?: QueueOrderEntry[],
   ) {
     if (battle.state.phase === 'finished') return
 
     // ── Online path ───────────────────────────────────────────────────────
     if (multiplayer) {
+      // Multiplayer uses legacy two-phase/bucketed resolution rather than the mixed queueOrder.
       await multiplayer.submitCommands(queuedActions, preludeEvents, playerActionOrder)
       clearPendingSelection()
       setHoveredAbility(null)
@@ -1238,14 +1242,21 @@ export function BattlePage() {
     let currentState = battle.state
     const timelineSteps: BattleTimelineStep[] = []
 
-    // Phase 1: player turn — respects player-chosen action order
+    // Phase 1: player turn
     if (preludeEvents.length > 0) {
       setBattleLog((current) => [...current, ...preludeEvents].slice(-36))
     }
 
-    const playerTimeline = resolveTeamTurnTimeline(currentState, queuedActions, 'player', playerActionOrder)
-    currentState = playerTimeline.state
-    timelineSteps.push(...playerTimeline.steps)
+    if (queueOrder) {
+      // Interleaved resolution: scheduled effects and commands fire in player-chosen order.
+      const playerTimeline = resolveInterleavedPlayerTurnTimeline(currentState, queuedActions, queueOrder)
+      currentState = playerTimeline.state
+      timelineSteps.push(...playerTimeline.steps)
+    } else {
+      const playerTimeline = resolveTeamTurnTimeline(currentState, queuedActions, 'player', playerActionOrder)
+      currentState = playerTimeline.state
+      timelineSteps.push(...playerTimeline.steps)
+    }
 
     clearPendingSelection()
     setHoveredAbility(null)
@@ -1339,9 +1350,9 @@ export function BattlePage() {
     setQueueDialogOpen(true)
   }
 
-  function handleQueueConfirm(finalActionOrder: string[], randomAlloc: RandomAllocation) {
+  function handleQueueConfirm(queueOrder: QueueOrderEntry[], randomAlloc: RandomAllocation) {
     setQueueDialogOpen(false)
-    resolveQueuedRound(applyRandomAllocationToQueuedActions(battle.queued, randomAlloc), [], finalActionOrder)
+    resolveQueuedRound(applyRandomAllocationToQueuedActions(battle.queued, randomAlloc), [], undefined, queueOrder)
   }
 
   function handleTargetFighterClick(fighter: { instanceId: string }) {

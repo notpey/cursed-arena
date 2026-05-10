@@ -18,7 +18,7 @@ export const hanami = fighter({
         modifierEffect('Natural Body Defense', 'damageTaken', -5, 1, 'self', ['natural-body-defense']),
       ],
       label: 'Natural Body',
-      description: 'At the start of each turn, Hanami gains 10 destructible defense that refreshes. While Hanami has this destructible defense, they take 5 less damage from all sources.',
+      description: 'At round start, Hanami gains 10 destructible defense that refreshes. While this defense is active, Hanami takes 5 less damage from all sources.',
       icon: { label: 'NB', tone: 'teal' },
     }),
   ],
@@ -37,6 +37,7 @@ export const hanami = fighter({
         { type: 'damage', power: 15, target: 'inherit' },
         modifierEffect('Root Snare', 'damageDealt', -15, 1, 'inherit', ['root-snare']),
         modifierEffect('Root Snare', 'canReduceDamageTaken', false, 1, 'inherit', ['root-snare']),
+        modifierEffect('Root Snare', 'canGainInvulnerable', false, 1, 'inherit', ['root-snare']),
       ],
     }),
     skill({

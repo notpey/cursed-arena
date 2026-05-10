@@ -76,6 +76,7 @@ export function BattleBoard({
             {targetingEnemies ? 'TARGET ENEMY' : targetingAllies ? 'TARGET ALLY' : selectedAbility.name.toUpperCase()}
           </span>
         ) : null}
+
         {timelineFocus ? (
           <span key={timelineFocus.label} className={[
             'rounded-[0.18rem] border px-2.5 py-1 ca-mono-label text-[0.58rem] animate-ca-fade-in',
@@ -91,6 +92,16 @@ export function BattleBoard({
           </span>
         ) : null}
       </div>
+
+      {/* Opponent-turn banner — shown when the player cannot act because it is the opponent's command phase */}
+      {!playerIsActiveSide && !interactionLocked ? (
+        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 flex justify-center animate-ca-fade-in">
+          <div className="flex items-center gap-2 rounded-[0.22rem] border border-white/10 bg-[rgba(8,8,14,0.78)] px-4 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ca-red" />
+            <span className="ca-mono-label text-[0.62rem] tracking-[0.14em] text-ca-text-2">AWAITING OPPONENT</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative z-10 flex flex-1 flex-col justify-evenly gap-1.5 sm:gap-2">
         {state.playerTeam.map((fighter, index) => {
@@ -151,11 +162,18 @@ export function BattleBoard({
                   <div
                     className={[
                       'rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.34)] transition duration-200 sm:p-2',
+                      // Timeline focus styles take precedence over targeting styles
                       enemyTimelineRole === 'actor'
                         ? 'border-ca-red/50 shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_0_22px_rgba(250,39,66,0.18)]'
                         : enemyTimelineRole === 'target'
                           ? 'border-amber-300/40 shadow-[0_0_0_1px_rgba(252,211,77,0.2),0_0_22px_rgba(252,211,77,0.12)]'
-                          : 'border-[rgba(250,39,66,0.2)]',
+                          // Valid target: gold border + ambient glow to make it unmissable
+                          : enemyTargetable
+                            ? 'border-amber-300/55 shadow-[0_0_0_1px_rgba(255,209,102,0.28),0_0_20px_rgba(255,209,102,0.18)]'
+                            // Non-valid while targeting enemies: dim the whole card
+                            : (targetingEnemies && selectedAbility)
+                              ? 'border-[rgba(250,39,66,0.1)] opacity-40 saturate-50'
+                              : 'border-[rgba(250,39,66,0.2)]',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-2">
@@ -174,7 +192,7 @@ export function BattleBoard({
                         mirrored
                         targetable={enemyTargetable}
                         selectedTarget={selectedTargetId === enemy.instanceId}
-                        muted={Boolean(targetingEnemies && !enemyTargetable && selectedAbility)}
+                        muted={false}
                         sizeClass="w-[4rem] sm:w-[4.75rem] xl:w-[5.4rem]"
                         timelineRole={enemyTimelineRole}
                         timelineTone={timelineFocus?.tone ?? null}

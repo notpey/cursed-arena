@@ -72,7 +72,7 @@ export const nanami = fighter({
     skill({
       id: 'nanami-collapse-point',
       name: 'Collapse Point',
-      description: 'Deals 5 piercing damage. The target permanently takes 5 more damage from all sources.',
+      description: 'Deals 5 piercing damage. The target takes 5 more damage from all sources for 4 turns.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -82,7 +82,7 @@ export const nanami = fighter({
       effects: [
         { type: 'damage', power: 5, target: 'inherit', piercing: true },
         markerEffect('Collapse Point', 'permanent', 'inherit', ['collapse-point']),
-        modifierEffect('Collapse Point', 'damageTaken', 5, 'permanent', 'inherit', ['collapse-point']),
+        modifierEffect('Collapse Point', 'damageTaken', 5, 4, 'inherit', ['collapse-point']),
       ],
     }),
   ],

@@ -5,7 +5,7 @@ import { normalizeBattleAssetSrc } from '@/features/battle/assets.ts'
 // ways that make older published snapshots stale (kit redesigns, new
 // fighters, breaking effect-shape changes). Snapshots without a matching
 // version are treated as outdated and the runtime falls back to authored.
-export const CONTENT_SCHEMA_VERSION = 7
+export const CONTENT_SCHEMA_VERSION = 10
 
 const draftContentKey = `ca-battle-content-draft-v${CONTENT_SCHEMA_VERSION}`
 const publishedContentKey = `ca-battle-content-published-v${CONTENT_SCHEMA_VERSION}`

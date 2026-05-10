@@ -13,12 +13,13 @@ export const todo = fighter({
     definePassive({
       id: 'todo-besto-friendo',
       trigger: 'onAbilityResolve',
+      conditions: [{ type: 'abilityClass', class: 'Physical' }],
       effects: [
         markerEffect('Type', 2, 'inherit', ['todo-type']),
         modifierEffect("Todo's Type Bonus", 'damageTaken', 5, 2, 'inherit', ['todo-type-damage']),
       ],
       label: 'Besto Friendo',
-      description: "When Todo targets an enemy, he marks them as his \"Type\" for 2 turns. Todo's skills will deal +5 damage to his \"Type\" and if his \"Type\" is stunned, they will take 5 additional damage from all sources for 1 turn.",
+      description: "When Todo targets an enemy with a Physical technique, he marks them as his \"Type\" for 2 turns. Todo's skills will deal +5 damage to his \"Type\" and if his \"Type\" is stunned, they will take 5 additional damage from all sources for 1 turn.",
       icon: { label: 'BF', tone: 'teal' },
     }),
     definePassive({

@@ -13,9 +13,9 @@ export const mechamaru = fighter({
     definePassive({
       id: 'mechamaru-artillery-frame',
       trigger: 'onRoundStart',
-      effects: [{ type: 'damage', power: 5, target: 'all-enemies' }],
+      effects: [{ type: 'damage', power: 3, target: 'all-enemies' }],
       label: 'Artillery Frame',
-      description: 'At the start of each turn, Mechamaru deals 5 damage to all enemies.',
+      description: 'At round start, Mechamaru deals 3 damage to all enemies.',
       icon: { label: 'AF', tone: 'red' },
     }),
   ],
@@ -43,7 +43,7 @@ export const mechamaru = fighter({
       targetRule: 'enemy-all',
       classes: ['Energy', 'Ranged', 'Instant'],
       cooldown: 2,
-      energyCost: { mental: 1 },
+      energyCost: { mental: 1, random: 1 },
       power: 15,
       effects: [
         { type: 'damage', power: 15, target: 'all-enemies' },
@@ -62,15 +62,25 @@ export const mechamaru = fighter({
       power: 25,
       effects: [
         { type: 'damage', power: 25, target: 'all-enemies' },
+        { type: 'setMode', key: 'overload', value: 'active', duration: 2, target: 'self' },
         modifierEffect('Overload Cannon', 'damageDealt', 5, 2, 'self', ['overload-cannon']),
-        { type: 'schedule', delay: 2, phase: 'roundEnd', target: 'self', effects: [{ type: 'damage', power: 10, target: 'inherit' }] },
+        {
+          type: 'schedule',
+          delay: 2,
+          phase: 'roundEnd',
+          target: 'self',
+          effects: [
+            { type: 'removeModifier', filter: { tags: ['overload-cannon'] }, target: 'inherit' },
+            { type: 'damage', power: 10, target: 'inherit' },
+          ],
+        },
       ],
     }),
   ],
   ultimate: defendSkill({
     id: 'mechamaru-remote-shielding',
     name: 'Remote Shielding',
-    description: 'Mechamaru becomes invulnerable for 1 turn. During that turn, allies take 5 less damage.',
+    description: 'Mechamaru becomes invulnerable for 1 turn. During that turn, his team takes 5 less damage.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,

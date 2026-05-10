@@ -1789,11 +1789,24 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   })
 }
 
-function resolveScheduledEffects(state: BattleState, ctx: ResolutionContext, phase: BattleScheduledPhase) {
+function resolveScheduledEffects(state: BattleState, ctx: ResolutionContext, phase: BattleScheduledPhase, orderedIds?: string[]) {
   const due = state.scheduledEffects.filter((effect) => effect.phase === phase && effect.dueRound <= state.round)
   state.scheduledEffects = state.scheduledEffects.filter((effect) => !(effect.phase === phase && effect.dueRound <= state.round))
 
-  due.forEach((scheduled) => {
+  // When the caller provides an explicit order, sort the due entries to match it.
+  // Entries not present in orderedIds retain their original relative order after the
+  // ordered entries, preserving backward-compatible behaviour when orderedIds is omitted.
+  const ordered = orderedIds && orderedIds.length > 0
+    ? [
+        ...orderedIds.flatMap((id) => {
+          const found = due.find((e) => e.id === id)
+          return found ? [found] : []
+        }),
+        ...due.filter((e) => !orderedIds.includes(e.id)),
+      ]
+    : due
+
+  ordered.forEach((scheduled) => {
     const actor = getFighterById(state, scheduled.actorId)
     if (!actor) return
 
@@ -1820,8 +1833,8 @@ function resolveScheduledEffects(state: BattleState, ctx: ResolutionContext, pha
   })
 }
 
-function applyRoundStartEffects(state: BattleState, ctx: ResolutionContext) {
-  resolveScheduledEffects(state, ctx, 'roundStart')
+function applyRoundStartEffects(state: BattleState, ctx: ResolutionContext, scheduledOrder?: string[]) {
+  resolveScheduledEffects(state, ctx, 'roundStart', scheduledOrder)
 
   const allUnits = state.playerTeam.concat(state.enemyTeam)
   allUnits.forEach((fighter) => {
@@ -2038,7 +2051,137 @@ export function resolveTeamTurnTimeline(
   return { state, steps }
 }
 
-export function beginNewRound(previousState: BattleState): BattleResolutionResult {
+// ── Interleaved player turn ───────────────────────────────────────────────────
+
+/**
+ * Resolves one scheduled effect by id, removing it from state.scheduledEffects
+ * so it cannot double-fire during applyRoundStartEffects.  No-op when the id
+ * is not found (already drained or bad caller).
+ */
+function resolveOneScheduledEffect(
+  state: BattleState,
+  ctx: ResolutionContext,
+  scheduledEffectId: string,
+): void {
+  const index = state.scheduledEffects.findIndex((e) => e.id === scheduledEffectId)
+  if (index === -1) return
+
+  const [scheduled] = state.scheduledEffects.splice(index, 1)
+  if (!scheduled) return
+
+  const actor = getFighterById(state, scheduled.actorId)
+  if (!actor) return
+
+  makeRuntimeEvent(ctx, state.round, 'scheduled_effect_resolved', {
+    actorId: actor.instanceId,
+    targetId: scheduled.targetIds[0],
+    team: actor.team,
+    abilityId: scheduled.abilityId,
+    meta: { phase: scheduled.phase },
+  })
+
+  const targets = scheduled.targetIds
+    .map((targetId) => getFighterById(state, targetId))
+    .filter((target): target is BattleFighterState => Boolean(target))
+
+  if (targets.length === 0) {
+    resolveEffects(state, ctx, actor, null, scheduled.effects, scheduled.abilityId)
+    return
+  }
+  targets.forEach((target) => {
+    resolveEffects(state, ctx, actor, target, scheduled.effects, scheduled.abilityId)
+  })
+}
+
+/**
+ * Resolves the player turn with commands and eligible roundStart scheduled
+ * effects interleaved in the player-chosen queueOrder.
+ *
+ * Each 'command' entry calls resolveAction exactly as resolveTeamTurnTimeline
+ * does.  Each 'scheduled' entry drains the scheduled effect from
+ * state.scheduledEffects and resolves it in place, preventing it from firing
+ * again when applyRoundStartEffects runs later.
+ *
+ * Scheduled effects that are NOT listed in queueOrder remain in
+ * state.scheduledEffects and fire normally during applyRoundStartEffects.
+ *
+ * tickTeamTurn runs once after the loop, as in resolveTeamTurnTimeline.
+ */
+export function resolveInterleavedPlayerTurnTimeline(
+  previousState: BattleState,
+  commands: Record<string, QueuedBattleAction>,
+  queueOrder: import('@/features/battle/queuePreview').QueueOrderEntry[],
+): BattleTimelineResult {
+  const state = cloneState(previousState)
+  const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
+  const steps: BattleTimelineStep[] = []
+  let battleEnded = false
+
+  for (const entry of queueOrder) {
+    if (battleEnded) break
+
+    const prevEventCount = ctx.events.length
+    const prevRuntimeCount = ctx.runtimeEvents.length
+
+    if (entry.kind === 'command') {
+      const actor = getFighterById(state, entry.actorId)
+      if (!actor || !isAlive(actor)) continue
+
+      const command = commands[entry.actorId] ?? {
+        actorId: entry.actorId,
+        team: actor.team,
+        abilityId: PASS_ABILITY_ID,
+        targetId: null,
+      }
+      resolveAction(state, ctx, command)
+
+      const winner = getWinner(state)
+      if (winner) {
+        state.phase = 'finished'
+        state.winner = winner
+        makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
+        battleEnded = true
+      }
+
+      const step = createTimelineStep('action', state, ctx, prevEventCount, prevRuntimeCount, {
+        actorId: entry.actorId,
+        targetId: command.targetId ?? undefined,
+        team: actor.team,
+        abilityId: command.abilityId,
+      })
+      if (step) steps.push(step)
+
+    } else {
+      // kind === 'scheduled'
+      resolveOneScheduledEffect(state, ctx, entry.scheduledEffectId)
+
+      const winner = getWinner(state)
+      if (winner) {
+        state.phase = 'finished'
+        state.winner = winner
+        makeEvent(ctx, state.round, 'victory', getVictoryTone(winner), getVictoryMessage(winner))
+        battleEnded = true
+      }
+
+      const step = createTimelineStep('roundStart', state, ctx, prevEventCount, prevRuntimeCount, {
+        team: 'player',
+      })
+      if (step) steps.push(step)
+    }
+  }
+
+  if (!state.winner) {
+    const prevEventCount = ctx.events.length
+    const prevRuntimeCount = ctx.runtimeEvents.length
+    tickTeamTurn(state, ctx, 'player')
+    const tickStep = createTimelineStep('action', state, ctx, prevEventCount, prevRuntimeCount)
+    if (tickStep) steps.push(tickStep)
+  }
+
+  return { state, steps }
+}
+
+export function beginNewRound(previousState: BattleState, scheduledOrder?: string[]): BattleResolutionResult {
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
 
@@ -2046,7 +2189,7 @@ export function beginNewRound(previousState: BattleState): BattleResolutionResul
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
 
-  applyRoundStartEffects(state, ctx)
+  applyRoundStartEffects(state, ctx, scheduledOrder)
 
   const winner = getWinner(state)
   if (winner) {
@@ -2063,7 +2206,7 @@ export function beginNewRound(previousState: BattleState): BattleResolutionResul
   return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
 }
 
-export function beginNewRoundTimeline(previousState: BattleState): BattleTimelineResult {
+export function beginNewRoundTimeline(previousState: BattleState, scheduledOrder?: string[]): BattleTimelineResult {
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
   const steps: BattleTimelineStep[] = []
@@ -2072,7 +2215,7 @@ export function beginNewRoundTimeline(previousState: BattleState): BattleTimelin
   makeEvent(ctx, state.round, 'phase', 'frost', `Round ${state.round} opened inside ${state.battlefield.name}.`)
   makeRuntimeEvent(ctx, state.round, 'round_started', { meta: { battlefield: state.battlefield.id } })
 
-  applyRoundStartEffects(state, ctx)
+  applyRoundStartEffects(state, ctx, scheduledOrder)
 
   const winner = getWinner(state)
   if (winner) {
@@ -2108,7 +2251,7 @@ export function transitionToSecondPlayer(previousState: BattleState): BattleStat
   return state
 }
 
-export function endRound(previousState: BattleState): BattleResolutionResult {
+export function endRound(previousState: BattleState, scheduledOrder?: string[]): BattleResolutionResult {
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
 
@@ -2130,7 +2273,7 @@ export function endRound(previousState: BattleState): BattleResolutionResult {
     return { state, events: ctx.events, runtimeEvents: ctx.runtimeEvents }
   }
 
-  const nextRound = beginNewRound(state)
+  const nextRound = beginNewRound(state, scheduledOrder)
   return {
     state: nextRound.state,
     events: [...ctx.events, ...nextRound.events],
@@ -2138,7 +2281,7 @@ export function endRound(previousState: BattleState): BattleResolutionResult {
   }
 }
 
-export function endRoundTimeline(previousState: BattleState): BattleTimelineResult {
+export function endRoundTimeline(previousState: BattleState, scheduledOrder?: string[]): BattleTimelineResult {
   const state = cloneState(previousState)
   const ctx: ResolutionContext = { events: [], runtimeEvents: [] }
   const steps: BattleTimelineStep[] = []
@@ -2175,7 +2318,7 @@ export function endRoundTimeline(previousState: BattleState): BattleTimelineResu
     return { state, steps }
   }
 
-  const nextRound = beginNewRoundTimeline(state)
+  const nextRound = beginNewRoundTimeline(state, scheduledOrder)
   return {
     state: nextRound.state,
     steps: [...steps, ...nextRound.steps],

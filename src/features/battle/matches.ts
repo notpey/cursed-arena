@@ -445,11 +445,15 @@ export function createStagedBattleSession(mode: BattleMatchMode, playerTeamIds: 
   const pool = mode === 'ranked' ? rankedOpponentPool : mode === 'quick' ? quickOpponentPool : privateOpponentPool
   const picked = pickPoolEntry(pool, `${battleSeed}:opponent`)
 
+  // Bot/AI opponents mirror the player's team so the match is symmetric.
+  // Ranked uses the pool team as a placeholder until real PvP matchmaking runs.
+  const enemyTeamIds = mode === 'ranked' ? picked.enemyTeamIds.slice() : playerTeamIds.slice()
+
   return {
     mode,
     battleSeed,
     playerTeamIds: playerTeamIds.slice(),
-    enemyTeamIds: picked.enemyTeamIds.slice(),
+    enemyTeamIds,
     opponentName: picked.opponentName,
     opponentTitle: picked.opponentTitle,
     opponentRankLabel: picked.opponentRankLabel ?? null,
@@ -461,17 +465,19 @@ export function createStagedBattleSession(mode: BattleMatchMode, playerTeamIds: 
 
 export function createPracticeSession(playerTeamIds: string[], options: PracticeOptions): StagedBattleSession {
   const battleSeed = createBattleSeed('practice', playerTeamIds)
+  // Mirror the player's team when no explicit enemy team is provided.
+  const enemyTeamIds = options.enemyTeamIds.length > 0 ? options.enemyTeamIds.slice() : playerTeamIds.slice()
   return {
     mode: 'practice',
     battleSeed,
     playerTeamIds: playerTeamIds.slice(),
-    enemyTeamIds: options.enemyTeamIds.slice(),
+    enemyTeamIds,
     opponentName: 'TRAINING_DUMMY',
     opponentTitle: 'Practice Match',
     opponentRankLabel: null,
     opponentExperience: null,
     roomCode: null,
-    practiceOptions: { ...options },
+    practiceOptions: { ...options, enemyTeamIds },
   }
 }
 
