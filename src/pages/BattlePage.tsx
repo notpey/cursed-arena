@@ -26,6 +26,7 @@ import { fetchMatchHistoryEntryForPlayer, surrenderMatch } from '@/features/mult
 import { buildPrepRosterEntries, readStagedBattleLaunch } from '@/features/battle/prep'
 import { getCurrentBattleContent } from '@/features/battle/contentStore'
 import { usePlayerState } from '@/features/player/store'
+import { playSoundEffect, setVolumesFromSettings, startBattleMusic, stopBattleMusic } from '@/features/audio/audioManager'
 import { useAuth } from '@/features/auth/useAuth'
 import { fetchMyClan } from '@/features/clans/client'
 import { getLadderRankTitle, getLevelForExperience } from '@/features/ranking/ladder'
@@ -646,7 +647,7 @@ function PracticeTurnLogOverlay({
 
 export function BattlePage() {
   const navigate = useNavigate()
-  const { profile } = usePlayerState()
+  const { profile, settings: playerSettings } = usePlayerState()
   const { user } = useAuth()
   const { matchId } = useParams<{ matchId?: string }>()
   const currentUserId = user?.id ?? null
@@ -685,6 +686,29 @@ export function BattlePage() {
   const lastPlayedMultiplayerResolutionRef = useRef<string | null>(null)
   const [playerClanTag, setPlayerClanTag] = useState<string | null>(null)
   const battleProfileStats = readBattleProfileStats()
+
+  // ── Audio: sync volume whenever settings change ───────────────────────────
+  useEffect(() => {
+    setVolumesFromSettings(playerSettings.audio)
+  }, [playerSettings.audio])
+
+  // ── Audio: battle music lifecycle ─────────────────────────────────────────
+  // Start once on mount; stop only on unmount. Phase changes mid-battle must
+  // not trigger cleanup, which is why this effect has an empty dep array.
+  useEffect(() => {
+    startBattleMusic()
+    return () => {
+      stopBattleMusic()
+    }
+  }, [])
+
+  // Stop music when the battle finishes (separate from the mount/unmount effect
+  // so normal phase transitions never call stopBattleMusic).
+  useEffect(() => {
+    if (battle.state.phase === 'finished') {
+      stopBattleMusic()
+    }
+  }, [battle.state.phase])
 
   useEffect(() => {
     const identityUserId = currentUserId ?? 'local-user'
@@ -1167,6 +1191,7 @@ export function BattlePage() {
     const ability = getAbilityById(actor, abilityId)
     if (!ability || !canQueueAbility(battle.state, battle.queued, actor, abilityId)) return
 
+    playSoundEffect('skillSelect')
     setBattle((current) => ({ ...current, selectedActorId: actor.instanceId }))
 
     if (ability.targetRule === 'self') {

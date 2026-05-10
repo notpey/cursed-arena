@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useAuth } from '@/features/auth/useAuth'
+import { resumeBattleMusicIfNeeded, setVolumesFromSettings } from '@/features/audio/audioManager'
 import { SquareAvatar } from '@/components/ui/SquareAvatar'
 import { AvatarUploader } from '@/features/avatar/components/AvatarUploader'
 import {
@@ -38,6 +39,12 @@ export function SettingsPage() {
     setProfileDraft(playerState.profile)
     setSettingsDraft(playerState.settings)
   }, [playerState])
+
+  // Apply slider changes to live audio immediately (before Save is clicked).
+  useEffect(() => {
+    setVolumesFromSettings(settingsDraft.audio)
+    resumeBattleMusicIfNeeded()
+  }, [settingsDraft.audio])
 
   useEffect(() => {
     setEmailInput(auth.user?.email ?? '')

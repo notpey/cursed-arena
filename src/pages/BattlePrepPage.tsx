@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { playSoundEffect, setVolumesFromSettings } from '@/features/audio/audioManager'
 import { useNavigate } from 'react-router-dom'
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { getTargetLabel } from '@/components/battle/battleDisplay'
@@ -51,6 +52,7 @@ import {
 } from '@/features/multiplayer/client'
 import type { MatchRow } from '@/features/multiplayer/types'
 import { useAuth } from '@/features/auth/useAuth'
+import { usePlayerState } from '@/features/player/store'
 import type { CharacterRarity } from '@/types/characters'
 
 type PrepSortKey = 'LORE' | 'NAME' | 'RARITY'
@@ -221,6 +223,15 @@ export function BattlePrepPage() {
   const [mpError, setMpError] = useState<string | null>(null)
   const [mpLoading, setMpLoading] = useState(false)
   const visibleSearchResults = searchQuery.trim() ? searchResults : []
+
+  // ── Audio ────────────────────────────────────────────────────────────────
+  const { settings: playerSettings } = usePlayerState()
+  // Guard so match-found plays exactly once per navigation, not per re-render.
+  const matchFoundPlayedRef = useRef(false)
+
+  useEffect(() => {
+    setVolumesFromSettings(playerSettings.audio)
+  }, [playerSettings.audio])
 
   // ── Matchmaking queue state (ranked / quick) ─────────────────────────────
   const [searching, setSearching] = useState(false)
@@ -406,6 +417,12 @@ export function BattlePrepPage() {
     handleClearSlot(slotIndex)
   }
 
+  function playMatchFound() {
+    if (matchFoundPlayedRef.current) return
+    matchFoundPlayedRef.current = true
+    playSoundEffect('matchFound')
+  }
+
   async function handleEnterArena(modeOverride?: BattleMatchMode) {
     const selectedMode = modeOverride ?? matchMode
     if (!isReady) return
@@ -415,6 +432,7 @@ export function BattlePrepPage() {
       const enemyIds = sanitizePrepTeamIds(practiceEnemyIds, battlePrepRosterById)
       const session = createPracticeSession(sanitized, { aiEnabled: practiceAiEnabled, enemyTeamIds: enemyIds })
       persistStagedBattleSession(session)
+      playMatchFound()
       navigate('/battle')
       return
     }
@@ -430,6 +448,7 @@ export function BattlePrepPage() {
     // Ranked / Quick — requires auth; join the matchmaking queue
     if (!user) {
       stageBattleLaunch(teamIds, selectedMode, battlePrepRosterById)
+      playMatchFound()
       navigate('/battle')
       return
     }
@@ -461,6 +480,7 @@ export function BattlePrepPage() {
     if (active.data) {
       searchingRef.current = false
       setSearching(false)
+      playMatchFound()
       navigate(`/battle/${active.data.id}`)
       return
     }
@@ -495,6 +515,7 @@ export function BattlePrepPage() {
     if (activeMatch) {
       searchingRef.current = false
       setSearching(false)
+      playMatchFound()
       navigate(`/battle/${activeMatch.id}`)
       return
     }
@@ -518,6 +539,7 @@ export function BattlePrepPage() {
     if (match) {
       searchingRef.current = false
       setSearching(false)
+      playMatchFound()
       navigate(`/battle/${match.id}`)
       return
     }
@@ -538,6 +560,7 @@ export function BattlePrepPage() {
           setSearching(false)
           setAiFallback(false)
           stageBattleLaunch(sanitized, mode, battlePrepRosterById)
+          playMatchFound()
           navigate('/battle')
         }, 1200)
         return
@@ -584,6 +607,7 @@ export function BattlePrepPage() {
     }
 
     // Navigate to the battle page — WaitingForOpponentOverlay shows until they accept
+    playMatchFound()
     navigate(`/battle/${data.id}`)
   }
 
@@ -610,6 +634,7 @@ export function BattlePrepPage() {
       return
     }
 
+    playMatchFound()
     navigate(`/battle/${data.id}`)
   }
 
