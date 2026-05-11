@@ -11,38 +11,38 @@
     /* ===== BACKGROUND SCALE =====
        Built from #17151c with purple undertone preserved.
        Each step lifts ~4-6% lightness. */
-    --bg-void:      #0d0c11;
-    --bg-base:      #17151c;
-    --bg-raised:    #1e1c24;
-    --bg-surface:   #26242e;
-    --bg-overlay:   #302e3a;
-    --bg-highlight: #3a3846;
-    --bg-elevated:  #454353;
+    --bg-void:      #07070b;
+    --bg-base:      #111018;
+    --bg-raised:    #1a1822;
+    --bg-surface:   #24212d;
+    --bg-overlay:   #302c3b;
+    --bg-highlight: #423e50;
+    --bg-elevated:  #504c60;
 
     /* ===== CURSED RED ===== */
-    --red-glow:     #ff3d5a;
-    --red-primary:  #fa2742;
+    --red-glow:     #ff435f;
+    --red-primary:  #fc2b47;
     --red-deep:     #c41d33;
     --red-muted:    #8a1523;
-    --red-wash:     rgba(250, 39, 66, 0.08);
-    --red-wash-mid: rgba(250, 39, 66, 0.15);
-    --red-wash-strong: rgba(250, 39, 66, 0.25);
+    --red-wash:     rgba(252, 43, 71, 0.09);
+    --red-wash-mid: rgba(252, 43, 71, 0.16);
+    --red-wash-strong: rgba(252, 43, 71, 0.27);
 
     /* ===== TEAL ===== */
-    --teal-glow:    #2aecd4;
-    --teal-primary: #05d8bd;
+    --teal-glow:    #32efd8;
+    --teal-primary: #06dcc2;
     --teal-deep:    #04a896;
     --teal-muted:   #03796d;
     --teal-dark:    #024d45;
-    --teal-wash:    rgba(5, 216, 189, 0.08);
-    --teal-wash-mid: rgba(5, 216, 189, 0.15);
-    --teal-wash-strong: rgba(5, 216, 189, 0.25);
+    --teal-wash:    rgba(6, 220, 194, 0.09);
+    --teal-wash-mid: rgba(6, 220, 194, 0.16);
+    --teal-wash-strong: rgba(6, 220, 194, 0.27);
 
     /* ===== TEXT (Frost family) ===== */
-    --text-primary:   #e4e6ef;
-    --text-secondary: #b0b2c0;
-    --text-tertiary:  #7a7c8e;
-    --text-disabled:  #4e5060;
+    --text-primary:   #e9ebf5;
+    --text-secondary: #b8bbca;
+    --text-tertiary:  #838699;
+    --text-disabled:  #575a6c;
     --text-inverse:   #17151c;
 
     /* ===== FUNCTIONAL ===== */
@@ -62,9 +62,9 @@
     --rarity-special:   var(--warning);
 
     /* ===== BORDERS ===== */
-    --border-subtle:  rgba(228, 230, 239, 0.06);
-    --border-default: rgba(228, 230, 239, 0.10);
-    --border-strong:  rgba(228, 230, 239, 0.18);
+    --border-subtle:  rgba(233, 235, 245, 0.07);
+    --border-default: rgba(233, 235, 245, 0.115);
+    --border-strong:  rgba(233, 235, 245, 0.21);
     --border-accent:  var(--red-primary);
 
     /* ===== SPACING ===== */
@@ -83,10 +83,10 @@
     --shadow-md:  0 4px 16px rgba(0,0,0,0.6);
     --shadow-lg:  0 8px 32px rgba(0,0,0,0.7);
     --shadow-xl:  0 16px 48px rgba(0,0,0,0.8);
-    --shadow-red: 0 0 24px rgba(250, 39, 66, 0.3);
-    --shadow-red-intense: 0 0 40px rgba(250, 39, 66, 0.5), 0 0 80px rgba(250, 39, 66, 0.15);
-    --shadow-teal: 0 0 24px rgba(5, 216, 189, 0.25);
-    --shadow-teal-intense: 0 0 40px rgba(5, 216, 189, 0.4), 0 0 80px rgba(5, 216, 189, 0.12);
+    --shadow-red: 0 0 26px rgba(252, 43, 71, 0.31);
+    --shadow-red-intense: 0 0 40px rgba(252, 43, 71, 0.47), 0 0 82px rgba(252, 43, 71, 0.15);
+    --shadow-teal: 0 0 26px rgba(6, 220, 194, 0.28);
+    --shadow-teal-intense: 0 0 40px rgba(6, 220, 194, 0.38), 0 0 82px rgba(6, 220, 194, 0.13);
 
     /* ===== RADIUS ===== */
     --radius-xs: 2px; --radius-sm: 4px; --radius-md: 8px;

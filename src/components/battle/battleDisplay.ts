@@ -990,9 +990,9 @@ export function getAccentStyles(accent: DisplayAccent) {
       border: 'border-ca-teal/38',
       wash: 'bg-ca-teal-wash',
       text: 'text-ca-teal',
-      glow: 'shadow-[0_0_24px_rgba(5,216,189,0.16)]',
-      panel: 'bg-[linear-gradient(180deg,rgba(5,216,189,0.12),rgba(7,10,12,0.95))]',
-      lane: 'bg-[linear-gradient(180deg,rgba(5,216,189,0.06),rgba(8,8,12,0.94))]',
+      glow: 'shadow-[0_0_24px_rgba(6,220,194,0.19)]',
+      panel: 'bg-[linear-gradient(180deg,rgba(6,220,194,0.125),rgba(5,8,10,0.96))]',
+      lane: 'bg-[linear-gradient(180deg,rgba(6,220,194,0.07),rgba(5,5,9,0.95))]',
     }
   }
 
@@ -1001,9 +1001,9 @@ export function getAccentStyles(accent: DisplayAccent) {
       border: 'border-ca-red/38',
       wash: 'bg-ca-red-wash',
       text: 'text-ca-red',
-      glow: 'shadow-[0_0_24px_rgba(255,54,95,0.16)]',
-      panel: 'bg-[linear-gradient(180deg,rgba(255,54,95,0.12),rgba(10,7,12,0.95))]',
-      lane: 'bg-[linear-gradient(180deg,rgba(255,54,95,0.06),rgba(8,8,12,0.94))]',
+      glow: 'shadow-[0_0_24px_rgba(252,43,71,0.19)]',
+      panel: 'bg-[linear-gradient(180deg,rgba(252,43,71,0.125),rgba(10,5,9,0.96))]',
+      lane: 'bg-[linear-gradient(180deg,rgba(252,43,71,0.07),rgba(5,5,9,0.95))]',
     }
   }
 

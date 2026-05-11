@@ -1,10 +1,53 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { isAlive } from '@/features/battle/engine'
 import { hasStatus } from '@/features/battle/statuses'
 import type { BattleFighterState } from '@/features/battle/types'
 import { cn, getAccentStyles, getActivePips, type ActiveEffectLine, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
+
+type FlashKind = 'damage' | 'heal' | 'shield-break' | null
+
+/**
+ * Tracks HP / shield deltas across renders so the portrait can flash a
+ * damage / heal / shield-break overlay. Pure UI; the engine is unaware.
+ *
+ * The previous HP and shield are stored in state and updated together with
+ * the flash whenever the inputs differ — React's "derive state from props"
+ * pattern. A single effect clears the flash after the keyframe completes.
+ */
+function useHpFeedback(fighter: BattleFighterState): { flash: FlashKind; seq: number } {
+  const currentShield = fighter.shield?.amount ?? 0
+  const [snapshot, setSnapshot] = useState<{ hp: number; shield: number; flash: FlashKind; seq: number }>(() => ({
+    hp: fighter.hp,
+    shield: currentShield,
+    flash: null,
+    seq: 0,
+  }))
+
+  if (snapshot.hp !== fighter.hp || snapshot.shield !== currentShield) {
+    let nextFlash: FlashKind = snapshot.flash
+    if (snapshot.shield > 0 && currentShield === 0) nextFlash = 'shield-break'
+    else if (fighter.hp < snapshot.hp) nextFlash = 'damage'
+    else if (fighter.hp > snapshot.hp) nextFlash = 'heal'
+    setSnapshot({
+      hp: fighter.hp,
+      shield: currentShield,
+      flash: nextFlash,
+      seq: nextFlash !== snapshot.flash || nextFlash !== null ? snapshot.seq + 1 : snapshot.seq,
+    })
+  }
+
+  useEffect(() => {
+    if (!snapshot.flash) return undefined
+    const timer = window.setTimeout(() => {
+      setSnapshot((s) => (s.flash ? { ...s, flash: null } : s))
+    }, 540)
+    return () => window.clearTimeout(timer)
+  }, [snapshot.flash, snapshot.seq])
+
+  return { flash: snapshot.flash, seq: snapshot.seq }
+}
 
 // ── Tone → border/glow ───────────────────────────────────────────────────────
 function pipToneBorder(tone: ActivePipTone): string {
@@ -21,10 +64,10 @@ function pipToneBorder(tone: ActivePipTone): string {
 
 function pipToneGlow(tone: ActivePipTone): string {
   switch (tone) {
-    case 'burn':    return 'shadow-[0_0_5px_rgba(250,39,66,0.45)]'
+    case 'burn':    return 'shadow-[0_0_6px_rgba(252,43,71,0.48)]'
     case 'stun':    return 'shadow-[0_0_5px_rgba(252,211,77,0.4)]'
     case 'heal':    return 'shadow-[0_0_5px_rgba(52,211,153,0.4)]'
-    case 'buff':    return 'shadow-[0_0_5px_rgba(5,216,189,0.34)]'
+    case 'buff':    return 'shadow-[0_0_6px_rgba(6,220,194,0.38)]'
     case 'debuff':  return 'shadow-[0_0_5px_rgba(192,132,252,0.42)]'
     case 'void':    return 'shadow-[0_0_5px_rgba(125,211,252,0.4)]'
     default:        return 'shadow-[0_0_5px_rgba(255,255,255,0.12)]'
@@ -45,8 +88,8 @@ function pipToneBadge(tone: ActivePipTone): string {
 
 // ── Icon tone → fallback bg (kept subtle so skill art reads through) ─────────
 function iconToneFallbackBg(tone: import('@/features/battle/types').BattleBoardAccent): string {
-  if (tone === 'teal')  return 'bg-[rgba(5,216,189,0.06)]'
-  if (tone === 'red')   return 'bg-[rgba(250,39,66,0.06)]'
+  if (tone === 'teal')  return 'bg-[rgba(6,220,194,0.075)]'
+  if (tone === 'red')   return 'bg-[rgba(252,43,71,0.075)]'
   if (tone === 'gold')  return 'bg-[rgba(252,211,77,0.06)]'
   return 'bg-[rgba(200,210,230,0.04)]'
 }
@@ -273,19 +316,24 @@ function PortraitSquare({
   dimmed = false,
   sizeClass = 'w-[4.2rem]',
   mirrored = false,
+  flash = null,
+  flashSeq = 0,
 }: {
   fighter: BattleFighterState
   dimmed?: boolean
   sizeClass?: string
   mirrored?: boolean
+  flash?: 'damage' | 'heal' | 'shield-break' | null
+  flashSeq?: number
 }) {
   const initial = fighter.shortName[0]?.toUpperCase() ?? '?'
   const portraitSrc = normalizeBattleAssetSrc(fighter.boardPortraitSrc)
+  const stunned = isAlive(fighter) && hasStatus(fighter.statuses, 'stun')
 
   return (
     <div
       className={cn(
-        'relative aspect-square overflow-hidden rounded-[0.2rem] border-2 bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]',
+        'ca-motion-smooth relative aspect-square overflow-hidden rounded-[0.2rem] border-2 bg-[linear-gradient(180deg,rgba(16,15,24,0.96),rgba(5,5,9,0.98))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]',
         rarityBorder(fighter.rarity),
         dimmed && 'opacity-45 saturate-75',
         sizeClass,
@@ -302,7 +350,7 @@ function PortraitSquare({
             style={{ transform: mirrored ? 'scaleX(-1)' : undefined }}
             draggable={false}
           />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.02),rgba(0,0,0,0.26))]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03),rgba(0,0,0,0.31))]" />
         </div>
       ) : (
         <div className="absolute inset-0 grid place-items-center">
@@ -316,8 +364,25 @@ function PortraitSquare({
       )}
 
       {!portraitSrc ? null : (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(180deg,transparent,rgba(5,5,8,0.55))]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-[linear-gradient(180deg,transparent,rgba(3,3,6,0.62))]" />
       )}
+
+      {/* Stun shimmer — slow amber pulse overlay while stunned and alive */}
+      {stunned ? (
+        <div className="pointer-events-none absolute inset-0 bg-amber-300/15 animate-ca-stun-shimmer" />
+      ) : null}
+
+      {/* HP / shield feedback overlays — `key` includes seq so back-to-back
+          hits of the same kind retrigger the keyframe. */}
+      {flash === 'damage' ? (
+        <div key={`d-${flashSeq}`} className="pointer-events-none absolute inset-0 bg-ca-red/45 animate-ca-flash-damage" />
+      ) : null}
+      {flash === 'heal' ? (
+        <div key={`h-${flashSeq}`} className="pointer-events-none absolute inset-0 bg-emerald-400/40 animate-ca-flash-heal" />
+      ) : null}
+      {flash === 'shield-break' ? (
+        <div key={`s-${flashSeq}`} className="pointer-events-none absolute inset-0 border-2 border-white/70 animate-ca-flash-shield" />
+      ) : null}
 
       {!isAlive(fighter) ? (
         <div className="absolute inset-0 grid place-items-center bg-black/72 animate-ca-fade-in">
@@ -363,6 +428,7 @@ export function BattlePortraitSlot({
 }) {
   const accentStyles = getAccentStyles(accent)
   const hpValue = (fighter.hp / fighter.maxHp) * 100
+  const { flash, seq } = useHpFeedback(fighter)
   const portraitSizeClass = sizeClassOverride ?? (compact
     ? 'w-[3rem] sm:w-[3.45rem]'
     : 'w-[4rem] sm:w-[5.25rem]')
@@ -382,10 +448,12 @@ export function BattlePortraitSlot({
       onClick={onClick}
       disabled={!onClick}
       className={cn(
-        'group relative w-fit text-left transition duration-200',
+        'group ca-motion-smooth relative w-fit text-left transition duration-200',
         muted && 'opacity-35 saturate-75',
         !isAlive(fighter) && 'opacity-55 grayscale',
-        onClick ? 'cursor-pointer hover:-translate-y-[1px]' : 'cursor-default',
+        onClick ? 'cursor-pointer hover:-translate-y-[2px] hover:scale-[1.02]' : 'cursor-default',
+        (active || selectedTarget || targetable) && 'animate-ca-selected-breathe',
+        flash === 'damage' && 'animate-ca-shake-2px',
       )}
     >
       {carryoverLabels.length > 0 ? (
@@ -402,14 +470,14 @@ export function BattlePortraitSlot({
         className={cn(
           'rounded-[0.2rem] p-0.5 transition duration-200',
           active && accentStyles.glow,
-          targetable && 'shadow-[0_0_0_2px_rgba(255,209,102,0.5),0_0_18px_rgba(255,209,102,0.2)]',
-          selectedTarget && 'shadow-[0_0_0_2px_rgba(255,255,255,0.55),0_0_18px_rgba(255,255,255,0.2)]',
-          timelineRole === 'actor' && timelineTone === 'red' && 'shadow-[0_0_0_2px_rgba(250,39,66,0.5),0_0_20px_rgba(250,39,66,0.2)]',
-          timelineRole === 'actor' && timelineTone !== 'red' && 'shadow-[0_0_0_2px_rgba(5,216,189,0.5),0_0_20px_rgba(5,216,189,0.2)]',
+          targetable && 'shadow-[0_0_0_2px_rgba(255,209,102,0.58),0_0_22px_rgba(255,209,102,0.3)]',
+          selectedTarget && 'shadow-[0_0_0_2px_rgba(255,255,255,0.62),0_0_22px_rgba(255,255,255,0.3)]',
+          timelineRole === 'actor' && timelineTone === 'red' && 'shadow-[0_0_0_2px_rgba(252,43,71,0.5),0_0_20px_rgba(252,43,71,0.22)]',
+          timelineRole === 'actor' && timelineTone !== 'red' && 'shadow-[0_0_0_2px_rgba(6,220,194,0.5),0_0_20px_rgba(6,220,194,0.22)]',
           timelineRole === 'target' && 'shadow-[0_0_0_2px_rgba(252,211,77,0.45),0_0_20px_rgba(252,211,77,0.16)]',
         )}
       >
-        <PortraitSquare fighter={fighter} dimmed={muted} sizeClass={portraitSizeClass} mirrored={mirrored} />
+        <PortraitSquare fighter={fighter} dimmed={muted} sizeClass={portraitSizeClass} mirrored={mirrored} flash={flash} flashSeq={seq} />
       </div>
 
       {statusTag ? (

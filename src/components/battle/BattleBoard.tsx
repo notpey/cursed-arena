@@ -62,8 +62,24 @@ export function BattleBoard({
   }, [state])
 
   return (
-    <section className="relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.25rem] border border-white/10 bg-[linear-gradient(180deg,rgba(12,11,18,0.26),rgba(8,8,13,0.2))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] animate-ca-turn-reveal sm:px-4">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.32),transparent_42%,rgba(5,216,189,0.28))]" />
+    <section
+      key={playerIsActiveSide ? 'player-side' : 'enemy-side'}
+      className={[
+        'relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.25rem] border bg-[radial-gradient(circle_at_50%_42%,rgba(233,235,245,0.02),transparent_42%),linear-gradient(180deg,rgba(8,7,13,0.5),rgba(4,4,8,0.4))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_36px_rgba(0,0,0,0.22)] animate-ca-control-shift sm:px-4 transition-colors duration-500',
+        playerIsActiveSide
+          ? 'border-ca-teal/36 shadow-[inset_0_0_34px_rgba(6,220,194,0.12),inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(6,220,194,0.07)]'
+          : 'border-ca-red/36 shadow-[inset_0_0_34px_rgba(252,43,71,0.13),inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(252,43,71,0.07)]',
+      ].join(' ')}
+    >
+      <div className="pointer-events-none absolute -inset-x-20 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.035)_34%,rgba(6,220,194,0.045)_49%,rgba(255,255,255,0.035)_56%,transparent_70%)] opacity-85 animate-ca-energy-sweep" />
+      <div
+        className={[
+          'pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity duration-500',
+          playerIsActiveSide
+            ? 'bg-[linear-gradient(90deg,rgba(5,216,189,0.55),transparent_50%,rgba(5,216,189,0.22))]'
+            : 'bg-[linear-gradient(90deg,rgba(250,39,66,0.55),transparent_50%,rgba(250,39,66,0.22))]',
+        ].join(' ')}
+      />
       <div className="relative z-10 mb-2 flex flex-wrap items-center gap-2">
         <span className="rounded-[0.18rem] border border-amber-300/24 bg-amber-300/10 px-2.5 py-1 ca-mono-label text-[0.58rem] text-amber-300">
           {state.battlefield.label.toUpperCase()}
@@ -96,7 +112,7 @@ export function BattleBoard({
       {/* Opponent-turn banner — shown when the player cannot act because it is the opponent's command phase */}
       {!playerIsActiveSide && !interactionLocked ? (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 flex justify-center animate-ca-fade-in">
-          <div className="flex items-center gap-2 rounded-[0.22rem] border border-white/10 bg-[rgba(8,8,14,0.78)] px-4 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-[0.22rem] border border-white/13 bg-[rgba(5,5,10,0.82)] px-4 py-2 shadow-[0_9px_24px_rgba(0,0,0,0.52)] backdrop-blur-sm animate-ca-soft-pop">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ca-red" />
             <span className="ca-mono-label text-[0.62rem] tracking-[0.14em] text-ca-text-2">AWAITING OPPONENT</span>
           </div>
@@ -161,19 +177,21 @@ export function BattleBoard({
                 {enemy ? (
                   <div
                     className={[
-                      'rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(24,10,14,0.94),rgba(32,14,18,0.9))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_4px_12px_rgba(0,0,0,0.34)] transition duration-200 sm:p-2',
+                      'rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(24,8,13,0.95),rgba(13,8,12,0.93))] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_5px_14px_rgba(0,0,0,0.4)] transition duration-200 sm:p-2',
                       // Timeline focus styles take precedence over targeting styles
                       enemyTimelineRole === 'actor'
                         ? 'border-ca-red/50 shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_0_22px_rgba(250,39,66,0.18)]'
                         : enemyTimelineRole === 'target'
                           ? 'border-amber-300/40 shadow-[0_0_0_1px_rgba(252,211,77,0.2),0_0_22px_rgba(252,211,77,0.12)]'
-                          // Valid target: gold border + ambient glow to make it unmissable
+                          // Valid target: gold border + slow pulse to make it unmissable
                           : enemyTargetable
-                            ? 'border-amber-300/55 shadow-[0_0_0_1px_rgba(255,209,102,0.28),0_0_20px_rgba(255,209,102,0.18)]'
+                            ? selectedTargetId === enemy?.instanceId
+                              ? 'border-amber-300/70 shadow-[0_0_0_2px_rgba(255,209,102,0.5),0_0_26px_rgba(255,209,102,0.36)] animate-ca-selected-breathe'
+                              : 'border-amber-300/60 animate-ca-target-pulse'
                             // Non-valid while targeting enemies: dim the whole card
                             : (targetingEnemies && selectedAbility)
                               ? 'border-[rgba(250,39,66,0.1)] opacity-40 saturate-50'
-                              : 'border-[rgba(250,39,66,0.2)]',
+                              : 'border-[rgba(252,43,71,0.23)]',
                     ].join(' ')}
                   >
                     <div className="flex items-start gap-2">

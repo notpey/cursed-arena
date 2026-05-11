@@ -54,9 +54,10 @@
   body {
     margin: 0;
     background:
-      radial-gradient(1200px 700px at 8% 30%, rgba(250, 39, 66, 0.08), transparent 70%),
-      radial-gradient(900px 650px at 92% 22%, rgba(5, 216, 189, 0.06), transparent 72%),
-      linear-gradient(180deg, var(--bg-void), #09090d);
+      radial-gradient(1150px 720px at 7% 28%, rgba(252, 43, 71, 0.11), transparent 68%),
+      radial-gradient(940px 680px at 92% 18%, rgba(6, 220, 194, 0.09), transparent 70%),
+      radial-gradient(780px 560px at 54% 96%, rgba(155, 109, 255, 0.06), transparent 72%),
+      linear-gradient(180deg, #050508 0%, var(--bg-void) 42%, #040407 100%);
     color: var(--text-primary);
     font-family: var(--font-body);
     -webkit-font-smoothing: antialiased;
@@ -112,14 +113,14 @@
 
 @keyframes ca-turn-reveal {
   0% {
-    opacity: 0.42;
-    transform: scale(0.992);
-    filter: saturate(0.82) brightness(0.86);
+    opacity: 0.34;
+    transform: translateY(7px) scale(0.986);
+    filter: saturate(0.78) brightness(0.82);
   }
   45% {
     opacity: 1;
-    transform: scale(1);
-    filter: saturate(1.08) brightness(1.08);
+    transform: translateY(0) scale(1);
+    filter: saturate(1.12) brightness(1.1);
   }
   100% {
     opacity: 1;
@@ -128,13 +129,115 @@
   }
 }
 
+@keyframes ca-ambient-drift {
+  0%, 100% {
+    opacity: 0.82;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(2.4%, -1.6%, 0) scale(1.045);
+  }
+}
+
+@keyframes ca-energy-sweep {
+  0% {
+    opacity: 0;
+    transform: translate3d(-34%, 0, 0) skewX(-12deg);
+  }
+  22% {
+    opacity: 0.68;
+  }
+  55% {
+    opacity: 0.24;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(34%, 0, 0) skewX(-12deg);
+  }
+}
+
+@keyframes ca-soft-pop {
+  from {
+    opacity: 0;
+    filter: saturate(0.88) brightness(0.92);
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    filter: saturate(1);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ca-selected-breathe {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.16) saturate(1.1);
+  }
+}
+
+@keyframes ca-control-shift {
+  0% {
+    opacity: 0.74;
+    transform: translateX(-8px) scale(0.99);
+    filter: brightness(0.9);
+  }
+  55% {
+    opacity: 1;
+    transform: translateX(1px) scale(1.004);
+    filter: brightness(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes ca-flash-heal {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes ca-flash-shield {
+  0%   { opacity: 0; transform: scale(0.94); }
+  30%  { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+@keyframes ca-shake-2px {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-2px); }
+  75%      { transform: translateX(2px); }
+}
+
+@keyframes ca-stun-shimmer {
+  0%, 100% { opacity: 0.12; }
+  50%      { opacity: 0.32; }
+}
+
+@keyframes ca-target-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.55), 0 0 22px rgba(255, 209, 102, 0.32);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.8), 0 0 30px rgba(255, 209, 102, 0.5);
+  }
+}
+
 @layer utilities {
   .ca-card {
-    background: rgba(18, 18, 24, 0.34);
-    border: 1px solid rgba(228, 230, 239, 0.07);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(252, 43, 71, 0.035), transparent 38%),
+      linear-gradient(180deg, rgba(28, 26, 36, 0.66), rgba(9, 9, 14, 0.76));
+    border: 1px solid rgba(233, 235, 245, 0.095);
     border-radius: 10px;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-    backdrop-filter: blur(8px) saturate(105%);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.038);
+    backdrop-filter: blur(9px) saturate(118%);
   }
 
   .ca-card-hover {
@@ -144,8 +247,8 @@
 
   .ca-card-hover:hover {
     transform: translateY(-2px);
-    border-color: rgba(228, 230, 239, 0.12);
-    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.2);
+    border-color: rgba(233, 235, 245, 0.17);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.35), 0 0 18px rgba(6, 220, 194, 0.055);
   }
 
   .animate-ca-fade-in {
@@ -174,6 +277,55 @@
 
   .animate-ca-turn-reveal {
     animation: ca-turn-reveal 560ms var(--ease-out-expo) both;
+  }
+
+  .animate-ca-ambient {
+    animation: ca-ambient-drift 13s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-ca-energy-sweep {
+    animation: ca-energy-sweep 7s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  .animate-ca-soft-pop {
+    animation: ca-soft-pop 320ms var(--ease-out-expo) both;
+  }
+
+  .animate-ca-selected-breathe {
+    animation: ca-selected-breathe 1600ms ease-in-out infinite;
+  }
+
+  .animate-ca-control-shift {
+    animation: ca-control-shift 420ms var(--ease-out-expo) both;
+  }
+
+  .ca-motion-smooth {
+    transition: transform 280ms var(--ease-out-expo), opacity 280ms var(--ease-out-expo),
+      border-color 280ms var(--ease-out-expo), box-shadow 280ms var(--ease-out-expo),
+      background-color 280ms var(--ease-out-expo), filter 280ms var(--ease-out-expo);
+    will-change: transform, opacity;
+  }
+
+  .animate-ca-flash-heal {
+    animation: ca-flash-heal 520ms var(--ease-out-expo) both;
+  }
+
+  .animate-ca-flash-shield {
+    animation: ca-flash-shield 480ms var(--ease-out-expo) both;
+  }
+
+  .animate-ca-shake-2px {
+    animation: ca-shake-2px 220ms ease-in-out 2;
+  }
+
+  .animate-ca-stun-shimmer {
+    animation: ca-stun-shimmer 2400ms ease-in-out infinite;
+  }
+
+  .animate-ca-target-pulse {
+    animation: ca-target-pulse 1600ms ease-in-out infinite;
   }
 
   .ca-mono-label {
@@ -233,5 +385,23 @@
     border: 1px solid rgba(228, 230, 239, 0.35);
     box-shadow: 0 0 0 3px rgba(5, 216, 189, 0.12);
     cursor: pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 1ms !important;
+    }
+
+    .animate-ca-ambient,
+    .animate-ca-energy-sweep,
+    .animate-ca-selected-breathe,
+    .animate-ca-control-shift {
+      animation: none !important;
+    }
   }
 }

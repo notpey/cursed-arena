@@ -1463,9 +1463,10 @@ export function BattlePage() {
             : 'Loading online match...'
 
     return (
-      <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
-        <div className="absolute inset-0 bg-cover bg-center opacity-[0.42]" style={{ backgroundImage: `url(${homeBgBase})` }} />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(250,39,66,0.08),transparent_34%),radial-gradient(circle_at_84%_24%,rgba(5,216,189,0.08),transparent_32%),linear-gradient(180deg,rgba(4,5,8,0.18),rgba(4,5,8,0.58))]" />
+      <div className="relative h-[100dvh] overflow-hidden bg-[#040508] text-ca-text">
+        <div className="absolute inset-0 bg-cover bg-center opacity-[0.39] saturate-[1.05] contrast-[1.08]" style={{ backgroundImage: `url(${homeBgBase})` }} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_13%_34%,rgba(252,43,71,0.17),transparent_38%),radial-gradient(circle_at_84%_24%,rgba(6,220,194,0.145),transparent_36%),linear-gradient(180deg,rgba(3,4,7,0.36),rgba(3,4,7,0.68))] animate-ca-ambient" />
+        <div className="absolute -inset-x-24 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.064)_34%,rgba(6,220,194,0.06)_52%,transparent_70%)] opacity-90 animate-ca-energy-sweep" />
         <div className="relative grid h-full place-items-center p-6">
           <div className="w-full max-w-sm rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 text-center shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
             <p className="ca-mono-label text-[0.52rem] text-ca-text-3">ONLINE MATCH</p>
@@ -1489,12 +1490,13 @@ export function BattlePage() {
   }
 
   return (
-    <div className="relative h-[100dvh] overflow-hidden bg-[#08090d] text-ca-text">
-      <div className="absolute inset-0 bg-cover bg-center opacity-[0.42]" style={{ backgroundImage: `url(${homeBgBase})` }} />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_34%,rgba(250,39,66,0.08),transparent_34%),radial-gradient(circle_at_84%_24%,rgba(5,216,189,0.08),transparent_32%),linear-gradient(180deg,rgba(4,5,8,0.18),rgba(4,5,8,0.58))]" />
+    <div className="relative h-[100dvh] overflow-hidden bg-[#040508] text-ca-text">
+      <div className="absolute inset-0 bg-cover bg-center opacity-[0.39] saturate-[1.05] contrast-[1.08]" style={{ backgroundImage: `url(${homeBgBase})` }} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_13%_34%,rgba(252,43,71,0.17),transparent_38%),radial-gradient(circle_at_84%_24%,rgba(6,220,194,0.145),transparent_36%),linear-gradient(180deg,rgba(3,4,7,0.36),rgba(3,4,7,0.68))] animate-ca-ambient" />
+      <div className="absolute -inset-x-24 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.064)_34%,rgba(6,220,194,0.06)_52%,transparent_70%)] opacity-90 animate-ca-energy-sweep" />
 
       <div className="relative flex h-full w-full flex-col p-2 sm:p-3">
-        <div className="flex w-full flex-1 flex-col overflow-y-auto rounded-[0.35rem] border border-white/10 bg-[rgba(8,8,12,0.18)] shadow-[0_20px_56px_rgba(0,0,0,0.34)]">
+        <div className="flex w-full flex-1 flex-col overflow-y-auto rounded-[0.35rem] border border-white/14 bg-[rgba(5,5,9,0.3)] shadow-[0_22px_56px_rgba(0,0,0,0.44),inset_0_1px_0_rgba(255,255,255,0.04)]">
           <BattleTopBar
             playerProfile={playerBoardProfile}
             enemyProfile={enemyBoardProfile}

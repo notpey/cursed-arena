@@ -65,11 +65,12 @@ function SkillTile({
         disabled={locked}
         aria-label={lockReason ? `${ability.name} — ${lockReason}` : ability.name}
         className={cn(
-          'group relative h-[3.2rem] w-[3.2rem] overflow-hidden rounded-[0.14rem] border-2 bg-[rgba(20,20,28,0.9)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
-          active ? 'border-white/60 shadow-[0_0_10px_rgba(255,255,255,0.24)]' : 'border-white/15',
-          queued && 'border-ca-teal/55 shadow-[0_0_8px_rgba(5,216,189,0.16)]',
+          'group ca-motion-smooth relative h-[3.2rem] w-[3.2rem] overflow-hidden rounded-[0.14rem] border-2 bg-[rgba(12,12,18,0.92)] shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_3px_10px_rgba(0,0,0,0.25)] transition-all duration-200 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
+          active && 'border-white/82 shadow-[0_0_0_1px_rgba(255,255,255,0.46),0_0_22px_rgba(255,255,255,0.34)] -translate-y-[3px] scale-[1.055] animate-ca-soft-pop',
+          !active && queued && 'border-ca-teal/72 shadow-[0_0_0_1px_rgba(6,220,194,0.3),0_0_16px_rgba(6,220,194,0.28)] animate-ca-selected-breathe',
+          !active && !queued && 'border-white/18',
           locked && 'cursor-not-allowed opacity-35 grayscale-[0.2]',
-          !locked && !active && !queued && 'hover:border-white/30',
+          !locked && !active && !queued && 'hover:border-white/40 hover:-translate-y-[2px] hover:scale-[1.025] hover:shadow-[0_7px_18px_rgba(0,0,0,0.46)]',
           !locked && 'active:scale-[0.93]',
         )}
       >
@@ -129,10 +130,10 @@ function QueuedSlot({
       disabled={!hasQueued}
       title={hasQueued ? `${queuedAbility!.name} (click to remove)` : 'This fighter will pass unless a technique is queued'}
       className={cn(
-        'group relative h-[3.2rem] w-[3.2rem] shrink-0 overflow-hidden rounded-[0.14rem] border-2 transition duration-150 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
+        'group ca-motion-smooth relative h-[3.2rem] w-[3.2rem] shrink-0 overflow-hidden rounded-[0.14rem] border-2 transition duration-200 sm:h-[3.9rem] sm:w-[3.9rem] xl:h-[4.65rem] xl:w-[4.65rem]',
         hasQueued
-          ? 'border-ca-teal/55 bg-[rgba(5,216,189,0.025)] shadow-[0_0_8px_rgba(5,216,189,0.14)]'
-          : 'border-dashed border-white/10 bg-[rgba(15,15,20,0.6)]',
+          ? 'border-ca-teal/66 bg-[rgba(6,220,194,0.05)] shadow-[0_0_14px_rgba(6,220,194,0.22)] animate-ca-selected-breathe'
+          : 'border-dashed border-white/13 bg-[rgba(10,10,16,0.66)]',
         hasQueued && 'cursor-pointer active:scale-[0.93]',
       )}
     >
@@ -218,7 +219,7 @@ export function BattleAbilityStrip({
           : null
 
   return (
-    <div className={cn('relative flex items-start gap-2 sm:gap-2.5 transition-opacity duration-[350ms]', !isActiveSide && 'opacity-70')}>
+    <div className={cn('ca-motion-smooth relative flex items-start gap-2 sm:gap-2.5 transition-all duration-[350ms]', selected && 'translate-x-1', !isActiveSide && 'opacity-70')}>
       <div className="relative z-10 shrink-0 pt-0.5">
         <BattlePortraitSlot
           fighter={fighter}
@@ -243,16 +244,16 @@ export function BattleAbilityStrip({
 
         <div
           className={cn(
-            'relative min-w-0 overflow-hidden rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(14,12,24,0.96),rgba(19,15,31,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.34)] transition duration-200',
-            selected ? 'border-ca-teal/35 ring-1 ring-ca-teal/20' : 'border-[rgba(5,216,189,0.2)]',
+            'ca-motion-smooth relative min-w-0 overflow-hidden rounded-[0.22rem] border bg-[linear-gradient(135deg,rgba(10,9,18,0.96),rgba(17,13,28,0.94))] shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_5px_14px_rgba(0,0,0,0.38)] transition duration-200',
+            selected ? 'border-ca-teal/48 ring-1 ring-ca-teal/28 animate-ca-control-shift shadow-[inset_0_1px_0_rgba(255,255,255,0.055),0_8px_20px_rgba(0,0,0,0.44),0_0_20px_rgba(6,220,194,0.12)]' : 'border-[rgba(6,220,194,0.23)]',
             actorTargetable && 'ring-2 ring-amber-300/30',
             actorMuted && 'opacity-50 saturate-75',
-            timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/45 ring-1 ring-ca-red/25 shadow-[0_0_22px_rgba(250,39,66,0.16)]',
-            timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/45 ring-1 ring-ca-teal/25 shadow-[0_0_22px_rgba(5,216,189,0.16)]',
+            timelineRole === 'actor' && timelineTone === 'red' && 'border-ca-red/40 ring-1 ring-ca-red/20 shadow-[0_0_18px_rgba(252,43,71,0.13)]',
+            timelineRole === 'actor' && timelineTone !== 'red' && 'border-ca-teal/40 ring-1 ring-ca-teal/20 shadow-[0_0_18px_rgba(6,220,194,0.13)]',
             timelineRole === 'target' && 'border-amber-300/40 ring-1 ring-amber-300/25 shadow-[0_0_22px_rgba(252,211,77,0.12)]',
           )}
         >
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_72%,rgba(5,216,189,0.012)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_72%,rgba(8,226,200,0.035)_100%)]" />
 
           {isActiveSide && fighter.hp > 0 && hasStatus(fighter.statuses, 'stun') ? (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[rgba(0,0,0,0.55)]">
@@ -277,11 +278,11 @@ export function BattleAbilityStrip({
             <div className={cn(
               'shrink-0 overflow-hidden',
               presentationMode === 'standard'
-                ? 'transition-[width,opacity] duration-[350ms]'
+                ? 'transition-[width,opacity,transform] duration-[420ms] ease-out'
                 : 'transition-none',
               isActiveSide
                 ? 'w-[3.2rem] opacity-100 sm:w-[3.9rem] xl:w-[4.65rem]'
-                : 'w-0 opacity-0',
+                : 'w-0 -translate-x-3 opacity-0',
             )}>
               <QueuedSlot actor={fighter} queuedAction={queuedAction} onDequeue={onDequeue} />
             </div>

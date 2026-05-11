@@ -15,9 +15,7 @@ import {
 import { useBattleRoster, useBattleRosterById } from '@/features/battle/contentStore'
 import type { BattleAbilityTemplate } from '@/features/battle/types'
 import {
-  battleMatchModes,
   createPracticeSession,
-  getModeButtonLabel,
   getModeLabel,
   persistSelectedMatchMode,
   persistStagedBattleSession,
@@ -193,6 +191,7 @@ export function BattlePrepPage() {
   const [searchValue, setSearchValue] = useState('')
   const [sortBy, setSortBy] = useState<PrepSortKey>('LORE')
   const [roleFilter, setRoleFilter] = useState<PrepRoleFilter>('ALL')
+  const [rosterPage, setRosterPage] = useState(0)
   const [teamIds, setTeamIds] = useState<Array<string | null>>(() => {
     const initial = readPrepSelection(battlePrepRosterById)
     return [initial[0] ?? null, initial[1] ?? null, initial[2] ?? null]
@@ -648,168 +647,364 @@ export function BattlePrepPage() {
     <section className="relative h-full overflow-hidden py-2 sm:py-3">
       <div className="pointer-events-none fixed bottom-0 left-0 right-0 top-14 z-0 overflow-hidden">
         <div
-          className="absolute inset-0 bg-cover bg-center opacity-[0.52]"
+          className="absolute inset-0 bg-cover bg-center opacity-[0.48] saturate-[1.05] contrast-[1.05]"
           style={{ backgroundImage: `url(${homeBgBase})` }}
         />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(250,39,66,0.2),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(155,109,255,0.15),transparent_34%),radial-gradient(circle_at_50%_92%,rgba(5,216,189,0.08),transparent_36%),linear-gradient(135deg,rgba(23,8,14,0.68)_0%,rgba(13,12,17,0.72)_42%,rgba(24,16,32,0.66)_100%)]" />
-        <div className="absolute inset-0 opacity-32 [background-image:linear-gradient(115deg,rgba(250,39,66,0.12)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(155,109,255,0.08)_0_1px,transparent_1px_56px)]" />
-        <div className="absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/12 blur-3xl" />
-        <div className="absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/8 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_24%,rgba(252,43,71,0.26),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(6,220,194,0.18),transparent_36%),radial-gradient(circle_at_52%_92%,rgba(155,109,255,0.1),transparent_40%),linear-gradient(135deg,rgba(16,4,9,0.72)_0%,rgba(5,5,9,0.77)_46%,rgba(13,8,20,0.7)_100%)] animate-ca-ambient" />
+        <div className="absolute -inset-x-24 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.075)_33%,rgba(6,220,194,0.068)_51%,transparent_70%)] opacity-90 animate-ca-energy-sweep" />
+        <div className="absolute inset-0 opacity-34 [background-image:linear-gradient(115deg,rgba(252,43,71,0.11)_0_1px,transparent_1px_42px),linear-gradient(25deg,rgba(6,220,194,0.07)_0_1px,transparent_1px_56px)]" />
+        <div className="absolute -left-24 top-8 h-72 w-72 rounded-full bg-ca-red/18 blur-3xl animate-ca-ambient" />
+        <div className="absolute right-0 top-4 h-80 w-80 rounded-full bg-ca-teal/14 blur-3xl animate-ca-ambient" />
       </div>
 
-      <div className="relative z-10 flex h-full min-h-0 flex-col gap-3 pt-2">
-        <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(30,28,38,0.82),rgba(13,12,18,0.86))] p-2 shadow-[0_20px_44px_rgba(0,0,0,0.28)] backdrop-blur-sm sm:p-3">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.45),rgba(228,230,239,0.12),rgba(5,216,189,0.35))]" />
-          <div className="pointer-events-none absolute -left-24 top-0 h-56 w-56 rounded-full bg-ca-red/7 blur-3xl" />
-          <div className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-ca-teal/7 blur-3xl" />
-          <div className="relative">
-            <PrepMatchButtons
-              isReady={isReady}
-              searching={searching}
-              matchMode={matchMode}
-              onSelectMode={(mode) => {
-                setMatchMode(mode)
-                if (mode === 'practice') {
-                  setPrivateOpen(false)
-                  setPracticeOpen(true)
-                  return
-                }
-                if (mode === 'private') {
-                  setPracticeOpen(false)
-                  setPrivateOpen(true)
-                  setMpError(null)
-                  setSearchQuery('')
-                  setSelectedOpponent(null)
-                  return
-                }
-                setPracticeOpen(false)
-                setPrivateOpen(false)
-                void handleEnterArena(mode)
-              }}
-            />
+      {/*
+        ── Naruto-Arena Character Selection blueprint ───────────────────────
+        D + E = top character info & skill detail panel
+        F     = central match buttons (Ladder / Quick / Private + Practice)
+        C     = bottom-left compact paginated roster grid
+        A + B = bottom-right player info + selected team
+      */}
+      {(() => {
+        const ROSTER_PAGE_SIZE = 21
+        const pageCount = Math.max(1, Math.ceil(visibleRoster.length / ROSTER_PAGE_SIZE))
+        const currentPage = Math.min(rosterPage, pageCount - 1)
+        const rosterSlice = visibleRoster.slice(currentPage * ROSTER_PAGE_SIZE, currentPage * ROSTER_PAGE_SIZE + ROSTER_PAGE_SIZE)
 
-            <div className="mt-2 rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,17,25,0.82),rgba(9,9,14,0.82))] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-3">
-              {selectedEntry && selectedAbility ? (
-                <SelectedFighterPanel
-                  key={selectedEntry.id}
-                  entry={selectedEntry}
-                  selectedAbility={selectedAbility}
-                  selectedAbilityId={selectedAbilityId}
-                  onSelectAbility={setSelectedAbilityId}
+        function startWithMode(mode: BattleMatchMode) {
+          setMatchMode(mode)
+          if (mode === 'practice') {
+            setPrivateOpen(false)
+            setPracticeOpen(true)
+            return
+          }
+          if (mode === 'private') {
+            setPracticeOpen(false)
+            setPrivateOpen(true)
+            setMpError(null)
+            setSearchQuery('')
+            setSelectedOpponent(null)
+            return
+          }
+          setPracticeOpen(false)
+          setPrivateOpen(false)
+          void handleEnterArena(mode)
+        }
+
+        const abilities = selectedEntry ? selectedEntry.battleTemplate.abilities.concat(selectedEntry.battleTemplate.ultimate) : []
+        const selectedEntryStyle = selectedEntry ? rarityStyles[selectedEntry.rarity] : null
+        const portraitSrc = selectedEntry ? normalizeBattleAssetSrc(selectedEntry.battleTemplate.boardPortraitSrc) : null
+
+        return (
+          <div className="relative z-10 mx-auto flex h-full min-h-0 w-[calc(100%-1.5rem)] max-w-[82rem] flex-col gap-3 pt-2">
+            {/* ── D + E. CHARACTER INFO + SKILL DETAIL (top panel) ────────── */}
+            <section className="relative shrink-0 overflow-hidden rounded-[10px] border border-white/16 bg-[linear-gradient(135deg,rgba(31,28,42,0.92),rgba(12,11,18,0.96)_46%,rgba(6,6,10,0.95))] shadow-[0_18px_42px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.065)] backdrop-blur-sm">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.45),rgba(228,230,239,0.12),rgba(5,216,189,0.35))]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_28%,rgba(250,39,66,0.1),transparent_38%),radial-gradient(circle_at_86%_18%,rgba(5,216,189,0.08),transparent_36%)]" />
+              {selectedEntryStyle ? (
+                <div
+                  className="pointer-events-none absolute inset-y-0 left-0 w-1"
+                  style={{ background: `linear-gradient(180deg, ${selectedEntryStyle.text}, rgba(255,255,255,0))` }}
                 />
               ) : null}
-            </div>
-          </div>
-        </section>
 
-        <section className="min-h-0 flex-1 overflow-hidden rounded-[10px] border border-white/10 bg-[linear-gradient(135deg,rgba(18,17,25,0.78),rgba(10,10,16,0.8))] p-2.5 shadow-[0_16px_34px_rgba(0,0,0,0.2)] backdrop-blur-sm sm:p-3">
-          <div className="grid h-full min-h-0 gap-2.5 xl:grid-cols-[minmax(0,1fr)_28rem]">
-            <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                  <input
-                    value={searchValue}
-                    onChange={(event) => setSearchValue(event.target.value)}
-                    placeholder="Search fighter, role, passive"
-                    className="w-full max-w-md rounded-[6px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-3 py-2.5 text-sm text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
-                  />
-                  <div className="flex items-center gap-2">
-                    <label className="ca-mono-label text-[0.44rem] text-ca-text-3" htmlFor="prep-role">
-                      Role
-                    </label>
+              {selectedEntry && selectedAbility ? (
+                <div key={selectedEntry.id} className="relative p-3 animate-ca-soft-pop">
+                  {/* D. Character info — portrait + name + role + passive + skill row */}
+                  <div className="grid grid-cols-[6.75rem_minmax(0,1fr)_auto] items-start gap-3.5">
+                    {/* Portrait */}
+                    <div className="relative h-[6.75rem] w-[6.75rem] overflow-hidden rounded-[7px] border border-white/14 bg-[linear-gradient(180deg,rgba(38,36,48,0.7),rgba(9,9,14,0.86))] shadow-[0_12px_24px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.07)]">
+                      {selectedEntryStyle ? (
+                        <div
+                          className="pointer-events-none absolute inset-0"
+                          style={{ background: `radial-gradient(circle at 50% 30%, ${selectedEntryStyle.wash}, transparent 70%)` }}
+                        />
+                      ) : null}
+                      {portraitSrc ? (
+                        <img src={portraitSrc} alt={selectedEntry.name} className="relative h-full w-full object-contain object-center" draggable={false} />
+                      ) : (
+                        <div className="relative grid h-full w-full place-items-center">
+                          <span className="ca-display text-[1.65rem]" style={{ color: selectedEntryStyle?.text }}>{selectedEntry.battleTemplate.shortName[0]}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Name + role + passive */}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className="ca-mono-label rounded-[3px] border px-1.5 py-0.5 text-[0.42rem] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                          style={{ borderColor: selectedEntryStyle?.border, background: selectedEntryStyle?.wash, color: selectedEntryStyle?.text }}
+                        >
+                          {selectedEntry.gradeLabel}
+                        </span>
+                        <span className="ca-mono-label max-w-[18rem] truncate rounded-[3px] border border-white/10 bg-[rgba(255,255,255,0.045)] px-1.5 py-0.5 text-[0.42rem] text-ca-text-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                          {selectedEntry.role}
+                        </span>
+                      </div>
+                      <h2 className="ca-display mt-2 truncate text-[1.9rem] leading-none text-ca-text drop-shadow-[0_2px_0_rgba(0,0,0,0.55)]">{selectedEntry.name}</h2>
+                      <p className="mt-2 line-clamp-2 max-w-[36rem] text-[0.82rem] leading-snug text-ca-text-2">{selectedEntry.passiveLabel}</p>
+                    </div>
+
+                    {/* Skill icon row — Naruto-Arena style compact icons */}
+                    <div className="flex shrink-0 gap-1.5 rounded-[6px] border border-white/8 bg-[rgba(8,8,13,0.42)] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                      {abilities.map((ability) => {
+                        const active = selectedAbilityId === ability.id || (selectedAbilityId === null && ability.id === selectedAbility.id)
+                        const abilityIcon = normalizeBattleAssetSrc(ability.icon.src)
+                        return (
+                          <button
+                            key={ability.id}
+                            type="button"
+                            onClick={() => setSelectedAbilityId(ability.id)}
+                            className={[
+                              'ca-motion-smooth relative h-[2.85rem] w-[2.85rem] overflow-hidden rounded-[4px] border transition duration-150',
+                              active
+                                ? 'border-ca-red/70 -translate-y-[2px] scale-[1.06] shadow-[0_0_0_1px_rgba(250,39,66,0.38),0_10px_22px_rgba(250,39,66,0.24)] animate-ca-selected-breathe'
+                                : 'border-white/14 bg-[rgba(255,255,255,0.035)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:-translate-y-[2px] hover:scale-[1.03] hover:border-white/30',
+                            ].join(' ')}
+                            title={ability.name}
+                            aria-label={ability.name}
+                          >
+                            {abilityIcon ? (
+                              <img src={abilityIcon} alt={ability.name} className="absolute inset-0 h-full w-full object-cover" />
+                            ) : (
+                              <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
+                                <span className="ca-mono-label text-[0.5rem] text-ca-text-2">{ability.icon.label}</span>
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.22))]" />
+                            {active ? <div className="absolute inset-x-0 bottom-0 h-[2px] bg-ca-red" /> : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Inner divider */}
+                  <div className="my-3 h-px bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)]" />
+
+                  {/* E. Skill detail — name + cost (upper-right), description, classes (lower-left) + cooldown (lower-right) */}
+                  <div className="relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(8,8,14,0.66),rgba(18,16,24,0.72))] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-ca-red/70" />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.18),rgba(5,216,189,0.16),transparent)]" />
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-[var(--font-display-alt)] text-[1.22rem] font-extrabold leading-none text-ca-red">{selectedAbility.name}</p>
+                        <p className="mt-2 line-clamp-2 text-[0.82rem] leading-snug text-ca-text-2">{selectedAbility.description}</p>
+                      </div>
+                      <div className="shrink-0 rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.055),rgba(255,255,255,0.025))] px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                        <p className="ca-mono-label text-[0.36rem] tracking-[0.12em] text-ca-text-3">Energy Cost</p>
+                        <div className="mt-1"><EnergyCostRow cost={getAbilityEnergyCost(selectedAbility)} compact /></div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2.5 flex flex-wrap items-end justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="ca-mono-label text-[0.4rem] tracking-[0.12em] text-ca-text-3">Classes</p>
+                        <p className="ca-mono-label mt-0.5 text-[0.5rem] tracking-[0.06em] text-ca-text-2">
+                          {formatAbilityClasses(selectedAbility)} · TARGET {getTargetLabel(selectedAbility)}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="ca-mono-label text-[0.4rem] tracking-[0.12em] text-ca-text-3">Cooldown</p>
+                        <p className="ca-mono-label mt-0.5 text-[0.5rem] tracking-[0.06em] text-ca-text-2">{selectedAbility.cooldown || 'NONE'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid place-items-center px-4 py-8 text-center">
+                  <p className="ca-display text-[1rem] leading-tight text-ca-text-2">Select a fighter to preview their skills.</p>
+                </div>
+              )}
+            </section>
+
+            {/* ── F. MATCH BUTTONS (central row, Naruto-Arena style) ──────── */}
+            <section className="relative shrink-0 overflow-hidden rounded-[9px] border border-white/12 bg-[linear-gradient(180deg,rgba(26,24,34,0.82),rgba(7,7,11,0.86))] px-3 py-2.5 shadow-[0_12px_26px_rgba(0,0,0,0.38),inset_0_1px_0_rgba(255,255,255,0.055)]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(250,39,66,0.38),rgba(5,216,189,0.28),transparent)]" />
+              <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
+                {(['ranked', 'quick', 'private'] as const).map((mode) => {
+                  const active = matchMode === mode
+                  const disabled = !isReady || searching
+                  const label = mode === 'ranked' ? 'Start Ladder Game' : mode === 'quick' ? 'Start Quick Game' : 'Start Private Game'
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => startWithMode(mode)}
+                      title={!isReady ? 'Select 3 fighters first' : label}
+                      className={[
+                        'ca-display ca-motion-smooth relative w-[12.5rem] rounded-[5px] border px-3 py-2.5 text-center text-[0.95rem] leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-150 hover:-translate-y-[2px] active:scale-[0.975]',
+                        disabled
+                          ? 'border-white/10 bg-[rgba(255,255,255,0.04)] text-ca-text-3 cursor-not-allowed opacity-55'
+                          : active
+                            ? 'border-ca-red/60 bg-[linear-gradient(180deg,rgba(250,39,66,0.28),rgba(250,39,66,0.09))] text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.24),0_10px_22px_rgba(250,39,66,0.16),0_8px_18px_rgba(0,0,0,0.36)] hover:brightness-110 animate-ca-selected-breathe'
+                            : 'border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.075),rgba(255,255,255,0.025))] text-ca-text hover:border-white/30 hover:bg-[rgba(255,255,255,0.08)]',
+                      ].join(' ')}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+                {/* Practice — smaller secondary option */}
+                <button
+                  type="button"
+                  onClick={() => startWithMode('practice')}
+                  disabled={!isReady}
+                  title={!isReady ? 'Select 3 fighters first' : 'Practice vs CPU'}
+                  className={[
+                    'ca-mono-label ca-motion-smooth rounded-[4px] border px-3 py-2 text-[0.5rem] tracking-[0.12em] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all duration-150 hover:-translate-y-[2px] active:scale-[0.975]',
+                    !isReady
+                      ? 'border-white/8 bg-[rgba(255,255,255,0.03)] text-ca-text-3 cursor-not-allowed opacity-55'
+                      : matchMode === 'practice'
+                        ? 'border-ca-teal/50 bg-ca-teal-wash text-ca-teal animate-ca-selected-breathe'
+                        : 'border-white/14 bg-[rgba(255,255,255,0.04)] text-ca-text-2 hover:border-ca-teal/35 hover:text-ca-teal',
+                  ].join(' ')}
+                >
+                  + Practice
+                </button>
+              </div>
+              {!isReady ? (
+                <p className="mt-1.5 text-center ca-mono-label text-[0.46rem] tracking-[0.12em] text-ca-text-3">
+                  Select 3 fighters to enable match buttons
+                </p>
+              ) : null}
+            </section>
+
+            {/* ── Bottom row: C roster (left) + A player info + B team (right) ── */}
+            <section className="min-h-0 flex-1 overflow-hidden">
+              <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
+                {/* ── C. CHARACTER ROSTER — compact paginated grid ───────── */}
+                <div className="relative flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-white/14 bg-[linear-gradient(180deg,rgba(24,22,32,0.86),rgba(7,7,12,0.92))] p-3 shadow-[0_14px_34px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.055)] backdrop-blur-sm">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,rgba(250,39,66,0.22),rgba(228,230,239,0.08),rgba(5,216,189,0.18))]" />
+                  {/* Slim filter row */}
+                  <div className="flex flex-wrap items-center gap-2 rounded-[6px] border border-white/8 bg-[rgba(8,8,13,0.48)] px-2 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <input
+                      value={searchValue}
+                      onChange={(event) => { setSearchValue(event.target.value); setRosterPage(0) }}
+                      placeholder="Search"
+                      className="w-[8rem] rounded-[4px] border border-white/10 bg-[rgba(11,11,18,0.72)] px-2 py-1 text-[0.7rem] text-ca-text outline-none transition placeholder:text-ca-text-3 focus:border-ca-teal/35"
+                    />
                     <select
-                      id="prep-role"
                       value={roleFilter}
-                      onChange={(event) => setRoleFilter(event.target.value as PrepRoleFilter)}
-                      className="ca-mono-label rounded-md border border-white/10 bg-[rgba(15,15,21,0.5)] px-2 py-1.5 text-[0.46rem] text-ca-text outline-none transition focus:border-ca-teal/35"
+                      onChange={(event) => { setRoleFilter(event.target.value as PrepRoleFilter); setRosterPage(0) }}
+                      className="ca-mono-label rounded-[4px] border border-white/10 bg-[rgba(15,15,21,0.5)] px-1.5 py-1 text-[0.42rem] text-ca-text outline-none transition focus:border-ca-teal/35"
+                      title="Filter by role"
                     >
                       {roleOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
+                        <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="ca-mono-label text-[0.44rem] text-ca-text-3" htmlFor="prep-sort">
-                      Sort
-                    </label>
                     <select
-                      id="prep-sort"
                       value={sortBy}
-                      onChange={(event) => setSortBy(event.target.value as PrepSortKey)}
-                      className="ca-mono-label rounded-md border border-white/10 bg-[rgba(15,15,21,0.5)] px-2 py-1.5 text-[0.46rem] text-ca-text outline-none transition focus:border-ca-teal/35"
+                      onChange={(event) => { setSortBy(event.target.value as PrepSortKey); setRosterPage(0) }}
+                      className="ca-mono-label rounded-[4px] border border-white/10 bg-[rgba(15,15,21,0.5)] px-1.5 py-1 text-[0.42rem] text-ca-text outline-none transition focus:border-ca-teal/35"
+                      title="Sort"
                     >
                       {sortOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
+                        <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
+                    <p className="ml-auto ca-mono-label text-[0.42rem] tracking-[0.1em] text-ca-text-3">
+                      {visibleRoster.length} AVAILABLE
+                    </p>
                   </div>
-                </div>
-                <p className="ca-mono-label text-[0.46rem] text-ca-text-3">{visibleRoster.length} AVAILABLE</p>
-              </div>
 
-              <div
-                className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 overscroll-contain"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={handleRosterDrop}
-              >
-                <div className="grid auto-rows-max content-start grid-cols-5 gap-1.5 sm:grid-cols-7 lg:grid-cols-9 xl:grid-cols-10 2xl:grid-cols-11">
-                  {visibleRoster.map((entry) => {
-                    const isLocked = !unlockedFighterIds.has(entry.id)
-                    return (
-                      <RosterTile
-                        key={entry.id}
-                        entry={entry}
-                        active={selectedRosterId === entry.id}
-                        inTeam={teamIds.includes(entry.id)}
-                        locked={isLocked}
-                        lockMissionName={isLocked ? (getUnlockMissionForFighter(entry.id)?.name ?? null) : null}
-                        onClick={isLocked ? undefined : () => handleAssignCharacter(entry.id)}
-                        onDragStart={(event) => handleRosterDragStart(event, entry.id)}
-                      />
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <aside className="flex h-full min-h-0 flex-col rounded-[8px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,12,20,0.82),rgba(8,8,13,0.78))] p-2.5">
-              <PlayerInfoPanel profileName={authProfile?.display_name ?? 'PLAYER'} stats={profileStats} winRate={winRate} />
-
-              <div className="mt-3 rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] p-2.5">
-                <div className="flex items-end justify-between gap-3">
-                  <div>
-                    <p className="ca-mono-label text-[0.48rem] text-ca-text-3">Your Team</p>
-                    <h2 className="ca-display mt-1 text-[1.55rem] leading-none text-ca-text">3 Slots</h2>
+                  {/* Grid — 7 cols × 3 rows = 21 per page */}
+                  <div
+                    className="mt-2.5 min-h-0 flex-1 overflow-hidden rounded-[7px] border border-white/8 bg-[linear-gradient(180deg,rgba(7,7,12,0.74),rgba(16,15,22,0.62))] p-2 shadow-[inset_0_0_22px_rgba(0,0,0,0.28)]"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={handleRosterDrop}
+                  >
+                    <div className="grid h-full auto-rows-fr grid-cols-7 gap-2">
+                      {rosterSlice.map((entry) => {
+                        const isLocked = !unlockedFighterIds.has(entry.id)
+                        return (
+                          <RosterTile
+                            key={entry.id}
+                            entry={entry}
+                            active={selectedRosterId === entry.id}
+                            inTeam={teamIds.includes(entry.id)}
+                            locked={isLocked}
+                            lockMissionName={isLocked ? (getUnlockMissionForFighter(entry.id)?.name ?? null) : null}
+                            onClick={isLocked ? undefined : () => handleAssignCharacter(entry.id)}
+                            onDragStart={(event) => handleRosterDragStart(event, entry.id)}
+                          />
+                        )
+                      })}
+                    </div>
                   </div>
-                  <p className={['ca-mono-label text-[0.48rem]', isReady ? 'text-ca-teal' : 'text-ca-text-3'].join(' ')}>
-                    {explicitTeamIds.length}/3 READY
-                  </p>
+
+                  {/* Pagination — page arrows like Naruto-Arena */}
+                  {pageCount > 1 ? (
+                    <div className="mt-2 flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setRosterPage((p) => Math.max(0, p - 1))}
+                        disabled={currentPage === 0}
+                        className="ca-display ca-motion-smooth rounded-[4px] border border-white/12 bg-[rgba(255,255,255,0.04)] px-2 py-1 text-[0.8rem] leading-none text-ca-text transition hover:-translate-y-[2px] hover:scale-[1.08] hover:border-white/24 disabled:cursor-not-allowed disabled:opacity-35"
+                        aria-label="Previous page"
+                      >
+                        ◀
+                      </button>
+                      <span className="ca-mono-label text-[0.5rem] tracking-[0.14em] text-ca-text-2 tabular-nums">
+                        PAGE {currentPage + 1} / {pageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRosterPage((p) => Math.min(pageCount - 1, p + 1))}
+                        disabled={currentPage >= pageCount - 1}
+                        className="ca-display ca-motion-smooth rounded-[4px] border border-white/12 bg-[rgba(255,255,255,0.04)] px-2 py-1 text-[0.8rem] leading-none text-ca-text transition hover:-translate-y-[2px] hover:scale-[1.08] hover:border-white/24 disabled:cursor-not-allowed disabled:opacity-35"
+                        aria-label="Next page"
+                      >
+                        ▶
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {teamEntries.map((entry, index) => (
-                    <TeamSlotCard
-                      key={`prep-slot-${index}`}
-                      slotIndex={index}
-                      entry={entry}
-                      focused={focusedSlot === index}
-                      compact
-                      onSelect={() => handleSelectSlot(index)}
-                      onClear={() => handleClearSlot(index)}
-                      onDragStart={(event) => handleTeamSlotDragStart(event, index)}
-                      onDrop={(event) => handleTeamSlotDrop(event, index)}
-                    />
-                  ))}
-                </div>
+                {/* ── A + B. PLAYER INFO + SELECTED TEAM (right column) ──── */}
+                <aside className="relative flex min-h-0 flex-col gap-2.5 overflow-hidden rounded-[10px] border border-white/14 bg-[linear-gradient(180deg,rgba(18,16,26,0.82),rgba(5,5,9,0.88))] p-2 shadow-[0_14px_34px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(5,216,189,0.24),rgba(250,39,66,0.18),transparent)]" />
+                  {/* A. Player info */}
+                  <div className="relative shrink-0">
+                    <PlayerInfoPanel profileName={authProfile?.display_name ?? 'PLAYER'} stats={profileStats} winRate={winRate} />
+                  </div>
+
+                  {/* B. Selected team — 3 prominent slots, clearly the team you're locking in */}
+                  <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[9px] border border-white/12 bg-[linear-gradient(180deg,rgba(30,28,38,0.82),rgba(11,10,17,0.9))] p-3 shadow-[0_12px_26px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.05)]">
+                    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(5,216,189,0.32),transparent)]" />
+                    <div className="flex items-baseline justify-between gap-2">
+                      <p className="ca-display text-[1.1rem] leading-none text-ca-text">Your Team</p>
+                      <p className={['ca-mono-label text-[0.46rem] tracking-[0.14em]', isReady ? 'text-ca-teal' : 'text-ca-text-3'].join(' ')}>
+                        {explicitTeamIds.length}/3 READY
+                      </p>
+                    </div>
+                    <div className="mt-2.5 grid min-h-0 flex-1 grid-rows-3 gap-2.5">
+                      {teamEntries.map((entry, index) => (
+                        <TeamSlotCard
+                          key={`prep-slot-${index}`}
+                          slotIndex={index}
+                          entry={entry}
+                          focused={focusedSlot === index}
+                          expanded
+                          onSelect={() => handleSelectSlot(index)}
+                          onClear={() => handleClearSlot(index)}
+                          onDragStart={(event) => handleTeamSlotDragStart(event, index)}
+                          onDrop={(event) => handleTeamSlotDrop(event, index)}
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-2 ca-mono-label text-center text-[0.42rem] tracking-[0.1em] text-ca-text-3">
+                      Drag fighters here · double-click to remove
+                    </p>
+                  </div>
+                </aside>
               </div>
-            </aside>
+            </section>
           </div>
-        </section>
-      </div>
+        )
+      })()}
 
       {searching ? (
         <PrepDialog title="Matchmaking" onClose={() => { void handleCancelSearch() }}>
@@ -912,74 +1107,21 @@ function PlayerInfoPanel({
   winRate: number
 }) {
   return (
-    <div className="grid grid-cols-[2.65rem_minmax(0,1fr)] items-center gap-2 rounded-[7px] border border-white/10 bg-[rgba(8,8,13,0.58)] px-3 py-2">
-      <div className="grid h-10 w-10 place-items-center rounded-[5px] border border-ca-red/35 bg-ca-red-wash">
-        <span className="ca-display text-[0.9rem] text-ca-red">{profileName.slice(0, 2).toUpperCase()}</span>
+    <div className="relative overflow-hidden rounded-[9px] border border-white/12 bg-[linear-gradient(180deg,rgba(30,28,38,0.78),rgba(9,9,15,0.86))] px-3 py-3 shadow-[0_10px_22px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-ca-red/65" />
+      <div className="grid grid-cols-[3.1rem_minmax(0,1fr)] items-center gap-3">
+      <div className="grid h-12 w-12 place-items-center rounded-[6px] border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.16),rgba(250,39,66,0.06))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <span className="ca-display text-[1rem] text-ca-red">{profileName.slice(0, 2).toUpperCase()}</span>
       </div>
       <div className="min-w-0">
-        <p className="ca-display truncate text-[1.05rem] leading-none text-ca-text">{profileName}</p>
+        <p className="ca-display truncate text-[1.22rem] leading-none text-ca-text">{profileName}</p>
         <p className="ca-mono-label mt-1 truncate text-[0.42rem] text-ca-text-3">Lv {stats.level} {stats.rankTitle}</p>
-        <div className="mt-2 grid grid-cols-3 gap-1">
+        <div className="mt-2.5 grid grid-cols-3 gap-1.5">
           <RecordStat label="Wins" value={String(stats.wins)} compact />
           <RecordStat label="Losses" value={String(stats.losses)} compact />
           <RecordStat label="Win %" value={`${winRate}%`} compact />
         </div>
       </div>
-    </div>
-  )
-}
-
-function PrepMatchButtons({
-  isReady,
-  searching,
-  matchMode,
-  onSelectMode,
-}: {
-  isReady: boolean
-  searching: boolean
-  matchMode: BattleMatchMode
-  onSelectMode: (mode: BattleMatchMode) => void
-}) {
-  return (
-    <div className="relative overflow-hidden rounded-[8px] border border-white/10 bg-[linear-gradient(90deg,rgba(92,24,36,0.7),rgba(13,12,18,0.74)_35%,rgba(13,12,18,0.74)_65%,rgba(45,25,76,0.55))] px-3 py-2">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_50%,rgba(250,39,66,0.18),transparent_30%),radial-gradient(circle_at_88%_50%,rgba(5,216,189,0.08),transparent_34%)]" />
-      <div className="relative grid gap-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-        <div>
-          <p className="ca-mono-label text-[0.42rem] text-ca-text-3">Start Match</p>
-          <p className="ca-display mt-1 text-[1rem] leading-none text-ca-text">Choose Mode</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {battleMatchModes.map((mode) => {
-            const active = matchMode === mode
-            const launchesQueue = mode === 'ranked' || mode === 'quick'
-            const disabled = launchesQueue && (!isReady || searching)
-
-            return (
-              <button
-                key={mode}
-                type="button"
-                disabled={disabled}
-                onClick={() => onSelectMode(mode)}
-                className={[
-                  'ca-display rounded-[5px] border px-3 py-2.5 text-[0.95rem] leading-none transition duration-300 active:scale-[0.98]',
-                  active
-                    ? mode === 'practice'
-                      ? 'border-ca-teal/45 bg-ca-teal-wash text-ca-teal shadow-[0_0_0_1px_rgba(5,216,189,0.12)]'
-                      : 'border-ca-red/45 bg-ca-red-wash text-ca-text shadow-[0_0_0_1px_rgba(250,39,66,0.12)]'
-                    : 'border-white/10 bg-[rgba(255,255,255,0.04)] text-ca-text-2 hover:border-white/20 hover:text-ca-text',
-                  disabled ? 'cursor-not-allowed opacity-45' : '',
-                ].join(' ')}
-              >
-                {getModeButtonLabel(mode)}
-              </button>
-            )
-          })}
-        </div>
-
-        <p className={['ca-mono-label rounded-[5px] border px-2 py-2 text-[0.46rem]', isReady ? 'border-ca-teal/25 bg-ca-teal-wash text-ca-teal' : 'border-white/10 bg-white/5 text-ca-text-3'].join(' ')}>
-          {isReady ? 'TEAM READY' : 'SELECT 3 FIGHTERS'}
-        </p>
       </div>
     </div>
   )
@@ -1273,143 +1415,9 @@ function SearchingPanel({
 
 function RecordStat({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={['rounded-[6px] border border-white/8 bg-[rgba(255,255,255,0.035)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', compact ? 'px-1.5 py-1.5' : 'px-2.5 py-2.5'].join(' ')}>
+    <div className={['rounded-[6px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', compact ? 'px-1.5 py-1.5' : 'px-2.5 py-2.5'].join(' ')}>
       <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
       <p className={['ca-display leading-none text-ca-text', compact ? 'mt-1 text-[0.88rem]' : 'mt-1.5 text-[1.1rem]'].join(' ')}>{value}</p>
-    </div>
-  )
-}
-
-function SelectedFighterPanel({
-  entry,
-  selectedAbility,
-  selectedAbilityId,
-  onSelectAbility,
-}: {
-  entry: BattlePrepRosterEntry
-  selectedAbility: BattleAbilityTemplate
-  selectedAbilityId: string | null
-  onSelectAbility: (abilityId: string) => void
-}) {
-  const abilities = entry.battleTemplate.abilities.concat(entry.battleTemplate.ultimate)
-  const style = rarityStyles[entry.rarity]
-  const portraitSrc = normalizeBattleAssetSrc(entry.battleTemplate.boardPortraitSrc)
-
-  return (
-    <div className="animate-ca-fade-in">
-      <div className="relative overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(135deg,rgba(228,230,239,0.07),rgba(13,12,18,0.78))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(250,39,66,0.12),transparent_32%),radial-gradient(circle_at_88%_10%,rgba(5,216,189,0.08),transparent_36%)]" />
-        <div className="relative grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem] lg:items-start">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className="ca-mono-label rounded-[3px] border px-2 py-1 text-[0.42rem]"
-                style={{ borderColor: style.border, background: style.wash, color: style.text }}
-              >
-                {entry.gradeLabel}
-              </span>
-              <span className="ca-mono-label rounded-[3px] border border-white/10 bg-[rgba(255,255,255,0.03)] px-2 py-1 text-[0.42rem] text-ca-text-3">
-                {entry.role}
-              </span>
-            </div>
-
-            <h2 className="ca-display mt-2 text-[2.4rem] leading-[0.88] text-ca-text sm:text-[2.85rem]">{entry.name}</h2>
-            <p className="mt-1.5 max-w-3xl text-[0.9rem] leading-5 text-ca-text-2">{entry.passiveLabel}</p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {abilities.map((ability) => {
-                const active = selectedAbilityId === ability.id
-                return (
-                  <button
-                    key={ability.id}
-                    type="button"
-                    onClick={() => onSelectAbility(ability.id)}
-                    className={[
-                      'group relative h-[4rem] w-[4rem] overflow-hidden rounded-[3px] border transition duration-300',
-                      active
-                        ? 'border-ca-red/55 shadow-[0_0_0_1px_rgba(250,39,66,0.22),0_12px_24px_rgba(250,39,66,0.14)]'
-                        : 'border-white/12 bg-[rgba(255,255,255,0.035)] hover:border-white/24 hover:-translate-y-[1px]',
-                    ].join(' ')}
-                    aria-label={ability.name}
-                  >
-                    {normalizeBattleAssetSrc(ability.icon.src) ? (
-                      <img src={normalizeBattleAssetSrc(ability.icon.src)} alt={ability.name} className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-[1.035]" />
-                    ) : (
-                      <div className="grid h-full w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
-                        <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.icon.label}</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(0,0,0,0.2))]" />
-                    {active ? <div className="absolute inset-x-0 bottom-0 h-[3px] bg-ca-red" /> : null}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="relative min-h-[9.75rem] w-full max-w-[12rem] justify-self-end overflow-hidden rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,28,0.7),rgba(8,8,12,0.72))]">
-            <div
-              className="pointer-events-none absolute inset-0"
-              style={{ background: `radial-gradient(circle at 50% 25%, ${style.wash}, transparent 68%)` }}
-            />
-            {portraitSrc ? (
-              <img
-                src={portraitSrc}
-                alt={entry.name}
-                className="relative h-[10.75rem] w-full object-contain object-center"
-                draggable={false}
-              />
-            ) : (
-              <div className="relative grid h-[10.75rem] place-items-center">
-                <span className="ca-display text-[3rem]" style={{ color: style.text }}>{entry.battleTemplate.shortName[0]}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="relative mt-2 overflow-hidden rounded-[7px] border border-white/10 bg-[linear-gradient(180deg,rgba(13,13,19,0.86),rgba(9,9,14,0.72))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-        <div
-          className="pointer-events-none absolute inset-y-0 left-0 w-1"
-          style={{ background: `linear-gradient(180deg, ${style.text}, rgba(255,255,255,0))` }}
-        />
-        <div className="relative grid gap-3 md:grid-cols-[minmax(0,1fr)_7.5rem] md:items-stretch">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-[var(--font-display-alt)] text-[1.35rem] font-extrabold leading-none text-ca-red sm:text-[1.55rem]">{selectedAbility.name}</p>
-                <p className="mt-2 max-w-4xl text-[0.92rem] leading-5 text-ca-text-2">{selectedAbility.description}</p>
-              </div>
-              <div className="min-w-[5rem] rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.035)] px-2 py-1.5">
-                <p className="ca-mono-label text-[0.36rem] text-ca-text-3">Energy</p>
-                <div className="mt-1"><EnergyCostRow cost={getAbilityEnergyCost(selectedAbility)} compact /></div>
-              </div>
-            </div>
-
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <MetaPill label="Classes">
-                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{formatAbilityClasses(selectedAbility)}</span>
-              </MetaPill>
-              <MetaPill label="Target">
-                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{getTargetLabel(selectedAbility)}</span>
-              </MetaPill>
-              <MetaPill label="Cooldown">
-                <span className="ca-mono-label text-[0.48rem] text-ca-text-2">{selectedAbility.cooldown || 'NONE'}</span>
-              </MetaPill>
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-[4px] border border-white/10 bg-[rgba(255,255,255,0.04)]">
-            {normalizeBattleAssetSrc(selectedAbility.icon.src) ? (
-              <img src={normalizeBattleAssetSrc(selectedAbility.icon.src)} alt={selectedAbility.name} className="h-full min-h-[7.25rem] w-full object-cover object-center" />
-            ) : (
-              <div className="grid h-full min-h-[7.25rem] w-full place-items-center bg-[linear-gradient(180deg,rgba(20,20,28,0.95),rgba(8,8,12,0.98))]">
-                <span className="ca-mono-label text-[0.7rem] text-ca-text-2">{selectedAbility.icon.label}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -1441,15 +1449,25 @@ function RosterTile({
       onDragStart={locked ? undefined : onDragStart}
       disabled={locked}
       title={locked && lockMissionName ? `Locked — complete mission: ${lockMissionName}` : undefined}
-      className="group relative overflow-hidden rounded-[4px] border bg-[rgba(18,18,26,0.72)] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-150 hover:-translate-y-[1px] active:scale-[0.94]"
+      className={[
+        'group ca-motion-smooth relative overflow-hidden rounded-[5px] border bg-[linear-gradient(180deg,rgba(30,28,38,0.72),rgba(12,12,18,0.86))] text-left shadow-[0_4px_10px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.05)] transition duration-150 hover:-translate-y-[2px] hover:scale-[1.015] hover:brightness-110 active:scale-[0.94]',
+        active && !locked ? 'animate-ca-selected-breathe' : '',
+      ].join(' ')}
       style={{
         borderColor: locked ? 'rgba(228,230,239,0.06)' : active ? style.border : inTeam ? 'rgba(5,216,189,0.34)' : 'rgba(228,230,239,0.1)',
-        boxShadow: active && !locked ? `0 0 0 1px ${style.border}, 0 10px 18px rgba(0,0,0,0.18)` : undefined,
+        boxShadow: active && !locked ? `0 0 0 1px ${style.border}, 0 10px 18px rgba(0,0,0,0.28)` : undefined,
       }}
     >
       <div className={locked ? 'opacity-30 grayscale' : undefined}>
         <PortraitThumb entry={entry} sizeClass="aspect-square w-full" labelClass="text-[0.3rem]" bordered={false} showLabel />
       </div>
+      {!locked ? (
+        <span
+          className="pointer-events-none absolute inset-y-0 left-0 w-[3px] shadow-[0_0_10px_currentColor]"
+          style={{ background: style.text, opacity: 0.85 }}
+          aria-hidden
+        />
+      ) : null}
       {locked ? (
         <div className="absolute inset-0 grid place-items-center bg-[rgba(0,0,0,0.35)]">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-[1.1rem] w-[1.1rem] text-white/40">
@@ -1472,6 +1490,7 @@ function TeamSlotCard({
   entry,
   focused,
   compact = false,
+  expanded = false,
   onSelect,
   onClear,
   onDragStart,
@@ -1481,6 +1500,7 @@ function TeamSlotCard({
   entry: BattlePrepRosterEntry | null
   focused: boolean
   compact?: boolean
+  expanded?: boolean
   onSelect: () => void
   onClear: () => void
   onDragStart: (event: DragEvent) => void
@@ -1496,13 +1516,13 @@ function TeamSlotCard({
         onDragOver={(event) => event.preventDefault()}
         onDrop={onDrop}
         className={[
-          'w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] text-left transition duration-150',
-          compact ? 'h-[4.75rem] px-2 py-2' : 'px-3 py-3',
-          focused ? 'border-ca-teal/35' : 'border-white/10 hover:border-white/18',
+          'ca-motion-smooth w-full rounded-[5px] border border-dashed bg-[rgba(255,255,255,0.02)] text-left transition duration-150 hover:-translate-y-[2px] hover:bg-[rgba(255,255,255,0.04)]',
+          expanded ? 'h-full min-h-[5.5rem] px-3 py-3' : compact ? 'h-[5.35rem] px-2 py-2.5' : 'px-3 py-3',
+          focused ? 'border-ca-teal/42 shadow-[0_0_0_1px_rgba(5,216,189,0.16)] animate-ca-selected-breathe' : 'border-white/10 hover:border-white/20',
         ].join(' ')}
       >
         <p className="ca-mono-label text-[0.4rem] text-ca-text-3">{label}</p>
-        <p className={['ca-display mt-1.5 leading-none text-ca-text-disabled', compact ? 'text-[1rem]' : 'text-[1.32rem]'].join(' ')}>Empty</p>
+        <p className={['ca-display mt-1.5 leading-none text-ca-text-disabled', expanded ? 'text-[1.45rem]' : compact ? 'text-[1rem]' : 'text-[1.32rem]'].join(' ')}>Empty</p>
       </button>
     )
   }
@@ -1521,17 +1541,26 @@ function TeamSlotCard({
       onDrop={onDrop}
       title="Double-click to remove. Drag to reorder or drop back into the roster."
       className={[
-        'w-full rounded-[5px] border bg-[rgba(255,255,255,0.03)] text-left transition duration-150',
-        compact ? 'h-[4.75rem] overflow-hidden px-2 py-2' : 'px-2.5 py-2.5',
-        focused ? 'border-ca-teal/35 shadow-[0_0_0_1px_rgba(5,216,189,0.16)]' : 'border-white/10 hover:border-white/18',
+        'ca-motion-smooth w-full rounded-[6px] border bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.018))] text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] transition duration-150 hover:-translate-y-[2px] hover:bg-[rgba(255,255,255,0.05)]',
+        expanded ? 'h-full min-h-[5.5rem] overflow-hidden px-3 py-3' : compact ? 'h-[5.35rem] overflow-hidden px-2 py-2.5' : 'px-2.5 py-2.5',
+        focused ? 'border-ca-teal/42 shadow-[0_0_0_1px_rgba(5,216,189,0.22),0_0_18px_rgba(5,216,189,0.12)] animate-ca-selected-breathe' : 'border-white/10 hover:border-white/20',
       ].join(' ')}
     >
-      {compact ? (
-        <div className="grid h-full min-h-0 grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-2">
-          <PortraitThumb entry={entry} sizeClass="h-[3.25rem] w-[3.25rem]" labelClass="text-[0.26rem]" bordered={false} />
+      {expanded ? (
+        <div className="grid h-full min-h-0 grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-3">
+          <PortraitThumb entry={entry} sizeClass="h-[4.25rem] w-[4.25rem]" labelClass="text-[0.28rem]" bordered={false} />
+          <div className="min-w-0">
+            <p className="ca-mono-label text-[0.38rem] text-ca-text-3">{label}</p>
+            <p className="ca-display mt-1 truncate text-[1.18rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
+            <p className="mt-1 truncate text-[0.66rem] leading-none text-ca-text-3">{entry.role}</p>
+          </div>
+        </div>
+      ) : compact ? (
+        <div className="grid h-full min-h-0 grid-cols-[3.55rem_minmax(0,1fr)] items-center gap-2">
+          <PortraitThumb entry={entry} sizeClass="h-[3.55rem] w-[3.55rem]" labelClass="text-[0.26rem]" bordered={false} />
           <div className="min-w-0">
             <p className="ca-mono-label text-[0.36rem] text-ca-text-3">{label}</p>
-            <p className="ca-display mt-1 truncate text-[0.92rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
+            <p className="ca-display mt-1 truncate text-[1rem] leading-none text-ca-text">{entry.battleTemplate.shortName}</p>
           </div>
         </div>
       ) : (
@@ -1546,25 +1575,3 @@ function TeamSlotCard({
     </button>
   )
 }
-
-function MetaPill({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="rounded-[5px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.018))] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <p className="ca-mono-label text-[0.38rem] text-ca-text-3">{label}</p>
-      <div className="mt-2 min-h-[1rem]">{children}</div>
-    </div>
-  )
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
