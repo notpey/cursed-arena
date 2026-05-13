@@ -369,12 +369,25 @@ function runPreDamageReactionWindow(
           state.round,
           'system',
           'gold',
-          `${target.shortName} countered ${actor.shortName}.`,
+          `${target.shortName} countered ${actor.shortName}'s ${ability.name}, canceled the skill${counterDamage > 0 ? `, and returned ${counterDamage} damage` : ''}.`,
           target.instanceId,
           actor.instanceId,
           counterDamage || undefined,
           counter.sourceAbilityId ?? ability.id,
         )
+        makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+          actorId: target.instanceId,
+          targetId: actor.instanceId,
+          team: actor.team,
+          abilityId: ability.id,
+          amount: counterDamage || undefined,
+          tags: ['counter', ...ability.classes],
+          meta: {
+            reason: 'counter',
+            canceledAbilityId: ability.id,
+            returnedDamage: counterDamage,
+          },
+        })
         result.cancelAction = true
         return result
       }
@@ -394,12 +407,24 @@ function runPreDamageReactionWindow(
           state.round,
           'system',
           'teal',
-          `${target.shortName} reflected ${actor.shortName}'s skill.`,
+          `${target.shortName} reflected ${actor.shortName}'s ${ability.name}; ${actor.shortName} received the redirected effect.`,
           target.instanceId,
           actor.instanceId,
           undefined,
           reflect.sourceAbilityId ?? ability.id,
         )
+        makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+          actorId: target.instanceId,
+          targetId: actor.instanceId,
+          team: actor.team,
+          abilityId: ability.id,
+          tags: ['reflect', ...ability.classes],
+          meta: {
+            reason: 'reflect',
+            reflectedFromTargetId: target.instanceId,
+            reflectedToTargetId: actor.instanceId,
+          },
+        })
       }
     }
   }
@@ -790,13 +815,13 @@ function firePassives(
 }
 
 
-function resolveEffectTargets(
+export function resolveEffectTargets(
   targetMode: SkillEffect['target'],
   actor: BattleFighterState,
   selectedTarget: BattleFighterState | null,
   allies: BattleFighterState[],
   enemies: BattleFighterState[],
-  state?: BattleState,
+  state: BattleState,
   linkedTargetId?: string,
 ): BattleFighterState[] {
   switch (targetMode) {
@@ -811,21 +836,23 @@ function resolveEffectTargets(
     case 'other-enemies':
       return enemies.filter((enemy) => enemy.instanceId !== selectedTarget?.instanceId)
     case 'attacker': {
-      if (!state) return []
       const attackerId = actor.lastAttackerId
       if (!attackerId) return []
       const attacker = getFighterById(state, attackerId)
       return attacker && isAlive(attacker) ? [attacker] : []
     }
     case 'linked-target': {
-      if (!state || !linkedTargetId) return []
+      if (!linkedTargetId) return []
       const linkedTarget = getFighterById(state, linkedTargetId)
       return linkedTarget && isAlive(linkedTarget) ? [linkedTarget] : []
     }
     case 'random-enemy': {
       const alive = enemies.filter(isAlive)
       if (alive.length === 0) return []
-      const seed = state ? `${state.battleSeed}:random-enemy:${state.round}` : String(Math.random())
+      if (!state) {
+        throw new Error('Battle state is required for deterministic random-enemy target resolution.')
+      }
+      const seed = `${state.battleSeed}:random-enemy:${state.round}`
       const rng = createSeededRandom(seed)
       const index = Math.floor(rng() * alive.length)
       return [alive[index]]
@@ -1201,6 +1228,17 @@ function resolveEffects(
       }
 
       if (isEffectBlocked(effectTarget, effect, effectActor.instanceId)) {
+        makeEvent(
+          ctx,
+          state.round,
+          'system',
+          'frost',
+          `${effectTarget.shortName}'s immunity blocked ${effectActor.shortName}'s ${effect.type} effect.`,
+          effectActor.instanceId,
+          effectTarget.instanceId,
+          undefined,
+          abilityId,
+        )
         makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
           actorId: effectActor.instanceId,
           targetId: effectTarget.instanceId,
@@ -1648,10 +1686,25 @@ function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
 }
 function resolveAction(state: BattleState, ctx: ResolutionContext, command: QueuedBattleAction) {
   const actor = getFighterById(state, command.actorId)
-  if (!actor || !isAlive(actor)) return
+  if (!actor) return
 
   const ability = getAbilityById(actor, command.abilityId)
   if (!ability) return
+
+  if (!isAlive(actor)) {
+    makeEvent(ctx, state.round, 'system', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because they were defeated before acting.`, actor.instanceId, undefined, undefined, ability.id)
+    makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+      actorId: actor.instanceId,
+      team: actor.team,
+      abilityId: ability.id,
+      tags: ability.classes,
+      meta: {
+        reason: 'ko_before_resolution',
+        canceledAbilityId: ability.id,
+      },
+    })
+    return
+  }
 
   // Reject commands where the actor's actual team does not match the command's
   // declared team.  All other structural checks (target validity, energy,
@@ -1664,13 +1717,48 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   }
 
   if (hasModifierBoolean(state, actor, 'canAct', false, { statusKind: 'stun' })) {
-    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName} is stunned and passed the turn.`, actor.instanceId)
+    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because they were stunned before acting.`, actor.instanceId, undefined, undefined, ability.id)
+    makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+      actorId: actor.instanceId,
+      team: actor.team,
+      abilityId: ability.id,
+      tags: ability.classes,
+      meta: {
+        reason: 'stun_before_resolution',
+        canceledAbilityId: ability.id,
+      },
+    })
     removeModifiersFromFighter(state, ctx, actor, { statusKind: 'stun' }, actor.instanceId, ability.id)
     return
   }
 
   if (ability.id !== PASS_ABILITY_ID && isAbilityClassStunned(actor, ability)) {
-    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s ${ability.name} is sealed and cannot be used.`, actor.instanceId, undefined, undefined, ability.id)
+    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because its class was sealed.`, actor.instanceId, undefined, undefined, ability.id)
+    makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+      actorId: actor.instanceId,
+      team: actor.team,
+      abilityId: ability.id,
+      tags: ability.classes,
+      meta: {
+        reason: 'class_lock_before_resolution',
+        canceledAbilityId: ability.id,
+      },
+    })
+    return
+  }
+
+  if (ability.id !== PASS_ABILITY_ID && isAbilityIntentStunned(actor, ability)) {
+    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because its intent was stunned.`, actor.instanceId, undefined, undefined, ability.id)
+    makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+      actorId: actor.instanceId,
+      team: actor.team,
+      abilityId: ability.id,
+      tags: ability.classes,
+      meta: {
+        reason: 'intent_lock_before_resolution',
+        canceledAbilityId: ability.id,
+      },
+    })
     return
   }
 
@@ -1708,6 +1796,9 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       },
       tags: ability.classes,
     })
+    if (spent && countEnergyCost(payableCost) > 0) {
+      makeEvent(ctx, state.round, 'system', 'gold', `${actor.shortName}'s team spent ${formatEnergyAmounts(spent)} cursed energy for ${ability.name}.`, actor.instanceId, undefined, countEnergyCost(payableCost), ability.id)
+    }
     applied.forEach((modifier) => {
       makeRuntimeEvent(ctx, state.round, 'ability_cost_modified', {
         actorId: actor.instanceId,
@@ -1759,6 +1850,20 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
       ? getTeam(state, actor.team).filter(isAlive)
       : singleTarget && isAlive(singleTarget) ? [singleTarget] : []
 
+  if (requiresValidatedSingleTarget && !singleTarget) {
+    makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName}'s ${ability.name} had no valid target and did nothing.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
+    makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+      actorId: actor.instanceId,
+      targetId: command.targetId ?? undefined,
+      team: actor.team,
+      abilityId: ability.id,
+      tags: ability.classes,
+      meta: {
+        reason: 'no_valid_target',
+      },
+    })
+  }
+
   runEffectReactionGuards(state, ctx, actor, 'onAbilityUse', actor, ability)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityUse', ability)
   for (const tgt of allTargeted) {
@@ -1767,6 +1872,8 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   const preDamageReaction = runPreDamageReactionWindow(state, ctx, actor, ability, allTargeted)
   if (!preDamageReaction.cancelAction && isAlive(actor)) {
     resolveEffects(state, ctx, actor, singleTarget, ability.effects ?? [], ability.id, ability.classes, preDamageReaction)
+  } else if (preDamageReaction.cancelAction) {
+    makeEvent(ctx, state.round, 'system', 'gold', `${actor.shortName}'s ${ability.name} was interrupted before its effects resolved.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
   }
   firePassives(state, ctx, actor, singleTarget, 'onAbilityResolve', ability)
 

@@ -4,8 +4,8 @@
  * These helpers do not touch React, the engine, or persistence — they exist so
  * the manual Random-Energy allocation rules can be unit-tested in isolation.
  *
- * Terminology note: this is Cursed Arena. We use "Random Energy" exclusively;
- * the word "chakra" is never used.
+ * Terminology note: this is Cursed Arena. Use "Random Energy" for the
+ * flexible-cost resource.
  */
 
 import {

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { createEnergyAmounts, totalEnergyInPool } from '@/features/battle/energy'
 import { battleRoster } from '@/features/battle/data'
 import {
@@ -13,6 +13,7 @@ import {
   getQueueAbilityBlockReason,
   getTeam,
   getValidTargetIds,
+  resolveEffectTargets,
   resolveInterleavedPlayerTurnTimeline,
   resolveTeamTurn,
   resolveTeamTurnTimeline,
@@ -63,6 +64,41 @@ function sampleAbility(overrides: Partial<BattleAbilityTemplate>): BattleAbility
 }
 
 describe('battle engine scenarios', () => {
+  test('random-enemy effect targeting is deterministic for the same seed and state', () => {
+    const left = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const right = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    left.battleSeed = 'random-target-test'
+    right.battleSeed = 'random-target-test'
+    left.round = 3
+    right.round = 3
+
+    const leftTarget = resolveEffectTargets('random-enemy', left.playerTeam[0], null, left.playerTeam, left.enemyTeam, left)[0]
+    const rightTarget = resolveEffectTargets('random-enemy', right.playerTeam[0], null, right.playerTeam, right.enemyTeam, right)[0]
+
+    expect(leftTarget?.templateId).toBe(rightTarget?.templateId)
+  })
+
+  test('random-enemy effect targeting fails instead of falling back to Math.random without state', () => {
+    const state = createChargedBattleState({
+      playerTeamIds: ['yuji', 'nobara', 'megumi'],
+      enemyTeamIds: ['yuji', 'nobara', 'megumi'],
+    })
+    const randomSpy = vi.spyOn(Math, 'random')
+
+    expect(() => {
+      resolveEffectTargets('random-enemy', state.playerTeam[0], null, state.playerTeam, state.enemyTeam, undefined as unknown as BattleState)
+    }).toThrow('Battle state is required for deterministic random-enemy target resolution.')
+    expect(randomSpy).not.toHaveBeenCalled()
+
+    randomSpy.mockRestore()
+  })
+
   test('ability intent helper infers and overrides hidden intent', () => {
     expect(getAbilityIntent(sampleAbility({ kind: 'attack' }))).toBe('harmful')
     expect(getAbilityIntent(sampleAbility({ kind: 'heal' }))).toBe('helpful')
@@ -496,7 +532,7 @@ describe('battle engine scenarios', () => {
       event.abilityId === actor.abilities[0].id,
     )).toBe(true)
     expect(damaged.events.some((event) =>
-      event.message === `${actor.shortName} damaged ${target.shortName}'s shield by 5.` &&
+      event.message === `${actor.shortName} damaged ${target.shortName}'s shield by 5; 7 shield remains.` &&
       event.actorId === actor.instanceId &&
       event.targetId === target.instanceId &&
       event.amount === 5 &&
@@ -555,7 +591,12 @@ describe('battle engine scenarios', () => {
     expect(broken.runtimeEvents.some((event) =>
       event.type === 'shield_broken' &&
       event.targetId === breakTarget.instanceId &&
-      event.amount === 0,
+      event.amount === 4 &&
+      event.meta?.trigger === 'onShieldBroken',
+    )).toBe(true)
+    expect(broken.events.some((event) =>
+      event.message.includes(`${breakTarget.shortName}'s Fragile Guard broke after losing 4 shield`) &&
+      event.amount === 4,
     )).toBe(true)
     expect(broken.events.some((event) =>
       event.message === `${breakActor.shortName} damaged ${breakTarget.shortName}'s shield by 4.` &&
@@ -727,6 +768,16 @@ describe('battle engine scenarios', () => {
     )
     expect(getFighter(countered.state, 'player', 'yuji').hp).toBe(80)
     expect(getFighter(countered.state, 'enemy', 'yuji').hp).toBe(100)
+    expect(countered.events.some((event) =>
+      event.message.includes(`countered ${counterAttacker.shortName}'s ${counterAttacker.abilities[0].name}`) &&
+      event.message.includes('canceled the skill') &&
+      event.message.includes('returned 20 damage'),
+    )).toBe(true)
+    expect(countered.runtimeEvents.some((event) =>
+      event.type === 'ability_interrupted' &&
+      event.meta?.reason === 'counter' &&
+      event.meta?.canceledAbilityId === counterAttacker.abilities[0].id,
+    )).toBe(true)
 
     const reflectState = createChargedBattleState()
     const reflectYuji = getFighter(reflectState, 'enemy', 'yuji')
@@ -748,6 +799,76 @@ describe('battle engine scenarios', () => {
     )
     expect(getFighter(reflected.state, 'player', 'yuji').hp).toBe(80)
     expect(getFighter(reflected.state, 'enemy', 'yuji').hp).toBe(100)
+    expect(reflected.events.some((event) =>
+      event.message.includes(`reflected ${reflectAttacker.shortName}'s ${reflectAttacker.abilities[0].name}`) &&
+      event.message.includes('received the redirected effect'),
+    )).toBe(true)
+    expect(reflected.runtimeEvents.some((event) =>
+      event.type === 'effect_ignored' &&
+      event.meta?.reason === 'reflect' &&
+      event.meta?.reflectedToTargetId === reflectAttacker.instanceId,
+    )).toBe(true)
+  })
+
+  test('KO-before-resolution cancels queued action with a visible interruption event', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'player', 'yuji')
+    const nobara = getFighter(state, 'player', 'nobara')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    yuji.abilities[0].targetRule = 'ally-single'
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'damage', power: 200, target: 'inherit' }]
+    nobara.abilities[0].targetRule = 'enemy-single'
+    nobara.abilities[0].energyCost = {}
+    nobara.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    const commands: Record<string, QueuedBattleAction> = {
+      [yuji.instanceId]: { actorId: yuji.instanceId, team: 'player', abilityId: yuji.abilities[0].id, targetId: nobara.instanceId },
+      [nobara.instanceId]: { actorId: nobara.instanceId, team: 'player', abilityId: nobara.abilities[0].id, targetId: enemyYuji.instanceId },
+    }
+    const result = resolveTeamTurnTimeline(state, commands, 'player', [yuji.instanceId, nobara.instanceId])
+
+    expect(getFighter(result.state, 'player', 'nobara').hp).toBe(0)
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(100)
+    expect(result.steps.flatMap((step) => step.events).some((event) =>
+      event.message.includes(`${nobara.shortName}'s queued ${nobara.abilities[0].name} was canceled`) &&
+      event.message.includes('defeated before acting'),
+    )).toBe(true)
+    expect(result.steps.flatMap((step) => step.runtimeEvents).some((event) =>
+      event.type === 'ability_interrupted' &&
+      event.meta?.reason === 'ko_before_resolution' &&
+      event.abilityId === nobara.abilities[0].id,
+    )).toBe(true)
+  })
+
+  test('stun-before-resolution cancels queued action with a visible interruption event', () => {
+    const state = createChargedBattleState()
+    const yuji = getFighter(state, 'player', 'yuji')
+    const nobara = getFighter(state, 'player', 'nobara')
+    const enemyYuji = getFighter(state, 'enemy', 'yuji')
+    yuji.abilities[0].targetRule = 'ally-single'
+    yuji.abilities[0].energyCost = {}
+    yuji.abilities[0].effects = [{ type: 'stun', duration: 1, target: 'inherit' }]
+    nobara.abilities[0].targetRule = 'enemy-single'
+    nobara.abilities[0].energyCost = {}
+    nobara.abilities[0].effects = [{ type: 'damage', power: 20, target: 'inherit' }]
+
+    const commands: Record<string, QueuedBattleAction> = {
+      [yuji.instanceId]: { actorId: yuji.instanceId, team: 'player', abilityId: yuji.abilities[0].id, targetId: nobara.instanceId },
+      [nobara.instanceId]: { actorId: nobara.instanceId, team: 'player', abilityId: nobara.abilities[0].id, targetId: enemyYuji.instanceId },
+    }
+    const result = resolveTeamTurnTimeline(state, commands, 'player', [yuji.instanceId, nobara.instanceId])
+
+    expect(getFighter(result.state, 'enemy', 'yuji').hp).toBe(100)
+    expect(result.steps.flatMap((step) => step.events).some((event) =>
+      event.message.includes(`${nobara.shortName}'s queued ${nobara.abilities[0].name} was canceled`) &&
+      event.message.includes('stunned before acting'),
+    )).toBe(true)
+    expect(result.steps.flatMap((step) => step.runtimeEvents).some((event) =>
+      event.type === 'ability_interrupted' &&
+      event.meta?.reason === 'stun_before_resolution' &&
+      event.abilityId === nobara.abilities[0].id,
+    )).toBe(true)
   })
 
   test('modifyAbilityCost effects can temporarily rewrite a specific skill cost', () => {
@@ -897,6 +1018,7 @@ describe('battle engine scenarios', () => {
 
     expect(getStatusDuration(getFighter(blocked.state, 'enemy', 'yuji').statuses, 'stun')).toBe(0)
     expect(blocked.runtimeEvents.some((event) => event.type === 'effect_ignored')).toBe(true)
+    expect(blocked.events.some((event) => event.message.includes('immunity blocked'))).toBe(true)
   })
 
   test('onDefeatEnemy passives can react to kills', () => {

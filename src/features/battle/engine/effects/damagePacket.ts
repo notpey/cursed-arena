@@ -76,7 +76,7 @@ export function applyDamagePacket(
       target.stateCounters.sukuna_bonus_hp = (target.stateCounters.sukuna_bonus_hp ?? 0) + 5
       emitCounterChange(ctx, state.round, target, 'sukuna_bonus_hp', target.stateCounters.sukuna_bonus_hp ?? 0, actor?.instanceId, packet.abilityId)
     }
-    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName} nullified ${actor?.shortName ?? 'the attack'}.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
+    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s invulnerability blocked ${actor?.shortName ?? 'the attack'}'s damage.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
     makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
       actorId: packet.sourceActorId,
       targetId: packet.targetId,
@@ -102,6 +102,7 @@ export function applyDamagePacket(
       amount: absorbed,
       label: target.shield.label,
       tags: target.shield.tags,
+      carryoverDamage: remainingDamage,
     })
 
     if (target.shield.amount <= 0) {
@@ -113,7 +114,20 @@ export function applyDamagePacket(
         amount: absorbed,
         label: brokenShield.label,
         tags: brokenShield.tags,
+        carryoverDamage: remainingDamage,
+        trigger: 'onShieldBroken',
       })
+      makeEvent(
+        ctx,
+        state.round,
+        'system',
+        'gold',
+        `${target.shortName}'s ${brokenShield.label} broke after losing ${absorbed} shield${remainingDamage > 0 ? `; ${remainingDamage} damage carried through` : ''}.`,
+        actor?.instanceId,
+        target.instanceId,
+        absorbed,
+        packet.abilityId,
+      )
       firePassives(
         state,
         ctx,
@@ -137,7 +151,7 @@ export function applyDamagePacket(
   }
 
   if (remainingDamage <= 0) {
-    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s shield absorbed the hit.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
+    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s shield absorbed the hit with no carryover damage.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
     makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
       actorId: packet.sourceActorId,
       targetId: packet.targetId,

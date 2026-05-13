@@ -15,6 +15,7 @@ type TimelineFocus = {
 export function BattleBoard({
   state,
   queued,
+  actionOrder = [],
   selectedActorId,
   selectedAbility,
   selectedTargetId,
@@ -33,9 +34,13 @@ export function BattleBoard({
   timelineFocus = null,
   playerIsActiveSide = true,
   presentationMode = 'standard',
+  inspectedEnemyFighterId = null,
+  onInspectEnemy,
+  onClearEnemyInspect,
 }: {
   state: BattleState
   queued: Record<string, QueuedBattleAction>
+  actionOrder?: string[]
   selectedActorId: string | null
   selectedAbility: BattleAbilityTemplate | null
   selectedTargetId: string | null
@@ -55,23 +60,30 @@ export function BattleBoard({
   /** Whether the player side is currently the active/commanding side. */
   playerIsActiveSide?: boolean
   presentationMode?: BattlePresentationMode
+  inspectedEnemyFighterId?: string | null
+  onInspectEnemy?: (fighterId: string) => void
+  onClearEnemyInspect?: () => void
 }) {
   useEffect(() => {
     setActiveBattleStateForPips(state)
     return () => setActiveBattleStateForPips(null)
   }, [state])
 
+  const queuedActorOrder = actionOrder.filter((actorId) => queued[actorId])
+
   return (
     <section
       key={playerIsActiveSide ? 'player-side' : 'enemy-side'}
       className={[
-        'relative flex flex-1 flex-col justify-center overflow-hidden rounded-[0.25rem] border bg-[radial-gradient(circle_at_50%_42%,rgba(233,235,245,0.02),transparent_42%),linear-gradient(180deg,rgba(8,7,13,0.5),rgba(4,4,8,0.4))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_36px_rgba(0,0,0,0.22)] animate-ca-control-shift sm:px-4 transition-colors duration-500',
+        'relative flex flex-1 flex-col justify-center overflow-visible rounded-[0.25rem] border bg-[radial-gradient(circle_at_50%_42%,rgba(233,235,245,0.02),transparent_42%),linear-gradient(180deg,rgba(8,7,13,0.5),rgba(4,4,8,0.4))] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_36px_rgba(0,0,0,0.22)] animate-ca-control-shift sm:px-4 transition-colors duration-500',
         playerIsActiveSide
           ? 'border-ca-teal/36 shadow-[inset_0_0_34px_rgba(6,220,194,0.12),inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(6,220,194,0.07)]'
           : 'border-ca-red/36 shadow-[inset_0_0_34px_rgba(252,43,71,0.13),inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(252,43,71,0.07)]',
       ].join(' ')}
     >
-      <div className="pointer-events-none absolute -inset-x-20 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.035)_34%,rgba(6,220,194,0.045)_49%,rgba(255,255,255,0.035)_56%,transparent_70%)] opacity-85 animate-ca-energy-sweep" />
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[0.25rem]">
+        <div className="absolute inset-x-0 inset-y-0 bg-[linear-gradient(105deg,transparent_0%,rgba(252,43,71,0.035)_34%,rgba(6,220,194,0.045)_49%,rgba(255,255,255,0.035)_56%,transparent_70%)] opacity-85 animate-ca-energy-sweep" />
+      </div>
       <div
         className={[
           'pointer-events-none absolute inset-x-0 top-0 h-px transition-opacity duration-500',
@@ -123,7 +135,10 @@ export function BattleBoard({
         {state.playerTeam.map((fighter, index) => {
           const enemy = state.enemyTeam[index]
           const allyQueued = queued[fighter.instanceId]
+          const allyQueuedOrder = allyQueued ? queuedActorOrder.indexOf(fighter.instanceId) + 1 : null
+          const allyDelayedEffectCount = state.scheduledEffects.filter((effect) => effect.targetIds.includes(fighter.instanceId)).length
           const allyTargetable = targetingAllies && validTargetIds.includes(fighter.instanceId)
+          const enemyDelayedEffectCount = enemy ? state.scheduledEffects.filter((effect) => effect.targetIds.includes(enemy.instanceId)).length : 0
           const enemyTargetable = Boolean(enemy && targetingEnemies && validTargetIds.includes(enemy.instanceId))
           const allyTimelineRole =
             timelineFocus?.actorId === fighter.instanceId
@@ -151,6 +166,8 @@ export function BattleBoard({
                   actorMuted={Boolean(targetingAllies && !allyTargetable && selectedAbility)}
                   pendingAbilityId={selectedActorId === fighter.instanceId ? selectedAbility?.id ?? null : null}
                   queuedAction={allyQueued}
+                  queuedOrder={allyQueuedOrder && allyQueuedOrder > 0 ? allyQueuedOrder : null}
+                  delayedEffectCount={allyDelayedEffectCount}
                   validAbility={(abilityId) => canUsePlayerAbility(fighter, abilityId)}
                   abilityBlockReason={(abilityId) => getPlayerAbilityBlockReason(fighter, abilityId)}
                   interactionLocked={interactionLocked}
@@ -191,8 +208,13 @@ export function BattleBoard({
                             // Non-valid while targeting enemies: dim the whole card
                             : (targetingEnemies && selectedAbility)
                               ? 'border-[rgba(250,39,66,0.1)] opacity-40 saturate-50'
-                              : 'border-[rgba(252,43,71,0.23)]',
+                              : inspectedEnemyFighterId === enemy.instanceId
+                                ? 'border-ca-red/48 shadow-[0_0_0_1px_rgba(252,43,71,0.22),0_0_18px_rgba(252,43,71,0.12)]'
+                                : 'border-[rgba(252,43,71,0.23)] cursor-pointer hover:border-ca-red/40',
                     ].join(' ')}
+                    onMouseEnter={!interactionLocked ? () => onInspectEnemy?.(enemy.instanceId) : undefined}
+                    onMouseLeave={!interactionLocked ? onClearEnemyInspect : undefined}
+                    onClick={!interactionLocked && !enemyTargetable ? () => onInspectEnemy?.(enemy.instanceId) : undefined}
                   >
                     <div className="flex items-start gap-2">
                       {/* Pip column to the LEFT of the portrait so the stack can stretch */}
@@ -214,6 +236,7 @@ export function BattleBoard({
                         sizeClass="w-[4rem] sm:w-[4.75rem] xl:w-[5.4rem]"
                         timelineRole={enemyTimelineRole}
                         timelineTone={timelineFocus?.tone ?? null}
+                        delayedEffectCount={enemyDelayedEffectCount}
                         onClick={enemyTargetable && !interactionLocked ? () => onTargetFighter(enemy) : undefined}
                       />
                     </div>

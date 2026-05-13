@@ -490,7 +490,7 @@ definePassive({
 
 Energy is shared across the team. All types pull from the same pool.
 
-**Energy types:** `physical`, `vow`, `random` (wildcard — satisfies any type during generation but is spent as a specific type when consumed; check `energy.ts` for the exact wildcard rule).
+**Energy types:** player-facing resources are Physical (`physical`), Technique (`technique`), Special (`vow`), Spirit (`mental`), and Random (`random`). Random is a flexible cost chosen by the player at queue/commit time and spent as a specific type when consumed; check `energy.ts` for the exact wildcard rule.
 
 **Cost guidelines by skill tier:**
 

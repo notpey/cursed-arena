@@ -124,14 +124,28 @@ export function applyShieldDamageToFighter(
 
   if (shield.amount <= 0) {
     const brokenShield = shield
+    const lost = drained
     target.shield = null
     emitShieldEvent(ctx, state.round, 'shield_broken', target, {
       actorId: actor.instanceId,
       abilityId,
-      amount: brokenShield.amount,
+      amount: lost,
       label: brokenShield.label,
       tags: brokenShield.tags,
+      carryoverDamage: 0,
+      trigger: 'onShieldBroken',
     })
+    makeEvent(
+      ctx,
+      state.round,
+      'system',
+      'gold',
+      `${target.shortName}'s ${brokenShield.label} broke after losing ${lost} shield; onShieldBroken effects checked.`,
+      actor.instanceId,
+      target.instanceId,
+      lost,
+      abilityId,
+    )
     firePassives(
       state,
       ctx,
@@ -158,7 +172,7 @@ export function applyShieldDamageToFighter(
     state.round,
     'system',
     'frost',
-    `${actor.shortName} damaged ${target.shortName}'s shield by ${drained}.`,
+    `${actor.shortName} damaged ${target.shortName}'s shield by ${drained}${target.shield ? `; ${target.shield.amount} shield remains` : ''}.`,
     actor.instanceId,
     target.instanceId,
     drained,

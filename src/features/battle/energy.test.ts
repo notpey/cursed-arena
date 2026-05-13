@@ -43,7 +43,7 @@ describe('battle energy model', () => {
     expect(totalEnergyInPool(after)).toBe(2)
   })
 
-  test('exchangeEnergy converts 5 total chakra into 1 chosen chakra', () => {
+  test('exchangeEnergy converts 5 total cursed energy into 1 chosen type', () => {
     const current = pool({ physical: 3, technique: 2, vow: 1 })
     const after = exchangeEnergy(current, 'mental')
 

@@ -51,9 +51,9 @@ export const battleEnergyExchangeCost = 5
 export const randomEnergyMeta = {
   label: 'Random',
   short: 'RND',
-  color: '#4e5060',
-  border: 'rgba(78, 80, 96, 0.5)',
-  glow: 'rgba(78, 80, 96, 0.25)',
+  color: '#050509',
+  border: 'rgba(228, 230, 239, 0.28)',
+  glow: 'rgba(228, 230, 239, 0.12)',
 }
 
 export const battleEnergyMeta: Record<
@@ -68,22 +68,22 @@ export const battleEnergyMeta: Record<
     glow: 'rgba(74, 222, 128, 0.22)',
   },
   technique: {
-    label: 'Cursed Technique',
+    label: 'Technique',
     short: 'CT',
-    color: '#55a7ff',
-    border: 'rgba(85, 167, 255, 0.35)',
-    glow: 'rgba(85, 167, 255, 0.2)',
+    color: '#fa2742',
+    border: 'rgba(250, 39, 66, 0.28)',
+    glow: 'rgba(250, 39, 66, 0.14)',
   },
   vow: {
-    label: 'Binding Vow',
-    short: 'VOW',
-    color: '#ff4f68',
-    border: 'rgba(255, 79, 104, 0.35)',
-    glow: 'rgba(255, 79, 104, 0.22)',
+    label: 'Special',
+    short: 'SPC',
+    color: '#3b82f6',
+    border: 'rgba(59, 130, 246, 0.35)',
+    glow: 'rgba(59, 130, 246, 0.2)',
   },
   mental: {
-    label: 'Mental',
-    short: 'MEN',
+    label: 'Spirit',
+    short: 'SPI',
     color: '#f7f7fb',
     border: 'rgba(247, 247, 251, 0.3)',
     glow: 'rgba(247, 247, 251, 0.18)',

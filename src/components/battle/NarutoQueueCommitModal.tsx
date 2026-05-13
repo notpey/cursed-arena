@@ -439,7 +439,7 @@ export function NarutoQueueCommitModal({
               type="button"
               disabled={!okEnabled}
               onClick={handleConfirm}
-              className="ca-display border border-ca-red/45 bg-ca-red px-3 py-1.5 text-[1rem] tracking-[0.05em] text-white shadow-[0_0_18px_rgba(250,39,66,0.2)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              className="ca-display border border-ca-teal/45 bg-ca-teal px-3 py-1.5 text-[1rem] tracking-[0.05em] text-[#06110f] shadow-[0_0_18px_rgba(5,216,189,0.18)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
             >
               OK
             </button>

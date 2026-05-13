@@ -514,6 +514,7 @@ export type BattleRuntimeEventType =
   | 'round_ended'
   | 'ability_used'
   | 'ability_resolved'
+  | 'ability_interrupted'
   | 'damage_would_apply'
   | 'damage_applied'
   | 'damage_blocked'

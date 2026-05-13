@@ -3,7 +3,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { isAlive } from '@/features/battle/engine'
 import { hasStatus } from '@/features/battle/statuses'
-import type { BattleFighterState } from '@/features/battle/types'
+import type { BattleFighterState, QueuedBattleAction } from '@/features/battle/types'
 import { cn, getAccentStyles, getActivePips, type ActiveEffectLine, type ActiveEffectPip, type ActivePipTone, type DisplayAccent } from '@/components/battle/battleDisplay'
 
 type FlashKind = 'damage' | 'heal' | 'shield-break' | null
@@ -175,20 +175,18 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
   const [hovered, setHovered] = useState(false)
   const border = pipToneBorder(pip.tone)
   const glow = pipToneGlow(pip.tone)
-  const badgeCls = pipToneBadge(pip.tone)
   const iconSrc = normalizeBattleAssetSrc(pip.iconSrc)
 
   return (
     <div
-      className="relative"
+      className={cn('relative', hovered && 'z-[260]')}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Main pip square — full-bleed icon */}
       <div className={cn(
-        'relative h-[1.55rem] w-[1.55rem] shrink-0 cursor-default overflow-hidden rounded-[0.16rem] border transition duration-150',
-        border,
-        hovered ? glow : '',
+        'relative h-[1.65rem] w-[1.65rem] shrink-0 cursor-default overflow-hidden rounded-[0.18rem] border bg-black/55 transition duration-150',
+        hovered ? `${border} ${glow} brightness-110` : 'border-white/16',
       )}>
         {iconSrc ? (
           <img
@@ -204,22 +202,13 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
         )}
 
         {/* Bottom gradient scrim so badges are readable */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[0.65rem] bg-[linear-gradient(transparent,rgba(0,0,0,0.66))]" />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),transparent_38%,rgba(0,0,0,0.24))]" />
 
         {/* Turn badge — bottom-right */}
-        {pip.turnsLeft !== null ? (
-          <span className={cn(
-            'pointer-events-none absolute bottom-[2px] right-[2px] z-10 rounded-[0.1rem] px-[2px] py-[1px] ca-mono-label text-[0.32rem] leading-none',
-            badgeCls,
-          )}>
-            {pip.turnsLeft}
-          </span>
-        ) : null}
-
         {/* Stack count — center overlay */}
         {pip.stackCount !== null && pip.stackCount > 0 ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="ca-display text-[0.9rem] font-black leading-none text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+          <div className="pointer-events-none absolute right-[1px] top-[1px] z-10 min-w-[0.78rem] rounded-[0.1rem] bg-black/76 px-[2px] py-[1px] text-center shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+            <span className="ca-mono-label text-[0.42rem] leading-none text-white">
               {pip.stackCount}
             </span>
           </div>
@@ -229,7 +218,7 @@ function ActivePip({ pip, mirrored = false, tooltipDown = false }: { pip: Active
       {/* Tooltip — opens downward for player strips, upward for enemies */}
       {hovered ? (
         <div className={cn(
-          'pointer-events-none absolute z-[100] w-80 max-w-[calc(100vw-2rem)]',
+          'pointer-events-none absolute z-[260] w-80 max-w-[calc(100vw-2rem)]',
           tooltipDown
             ? 'top-[calc(100%+5px)]'
             : 'bottom-[calc(100%+5px)]',
@@ -309,6 +298,130 @@ function rarityTextColor(rarity: BattleFighterState['rarity']) {
   if (rarity === 'SSR') return 'text-amber-300/70'
   if (rarity === 'SR') return 'text-orange-300/60'
   return 'text-white/40'
+}
+
+export type PortraitStateBadge = {
+  key: string
+  label: string
+  title: string
+  tone: 'red' | 'gold' | 'teal' | 'blue' | 'purple' | 'frost'
+}
+
+function portraitBadgeClasses(tone: PortraitStateBadge['tone']) {
+  switch (tone) {
+    case 'red': return 'border-ca-red/38 bg-ca-red/18 text-ca-red'
+    case 'gold': return 'border-amber-300/36 bg-amber-300/14 text-amber-200'
+    case 'teal': return 'border-ca-teal/34 bg-ca-teal/13 text-ca-teal'
+    case 'blue': return 'border-sky-300/34 bg-sky-300/12 text-sky-200'
+    case 'purple': return 'border-purple-300/36 bg-purple-300/13 text-purple-200'
+    default: return 'border-white/16 bg-black/58 text-ca-text-2'
+  }
+}
+
+/**
+ * Portrait badge priority rules:
+ * KO overrides every other tactical state. After that, action-denial states
+ * lead, defensive/reaction states stay visible, and slower setup/debuff
+ * states collapse behind +N when the portrait would become noisy.
+ */
+function getPortraitStateBadges(
+  fighter: BattleFighterState,
+  options: {
+    queuedAction?: QueuedBattleAction
+    delayedEffectCount?: number
+  } = {},
+): PortraitStateBadge[] {
+  if (!isAlive(fighter)) {
+    return [{ key: 'ko', label: 'KO', title: 'Defeated', tone: 'red' }]
+  }
+
+  const badges: PortraitStateBadge[] = []
+  const add = (badge: PortraitStateBadge) => badges.push(badge)
+
+  if (hasStatus(fighter.statuses, 'stun')) {
+    add({ key: 'stun', label: 'STN', title: 'Stunned: cannot act', tone: 'gold' })
+  }
+  if (fighter.classStuns.length > 0) {
+    add({ key: 'class-lock', label: 'CLS', title: 'Class locked or sealed', tone: 'gold' })
+  }
+  if (fighter.intentStuns.length > 0) {
+    add({ key: 'intent-lock', label: 'INT', title: 'Intent locked', tone: 'gold' })
+  }
+  if (hasStatus(fighter.statuses, 'invincible')) {
+    add({ key: 'invulnerable', label: 'INV', title: 'Invulnerable', tone: 'teal' })
+  }
+  if (fighter.shield && fighter.shield.amount > 0) {
+    add({ key: 'shield', label: `${fighter.shield.amount}`, title: `${fighter.shield.amount} shield`, tone: 'blue' })
+  }
+  if (fighter.reactionGuards.some((guard) => guard.kind === 'counter' && guard.remainingRounds > 0 && guard.visible !== false)) {
+    add({ key: 'counter', label: 'CTR', title: 'Counter armed', tone: 'red' })
+  }
+  if (fighter.reactionGuards.some((guard) => guard.kind === 'reflect' && guard.remainingRounds > 0 && guard.visible !== false)) {
+    add({ key: 'reflect', label: 'RFL', title: 'Reflect armed', tone: 'teal' })
+  }
+  if (hasStatus(fighter.statuses, 'mark') || fighter.modifiers.some((modifier) => modifier.visible && modifier.statusKind === 'mark')) {
+    add({ key: 'mark', label: 'MRK', title: 'Marked or setup effect active', tone: 'purple' })
+  }
+  if (hasStatus(fighter.statuses, 'burn') || fighter.modifiers.some((modifier) => modifier.visible && modifier.statusKind === 'burn')) {
+    add({ key: 'dot', label: 'DOT', title: 'Damage over time or affliction active', tone: 'red' })
+  }
+  if (Object.values(fighter.stateModes).some(Boolean)) {
+    add({ key: 'mode', label: 'MOD', title: 'Mode or form active', tone: 'teal' })
+  }
+  if (fighter.effectImmunities.length > 0) {
+    add({ key: 'immunity', label: 'IMM', title: 'Effect immunity active', tone: 'blue' })
+  }
+  if ((options.delayedEffectCount ?? 0) > 0) {
+    add({ key: 'delayed', label: 'DLY', title: `${options.delayedEffectCount} delayed effect${options.delayedEffectCount === 1 ? '' : 's'} pending`, tone: 'purple' })
+  }
+  if (options.queuedAction) {
+    add({ key: 'queued', label: 'QUE', title: 'Queued action ready', tone: 'teal' })
+  }
+
+  return badges
+}
+
+function PortraitStateBadges({
+  fighter,
+  queuedAction,
+  delayedEffectCount = 0,
+}: {
+  fighter: BattleFighterState
+  queuedAction?: QueuedBattleAction
+  delayedEffectCount?: number
+}) {
+  const badges = getPortraitStateBadges(fighter, { queuedAction, delayedEffectCount })
+  const visible = badges.slice(0, 4)
+  const overflow = badges.slice(4)
+  const title = badges.map((badge) => badge.title).join('; ')
+
+  if (badges.length === 0) return null
+
+  return (
+    <div
+      className="pointer-events-none absolute -left-1 -top-1 z-20 flex max-w-[calc(100%+0.5rem)] flex-wrap gap-0.5"
+      title={title}
+      aria-label={title}
+    >
+      {visible.map((badge) => (
+        <span
+          key={badge.key}
+          className={cn('rounded-[0.12rem] border px-1 py-0.5 ca-mono-label text-[0.42rem] leading-none shadow-[0_4px_10px_rgba(0,0,0,0.34)] backdrop-blur-sm', portraitBadgeClasses(badge.tone))}
+          title={badge.title}
+        >
+          {badge.label}
+        </span>
+      ))}
+      {overflow.length > 0 ? (
+        <span
+          className="rounded-[0.12rem] border border-white/16 bg-black/62 px-1 py-0.5 ca-mono-label text-[0.42rem] leading-none text-ca-text-2 shadow-[0_4px_10px_rgba(0,0,0,0.34)]"
+          title={overflow.map((badge) => badge.title).join('; ')}
+        >
+          +{overflow.length}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 function PortraitSquare({
@@ -406,6 +519,8 @@ export function BattlePortraitSlot({
   hideHp = false,
   sizeClass: sizeClassOverride,
   carryoverLabels = [],
+  queuedAction,
+  delayedEffectCount = 0,
   timelineRole = null,
   timelineTone = null,
   onClick,
@@ -422,6 +537,8 @@ export function BattlePortraitSlot({
   hideHp?: boolean
   sizeClass?: string
   carryoverLabels?: string[]
+  queuedAction?: QueuedBattleAction
+  delayedEffectCount?: number
   timelineRole?: 'actor' | 'target' | null
   timelineTone?: 'red' | 'teal' | 'gold' | 'frost' | null
   onClick?: () => void
@@ -432,15 +549,6 @@ export function BattlePortraitSlot({
   const portraitSizeClass = sizeClassOverride ?? (compact
     ? 'w-[3rem] sm:w-[3.45rem]'
     : 'w-[4rem] sm:w-[5.25rem]')
-  const statusTag = fighter.hp <= 0
-    ? 'KO'
-    : hasStatus(fighter.statuses, 'stun')
-      ? 'STUN'
-      : hasStatus(fighter.statuses, 'invincible')
-        ? 'VOID'
-        : fighter.classStuns.length > 0
-          ? 'SEAL'
-          : null
 
   return (
     <button
@@ -480,11 +588,7 @@ export function BattlePortraitSlot({
         <PortraitSquare fighter={fighter} dimmed={muted} sizeClass={portraitSizeClass} mirrored={mirrored} flash={flash} flashSeq={seq} />
       </div>
 
-      {statusTag ? (
-        <span className="pointer-events-none absolute right-0 top-0 rounded-full border border-white/12 bg-black/60 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)] animate-ca-fade-in">
-          {statusTag}
-        </span>
-      ) : null}
+      <PortraitStateBadges fighter={fighter} queuedAction={queuedAction} delayedEffectCount={delayedEffectCount} />
 
       {targetable ? (
         <span className="pointer-events-none absolute left-0 top-0 rounded-full border border-amber-300/30 bg-amber-300/12 px-1.5 py-0.5 ca-mono-label text-[0.42rem] text-amber-200 shadow-[0_4px_10px_rgba(0,0,0,0.24)] animate-ca-fade-in">

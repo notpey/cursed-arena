@@ -80,6 +80,8 @@ export function emitShieldEvent(
     amount: number
     label?: string
     tags?: string[]
+    carryoverDamage?: number
+    trigger?: string
   },
 ) {
   makeRuntimeEvent(ctx, round, type, {
@@ -91,6 +93,8 @@ export function emitShieldEvent(
     tags: payload.tags,
     meta: {
       label: payload.label ?? null,
+      carryoverDamage: payload.carryoverDamage ?? null,
+      trigger: payload.trigger ?? null,
     },
   })
 }

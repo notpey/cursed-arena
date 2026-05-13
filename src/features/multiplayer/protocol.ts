@@ -1,4 +1,5 @@
 import type { BattleState, BattleTimelineStep, QueuedBattleAction, TurnPhase } from '@/features/battle/types'
+import type { CommandValidationIssue } from '@/features/multiplayer/turnValidation'
 
 export type ResolvableMatchPhase = Extract<TurnPhase, 'firstPlayerCommand' | 'secondPlayerCommand'>
 
@@ -48,6 +49,7 @@ export type SubmitMatchTurnReject = {
   message: string
   latestRevision?: number
   latestState?: BattleState
+  commandReasons?: CommandValidationIssue[]
 }
 
 export type SubmitMatchTurnResponse = SubmitMatchTurnSuccess | SubmitMatchTurnReject

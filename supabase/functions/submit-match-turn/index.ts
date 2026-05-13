@@ -1,8 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4'
-import { battleEnergyOrder, type BattleEnergyType } from '@/features/battle/energy.ts'
-import { PASS_ABILITY_ID } from '@/features/battle/data.ts'
-import { endRoundTimeline, getAbilityById, resolveTeamTurnTimeline, transitionToSecondPlayer } from '@/features/battle/engine.ts'
-import type { BattleFighterState, BattleState, BattleTimelineStep, QueuedBattleAction } from '@/features/battle/types.ts'
+import { endRoundTimeline, resolveTeamTurnTimeline, transitionToSecondPlayer } from '@/features/battle/engine.ts'
+import { validateSubmittedTurnCommands, type CommandValidationIssue } from '@/features/multiplayer/turnValidation.ts'
+import type { BattleState, BattleTimelineStep } from '@/features/battle/types.ts'
 
 type BattleTeamId = 'player' | 'enemy'
 type BattleWinner = BattleTeamId | 'draw'
@@ -51,6 +50,7 @@ type SubmitMatchTurnReject = {
   message: string
   latestRevision?: number
   latestState?: unknown
+  commandReasons?: CommandValidationIssue[]
 }
 
 type SubmitMatchTurnSuccess = {
@@ -128,77 +128,6 @@ function getRoleTeam(match: MatchRow, userId: string): BattleTeamId | null {
 function getStatusFromState(state: BattleState): MatchStatus {
   if (state.phase === 'finished') return 'finished'
   return 'in_progress'
-}
-
-function sanitizeRandomAllocation(value: unknown): Partial<Record<BattleEnergyType, number>> | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const candidate = value as Record<string, unknown>
-  const normalized = Object.fromEntries(
-    battleEnergyOrder
-      .map((type) => {
-        const raw = candidate[type]
-        const amount = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0
-        return [type, amount] as const
-      })
-      .filter((entry) => entry[1] > 0),
-  ) as Partial<Record<BattleEnergyType, number>>
-
-  return Object.keys(normalized).length > 0 ? normalized : undefined
-}
-
-function sanitizeActionOrder(actionOrder: string[], commandableIds: Set<string>) {
-  const seen = new Set<string>()
-  return actionOrder.filter((actorId) => {
-    if (!commandableIds.has(actorId)) return false
-    if (seen.has(actorId)) return false
-    seen.add(actorId)
-    return true
-  })
-}
-
-function sanitizeCommandsForTeam(
-  state: BattleState,
-  team: BattleTeamId,
-  commands: Record<string, unknown>,
-) {
-  const teamUnits = (team === 'player' ? state.playerTeam : state.enemyTeam).filter((fighter) => fighter.hp > 0)
-  const fightersById = new Map<string, BattleFighterState>(teamUnits.map((fighter) => [fighter.instanceId, fighter]))
-  const commandableIds = new Set(fightersById.keys())
-  const sanitized: Record<string, QueuedBattleAction> = {}
-
-  for (const actorId of commandableIds) {
-    const raw = commands[actorId]
-    if (!raw || typeof raw !== 'object') continue
-    const candidate = raw as Record<string, unknown>
-    const fighter = fightersById.get(actorId)
-    if (!fighter) continue
-
-    const requestedAbilityId = typeof candidate.abilityId === 'string' ? candidate.abilityId : PASS_ABILITY_ID
-    const ability = requestedAbilityId === PASS_ABILITY_ID ? null : getAbilityById(fighter, requestedAbilityId)
-    const abilityId = ability ? requestedAbilityId : PASS_ABILITY_ID
-    const targetId = typeof candidate.targetId === 'string' ? candidate.targetId : null
-
-    const command: QueuedBattleAction = {
-      actorId,
-      team,
-      abilityId,
-      targetId,
-    }
-
-    if (abilityId !== PASS_ABILITY_ID) {
-      const allocation = sanitizeRandomAllocation(candidate.randomCostAllocation)
-      if (allocation) {
-        command.randomCostAllocation = allocation
-      }
-    }
-
-    sanitized[actorId] = command
-  }
-
-  return {
-    commands: sanitized,
-    commandableIds,
-  }
 }
 
 Deno.serve(async (req) => {
@@ -329,9 +258,17 @@ Deno.serve(async (req) => {
     return reject('MATCH_NOT_ACTIVE', 'Match has no canonical battle state.')
   }
 
-  const sanitizedPayload = sanitizeCommandsForTeam(canonicalState, callerTeam, requestBody.commands)
-  const canonicalCommands = sanitizedPayload.commands
-  const canonicalActionOrder = sanitizeActionOrder(requestBody.actionOrder, sanitizedPayload.commandableIds)
+  const validation = validateSubmittedTurnCommands(canonicalState, callerTeam, requestBody.commands, requestBody.actionOrder)
+  if (!validation.ok) {
+    return reject('INVALID_COMMANDS', 'One or more submitted commands are invalid.', {
+      latestRevision: row.match_revision,
+      latestState: row.battle_state,
+      commandReasons: validation.issues,
+    })
+  }
+
+  const canonicalCommands = validation.commands
+  const canonicalActionOrder = validation.actionOrder
 
   const commandInsert = await adminClient
     .from('match_commands')

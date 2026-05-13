@@ -26,7 +26,7 @@ export function EnergyPip({ type, small = false }: { type: BattleEnergyType | 'r
       className={cn(
         'border shadow-[0_0_6px_var(--energy-glow)]',
         small ? 'h-2.5 w-2.5' : 'h-3.5 w-3.5',
-        type === 'random' ? 'rounded-[0.15rem]' : 'rounded-full',
+        'rounded-[0.15rem]',
       )}
       style={{
         backgroundColor: meta.color,
@@ -81,7 +81,7 @@ function ExchangeChip({
         borderColor: canExchange ? meta.border : 'rgba(255,255,255,0.08)',
         boxShadow: canExchange ? `0 0 14px ${meta.glow}` : 'none',
       }}
-      title={canExchange ? `Exchange ${battleEnergyExchangeCost} chakra into 1 ${meta.label}` : meta.label}
+      title={canExchange ? `Exchange ${battleEnergyExchangeCost} cursed energy into 1 ${meta.label}` : meta.label}
     >
       <EnergyPip type={type} small />
       <span className="ca-mono-label text-[0.6rem]">{meta.short}</span>
@@ -114,7 +114,7 @@ export function TeamEnergyReserve({
 
         <div className="min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">EXCHANGE CHAKRA</p>
+            <p className="ca-mono-label text-[0.6rem] text-ca-text-3">EXCHANGE ENERGY</p>
             <span className="rounded-full border border-ca-teal/25 bg-ca-teal-wash px-1.5 py-0.5 ca-mono-label text-[0.6rem] text-ca-teal">
               {battleEnergyExchangeCost} TO 1
             </span>
@@ -133,7 +133,7 @@ export function TeamEnergyReserve({
           </div>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
             <span className="ca-mono-label text-[0.6rem] text-ca-text-3">
-              {exchangeReady ? 'CLICK A TYPE TO CONVERT 5 CHAKRA INTO 1 CHOSEN PIP' : `BANK ${battleEnergyExchangeCost} CHAKRA TO ENABLE EXCHANGE`}
+              {exchangeReady ? 'CLICK A TYPE TO CONVERT 5 ENERGY INTO 1 CHOSEN PIP' : `BANK ${battleEnergyExchangeCost} ENERGY TO ENABLE EXCHANGE`}
             </span>
             <span className="ca-mono-label text-[0.6rem] text-ca-text-3">CURRENT TOTAL {totalEnergyInPool(pool)}</span>
           </div>

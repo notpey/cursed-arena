@@ -1,7 +1,7 @@
 # Cursed Arena - Agent Instructions
 
 ## Project
-Cursed Arena is a 3v3 turn-based PvP gacha RPG inspired by Jujutsu Kaisen.
+Cursed Arena is a 3v3 turn-based PvP tactical arena game inspired by Naruto-Arena's strategic structure and themed through Jujutsu Kaisen.
 Web app. React + Vite + TypeScript + Tailwind CSS.
 
 ## Visual Reference
@@ -13,9 +13,9 @@ Web app. React + Vite + TypeScript + Tailwind CSS.
 ### Colors (CSS Variables)
 - Background scale: `#0d0c11` (void) -> `#17151c` (base) -> `#1e1c24` (raised)
   -> `#26242e` (surface) -> `#302e3a` (overlay). Purple undertone, NEVER neutral gray.
-- Red (`#fa2742`): Player agency. CTAs, active states, damage, urgency.
-  MAX ONE red CTA per viewport. Red is rare.
-- Teal (`#05d8bd`): System/supernatural. CE, gacha, buffs, progression, data.
+- Red (`#fa2742`): Player agency, active states, damage, urgency.
+  MAX ONE red CTA per viewport. Red is rare. Do not use red for normal submit/confirm buttons on the battle screen.
+- Teal (`#05d8bd`): System/supernatural. CE, buffs, progression, data.
   More frequent than red. AAA contrast on dark backgrounds.
 - Text: `#e4e6ef` (primary) -> `#b0b2c0` (secondary) -> `#7a7c8e` (tertiary)
   -> `#4e5060` (disabled). All have cool blue undertone.
@@ -43,6 +43,9 @@ Web app. React + Vite + TypeScript + Tailwind CSS.
 ### Component Patterns
 - Progress bars: 2-3px height, rounded, bg-highlight track.
   Red fill = combat. Teal fill = system/collection. Gold = premium/XP.
+- Player-facing Cursed Energy resources are small square pips:
+  Physical = green, Technique = red, Special = blue, Spirit = white, Random = black.
+  Keep these names in player-facing UI even if internal keys remain `physical`, `technique`, `vow`, and `mental`.
 - Tags: JetBrains Mono, 0.5rem, 600 weight, uppercase, colored bg at 12-15%.
 - Buttons: Bebas Neue. Primary = red bg, white text. Secondary = bg-overlay,
   frost text, border-default. Ghost = transparent, text-secondary.
@@ -62,3 +65,13 @@ Web app. React + Vite + TypeScript + Tailwind CSS.
 - Page components in `/src/pages/`.
 - Reusable components in `/src/components/ui/`.
 
+## Battle Rules That Must Not Drift
+- PvP uses the current engine's half-round command/resolution model.
+- Players may reorder queued actions before submission.
+- Shared team energy is mandatory; do not introduce per-fighter main energy.
+- Enemy skill information may be inspected on demand, but do not add a mirrored enemy skill tray.
+- Enemy live cooldown counters are hidden. Enemy inspection may show static skill info and authored base cooldown only.
+- If a fighter is defeated before their queued action resolves, that action is canceled.
+- A stun/lock before resolution cancels a queued action only when it applies to that skill's class/type/intent.
+- Fatal damage followed by later healing does not allow survival.
+- Domain Expansion and collection/gacha are deferred until the base battle game is stable.

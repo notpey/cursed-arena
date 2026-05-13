@@ -159,8 +159,19 @@ function formatRuntimeEventForPracticeLog(event: BattleRuntimeEvent, state: Batt
         id: event.id,
         round: event.round,
         label: 'BLOCKED',
-        summary: `${target ?? 'Target'} blocked ${event.amount ?? 0} damage.`,
+        summary: event.meta?.blockedByInvincible
+          ? `${target ?? 'Target'} blocked damage with invulnerability.`
+          : `${target ?? 'Target'} blocked ${event.amount ?? 0} damage.`,
         detail: event.meta?.blockedByShield ? 'Shield absorbed the hit.' : event.meta?.blockedByInvincible ? 'Invulnerability prevented the hit.' : undefined,
+        tone: 'gold',
+      }
+    case 'ability_interrupted':
+      return {
+        id: event.id,
+        round: event.round,
+        label: 'INTERRUPTED',
+        summary: `${target ?? actor ?? 'A fighter'} had a queued action canceled.`,
+        detail: typeof event.meta?.reason === 'string' ? humanizeKey(event.meta.reason) : ability ? `Source: ${ability}` : undefined,
         tone: 'gold',
       }
     case 'heal_applied':
@@ -226,7 +237,10 @@ function formatRuntimeEventForPracticeLog(event: BattleRuntimeEvent, state: Batt
         id: event.id,
         round: event.round,
         label: 'SHIELD',
-        summary: `${target ?? 'Target'} shield broke.`,
+        summary: `${target ?? 'Target'} shield broke after losing ${event.amount ?? 0}.`,
+        detail: typeof event.meta?.carryoverDamage === 'number' && event.meta.carryoverDamage > 0
+          ? `${event.meta.carryoverDamage} damage carried through.`
+          : undefined,
         tone: 'red',
       }
     case 'counter_changed': {
@@ -248,11 +262,21 @@ function formatRuntimeEventForPracticeLog(event: BattleRuntimeEvent, state: Batt
         tone: 'frost',
       }
     case 'effect_ignored':
+      if (event.meta?.reason === 'reflect') {
+        return {
+          id: event.id,
+          round: event.round,
+          label: 'REFLECT',
+          summary: `${actor ?? 'A fighter'} reflected an effect${target ? ` to ${target}` : ''}.`,
+          detail: ability ? `Source: ${ability}` : undefined,
+          tone: 'teal',
+        }
+      }
       return {
         id: event.id,
         round: event.round,
         label: 'IGNORED',
-        summary: `${target ?? 'Target'} ignored an effect.`,
+        summary: `${target ?? 'Target'} ignored or blocked an effect.`,
         detail: ability ? `Source: ${ability}` : undefined,
         tone: 'frost',
       }
@@ -665,6 +689,7 @@ export function BattlePage() {
   const [selectedAbilityId, setSelectedAbilityId] = useState<string | null>(null)
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null)
   const [hoveredAbility, setHoveredAbility] = useState<HoveredAbilityState | null>(null)
+  const [inspectedEnemy, setInspectedEnemy] = useState<{ fighterId: string; abilityId: string | null } | null>(null)
   const [battleLog, setBattleLog] = useState<BattleEvent[]>(initialBattle.initialEvents)
   const [practiceTurnLog, setPracticeTurnLog] = useState<PracticeTurnLogEntry[]>([])
   const [turnSecondsLeft, setTurnSecondsLeft] = useState(60)
@@ -783,9 +808,20 @@ export function BattlePage() {
   const targetingEnemies = selectedAbility?.targetRule === 'enemy-single'
   const hoveredActor = hoveredAbility ? getFighterById(battle.state, hoveredAbility.actorId) : null
   const fallbackActor = battle.state.playerTeam.find(isAlive) ?? battle.state.playerTeam[0] ?? null
-  const inspectedActor = hoveredActor ?? selectedActor ?? fallbackActor
+  const inspectedEnemyFighter = inspectedEnemy ? getFighterById(battle.state, inspectedEnemy.fighterId) : null
+  const inspectedEnemyAbility =
+    inspectedEnemyFighter && inspectedEnemy?.abilityId
+      ? getAbilityById(inspectedEnemyFighter, inspectedEnemy.abilityId)
+      : null
+  // Priority: hovered ally > enemy inspect > selected ally > fallback ally
+  const isEnemyInspect = Boolean(!hoveredActor && inspectedEnemyFighter)
+  const inspectedActor = hoveredActor ?? inspectedEnemyFighter ?? selectedActor ?? fallbackActor
   const inspectedAbility =
-    hoveredAbility && hoveredActor ? getAbilityById(hoveredActor, hoveredAbility.abilityId) : selectedAbility
+    hoveredAbility && hoveredActor
+      ? getAbilityById(hoveredActor, hoveredAbility.abilityId)
+      : isEnemyInspect
+        ? inspectedEnemyAbility
+        : selectedAbility
   const turnOrderLabel = battle.state.firstPlayer === 'player' ? '1ST' : '2ND'
   const committedActionCount = countCommittedPlayerActions(battle.queued)
   const hasCommittedActions = committedActionCount > 0
@@ -1115,6 +1151,22 @@ export function BattlePage() {
   function clearPendingSelection() {
     setSelectedAbilityId(null)
     setSelectedTargetId(null)
+  }
+
+  function handleInspectEnemy(fighterId: string) {
+    setInspectedEnemy((current) => {
+      // Keep the currently browsed ability when re-hovering the same fighter
+      if (current?.fighterId === fighterId) return current
+      return { fighterId, abilityId: null }
+    })
+  }
+
+  function handleClearEnemyInspect() {
+    setInspectedEnemy(null)
+  }
+
+  function handleSelectEnemyAbility(abilityId: string) {
+    setInspectedEnemy((current) => current ? { ...current, abilityId } : null)
   }
 
   function handleTogglePresentationMode() {
@@ -1514,6 +1566,7 @@ export function BattlePage() {
               key={boardRevealKey}
               state={battle.state}
               queued={battle.queued}
+              actionOrder={battle.actionOrder}
               selectedActorId={battle.selectedActorId}
               selectedAbility={selectedAbility}
               selectedTargetId={selectedTargetId}
@@ -1532,6 +1585,9 @@ export function BattlePage() {
               timelineFocus={timelineFocus}
               playerIsActiveSide={playerIsActiveSide}
               presentationMode={presentationMode}
+              inspectedEnemyFighterId={inspectedEnemy?.fighterId ?? null}
+              onInspectEnemy={handleInspectEnemy}
+              onClearEnemyInspect={handleClearEnemyInspect}
             />
 
             <div className="grid gap-2 lg:grid-cols-[10rem_minmax(0,1fr)]">
@@ -1540,7 +1596,16 @@ export function BattlePage() {
                 presentationMode={presentationMode}
                 onTogglePresentationMode={handleTogglePresentationMode}
               />
-              <BattleInfoPanel state={battle.state} queued={battle.queued} actor={inspectedActor} ability={inspectedAbility} />
+              <BattleInfoPanel
+                state={battle.state}
+                queued={battle.queued}
+                actor={inspectedActor}
+                ability={inspectedAbility}
+                isEnemyInspect={isEnemyInspect}
+                inspectedEnemyFighter={inspectedEnemyFighter}
+                inspectedEnemyAbilityId={inspectedEnemy?.abilityId ?? null}
+                onSelectEnemyAbility={handleSelectEnemyAbility}
+              />
             </div>
           </div>
         </div>
@@ -2150,7 +2215,7 @@ export function SkillQueueModal({
             type="button"
             disabled={!canAfford || hasUnallocated}
             onClick={() => onConfirm(order)}
-            className="ca-display rounded-lg border border-ca-teal/35 bg-[linear-gradient(180deg,rgba(5,216,189,0.16),rgba(5,216,189,0.07))] py-2.5 text-[1.05rem] text-ca-teal transition hover:brightness-110 disabled:opacity-35 disabled:cursor-not-allowed"
+            className="ca-display rounded-lg border border-ca-teal/45 bg-ca-teal py-2.5 text-[1.05rem] text-[#06110f] transition hover:brightness-110 disabled:opacity-35 disabled:cursor-not-allowed"
           >
             OK
           </button>

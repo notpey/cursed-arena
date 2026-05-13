@@ -12,12 +12,16 @@ Each player fields a team of **3 characters**. A team is defeated when all 3 cha
 
 ## Turns and Phases
 
-Each **round** has two halves: the first player acts, then the second player acts. At the start of each battle, a coin flip determines who goes first. The first-player advantage alternates each round so that the second player in round 1 becomes the first player in round 2, and so on.
+PvP follows the half-round model currently defined by the engine. Do not replace it with a simultaneous double-submit model.
+
+Each **round** has two command/resolution halves. At the start of each battle, a seeded coin flip determines who goes first. The first-player advantage alternates each round so that the second player in round 1 becomes the first player in round 2, and so on.
 
 **Each half of a round:**
-1. The active player selects one skill per living character and assigns targets.
-2. All selected skills resolve simultaneously, in the order they were queued.
-3. After both halves complete, round-end effects tick (cooldowns decrement, durations expire, burn damage is dealt, etc.).
+1. The active player selects up to one skill per living character and assigns targets.
+2. The active player may reorder queued actions before submitting.
+3. Queued actions resolve one at a time in the submitted order. Resolution order is tactically meaningful.
+4. Before each queued action resolves, the engine re-checks whether the actor can still perform that exact skill.
+5. After both halves complete, round-end effects tick (cooldowns decrement, durations expire, burn damage is dealt, etc.).
 
 **Fatigue:** Starting on a configurable round (default: round 8), all living characters take increasing damage at the start of each round. This prevents indefinitely long games.
 
@@ -29,11 +33,13 @@ Cursed Energy is the resource used to activate skills. There are four named type
 
 | Type | Color | Engine Key |
 |---|---|---|
-| Force | Green | `physical` |
-| Technique | Red | `technique` |
-| Blessing | Blue | `vow` |
-| Authority | White | `mental` |
-| Random | Any | resolved at spend time |
+| Physical | Green square | `physical` |
+| Technique | Red square | `technique` |
+| Special | Blue square | `vow` |
+| Spirit | White square | `mental` |
+| Random | Black square | resolved at spend time |
+
+The implementation may keep older internal keys, but all player-facing UI and documentation must use **Physical**, **Technique**, **Special**, **Spirit**, and **Random**. Energy is displayed as small square pips, not orbs.
 
 At the start of each round, each living character generates **1 Cursed Energy** for their team. The type of that energy is determined randomly (25% chance each type). Because the draw is random, you may receive multiple of the same type in one round.
 
@@ -60,6 +66,8 @@ Energy is tracked as **one pool per team**, shared by all three fighters on that
 Each character has a maximum HP of 100. Damage reduces current HP; healing restores it. HP cannot go above the character's maximum.
 
 Characters at 0 HP are **defeated** and are removed from play. Defeated characters cannot be healed back.
+
+If a fighter is defeated before their queued action resolves, that queued action is canceled. Fatal damage is fatal when it resolves; later healing in the same command window does not restore that fighter unless a future explicit revive/prevent-death mechanic says otherwise.
 
 ---
 
@@ -143,6 +151,7 @@ A stunned character **cannot use skills** for the duration of the stun. On their
 
 - Duration is measured in **victim turns** — the number of turns the stunned character would have taken. Applying a stun during a round does not consume a duration tick until the character's next end-of-round tick.
 - **Class stun**: A softer form of stun that only prevents skills of specific classes (e.g., Melee, Physical). The character can still use other skill classes.
+- A queued skill is canceled before resolution only if the fighter is defeated, fully stunned, or affected by a class/type/intent lock that applies to that exact queued skill. An unrelated lock does not cancel the queued action.
 
 ---
 
@@ -153,6 +162,8 @@ A skill's cooldown is the number of turns it cannot be used after it is activate
 > Example: A skill with cooldown 4 cannot be used for the next 4 turns. After 4 full turns have passed, it becomes available again.
 
 Cooldowns tick down by 1 at the end of each round. Effects can increase or decrease cooldowns. A cooldown cannot go below 0.
+
+Enemy live cooldown values are hidden. Enemy skill information may be inspected on demand, but enemy inspection shows only static skill information such as name, description, cost, classes/tags, target rule, and authored base cooldown.
 
 ---
 
@@ -420,7 +431,7 @@ Round Start:
   - Generate energy (+1 random type per living character per team)
 
 Player 1 Command → Player 1 Resolve (per queued action):
-  - Check stun / class stun → force Pass if blocked
+  - Check defeated / stun / class / intent lock for this exact skill → cancel if blocked
   - Pay energy, set cooldown
   - Fire onAbilityUse / onBeingTargeted reactions
   - Run pre-damage window (counter check → reflect check)
@@ -473,3 +484,9 @@ Round End:
 | Mode / Form | A named state that changes a character's behavior |
 | Counter (stacks) | A numeric value tracking charges, ammo, or stacks |
 | Fatigue | Escalating damage applied to all characters in late rounds |
+
+---
+
+## Deferred Systems
+
+Domain Expansion is deferred until the base battle game is stable. Collection and gacha systems are long-term product surfaces and should be implemented after the base game is complete.
