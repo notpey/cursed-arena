@@ -120,7 +120,7 @@ export const maki = fighter({
           elseEffects: [{ type: 'schedule', delay: 1, phase: 'roundStart', target: 'inherit', effects: [{ type: 'damage', power: 15, target: 'inherit' }] }],
         },
         resetMakiWeaponBonus,
-        modifierEffect('Close-Quarters Guard', 'damageTaken', -10, 1, 'self', ['close-quarters-combo']),
+        modifierEffect('Close-Quarters Guard', 'damageTaken', -10, 1, 'self', ['close-quarters-combo'], { intent: 'helpful' }),
       ],
     }),
     skill({

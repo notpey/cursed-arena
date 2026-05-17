@@ -38,7 +38,7 @@ export const miwa = fighter({
         { type: 'effectImmunity', label: 'Simple Domain', blocks: ['nonDamage'], duration: 2, tags: ['simple-domain'], target: 'self' },
         modifierEffect('Simple Domain', 'damageTaken', -10, 2, 'self', ['simple-domain']),
         modifierEffect('Steady Discipline', 'damageTaken', -5, 2, 'self', ['steady-discipline', 'simple-domain']),
-        modifierEffect('Simple Domain', 'canGainInvulnerable', false, 2, 'all-enemies', ['simple-domain']),
+        modifierEffect('Simple Domain', 'canGainInvulnerable', false, 2, 'all-enemies', ['simple-domain'], { intent: 'harmful' }),
         {
           type: 'conditional',
           target: 'self',

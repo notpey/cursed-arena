@@ -49,7 +49,7 @@ export const toge = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
-        modifierEffect("Don't Move", 'damageDealt', -10, 1, 'inherit', ['dont-move']),
+        modifierEffect("Don't Move", 'damageDealt', -10, 1, 'inherit', ['dont-move'], { intent: 'harmful' }),
         { type: 'adjustCounter', key: 'vocal_strain_damage', amount: 5, max: 15, target: 'self' },
         {
           type: 'reaction',
@@ -60,7 +60,7 @@ export const toge = fighter({
           harmfulOnly: false,
           target: 'inherit',
           effects: [
-            { type: 'adjustCounter', key: 'blast_away_bonus', amount: 5, target: 'attacker' },
+            { type: 'adjustCounter', key: 'blast_away_bonus', amount: 5, target: 'attacker', intent: 'harmful' },
           ],
         },
       ],
@@ -68,7 +68,7 @@ export const toge = fighter({
     skill({
       id: 'toge-blast-away',
       name: 'Blast Away',
-      description: "This skill targets all enemies, dealing 25 damage to them. If \"Don't Move\" was used last turn, this skill will deal an additional 10 damage. If \"Throat Spray\" was used last turn, this skill cannot be countered or reflected.",
+      description: "This skill deals 25 damage to all enemies, plus any Blast Away bonus stacks each target has accumulated. If \"Don't Move\" was used last turn, it deals 10 additional damage. If \"Throat Spray\" was used last turn, this skill cannot be countered or reflected.",
       kind: 'attack',
       targetRule: 'enemy-all',
       classes: ['Special', 'Ranged', 'Instant'],

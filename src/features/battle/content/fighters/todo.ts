@@ -15,8 +15,8 @@ export const todo = fighter({
       trigger: 'onAbilityResolve',
       conditions: [{ type: 'abilityClass', class: 'Physical' }],
       effects: [
-        markerEffect('Type', 2, 'inherit', ['todo-type']),
-        modifierEffect("Todo's Type Bonus", 'damageTaken', 5, 2, 'inherit', ['todo-type-damage']),
+        markerEffect('Type', 2, 'inherit', ['todo-type'], { intent: 'harmful' }),
+        modifierEffect("Todo's Type Bonus", 'damageTaken', 5, 2, 'inherit', ['todo-type-damage'], { intent: 'harmful' }),
       ],
       label: 'Besto Friendo',
       description: "When Todo targets an enemy with a Physical technique, he marks them as his \"Type\" for 2 turns. Todo's skills will deal +5 damage to his \"Type\" and if his \"Type\" is stunned, they will take 5 additional damage from all sources for 1 turn.",
@@ -26,7 +26,7 @@ export const todo = fighter({
       id: 'todo-besto-friendo-stun',
       trigger: 'onBeingTargeted',
       conditions: [{ type: 'actorHasModifierTag', tag: 'todo-type' }, { type: 'actorHasStatus', status: 'stun' }],
-      effects: [modifierEffect('Type Stunned', 'damageTaken', 5, 1, 'attacker', ['todo-type-stunned'])],
+      effects: [modifierEffect('Type Stunned', 'damageTaken', 5, 1, 'attacker', ['todo-type-stunned'], { intent: 'harmful' })],
       label: 'Besto Friendo Stun',
       hidden: true,
     }),
@@ -57,8 +57,8 @@ export const todo = fighter({
       cooldown: 2,
       energyCost: { random: 1 },
       effects: [
-        modifierEffect('Boogie Woogie', 'damageDealt', -10, 1, 'inherit', ['boogie-woogie']),
-        modifierEffect('Boogie Woogie', 'canGainInvulnerable', false, 1, 'inherit', ['boogie-woogie']),
+        modifierEffect('Boogie Woogie', 'damageDealt', -10, 1, 'inherit', ['boogie-woogie'], { intent: 'harmful' }),
+        modifierEffect('Boogie Woogie', 'canGainInvulnerable', false, 1, 'inherit', ['boogie-woogie'], { intent: 'harmful' }),
         {
           type: 'reaction',
           label: 'Boogie Woogie Guard',
@@ -107,7 +107,7 @@ export const todo = fighter({
     energyCost: { mental: 1 },
     effects: [
       { type: 'invulnerable', duration: 1, target: 'self' },
-      modifierEffect('Unshakable Confidence', 'damageDealt', 10, 1, 'self', ['unshakable-confidence']),
+      modifierEffect('Unshakable Confidence', 'damageDealt', 10, 1, 'self', ['unshakable-confidence'], { intent: 'helpful' }),
     ],
   }),
 })

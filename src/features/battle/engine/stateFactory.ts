@@ -35,8 +35,20 @@ export function addAbilityStateDelta(
         (current) =>
           !(current.mode === 'replace' && current.slotAbilityId === delta.slotAbilityId),
       )
-      fighter.abilityState.push({ ...delta, replacement: cloneAbilityTemplate(delta.replacement) })
+      fighter.abilityState.push({
+        ...delta,
+        replacement: cloneAbilityTemplate(delta.replacement),
+        replacementsByRemainingTurns: delta.replacementsByRemainingTurns
+          ? Object.fromEntries(
+              Object.entries(delta.replacementsByRemainingTurns).map(([remaining, ability]) => [
+                remaining,
+                cloneAbilityTemplate(ability),
+              ]),
+            )
+          : undefined,
+      })
       ensureCooldownEntry(fighter, delta.replacement.id)
+      Object.values(delta.replacementsByRemainingTurns ?? {}).forEach((ability) => ensureCooldownEntry(fighter, ability.id))
       return
     case 'grant':
       fighter.abilityState = fighter.abilityState.filter(
@@ -125,6 +137,7 @@ export function createReactionGuardState(
     visible: effect.type === 'reaction' ? effect.visible ?? true : true,
     oncePerRound: effect.type === 'reaction' ? effect.oncePerRound : undefined,
     triggeredRounds: effect.type === 'reaction' ? [] : undefined,
+    deferEffectsUntilAfterTrigger: effect.type === 'reaction' ? effect.deferEffectsUntilAfterTrigger : undefined,
     effects: effect.type === 'reaction' ? effect.effects.map(cloneEffect) : undefined,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,
@@ -158,12 +171,14 @@ export function createEffectImmunityState(
   actor: BattleFighterState,
   abilityId: string | undefined,
   effect: Extract<SkillEffect, { type: 'effectImmunity' }>,
+  round: number,
 ): BattleEffectImmunityState {
   return {
     id: `immunity-${actor.instanceId}-${abilityId ?? 'passive'}-${actor.effectImmunities.length}`,
     label: effect.label,
     blocks: [...effect.blocks],
     remainingRounds: effect.duration,
+    appliedInRound: round,
     tags: effect.tags ? [...effect.tags] : undefined,
     sourceActorId: actor.instanceId,
     sourceAbilityId: abilityId,

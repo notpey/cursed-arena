@@ -32,8 +32,8 @@ describe('BattlePortraitSlot scan badges', () => {
 
     const html = renderPortrait(fighter)
 
-    expect(html).toContain('STN')
-    expect(html).toContain('Stunned: cannot act')
+    expect(html).toContain('STUN')
+    expect(html).toContain('Stunned — cannot use any skills this turn')
   })
 
   test('shielded portrait shows visible shield value', () => {
@@ -49,7 +49,7 @@ describe('BattlePortraitSlot scan badges', () => {
     const html = renderPortrait(fighter)
 
     expect(html).toContain('>18<')
-    expect(html).toContain('18 shield')
+    expect(html).toContain('18 destructible defense')
   })
 
   test('invulnerable portrait shows visible invulnerable indicator', () => {
@@ -58,8 +58,8 @@ describe('BattlePortraitSlot scan badges', () => {
 
     const html = renderPortrait(fighter)
 
-    expect(html).toContain('INV')
-    expect(html).toContain('Invulnerable')
+    expect(html).toContain('INVUL')
+    expect(html).toContain('Invulnerable — immune to all damage and harmful effects')
   })
 
   test('counter and reflect guards show visible indicators', () => {
@@ -84,10 +84,10 @@ describe('BattlePortraitSlot scan badges', () => {
 
     const html = renderPortrait(fighter)
 
-    expect(html).toContain('CTR')
-    expect(html).toContain('Counter armed')
-    expect(html).toContain('RFL')
-    expect(html).toContain('Reflect armed')
+    expect(html).toContain('CNTR')
+    expect(html).toContain('Counter armed — will retaliate when targeted')
+    expect(html).toContain('RFLT')
+    expect(html).toContain('Reflect armed — will reflect the next skill used on them')
   })
 
   test('mark setup status shows visible indicator', () => {
@@ -96,8 +96,8 @@ describe('BattlePortraitSlot scan badges', () => {
 
     const html = renderPortrait(fighter)
 
-    expect(html).toContain('MRK')
-    expect(html).toContain('Marked or setup effect active')
+    expect(html).toContain('MARK')
+    expect(html).toContain('Marked — a setup effect is active; hover pips for details')
   })
 
   test('status overflow exposes hidden details in title', () => {
@@ -131,8 +131,8 @@ describe('BattlePortraitSlot scan badges', () => {
     const html = renderPortrait(fighter)
 
     expect(html).toContain('+')
-    expect(html).toContain('Effect immunity active')
-    expect(html).toContain('Damage over time or affliction active')
+    expect(html).toContain('Effect immunity active — certain effects cannot be applied')
+    expect(html).toContain('Affliction active — taking periodic damage; hover pips for details')
   })
 
   test('KO portrait remains visually distinct and suppresses other badges', () => {
@@ -165,9 +165,9 @@ describe('BattlePortraitSlot scan badges', () => {
     })
 
     expect(html).toContain('DLY')
-    expect(html).toContain('1 delayed effect pending')
-    expect(html).toContain('QUE')
-    expect(html).toContain('Queued action ready')
+    expect(html).toContain('1 delayed effect incoming — hover pips for details')
+    expect(html).toContain('RDY')
+    expect(html).toContain('Technique queued and ready to resolve')
   })
 
   test('active effect pips do not render category or duration text overlays', () => {

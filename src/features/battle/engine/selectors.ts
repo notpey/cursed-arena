@@ -7,11 +7,15 @@ import type {
   BattleTeamId,
 } from '@/features/battle/types.ts'
 
+function getReplacementAbility(delta: Extract<BattleAbilityStateDelta, { mode: 'replace' }>): BattleAbilityTemplate {
+  return delta.replacementsByRemainingTurns?.[delta.duration] ?? delta.replacement
+}
+
 export function getVisibleAbilities(fighter: BattleFighterState): BattleAbilityTemplate[] {
   const replacements = new Map(
     fighter.abilityState
       .filter((delta): delta is Extract<BattleAbilityStateDelta, { mode: 'replace' }> => delta.mode === 'replace')
-      .map((delta) => [delta.slotAbilityId, delta.replacement]),
+      .map((delta) => [delta.slotAbilityId, getReplacementAbility(delta)]),
   )
   const locks = new Set(
     fighter.abilityState

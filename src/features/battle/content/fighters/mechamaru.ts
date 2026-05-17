@@ -47,7 +47,7 @@ export const mechamaru = fighter({
       power: 15,
       effects: [
         { type: 'damage', power: 15, target: 'all-enemies' },
-        modifierEffect('Suppressive Fire', 'damageDealt', -10, 1, 'all-enemies', ['suppressive-fire']),
+        modifierEffect('Suppressive Fire', 'damageDealt', -10, 1, 'all-enemies', ['suppressive-fire'], { intent: 'harmful' }),
       ],
     }),
     skill({
@@ -63,7 +63,7 @@ export const mechamaru = fighter({
       effects: [
         { type: 'damage', power: 25, target: 'all-enemies' },
         { type: 'setMode', key: 'overload', value: 'active', duration: 2, target: 'self' },
-        modifierEffect('Overload Cannon', 'damageDealt', 5, 2, 'self', ['overload-cannon']),
+        modifierEffect('Overload Cannon', 'damageDealt', 5, 2, 'self', ['overload-cannon'], { intent: 'helpful' }),
         {
           type: 'schedule',
           delay: 2,
@@ -88,7 +88,7 @@ export const mechamaru = fighter({
     energyCost: { random: 1 },
     effects: [
       { type: 'invulnerable', duration: 1, target: 'self' },
-      modifierEffect('Remote Shielding', 'damageTaken', -5, 1, 'all-allies', ['remote-shielding']),
+      modifierEffect('Remote Shielding', 'damageTaken', -5, 1, 'all-allies', ['remote-shielding'], { intent: 'helpful' }),
     ],
   }),
 })

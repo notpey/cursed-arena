@@ -83,6 +83,7 @@ export function resolveRandomEnemyDamageTick(
   }
 
   const effectivePower = wasRepeat && effect.repeatPowerBonus ? effect.power + effect.repeatPowerBonus : effect.power
+  const isAfflictionClass = abilityClasses?.includes('Affliction') ?? false
   const amount = calculateDamage(state, actor, target, effectivePower, abilityClasses?.includes('Ultimate') ?? false, false, abilityId, abilityClasses)
   const packet: BattleDamagePacket = {
     kind: 'damage',
@@ -93,7 +94,7 @@ export function resolveRandomEnemyDamageTick(
     amount,
     damageType: 'normal',
     tags: abilityClasses ?? [],
-    flags: {},
+    flags: { ignoresShield: isAfflictionClass },
   }
   applyDamagePacket(state, ctx, actor, target, packet, firePassives, runEffectReactionGuards, applyDefeat, effect)
 }

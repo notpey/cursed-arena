@@ -44,6 +44,7 @@ import {
   abilityCanBeReflected,
   canEffectBeReflected,
   consumeReactionGuard,
+  getEffectIntent,
   guardMatchesAbility,
   isEffectBlocked,
   isHelpfulAbility,
@@ -85,6 +86,7 @@ import {
   createModifiers,
   getFighterModifierPool,
   getTeamModifierBucket,
+  hasBooleanModifierForStat,
   hasBooleanModifierValue,
   hasModifierStatus,
   removeModifiers,
@@ -136,10 +138,12 @@ import { createStatuses } from '@/features/battle/statuses.ts'
 import { BATTLE_STATE_SCHEMA_VERSION } from '@/features/battle/types.ts'
 import type {
   BattleAbilityTemplate,
+  BattleCostModifierState,
   BattleDamagePacket,
   BattleFighterState,
   BattleHealPacket,
   BattleModifierFilter,
+  BattleModifierInstance,
   BattleModifierTemplate,
   BattleReactionTrigger,
   BattleResolutionResult,
@@ -338,7 +342,11 @@ function runPreDamageReactionWindow(
 
   if (!isHarmfulAbility(ability)) return result
 
-  for (const target of targets) {
+  // Sort by battlefield slot for deterministic counter/reflect priority (Law 6.1).
+  // Lowest slot number acts first — mirrors stable team roster order.
+  const sortedTargets = [...targets].sort((a, b) => a.slot - b.slot)
+
+  for (const target of sortedTargets) {
     if (!isAlive(target)) continue
 
     if (abilityCanBeCountered(ability)) {
@@ -475,18 +483,32 @@ function runEffectReactionGuards(
       consumeReactionGuard(observed, guard.id)
     }
 
-    resolveEffects(
-      state,
-      ctx,
-      effectActor,
-      observed,
-      effects,
-      guard.sourceAbilityId ?? ability?.id,
-      ability?.classes,
-      undefined,
-      undefined,
-      guard.linkedTargetId,
-    )
+    if (guard.deferEffectsUntilAfterTrigger) {
+      ctx.deferredReactionEffects = [
+        ...(ctx.deferredReactionEffects ?? []),
+        {
+          actorId: effectActor.instanceId,
+          observedId: observed.instanceId,
+          effects,
+          abilityId: guard.sourceAbilityId ?? ability?.id,
+          abilityClasses: ability?.classes,
+          linkedTargetId: guard.linkedTargetId,
+        },
+      ]
+    } else {
+      resolveEffects(
+        state,
+        ctx,
+        effectActor,
+        observed,
+        effects,
+        guard.sourceAbilityId ?? ability?.id,
+        ability?.classes,
+        undefined,
+        undefined,
+        guard.linkedTargetId,
+      )
+    }
 
     makeEvent(
       ctx,
@@ -499,6 +521,31 @@ function runEffectReactionGuards(
       undefined,
       guard.sourceAbilityId ?? ability?.id,
     )
+  }
+}
+
+function flushDeferredReactionEffects(state: BattleState, ctx: ResolutionContext) {
+  while ((ctx.deferredReactionEffects?.length ?? 0) > 0) {
+    const pending = ctx.deferredReactionEffects?.splice(0) ?? []
+    pending.forEach((deferred) => {
+      const observed = getFighterById(state, deferred.observedId)
+      if (!observed || !isAlive(observed)) return
+
+      const sourceActor = getFighterById(state, deferred.actorId)
+      const effectActor = sourceActor && isAlive(sourceActor) ? sourceActor : observed
+      resolveEffects(
+        state,
+        ctx,
+        effectActor,
+        observed,
+        deferred.effects,
+        deferred.abilityId,
+        deferred.abilityClasses,
+        undefined,
+        undefined,
+        deferred.linkedTargetId,
+      )
+    })
   }
 }
 export { getCooldown, getFighterById, getOpposingTeam, getTeam, isAlive, getAbilityById } from '@/features/battle/engine/selectors.ts'
@@ -583,6 +630,25 @@ function getCommandResolvedCost(cost: BattleEnergyCost, command: QueuedBattleAct
   return resolved
 }
 
+function emitEnergyCostBlock(
+  state: BattleState,
+  ctx: ResolutionContext,
+  actor: BattleFighterState,
+  ability: BattleAbilityTemplate,
+) {
+  makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} couldn't activate ${ability.name}: insufficient cursed energy.`, actor.instanceId, undefined, undefined, ability.id)
+  makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
+    actorId: actor.instanceId,
+    team: actor.team,
+    abilityId: ability.id,
+    tags: ability.classes,
+    meta: {
+      reason: 'insufficient_energy',
+      canceledAbilityId: ability.id,
+    },
+  })
+}
+
 function getCommandEnergyCost(state: BattleState, command: QueuedBattleAction) {
   const actor = getFighterById(state, command.actorId)
   if (!actor) return {}
@@ -620,7 +686,9 @@ export function canUseAbility(state: BattleState, fighter: BattleFighterState, a
   if (!ability) return false
   if (!isAlive(fighter)) return false
   if (abilityId === PASS_ABILITY_ID) return true
+  if (hasModifierStatus(fighter.modifiers, 'stun')) return false
   if (isAbilityIntentStunned(fighter, ability)) return false
+  if (isAbilityClassStunned(fighter, ability)) return false
   if (!actorConditionsMet(fighter, ability, state.round)) return false
   if (!canPayEnergy(getEnergyPool(state, fighter.team), getResolvedAbilityEnergyCost(fighter, ability).cost)) return false
   return getCooldown(fighter, abilityId) <= 0
@@ -869,7 +937,14 @@ function applyModifierToFighter(
   template: BattleModifierTemplate,
   actorId?: string,
   abilityId?: string,
-) {
+): BattleModifierInstance | null {
+  if (template.stat === 'isInvulnerable' && template.value === true) {
+    const canGain = !hasBooleanModifierForStat(getFighterModifierPool(state, target), 'canGainInvulnerable', false)
+    if (!canGain) {
+      makeEvent(ctx, state.round, 'system', 'frost', `${target.shortName} cannot become invulnerable.`, actorId, target.instanceId, undefined, abilityId)
+      return null
+    }
+  }
   const beforeKinds = target.statuses.map((status) => status.kind)
   const next = createModifierInstance(template, {
     sourceActorId: actorId,
@@ -1064,14 +1139,17 @@ function applyRotMarkerAndRewards(
     (fighter) => fighter.templateId === 'eso' && fighter.stateFlags[ESO_BLOOD_BROTHERS_FLAG] && isAlive(fighter),
   )
   if (alliedEso) {
-    applyShieldToFighter(state, ctx, alliedEso, alliedEso, {
-      type: 'shield',
-      amount: 5 * amount,
-      label: 'Blood Brothers',
-      tags: ['blood-brothers'],
-      target: 'self',
-    }, 'eso-blood-brothers', firePassives)
-    makeEvent(ctx, state.round, 'system', 'teal', `${alliedEso.shortName} gained blood-bound defense.`, alliedEso.instanceId, alliedEso.instanceId, 5 * amount, 'eso-blood-brothers')
+    const shieldBlocked = alliedEso.effectImmunities.some((imm) => imm.blocks.includes('shield'))
+    if (!shieldBlocked) {
+      applyShieldToFighter(state, ctx, alliedEso, alliedEso, {
+        type: 'shield',
+        amount: 5 * amount,
+        label: 'Blood Brothers',
+        tags: ['blood-brothers'],
+        target: 'self',
+      }, 'eso-blood-brothers', firePassives)
+      makeEvent(ctx, state.round, 'system', 'teal', `${alliedEso.shortName} gained blood-bound defense.`, alliedEso.instanceId, alliedEso.instanceId, 5 * amount, 'eso-blood-brothers')
+    }
   }
 }
 
@@ -1118,7 +1196,7 @@ function applyEffectImmunityToFighter(
   effect: Extract<SkillEffect, { type: 'effectImmunity' }>,
   abilityId?: string,
 ) {
-  target.effectImmunities.push(createEffectImmunityState(actor, abilityId, effect))
+  target.effectImmunities.push(createEffectImmunityState(actor, abilityId, effect, state.round))
   makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
     actorId: actor.instanceId,
     targetId: target.instanceId,
@@ -1179,6 +1257,8 @@ function resolveEffects(
   const allies = getTeam(state, actor.team).filter(isAlive)
   const enemies = getOpposingTeam(state, actor.team).filter(isAlive)
   const isUlt = abilityClasses?.includes('Ultimate') ?? false
+  // Affliction-class skills bypass destructible defense per the game design contract.
+  const isAfflictionClass = abilityClasses?.includes('Affliction') ?? false
   const resolvedAbility = abilityId ? getAbilityById(actor, abilityId) ?? undefined : undefined
   const rotCounterCallbacks = {
     counterKey: ROT_COUNTER_KEY,
@@ -1186,16 +1266,115 @@ function resolveEffects(
     removeMarkerIfEmpty: removeRotMarkerIfEmpty,
   }
 
+  const shouldSkipEffectTarget = (
+    effect: SkillEffect,
+    effectActor: BattleFighterState,
+    effectTarget: BattleFighterState,
+  ) => {
+    if (isEffectBlocked(effectTarget, effect, effectActor.instanceId)) {
+      makeEvent(
+        ctx,
+        state.round,
+        'system',
+        'frost',
+        `${effectTarget.shortName}'s immunity blocked ${effectActor.shortName}'s ${effect.type} effect.`,
+        effectActor.instanceId,
+        effectTarget.instanceId,
+        undefined,
+        abilityId,
+      )
+      makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+        actorId: effectActor.instanceId,
+        targetId: effectTarget.instanceId,
+        team: effectTarget.team,
+        abilityId,
+        tags: abilityClasses ?? [],
+        meta: {
+          effectType: effect.type,
+          blockedBy: 'effectImmunity',
+        },
+      })
+      return true
+    }
+
+    if (
+      getEffectIntent(effect) === 'helpful'
+      && hasBooleanModifierForStat(getFighterModifierPool(state, effectTarget), 'canReceiveHelpfulEffects', false)
+    ) {
+      makeEvent(
+        ctx,
+        state.round,
+        'system',
+        'frost',
+        `${effectTarget.shortName} cannot receive helpful effects.`,
+        effectActor.instanceId,
+        effectTarget.instanceId,
+        undefined,
+        abilityId,
+      )
+      makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+        actorId: effectActor.instanceId,
+        targetId: effectTarget.instanceId,
+        team: effectTarget.team,
+        abilityId,
+        tags: abilityClasses ?? [],
+        meta: {
+          effectType: effect.type,
+          blockedBy: 'canReceiveHelpfulEffects',
+        },
+      })
+      return true
+    }
+
+    if (
+      getEffectIntent(effect) === 'harmful'
+      && effectActor.instanceId !== effectTarget.instanceId
+      && hasModifierBoolean(state, effectTarget, 'isInvulnerable', true, { statusKind: 'invincible' })
+      && !(resolvedAbility && abilityIgnoresInvulnerability(resolvedAbility))
+      && effect.type !== 'damage'
+      && effect.type !== 'damageFiltered'
+      && effect.type !== 'damageScaledByCounter'
+      && effect.type !== 'damageEqualToActorShield'
+    ) {
+      makeEvent(
+        ctx,
+        state.round,
+        'system',
+        'teal',
+        `${effectTarget.shortName}'s invulnerability blocked ${effectActor.shortName}'s ${effect.type} effect.`,
+        effectActor.instanceId,
+        effectTarget.instanceId,
+        undefined,
+        abilityId,
+      )
+      makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+        actorId: effectActor.instanceId,
+        targetId: effectTarget.instanceId,
+        team: effectTarget.team,
+        abilityId,
+        tags: abilityClasses ?? [],
+        meta: {
+          effectType: effect.type,
+          blockedBy: 'invulnerability',
+        },
+      })
+      return true
+    }
+
+    return false
+  }
+
   for (const effect of effects) {
     const targets = resolveEffectTargets(effect.target, actor, target, allies, enemies, state, linkedTargetId)
 
     if (effect.type === 'schedule') {
-      createScheduledEffect(state, ctx, actor, targets, effect, abilityId)
+      const eligibleTargets = targets.filter((entry) => !shouldSkipEffectTarget(effect, actor, entry))
+      createScheduledEffect(state, ctx, actor, eligibleTargets, effect, abilityId, abilityClasses)
       continue
     }
 
     if (effect.type === 'randomEnemyDamageOverTime') {
-      createRandomEnemyDamageOverTime(state, ctx, actor, effect, abilityId)
+      createRandomEnemyDamageOverTime(state, ctx, actor, effect, abilityId, abilityClasses)
       continue
     }
 
@@ -1253,6 +1432,81 @@ function resolveEffects(
         continue
       }
 
+      // Law 4.3: canReceiveHelpfulEffects=false blocks all helpful effects.
+      // No self-bypass: the restriction applies regardless of who is casting.
+      if (
+        getEffectIntent(effect) === 'helpful'
+        && hasBooleanModifierForStat(getFighterModifierPool(state, effectTarget), 'canReceiveHelpfulEffects', false)
+      ) {
+        makeEvent(
+          ctx,
+          state.round,
+          'system',
+          'frost',
+          `${effectTarget.shortName} cannot receive helpful effects.`,
+          effectActor.instanceId,
+          effectTarget.instanceId,
+          undefined,
+          abilityId,
+        )
+        makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+          actorId: effectActor.instanceId,
+          targetId: effectTarget.instanceId,
+          team: effectTarget.team,
+          abilityId,
+          tags: abilityClasses ?? [],
+          meta: {
+            effectType: effect.type,
+            blockedBy: 'canReceiveHelpfulEffects',
+          },
+        })
+        continue
+      }
+
+      // Law 5.3: Invulnerability is a targeting law — all harmful effects are
+      // blocked against an invulnerable target (fire-but-block scenario).
+      // Helpful and neutral effects are NOT blocked by invulnerability.
+      // Self-bypass: when effectActor === effectTarget, the fighter is applying
+      // effects to themselves (e.g. a self-targeted defensive ability) — their
+      // own invulnerability does not block their own ability from resolving.
+      // Damage effects pass through to applyDamagePacket, which already emits
+      // the canonical "invulnerability blocked" log; this gate covers the
+      // non-damage harmful effects that previously slipped through.
+      if (
+        getEffectIntent(effect) === 'harmful'
+        && effectActor.instanceId !== effectTarget.instanceId
+        && hasModifierBoolean(state, effectTarget, 'isInvulnerable', true, { statusKind: 'invincible' })
+        && !(resolvedAbility && abilityIgnoresInvulnerability(resolvedAbility))
+        && effect.type !== 'damage'
+        && effect.type !== 'damageFiltered'
+        && effect.type !== 'damageScaledByCounter'
+        && effect.type !== 'damageEqualToActorShield'
+      ) {
+        makeEvent(
+          ctx,
+          state.round,
+          'system',
+          'teal',
+          `${effectTarget.shortName}'s invulnerability blocked ${effectActor.shortName}'s ${effect.type} effect.`,
+          effectActor.instanceId,
+          effectTarget.instanceId,
+          undefined,
+          abilityId,
+        )
+        makeRuntimeEvent(ctx, state.round, 'effect_ignored', {
+          actorId: effectActor.instanceId,
+          targetId: effectTarget.instanceId,
+          team: effectTarget.team,
+          abilityId,
+          tags: abilityClasses ?? [],
+          meta: {
+            effectType: effect.type,
+            blockedBy: 'invulnerability',
+          },
+        })
+        continue
+      }
+
       switch (effect.type) {
         case 'randomEnemyDamageTick':
           resolveRandomEnemyDamageTick(state, ctx, actor, effect, abilityId, abilityClasses, firePassives, runEffectReactionGuards, applyDefeat)
@@ -1274,7 +1528,7 @@ function resolveEffects(
             flags: {
               isUltimate: isUlt,
               ignoresInvulnerability: effect.ignoresInvulnerability,
-              ignoresShield: effect.ignoresShield,
+              ignoresShield: effect.ignoresShield || isAfflictionClass,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -1300,7 +1554,7 @@ function resolveEffects(
             flags: {
               isUltimate: isUlt,
               ignoresInvulnerability: effect.ignoresInvulnerability,
-              ignoresShield: effect.ignoresShield,
+              ignoresShield: effect.ignoresShield || isAfflictionClass,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -1340,7 +1594,7 @@ function resolveEffects(
             flags: {
               isUltimate: isUlt,
               ignoresInvulnerability: effect.ignoresInvulnerability,
-              ignoresShield: effect.ignoresShield,
+              ignoresShield: effect.ignoresShield || isAfflictionClass,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -1371,7 +1625,7 @@ function resolveEffects(
             flags: {
               isUltimate: isUlt,
               ignoresInvulnerability: effect.ignoresInvulnerability,
-              ignoresShield: effect.ignoresShield,
+              ignoresShield: effect.ignoresShield || isAfflictionClass,
               isPiercing,
               cannotBeCountered: resolvedAbility?.cannotBeCountered ?? effect.cannotBeCountered ?? false,
               cannotBeReflected: resolvedAbility?.cannotBeReflected ?? effect.cannotBeReflected ?? false,
@@ -1449,7 +1703,7 @@ function resolveEffects(
               tags: effect.shieldTags ?? [],
               target: effect.target,
             }, abilityId, firePassives)
-            makeEvent(ctx, state.round, 'system', 'teal', `${effectTarget.shortName} gained ${overflow} shield from overheal.`, effectActor.instanceId, effectTarget.instanceId, overflow, abilityId)
+            makeEvent(ctx, state.round, 'system', 'teal', `${effectTarget.shortName} gained ${overflow} destructible defense from overheal.`, effectActor.instanceId, effectTarget.instanceId, overflow, abilityId)
           }
           break
         }
@@ -1505,7 +1759,7 @@ function resolveEffects(
         }
         case 'shield':
           applyShieldToFighter(state, ctx, actor, t, effect, abilityId, firePassives)
-          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.amount} shield.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
+          makeEvent(ctx, state.round, 'system', 'teal', `${t.shortName} gained ${effect.amount} destructible defense.`, actor.instanceId, t.instanceId, effect.amount, abilityId)
           break
         case 'shieldDamage': {
           applyShieldDamageToFighter(state, ctx, effectActor, effectTarget, effect, abilityId, firePassives, runEffectReactionGuards)
@@ -1657,16 +1911,45 @@ function tickTeamTurn(state: BattleState, ctx: ResolutionContext, team: BattleTe
         targetId: fighter.instanceId,
         team: fighter.team,
       })
+      resolveModifierOnExpireEffects(state, ctx, fighter, modifier)
     })
     emitRemovedStatusEvents(ctx, state.round, fighter, beforeKinds)
     tickAbilityState(fighter)
     tickCostModifiers(fighter)
-    tickEffectImmunities(fighter)
+    tickEffectImmunities(fighter, state.round)
     tickClassStuns(fighter, state.round)
     tickIntentStuns(fighter, state.round)
     tickReactionGuards(fighter, state.round)
     tickStateModes(fighter, state.round, ctx)
   })
+}
+
+function resolveModifierOnExpireEffects(
+  state: BattleState,
+  ctx: ResolutionContext,
+  target: BattleFighterState,
+  modifier: BattleModifierInstance,
+) {
+  if (!modifier.onExpireEffects || modifier.onExpireEffects.length === 0) return
+  if (state.phase === 'finished' || getWinner(state)) return
+  if (!isAlive(target)) return
+
+  const source = modifier.sourceActorId ? getFighterById(state, modifier.sourceActorId) : null
+  const actor = source ?? target
+  const ability = modifier.sourceAbilityId ? getAbilityById(actor, modifier.sourceAbilityId) ?? undefined : undefined
+
+  makeEvent(
+    ctx,
+    state.round,
+    'system',
+    'teal',
+    `${modifier.label} expired on ${target.shortName}.`,
+    actor.instanceId,
+    target.instanceId,
+    undefined,
+    modifier.sourceAbilityId,
+  )
+  resolveEffects(state, ctx, actor, target, modifier.onExpireEffects, modifier.sourceAbilityId, ability?.classes)
 }
 
 function tickRoundEnd(state: BattleState, ctx: ResolutionContext) {
@@ -1748,7 +2031,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   }
 
   if (ability.id !== PASS_ABILITY_ID && isAbilityIntentStunned(actor, ability)) {
-    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because its intent was stunned.`, actor.instanceId, undefined, undefined, ability.id)
+    makeEvent(ctx, state.round, 'status', 'gold', `${actor.shortName}'s queued ${ability.name} was canceled because its intent was sealed.`, actor.instanceId, undefined, undefined, ability.id)
     makeRuntimeEvent(ctx, state.round, 'ability_interrupted', {
       actorId: actor.instanceId,
       team: actor.team,
@@ -1762,16 +2045,27 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
     return
   }
 
+  let payableCost: BattleEnergyCost = {}
+  let appliedCostModifiers: BattleCostModifierState[] = []
+  if (ability.id !== PASS_ABILITY_ID) {
+    const { cost, applied } = getResolvedAbilityEnergyCost(actor, ability)
+    const currentPool = getEnergyPool(state, actor.team)
+    const requestedCost = getCommandResolvedCost(cost, command)
+    if (!canPayEnergy(currentPool, requestedCost)) {
+      emitEnergyCostBlock(state, ctx, actor, ability)
+      return
+    }
+    payableCost = requestedCost
+    appliedCostModifiers = applied
+  }
+
   if (!canUseAbility(state, actor, ability.id)) {
     makeEvent(ctx, state.round, 'system', 'frost', `${actor.shortName} couldn't activate ${ability.name}.`, actor.instanceId, undefined, undefined, ability.id)
     return
   }
 
   if (ability.id !== PASS_ABILITY_ID) {
-    const { cost, applied } = getResolvedAbilityEnergyCost(actor, ability)
     const currentPool = getEnergyPool(state, actor.team)
-    const requestedCost = getCommandResolvedCost(cost, command)
-    const payableCost = canPayEnergy(currentPool, requestedCost) ? requestedCost : cost
     const spent = getSpentEnergyAmounts(currentPool, payableCost)
     const nextPool = spendEnergy(currentPool, payableCost)
     if (actor.team === 'player') {
@@ -1799,7 +2093,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
     if (spent && countEnergyCost(payableCost) > 0) {
       makeEvent(ctx, state.round, 'system', 'gold', `${actor.shortName}'s team spent ${formatEnergyAmounts(spent)} cursed energy for ${ability.name}.`, actor.instanceId, undefined, countEnergyCost(payableCost), ability.id)
     }
-    applied.forEach((modifier) => {
+    appliedCostModifiers.forEach((modifier) => {
       makeRuntimeEvent(ctx, state.round, 'ability_cost_modified', {
         actorId: actor.instanceId,
         targetId: actor.instanceId,
@@ -1875,6 +2169,7 @@ function resolveAction(state: BattleState, ctx: ResolutionContext, command: Queu
   } else if (preDamageReaction.cancelAction) {
     makeEvent(ctx, state.round, 'system', 'gold', `${actor.shortName}'s ${ability.name} was interrupted before its effects resolved.`, actor.instanceId, command.targetId ?? undefined, undefined, ability.id)
   }
+  flushDeferredReactionEffects(state, ctx)
   firePassives(state, ctx, actor, singleTarget, 'onAbilityResolve', ability)
 
   for (const tgt of allTargeted) {
@@ -1927,15 +2222,15 @@ function resolveScheduledEffects(state: BattleState, ctx: ResolutionContext, pha
 
     const targets = scheduled.targetIds
       .map((targetId) => getFighterById(state, targetId))
-      .filter((target): target is BattleFighterState => Boolean(target))
+      .filter((target): target is BattleFighterState => target !== null && isAlive(target))
 
     if (targets.length === 0) {
-      resolveEffects(state, ctx, actor, null, scheduled.effects, scheduled.abilityId)
+      resolveEffects(state, ctx, actor, null, scheduled.effects, scheduled.abilityId, scheduled.abilityClasses)
       return
     }
 
     targets.forEach((target) => {
-      resolveEffects(state, ctx, actor, target, scheduled.effects, scheduled.abilityId)
+      resolveEffects(state, ctx, actor, target, scheduled.effects, scheduled.abilityId, scheduled.abilityClasses)
     })
   })
 }
@@ -2189,7 +2484,7 @@ function resolveOneScheduledEffect(
 
   const targets = scheduled.targetIds
     .map((targetId) => getFighterById(state, targetId))
-    .filter((target): target is BattleFighterState => Boolean(target))
+    .filter((target): target is BattleFighterState => target !== null && isAlive(target))
 
   if (targets.length === 0) {
     resolveEffects(state, ctx, actor, null, scheduled.effects, scheduled.abilityId)
@@ -2369,7 +2664,8 @@ export function endRound(previousState: BattleState, scheduledOrder?: string[]):
     if (!isAlive(fighter)) return
     firePassives(state, ctx, fighter, null, 'onRoundEnd')
   })
-  tickTeamTurn(state, ctx, getSecondPlayer(state.firstPlayer))
+  // Law 7.1: second team already received tickTeamTurn inside resolveTeamTurn(secondTeam).
+  // A second call here was the redundant double-tick fixed in Phase 7B.
   tickRoundEnd(state, ctx)
 
   const winner = getWinner(state)
@@ -2400,7 +2696,8 @@ export function endRoundTimeline(previousState: BattleState, scheduledOrder?: st
     if (!isAlive(fighter)) return
     firePassives(state, ctx, fighter, null, 'onRoundEnd')
   })
-  tickTeamTurn(state, ctx, getSecondPlayer(state.firstPlayer))
+  // Law 7.1: second team already received tickTeamTurn inside resolveTeamTurn(secondTeam).
+  // A second call here was the redundant double-tick fixed in Phase 7B.
   tickRoundEnd(state, ctx)
 
   const winner = getWinner(state)

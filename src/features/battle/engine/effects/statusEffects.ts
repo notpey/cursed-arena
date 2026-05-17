@@ -1,6 +1,5 @@
 import { emitCounterChange, makeEvent, makeRuntimeEvent } from '@/features/battle/engine/events.ts'
 import { createClassStunState, createIntentStunState } from '@/features/battle/engine/stateFactory.ts'
-import { getFighterModifierPool, hasBooleanModifierForStat } from '@/features/battle/modifiers.ts'
 import type {
   BattleFighterState,
   BattleModifierFilter,
@@ -80,7 +79,7 @@ export function applyIntentStunStatus(
 ): void {
   target.intentStuns.push(createIntentStunState(actor, abilityId, effect, state.round, target.intentStuns.length))
   const label = effect.intent === 'harmful' ? 'harmful' : 'helpful'
-  makeEvent(ctx, state.round, 'status', 'gold', `${target.shortName}'s ${label} skills are stunned for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, target.instanceId, effect.duration, abilityId)
+  makeEvent(ctx, state.round, 'status', 'gold', `${target.shortName}'s ${label} skills are sealed for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, target.instanceId, effect.duration, abilityId)
   makeRuntimeEvent(ctx, state.round, 'modifier_applied', {
     actorId: actor.instanceId,
     targetId: target.instanceId,
@@ -128,12 +127,9 @@ export function applyInvulnerableStatus(
   abilityId: string | undefined,
   applyModifierToFighter: ApplyModifierToFighterFn,
 ): void {
-  const canGain = !hasBooleanModifierForStat(getFighterModifierPool(state, target), 'canGainInvulnerable', false)
-  if (!canGain) {
-    makeEvent(ctx, state.round, 'system', 'frost', `${target.shortName} cannot become invulnerable.`, actor.instanceId, target.instanceId, undefined, abilityId)
-    return
-  }
-  applyModifierToFighter(state, ctx, target, {
+  // canGainInvulnerable is now enforced universally inside applyModifierToFighter.
+  // The block event is emitted there; if it returns null the modifier was rejected.
+  const applied = applyModifierToFighter(state, ctx, target, {
     label: 'Invulnerable',
     stat: 'isInvulnerable',
     mode: 'set',
@@ -144,7 +140,9 @@ export function applyInvulnerableStatus(
     stacking: 'max',
     statusKind: 'invincible',
   }, actor.instanceId, abilityId)
-  makeEvent(ctx, state.round, 'status', 'teal', `${target.shortName} became untouchable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, target.instanceId, undefined, abilityId)
+  if (applied) {
+    makeEvent(ctx, state.round, 'status', 'teal', `${target.shortName} became invulnerable for ${effect.duration} turn${effect.duration === 1 ? '' : 's'}.`, actor.instanceId, target.instanceId, undefined, abilityId)
+  }
 }
 
 export function applyAttackUpStatus(

@@ -60,6 +60,26 @@ export function applyDamagePacket(
 ): number {
   if (!isAlive(target)) return 0
 
+  // Self-applied damage (e.g. self-harm effects) bypasses immunity per Law 4.1.
+  const isSelfApplied = packet.sourceActorId !== undefined && packet.sourceActorId === target.instanceId
+  if (!isSelfApplied) {
+    const blocked = target.effectImmunities.some((imm) => imm.blocks.includes('damage'))
+    if (blocked) {
+      makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s effect immunity blocked incoming damage.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
+      makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
+        actorId: packet.sourceActorId,
+        targetId: packet.targetId,
+        team: target.team,
+        abilityId: packet.abilityId,
+        amount: 0,
+        tags: packet.tags,
+        packet,
+        meta: { blockedByImmunity: true },
+      })
+      return 0
+    }
+  }
+
   makeRuntimeEvent(ctx, state.round, 'damage_would_apply', {
     actorId: packet.sourceActorId,
     targetId: packet.targetId,
@@ -122,7 +142,7 @@ export function applyDamagePacket(
         state.round,
         'system',
         'gold',
-        `${target.shortName}'s ${brokenShield.label} broke after losing ${absorbed} shield${remainingDamage > 0 ? `; ${remainingDamage} damage carried through` : ''}.`,
+        `${target.shortName}'s ${brokenShield.label} destructible defense was destroyed after absorbing ${absorbed}${remainingDamage > 0 ? `; ${remainingDamage} damage carried through` : ''}.`,
         actor?.instanceId,
         target.instanceId,
         absorbed,
@@ -151,7 +171,7 @@ export function applyDamagePacket(
   }
 
   if (remainingDamage <= 0) {
-    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s shield absorbed the hit with no carryover damage.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
+    makeEvent(ctx, state.round, 'system', 'teal', `${target.shortName}'s destructible defense absorbed the hit with no carryover damage.`, actor?.instanceId, target.instanceId, 0, packet.abilityId)
     makeRuntimeEvent(ctx, state.round, 'damage_blocked', {
       actorId: packet.sourceActorId,
       targetId: packet.targetId,

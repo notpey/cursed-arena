@@ -65,7 +65,7 @@ export const sukuna = fighter({
   ultimate: defendSkill({
     id: 'sukuna-cursed-sovereignty',
     name: 'Cursed Sovereignty',
-    description: 'Sukuna becomes invulnerable for 1 turn and ignores enemy cost disruption.',
+    description: 'Sukuna becomes invulnerable for 1 turn and ignores incoming non-damage effects.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,

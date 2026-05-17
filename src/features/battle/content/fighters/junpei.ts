@@ -3,7 +3,7 @@ import { fighter, skill, modifierEffect, markerEffect } from './_helpers.ts'
 
 const MOON_DREGS_TAG = 'moon-dregs-injection'
 const moonDregsMarker = (target: 'inherit' | 'attacker') =>
-  markerEffect('Moon Dregs: Injection', 2, target, [MOON_DREGS_TAG])
+  markerEffect('Moon Dregs: Injection', 2, target, [MOON_DREGS_TAG], { intent: 'harmful' })
 
 const moonDregsReaction = (target: 'inherit' | 'attacker') => ({
   type: 'reaction' as const,
@@ -105,7 +105,7 @@ export const junpei = fighter({
     skill({
       id: 'junpei-toxic-break',
       name: 'Toxic Break',
-      description: 'This skill targets one enemy, dealing 20 damage to them. If the target is affected by Moon Dregs: Injection, this skill will deal 15 additional piercing damage and increase all affliction effects by 5 permanently on them.',
+      description: 'This skill targets one enemy, dealing 20 damage. If the target is affected by Moon Dregs: Injection, it deals 15 additional piercing damage and the target permanently takes 5 more affliction damage.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Affliction', 'Ranged', 'Instant'],
@@ -120,7 +120,7 @@ export const junpei = fighter({
           conditions: [{ type: 'targetHasModifierTag', tag: MOON_DREGS_TAG }],
           effects: [
             { type: 'damage', power: 15, piercing: true, target: 'inherit' },
-            modifierEffect('Toxic Break Toxicity', 'damageTaken', 5, 'permanent', 'inherit', ['toxic-break-toxicity'], { damageClass: 'Affliction' }),
+            modifierEffect('Toxic Break Toxicity', 'damageTaken', 5, 'permanent', 'inherit', ['toxic-break-toxicity'], { damageClass: 'Affliction', intent: 'harmful' }),
           ],
         },
       ],
@@ -129,7 +129,7 @@ export const junpei = fighter({
   ultimate: defendSkill({
     id: 'junpei-moon-dregs-guard',
     name: 'Moon Dregs: Guard',
-    description: 'For 1 turn, Junpei becomes invulnerable. During this time, the first enemy that targets Junpei with a harmful skill will take 15 affliction damage and become affected by the Moon Dregs marker and harmful-skill punishment.',
+    description: 'For 1 turn, Junpei becomes invulnerable. During this time, the first enemy that uses a harmful skill on him takes 15 affliction damage, receives the Moon Dregs: Injection marker, and is punished for using harmful skills for 2 rounds.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,

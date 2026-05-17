@@ -1,6 +1,6 @@
 import { EnergyCostRow } from '@/components/battle/BattleEnergy'
 import { BattlePortraitSlot } from '@/components/battle/BattlePortraitSlot'
-import { describeSkillEffectForUi, getSkillEffectDuration, getTargetLabel } from '@/components/battle/battleDisplay'
+import { cn, describeSkillEffectForUi, getSkillEffectDuration, getTargetLabel } from '@/components/battle/battleDisplay'
 import { formatSkillClasses } from '@/components/battle/skillClassDisplay'
 import { countEnergyCost, getAbilityEnergyCost } from '@/features/battle/energy'
 import { getCooldown, getQueueAbilityBlockReason, getResolvedAbilityEnergyCost, getValidTargetIds } from '@/features/battle/engine'
@@ -23,18 +23,25 @@ function classLabel(kind: BattleAbilityTemplate['kind']): string {
 
 function EnemySkillIcon({
   ability,
+  fighter,
   selected,
   onSelect,
   onHover,
   onLeave,
 }: {
   ability: BattleAbilityTemplate
+  fighter: BattleFighterState | null
   selected: boolean
   onSelect: () => void
   onHover: () => void
   onLeave: () => void
 }) {
   const iconSrc = normalizeBattleAssetSrc(ability.icon.src)
+  const cooldown = fighter ? getCooldown(fighter, ability.id) : null
+  const onCooldown = cooldown !== null && cooldown > 0
+  const cost = getAbilityEnergyCost(ability)
+  const totalCost = countEnergyCost(cost)
+
   return (
     <button
       type="button"
@@ -42,18 +49,45 @@ function EnemySkillIcon({
       onClick={onSelect}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
-      className={[
-        'relative h-[2.4rem] w-[2.4rem] shrink-0 overflow-hidden rounded-[0.12rem] border-2 transition duration-150',
+      className={cn(
+        'group relative flex shrink-0 flex-col items-center gap-0.5 rounded-[0.14rem] border-2 pb-0.5 pt-0.5 transition duration-150',
+        'w-[3.6rem]',
         selected
-          ? 'border-ca-red/70 shadow-[0_0_0_1px_rgba(252,43,71,0.3),0_0_12px_rgba(252,43,71,0.22)] -translate-y-[2px]'
-          : 'border-ca-red/25 hover:border-ca-red/50 hover:-translate-y-[1px]',
-      ].join(' ')}
-    >
-      {iconSrc ? (
-        <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover opacity-85" />
-      ) : (
-        <div className="grid h-full w-full place-items-center bg-[rgba(24,8,13,0.95)] text-[0.85rem] font-black text-ca-red/40">?</div>
+          ? 'border-ca-red/70 shadow-[0_0_0_1px_rgba(252,43,71,0.3),0_0_12px_rgba(252,43,71,0.22)] -translate-y-[2px] bg-[rgba(24,8,13,0.7)]'
+          : 'border-ca-red/25 hover:border-ca-red/50 hover:-translate-y-[1px] bg-[rgba(24,8,13,0.45)]',
       )}
+    >
+      {/* Icon + cooldown overlay */}
+      <div className="relative h-[2rem] w-[2rem] shrink-0 overflow-hidden rounded-[0.1rem]">
+        {iconSrc ? (
+          <img src={iconSrc} alt={ability.name} className="h-full w-full object-cover opacity-85" />
+        ) : (
+          <div className="grid h-full w-full place-items-center bg-[rgba(24,8,13,0.95)] text-[0.85rem] font-black text-ca-red/40">?</div>
+        )}
+        {onCooldown ? (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/72">
+            <span className="ca-display select-none text-[0.9rem] leading-none text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">{cooldown}</span>
+            <span className="ca-mono-label text-[0.34rem] leading-none text-white/60">TRN</span>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Skill name */}
+      <span className={cn(
+        'ca-mono-label w-full truncate text-center text-[0.38rem] leading-none',
+        onCooldown ? 'text-ca-text-3' : 'text-ca-text-2 group-hover:text-ca-text',
+      )}>
+        {ability.name.toUpperCase()}
+      </span>
+
+      {/* Cost row */}
+      <div className="flex items-center justify-center">
+        {totalCost > 0 ? (
+          <EnergyCostRow cost={cost} compact />
+        ) : (
+          <span className="ca-mono-label text-[0.38rem] text-ca-text-3">FREE</span>
+        )}
+      </div>
     </button>
   )
 }
@@ -178,7 +212,17 @@ export function BattleInfoPanel({
 
               <div className="flex items-center gap-2">
                 <span className="ca-mono-label text-[0.55rem] text-ca-text-3">COOLDOWN</span>
-                <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability ? (isEnemyInspect ? ability.cooldown : cooldown !== null && cooldown > 0 ? cooldown : ability.cooldown) : 'NONE'}</span>
+                {ability ? (
+                  isEnemyInspect ? (
+                    <span className="ca-mono-label text-[0.62rem] text-ca-text-2">{ability.cooldown} BASE</span>
+                  ) : cooldown !== null && cooldown > 0 ? (
+                    <span className="ca-mono-label text-[0.62rem] text-ca-red">{cooldown} TURN{cooldown === 1 ? '' : 'S'} LEFT</span>
+                  ) : (
+                    <span className="ca-mono-label text-[0.62rem] text-ca-teal">READY ({ability.cooldown} BASE)</span>
+                  )
+                ) : (
+                  <span className="ca-mono-label text-[0.62rem] text-ca-text-2">NONE</span>
+                )}
               </div>
 
               {ability && !isEnemyInspect ? (
@@ -207,6 +251,7 @@ export function BattleInfoPanel({
                     <EnemySkillIcon
                       key={ab.id}
                       ability={ab}
+                      fighter={inspectedEnemyFighter}
                       selected={ab.id === inspectedEnemyAbilityId}
                       onSelect={() => onSelectEnemyAbility?.(ab.id)}
                       onHover={() => onSelectEnemyAbility?.(ab.id)}

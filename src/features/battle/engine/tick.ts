@@ -12,9 +12,12 @@ export function tickCostModifiers(fighter: BattleFighterState) {
     .filter((modifier) => modifier.remainingRounds > 0 && (modifier.remainingUses == null || modifier.remainingUses > 0))
 }
 
-export function tickEffectImmunities(fighter: BattleFighterState) {
+export function tickEffectImmunities(fighter: BattleFighterState, round: number) {
   fighter.effectImmunities = fighter.effectImmunities
-    .map((immunity) => ({ ...immunity, remainingRounds: Math.max(0, immunity.remainingRounds - 1) }))
+    .map((immunity) => {
+      if (immunity.appliedInRound !== undefined && immunity.appliedInRound === round) return immunity
+      return { ...immunity, remainingRounds: Math.max(0, immunity.remainingRounds - 1) }
+    })
     .filter((immunity) => immunity.remainingRounds > 0)
 }
 

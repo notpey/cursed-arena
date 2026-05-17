@@ -75,7 +75,7 @@ const visibleCounterPresenters: Record<string, VisibleCounterPresenter> = {
     priority: 6,
     lines: (value) => [
       { text: `${value} Shikigami stack${value === 1 ? '' : 's'} gathered.`, turnsLeft: null },
-      { text: `Shikigami Recall restores ${value * 5} HP and ${value * 5} shield, then consumes all stacks.`, turnsLeft: null },
+      { text: `Shikigami Recall restores ${value * 5} HP and ${value * 5} destructible defense, then consumes all stacks.`, turnsLeft: null },
     ],
   },
   straw_doll_ritual_stacks: {
@@ -337,9 +337,9 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
     case 'damageScaledByCounter':
       return `take damage for each stack`
     case 'damageEqualToActorShield':
-      return `take damage equal to the attacker's shield`
+      return `take damage equal to the attacker's destructible defense`
     case 'shieldDamage':
-      return `lose ${effect.amount} shield`
+      return `lose ${effect.amount} destructible defense`
     case 'energyGain':
       return `gain cursed energy`
     case 'energyDrain':
@@ -355,7 +355,7 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
     case 'healScaledByCounter':
       return `restore HP for each stack`
     case 'shieldScaledByCounter':
-      return `gain shield for each stack`
+      return `gain destructible defense for each stack`
     case 'setHpFromCounter':
       return `have HP set to a fixed value`
     case 'stun':
@@ -403,9 +403,9 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
     case 'removeModifier':
       return `have a modifier removed`
     case 'shield':
-      return `gain ${effect.amount} shield`
+      return `gain ${effect.amount} destructible defense`
     case 'breakShield':
-      return `have their shield broken`
+      return `have their destructible defense destroyed`
     case 'effectImmunity':
       return `gain immunity to ${effect.label.toLowerCase()}`
     case 'removeEffectImmunity':
@@ -417,7 +417,7 @@ export function describeSkillEffectForUi(effect: SkillEffect): string {
     case 'randomEnemyDamageTick':
       return `take ${effect.power} damage`
     case 'overhealToShield':
-      return `convert overhealing into shield`
+      return `convert overhealing into destructible defense`
     default:
       return 'be affected'
   }
@@ -442,11 +442,11 @@ function passiveTriggerPhrase(passive: PassiveEffect): string {
     case 'onTakeDamage':
       return 'Each time this character takes damage'
     case 'onShieldBroken':
-      return 'When this character\'s shield is broken'
+      return 'When this character\'s destructible defense is destroyed'
     case 'onHeal':
       return 'Each time this character is healed'
     case 'onShieldGain':
-      return 'Each time this character gains a shield'
+      return 'Each time this character gains destructible defense'
     case 'onDefeat':
       return 'When this character is defeated'
     case 'onDefeatEnemy':
@@ -504,8 +504,8 @@ function describeImmunityBlocks(blocks: BattleEffectImmunityBlock[]): string {
   if (blocks.includes('classStun')) labels.push('technique seals')
   if (blocks.includes('mark')) labels.push('mark')
   if (blocks.includes('burn')) labels.push('affliction damage')
-  if (blocks.includes('shieldDamage')) labels.push('shield damage')
-  if (blocks.includes('breakShield')) labels.push('shield break')
+  if (blocks.includes('shieldDamage')) labels.push('destructible defense damage')
+  if (blocks.includes('breakShield')) labels.push('destructible defense break')
   if (blocks.includes('energyDrain') || blocks.includes('energySteal')) labels.push('energy drain')
   if (blocks.includes('heal')) labels.push('healing')
   if (blocks.includes('invulnerable')) labels.push('invulnerability effects')
@@ -529,7 +529,7 @@ function reactionTriggerPhrase(trigger: string | undefined, firstOrAny: string):
     case 'onDamageBlocked':
       return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character blocks damage`
     case 'onShieldBroken':
-      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character's shield is broken`
+      return `${firstOrAny.charAt(0).toUpperCase()}${firstOrAny.slice(1)} this character's destructible defense is destroyed`
     case 'onDefeat':
       return 'When this character is defeated'
     case 'onDefeatEnemy':
@@ -723,11 +723,11 @@ function describeCounterLine(key: string, value: number, fighter: BattleFighterS
     }
   }
 
-  // ── Shield ────────────────────────────────────────────────────────────────
+  // ── Destructible Defense ──────────────────────────────────────────────────
   if (fighter.shield && fighter.shield.amount > 0) {
     const sourceId = fighter.shield.sourceAbilityId ?? '__shield__'
     const group = ensureGroup(sourceId)
-    group.lines.push({ text: `This character has ${fighter.shield.amount} shield remaining`, turnsLeft: null })
+    group.lines.push({ text: `This character has ${fighter.shield.amount} destructible defense remaining`, turnsLeft: null })
     mergeTone(group, 'buff')
     mergePriority(group, 1)
   }

@@ -47,7 +47,7 @@ export const noritoshi = fighter({
     skill({
       id: 'noritoshi-blood-draw',
       name: 'Blood Draw',
-      description: 'Kamo loses 10 health and gains 1 random energy. For 1 turn, his cooldowns tick down rapidly. This adapts the source no-cooldown rider.',
+      description: 'Kamo loses 10 health and gains 1 random energy. For 1 turn, his cooldowns tick down rapidly.',
       kind: 'utility',
       targetRule: 'self',
       classes: ['Strategic', 'Instant', 'Affliction'],
@@ -56,14 +56,14 @@ export const noritoshi = fighter({
       effects: [
         { type: 'damage', power: 10, target: 'self', piercing: true, ignoresShield: true, ignoresInvulnerability: true },
         { type: 'energyGain', amount: { random: 1 }, target: 'self' },
-        modifierEffect('Blood Draw Tempo', 'cooldownTick', 99, 1, 'self', ['blood-draw']),
+        modifierEffect('Blood Draw Tempo', 'cooldownTick', 99, 1, 'self', ['blood-draw'], { intent: 'helpful' }),
         prepareRefinedBonus('noritoshi-blood-draw'),
       ],
     }),
     skill({
       id: 'noritoshi-piercing-blood',
       name: 'Piercing Blood',
-      description: 'This skill targets one enemy, dealing 20 damage. If used immediately after Blood Draw, it deals 35 piercing damage instead. Refined Technique bonus applies after this branch.',
+      description: 'This skill targets one enemy, dealing 20 damage. If used immediately after Blood Draw, it deals 35 piercing damage instead. The Refined Technique damage bonus applies to this skill.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Ranged', 'Instant'],

@@ -1,10 +1,10 @@
 import { definePassive } from '@/features/battle/content.ts'
 import { fighter, skill, markerEffect } from './_helpers.ts'
 
-const rotDescription = 'If an enemy affected by Rot uses a new harmful skill, they will deal 5 less non-affliction damage for 1 turn. This skill stacks.'
+const rotDescription = 'If an enemy affected by Rot uses a new harmful skill, they will deal 5 less non-affliction damage for 1 turn. Rot stacks.'
 
 const applyRot = (amount = 1) =>
-  ({ type: 'adjustCounter' as const, key: 'rot', amount, min: 0, target: 'inherit' as const })
+  ({ type: 'adjustCounter' as const, key: 'rot', amount, min: 0, target: 'inherit' as const, intent: 'harmful' as const })
 
 const impalingRushEffects = [
   { type: 'damage' as const, power: 10, piercing: true, target: 'inherit' as const },
@@ -67,14 +67,14 @@ export const eso = fighter({
           harmfulOnly: true,
           consumeOnTrigger: false,
           target: 'self',
-          effects: [{ type: 'adjustCounter', key: 'rot', amount: 1, min: 0, target: 'linked-target' }],
+          effects: [{ type: 'adjustCounter', key: 'rot', amount: 1, min: 0, target: 'linked-target', intent: 'harmful' }],
         },
       ],
     }),
     skill({
       id: 'eso-corrosive-blood',
       name: 'Corrosive Blood',
-      description: 'This skill targets all enemies for 2 turns. On the first turn, any enemy who uses a new skill will have Impaling Rush activated on them; this effect is invisible. On the second turn, all enemies will receive 10 piercing damage for each stack of Rot on them, and removes all stacks of Rot afterwards.',
+      description: 'This skill targets all enemies. This turn, any enemy who uses a new skill has Impaling Rush activated on them. Next turn, all enemies take 10 piercing damage per Rot stack, then all Rot stacks are removed.',
       kind: 'attack',
       targetRule: 'enemy-all',
       classes: ['Special', 'Ranged', 'Instant', 'Action'],

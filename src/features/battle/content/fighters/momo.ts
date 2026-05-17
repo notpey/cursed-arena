@@ -16,7 +16,7 @@ export const momo = fighter({
       conditions: [{ type: 'counterAtLeast', key: '__never_momo_display_only', value: 1 }],
       effects: [markerEffect('Battlefield Awareness', 'permanent', 'self', ['battlefield-awareness'])],
       label: 'Battlefield Awareness',
-      description: 'Source note: Battlefield Awareness duplicated Evasive Flight, so the active protection is authored only on Evasive Flight.',
+      description: 'Momo monitors the battlefield from above, coordinating with allies and tracking enemy positions.',
       icon: { label: 'BA', tone: 'teal' },
     }),
   ],
@@ -31,7 +31,7 @@ export const momo = fighter({
       cooldown: 2,
       energyCost: { random: 1 },
       effects: [
-        modifierEffect('Aerial Support', 'damageDealt', 10, 2, 'inherit', ['aerial-support']),
+        modifierEffect('Aerial Support', 'damageDealt', 10, 2, 'inherit', ['aerial-support'], { intent: 'helpful' }),
         { type: 'modifyAbilityCost', target: 'inherit', modifier: { mode: 'reduceRandom', amount: 1, duration: 2, label: 'Aerial Support' } },
       ],
     }),
@@ -47,7 +47,7 @@ export const momo = fighter({
       power: 10,
       effects: [
         { type: 'damage', power: 10, target: 'inherit' },
-        modifierEffect('Disrupting Gust', 'damageDealt', -10, 1, 'inherit', ['disrupting-gust']),
+        modifierEffect('Disrupting Gust', 'damageDealt', -10, 1, 'inherit', ['disrupting-gust'], { intent: 'harmful' }),
         { type: 'modifyAbilityCost', target: 'inherit', modifier: { mode: 'increaseRandom', amount: 1, duration: 1, uses: 1, label: 'Disrupting Gust' } },
       ],
     }),
@@ -72,6 +72,7 @@ export const momo = fighter({
             label: 'Coordinated Assault',
             trigger: 'onDamageApplied',
             duration: 1,
+            intent: 'harmful',
             consumeOnTrigger: true,
             target: 'inherit',
             effects: [{ type: 'damage', power: 15, target: 'inherit' }],
@@ -91,7 +92,7 @@ export const momo = fighter({
     energyCost: { random: 1 },
     effects: [
       { type: 'invulnerable', duration: 1, target: 'self' },
-      modifierEffect('Evasive Flight', 'damageTaken', -5, 1, 'all-allies', ['evasive-flight']),
+      modifierEffect('Evasive Flight', 'damageTaken', -5, 1, 'all-allies', ['evasive-flight'], { intent: 'helpful' }),
     ],
   }),
 })

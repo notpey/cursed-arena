@@ -59,7 +59,7 @@ export const mai = fighter({
     skill({
       id: 'mai-steady-aim',
       name: 'Steady Aim',
-      description: 'Mai gains 1 Cursed Bullet use, up to 3. Her next skill deals 10 additional damage. The delayed reload for skipping Cursed Bullet is deferred.',
+      description: 'Mai gains 1 Cursed Bullet use, up to 3. Her next skill deals 10 additional damage.',
       kind: 'utility',
       targetRule: 'self',
       classes: ['Strategic', 'Instant'],
@@ -87,7 +87,7 @@ export const mai = fighter({
           conditions: [{ type: 'counterAtLeast', key: CURSED_BULLET_USES, value: 1 }],
           effects: [
             { type: 'damage', power: 15, target: 'inherit' },
-            modifierEffect('Suppressing Fire', 'damageDealt', -10, 1, 'inherit', ['suppressing-fire']),
+            modifierEffect('Suppressing Fire', 'damageDealt', -10, 1, 'inherit', ['suppressing-fire'], { intent: 'harmful' }),
           ],
           elseEffects: [
             { type: 'damage', power: 25, target: 'inherit' },

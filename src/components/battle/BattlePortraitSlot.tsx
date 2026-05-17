@@ -339,43 +339,43 @@ function getPortraitStateBadges(
   const add = (badge: PortraitStateBadge) => badges.push(badge)
 
   if (hasStatus(fighter.statuses, 'stun')) {
-    add({ key: 'stun', label: 'STN', title: 'Stunned: cannot act', tone: 'gold' })
+    add({ key: 'stun', label: 'STUN', title: 'Stunned — cannot use any skills this turn', tone: 'gold' })
   }
   if (fighter.classStuns.length > 0) {
-    add({ key: 'class-lock', label: 'CLS', title: 'Class locked or sealed', tone: 'gold' })
+    add({ key: 'class-lock', label: 'SEAL', title: 'Skill class sealed — certain skill types are unavailable', tone: 'gold' })
   }
   if (fighter.intentStuns.length > 0) {
-    add({ key: 'intent-lock', label: 'INT', title: 'Intent locked', tone: 'gold' })
+    add({ key: 'intent-lock', label: 'LOCK', title: 'Skill intent locked — harmful or helpful skills are unavailable', tone: 'gold' })
   }
   if (hasStatus(fighter.statuses, 'invincible')) {
-    add({ key: 'invulnerable', label: 'INV', title: 'Invulnerable', tone: 'teal' })
+    add({ key: 'invulnerable', label: 'INVUL', title: 'Invulnerable — immune to all damage and harmful effects', tone: 'teal' })
   }
   if (fighter.shield && fighter.shield.amount > 0) {
-    add({ key: 'shield', label: `${fighter.shield.amount}`, title: `${fighter.shield.amount} shield`, tone: 'blue' })
+    add({ key: 'shield', label: `${fighter.shield.amount}`, title: `${fighter.shield.amount} destructible defense — absorbs damage before HP is lost`, tone: 'blue' })
   }
   if (fighter.reactionGuards.some((guard) => guard.kind === 'counter' && guard.remainingRounds > 0 && guard.visible !== false)) {
-    add({ key: 'counter', label: 'CTR', title: 'Counter armed', tone: 'red' })
+    add({ key: 'counter', label: 'CNTR', title: 'Counter armed — will retaliate when targeted', tone: 'red' })
   }
   if (fighter.reactionGuards.some((guard) => guard.kind === 'reflect' && guard.remainingRounds > 0 && guard.visible !== false)) {
-    add({ key: 'reflect', label: 'RFL', title: 'Reflect armed', tone: 'teal' })
+    add({ key: 'reflect', label: 'RFLT', title: 'Reflect armed — will reflect the next skill used on them', tone: 'teal' })
   }
   if (hasStatus(fighter.statuses, 'mark') || fighter.modifiers.some((modifier) => modifier.visible && modifier.statusKind === 'mark')) {
-    add({ key: 'mark', label: 'MRK', title: 'Marked or setup effect active', tone: 'purple' })
+    add({ key: 'mark', label: 'MARK', title: 'Marked — a setup effect is active; hover pips for details', tone: 'purple' })
   }
   if (hasStatus(fighter.statuses, 'burn') || fighter.modifiers.some((modifier) => modifier.visible && modifier.statusKind === 'burn')) {
-    add({ key: 'dot', label: 'DOT', title: 'Damage over time or affliction active', tone: 'red' })
+    add({ key: 'dot', label: 'AFFL', title: 'Affliction active — taking periodic damage; hover pips for details', tone: 'red' })
   }
   if (Object.values(fighter.stateModes).some(Boolean)) {
-    add({ key: 'mode', label: 'MOD', title: 'Mode or form active', tone: 'teal' })
+    add({ key: 'mode', label: 'MODE', title: 'Special form or mode active; hover pips for details', tone: 'teal' })
   }
   if (fighter.effectImmunities.length > 0) {
-    add({ key: 'immunity', label: 'IMM', title: 'Effect immunity active', tone: 'blue' })
+    add({ key: 'immunity', label: 'IMMU', title: 'Effect immunity active — certain effects cannot be applied', tone: 'blue' })
   }
   if ((options.delayedEffectCount ?? 0) > 0) {
-    add({ key: 'delayed', label: 'DLY', title: `${options.delayedEffectCount} delayed effect${options.delayedEffectCount === 1 ? '' : 's'} pending`, tone: 'purple' })
+    add({ key: 'delayed', label: 'DLY', title: `${options.delayedEffectCount} delayed effect${options.delayedEffectCount === 1 ? '' : 's'} incoming — hover pips for details`, tone: 'purple' })
   }
   if (options.queuedAction) {
-    add({ key: 'queued', label: 'QUE', title: 'Queued action ready', tone: 'teal' })
+    add({ key: 'queued', label: 'RDY', title: 'Technique queued and ready to resolve', tone: 'teal' })
   }
 
   return badges

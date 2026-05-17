@@ -18,7 +18,7 @@ export const ijichi = fighter({
         { type: 'damageFiltered', power: 5, requiresTag: 'barrier-tagging', target: 'all-enemies' },
       ],
       label: 'Regulated Space',
-      description: 'Each turn, allies gain barrier reinforcement and tagged enemies take damage.',
+      description: 'At round start, all allies gain 5 destructible defense. Enemies tagged by Barrier Tagging take 5 damage.',
       icon: { label: 'RS', tone: 'teal' },
     }),
   ],
@@ -34,7 +34,7 @@ export const ijichi = fighter({
       energyCost: { technique: 1 },
       effects: [
         { type: 'shield', amount: 25, label: 'Simple Barrier', tags: ['simple-barrier'], target: 'inherit' },
-        modifierEffect('Simple Barrier', 'damageTaken', -10, 2, 'inherit', ['simple-barrier']),
+        modifierEffect('Simple Barrier', 'damageTaken', -10, 2, 'inherit', ['simple-barrier'], { intent: 'helpful' }),
       ],
     }),
     skill({
@@ -47,8 +47,8 @@ export const ijichi = fighter({
       cooldown: 3,
       energyCost: { technique: 2 },
       effects: [
-        modifierEffect('Curtain', 'damageTaken', -10, 1, 'all-allies', ['curtain']),
-        modifierEffect('Curtain', 'damageDealt', -5, 1, 'all-enemies', ['curtain']),
+        modifierEffect('Curtain', 'damageTaken', -10, 1, 'all-allies', ['curtain'], { intent: 'helpful' }),
+        modifierEffect('Curtain', 'damageDealt', -5, 1, 'all-enemies', ['curtain'], { intent: 'harmful' }),
       ],
     }),
     skill({
@@ -61,9 +61,9 @@ export const ijichi = fighter({
       cooldown: 3,
       energyCost: { technique: 2 },
       effects: [
-        markerEffect('Barrier Tagging', 2, 'inherit', ['barrier-tagging']),
-        modifierEffect('Barrier Tagging', 'canReduceDamageTaken', false, 2, 'inherit', ['barrier-tagging']),
-        modifierEffect('Barrier Tagging', 'canGainInvulnerable', false, 2, 'inherit', ['barrier-tagging']),
+        markerEffect('Barrier Tagging', 2, 'inherit', ['barrier-tagging'], { intent: 'harmful' }),
+        modifierEffect('Barrier Tagging', 'canReduceDamageTaken', false, 2, 'inherit', ['barrier-tagging'], { intent: 'harmful' }),
+        modifierEffect('Barrier Tagging', 'canGainInvulnerable', false, 2, 'inherit', ['barrier-tagging'], { intent: 'harmful' }),
       ],
     }),
   ],

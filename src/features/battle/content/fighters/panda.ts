@@ -81,12 +81,12 @@ export const panda = fighter({
           conditions: [gorillaModeCondition],
           effects: [
             { type: 'shield', amount: 20, label: 'Cursed Body', tags: ['cursed-body'], target: 'self' },
-            modifierEffect('Cursed Body', 'damageTaken', -10, 3, 'self', ['cursed-body'], { excludedDamageClass: 'Affliction' }),
+            modifierEffect('Cursed Body', 'damageTaken', -10, 3, 'self', ['cursed-body'], { excludedDamageClass: 'Affliction', intent: 'helpful' }),
             { type: 'effectImmunity', label: 'Cursed Body', blocks: ['nonDamage'], duration: 3, tags: ['cursed-body'], target: 'self' },
           ],
           elseEffects: [
             { type: 'shield', amount: 20, label: 'Cursed Body', tags: ['cursed-body'], target: 'self' },
-            modifierEffect('Cursed Body', 'damageTaken', -10, 2, 'self', ['cursed-body'], { excludedDamageClass: 'Affliction' }),
+            modifierEffect('Cursed Body', 'damageTaken', -10, 2, 'self', ['cursed-body'], { excludedDamageClass: 'Affliction', intent: 'helpful' }),
           ],
         },
       ],
@@ -94,7 +94,7 @@ export const panda = fighter({
     skill({
       id: 'panda-drumming-beat',
       name: 'Drumming Beat',
-      description: 'This skill targets one enemy, dealing 30 damage to them. While in Gorilla Mode, this skill deals 60 damage, costs 1 additional random energy, and stuns Panda from using harmful skills for 1 turn.',
+      description: 'This skill targets one enemy, dealing 30 damage. While in Gorilla Mode, this skill deals 60 damage, costs 1 additional random energy, and prevents Panda from using harmful skills for 1 turn.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],

@@ -117,6 +117,7 @@ export function cloneModifiers(modifiers: BattleModifierInstance[]): BattleModif
     ...modifier,
     duration: cloneModifierDuration(modifier.duration),
     tags: [...modifier.tags],
+    onExpireEffects: modifier.onExpireEffects?.map((effect) => ({ ...effect })),
     damageClass: modifier.damageClass,
     excludedDamageClass: modifier.excludedDamageClass,
   }))
@@ -148,6 +149,7 @@ export function createModifierInstance(
     value: template.value,
     duration: instantiateDuration(template.duration),
     tags: [...template.tags],
+    onExpireEffects: template.onExpireEffects?.map((effect) => ({ ...effect })),
     visible: template.visible ?? Boolean(template.statusKind),
     stacking: template.stacking ?? 'max',
     statusKind: template.statusKind,
@@ -179,6 +181,7 @@ export function upsertModifier(modifiers: BattleModifierInstance[], next: Battle
       duration: mergeDuration(modifier.duration, next.duration),
       visible: modifier.visible || next.visible,
       tags: Array.from(new Set([...modifier.tags, ...next.tags])),
+      onExpireEffects: next.onExpireEffects ?? modifier.onExpireEffects,
       sourceActorId: next.sourceActorId ?? modifier.sourceActorId,
       sourceAbilityId: next.sourceAbilityId ?? modifier.sourceAbilityId,
     }

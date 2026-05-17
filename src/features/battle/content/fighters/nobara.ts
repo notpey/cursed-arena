@@ -35,7 +35,7 @@ export const nobara = fighter({
     skill({
       id: 'nobara-hammer-and-nails',
       name: 'Hammer & Nails',
-      description: 'This skill targets one enemy, dealing 10 piercing damage and applying 1 Straw Doll stack. For 1 turn, Soul Resonance costs 1 less random energy.',
+      description: 'This skill targets one enemy, dealing 10 piercing damage and applying 1 Straw Doll stack. Soul Resonance costs 1 less random energy for the next use.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -44,8 +44,8 @@ export const nobara = fighter({
       power: 10,
       effects: [
         { type: 'damage', power: 10, piercing: true, target: 'inherit' },
-        { type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'inherit' },
-        markerEffect('Straw Doll Ritual', 'permanent', 'inherit', [STRAW_DOLL_TAG]),
+        { type: 'adjustCounter', key: 'straw_doll_ritual_stacks', amount: 1, target: 'inherit', intent: 'harmful' },
+        markerEffect('Straw Doll Ritual', 'permanent', 'inherit', [STRAW_DOLL_TAG], { intent: 'harmful' }),
         {
           type: 'modifyAbilityCost',
           target: 'self',
@@ -86,7 +86,7 @@ export const nobara = fighter({
     skill({
       id: 'nobara-hairpin',
       name: 'Hairpin',
-      description: 'This skill targets one enemy with Straw Doll stacks, dealing 30 damage. For 1 turn, Hammer & Nails costs 0 energy.',
+      description: 'This skill targets one enemy with Straw Doll stacks, dealing 30 damage. Hammer & Nails costs 0 energy for the next use.',
       kind: 'attack',
       targetRule: 'enemy-single',
       requiredTargetTags: [STRAW_DOLL_TAG],

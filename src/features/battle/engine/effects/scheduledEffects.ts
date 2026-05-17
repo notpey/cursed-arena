@@ -1,6 +1,7 @@
 import { cloneEffect } from '@/features/battle/engine/clone.ts'
 import { makeEvent, makeRuntimeEvent } from '@/features/battle/engine/events.ts'
 import type {
+  BattleAbilityTemplate,
   BattleFighterState,
   BattleState,
   ResolutionContext,
@@ -14,6 +15,7 @@ export function createScheduledEffect(
   targets: BattleFighterState[],
   effect: Extract<SkillEffect, { type: 'schedule' }>,
   abilityId: string | undefined,
+  abilityClasses?: BattleAbilityTemplate['classes'],
 ): void {
   if (targets.length === 0) return
   state.scheduledEffects.push({
@@ -21,6 +23,7 @@ export function createScheduledEffect(
     actorId: actor.instanceId,
     targetIds: targets.map((entry) => entry.instanceId),
     abilityId,
+    abilityClasses,
     dueRound: state.round + effect.delay,
     phase: effect.phase,
     effects: effect.effects.map(cloneEffect),
@@ -41,6 +44,7 @@ export function createRandomEnemyDamageOverTime(
   actor: BattleFighterState,
   effect: Extract<SkillEffect, { type: 'randomEnemyDamageOverTime' }>,
   abilityId: string | undefined,
+  abilityClasses?: BattleAbilityTemplate['classes'],
 ): void {
   for (let delay = 1; delay <= effect.duration; delay += 1) {
     state.scheduledEffects.push({
@@ -48,6 +52,7 @@ export function createRandomEnemyDamageOverTime(
       actorId: actor.instanceId,
       targetIds: [actor.instanceId],
       abilityId,
+      abilityClasses,
       dueRound: state.round + delay,
       phase: 'roundStart',
       effects: [{

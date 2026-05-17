@@ -183,11 +183,12 @@ export function modifierEffect(
   rounds: number | 'permanent',
   target: EffectTarget,
   tags: string[] = [],
-  options: { damageClass?: BattleSkillDamageType; excludedDamageClass?: BattleSkillDamageType } = {},
+  options: { damageClass?: BattleSkillDamageType; excludedDamageClass?: BattleSkillDamageType; intent?: 'helpful' | 'harmful' | 'neutral' } = {},
 ): SkillEffect {
   return {
     type: 'addModifier',
     target,
+    intent: options.intent,
     modifier: {
       label,
       stat,
@@ -203,6 +204,12 @@ export function modifierEffect(
   }
 }
 
-export function markerEffect(label: string, rounds: number | 'permanent', target: EffectTarget, tags: string[]): SkillEffect {
-  return modifierEffect(label, 'cooldownTick', 0, rounds, target, tags)
+export function markerEffect(
+  label: string,
+  rounds: number | 'permanent',
+  target: EffectTarget,
+  tags: string[],
+  options: { intent?: 'helpful' | 'harmful' | 'neutral' } = {},
+): SkillEffect {
+  return modifierEffect(label, 'cooldownTick', 0, rounds, target, tags, options)
 }

@@ -98,10 +98,11 @@ function SkillTile({
         </div>
 
         {onCooldown ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/65">
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-black/65 gap-0.5">
             <span className="ca-display select-none text-[1.55rem] leading-none text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] sm:text-[1.9rem] xl:text-[2.2rem]">
               {cooldown}
             </span>
+            <span className="ca-mono-label select-none text-[0.38rem] leading-none text-white/55 sm:text-[0.44rem]">TRN</span>
           </div>
         ) : null}
 

@@ -11,8 +11,8 @@ const understandingPayoff = [
 ]
 
 const idleTransfigurationEffects = (target: 'inherit' | 'attacker') => [
-  modifierEffect('Idle Transfiguration', 'damageDealt', -15, 1, target, [IDLE_TRANSFIGURATION_TAG]),
-  markerEffect('Idle Transfiguration', 2, target, [IDLE_TRANSFIGURATION_TAG]),
+  modifierEffect('Idle Transfiguration', 'damageDealt', -15, 1, target, [IDLE_TRANSFIGURATION_TAG], { intent: 'harmful' }),
+  markerEffect('Idle Transfiguration', 2, target, [IDLE_TRANSFIGURATION_TAG], { intent: 'harmful' }),
 ]
 
 const experimentationPayoff = [
@@ -32,7 +32,7 @@ export const mahito = fighter({
       id: 'mahito-understanding-the-soul',
       trigger: 'onAbilityResolve',
       conditions: [{ type: 'firstAbilityOnTarget' }],
-      effects: [markerEffect('Soul Understanding', 'permanent', 'inherit', [SOUL_UNDERSTANDING_TAG])],
+      effects: [markerEffect('Soul Understanding', 'permanent', 'inherit', [SOUL_UNDERSTANDING_TAG], { intent: 'harmful' })],
       label: 'Understanding the Soul',
       description: 'The first time Mahito uses a skill on each enemy, that enemy is marked. His next damaging skill against that target deals 10 additional damage and consumes the mark.',
       icon: { label: 'US', tone: 'teal' },
@@ -42,7 +42,7 @@ export const mahito = fighter({
     skill({
       id: 'mahito-idle-transfiguration',
       name: 'Idle Transfiguration',
-      description: 'This skill targets one enemy, dealing 20 damage to them and reducing their damage by 15 for 1 turn. Random transfiguration effects are adapted to this deterministic control rider.',
+      description: 'This skill targets one enemy, dealing 20 damage to them and reducing their damage by 15 for 1 turn.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Mental', 'Melee', 'Instant'],
@@ -59,7 +59,7 @@ export const mahito = fighter({
     skill({
       id: 'mahito-soul-multiplicity',
       name: 'Soul Multiplicity',
-      description: 'This skill targets one enemy, dealing 15 damage to all enemies. If the main target is affected by Idle Transfiguration, this skill deals 25 damage to all enemies instead.',
+      description: 'This skill targets one enemy and deals 15 damage to all enemies. If the main target is affected by Idle Transfiguration, it deals 25 damage to all enemies instead.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Mental', 'Ranged', 'Instant'],
@@ -91,7 +91,7 @@ export const mahito = fighter({
       cooldown: 4,
       energyCost: { random: 1, technique: 1 },
       effects: [
-        markerEffect('Soul Experimentation', 3, 'inherit', [SOUL_EXPERIMENTATION_TAG]),
+        markerEffect('Soul Experimentation', 3, 'inherit', [SOUL_EXPERIMENTATION_TAG], { intent: 'harmful' }),
         {
           type: 'reaction',
           label: 'Soul Experimentation',

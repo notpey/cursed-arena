@@ -4,7 +4,7 @@ import { fighter, modifierEffect, skill } from './_helpers.ts'
 const yujiBlackFlash = skill({
   id: 'yuji-black-flash',
   name: 'Black Flash',
-  description: 'This skill deals 20 damage to one enemy plus 1 additional damage for each Black Flash bonus Yuji has. If the intended damage is 40 or more, the target is stunned for 1 turn.',
+  description: 'This skill deals 20 damage to one enemy plus 1 additional damage for each Black Flash bonus Yuji has. If his Black Flash bonus is 20 or more, the target is stunned for 1 turn.',
   kind: 'attack',
   targetRule: 'enemy-single',
   requiredActorConditions: [{ type: 'actorModeIs', key: 'soul_charge', value: 'active' }],
@@ -45,6 +45,7 @@ export const yuji = fighter({
         {
           type: 'addModifier',
           target: 'self',
+          intent: 'helpful',
           modifier: {
             label: "Sukuna's Vessel",
             stat: 'damageTaken',
@@ -90,7 +91,7 @@ export const yuji = fighter({
     skill({
       id: 'yuji-soul-charge',
       name: 'Soul Charge',
-      description: 'For 4 turns, Divergent Fist is improved and Black Flash may be used. Yuji gains 10 damage reduction, and harmful skills aimed at him increase Black Flash damage by 5.',
+      description: 'For 4 turns, Divergent Fist is improved and Black Flash may be used. Yuji gains 10 damage reduction, and each time he is targeted by a harmful skill, his Black Flash bonus increases by 5.',
       kind: 'buff',
       targetRule: 'self',
       classes: ['Strategic', 'Instant'],
@@ -98,9 +99,9 @@ export const yuji = fighter({
       energyCost: { random: 1 },
       effects: [
         { type: 'setMode', key: 'soul_charge', value: 'active', duration: 4, target: 'self' },
-        modifierEffect('Soul Charge Guard', 'damageTaken', -10, 4, 'self', ['soul-charge']),
-        modifierEffect('Soul Charge Suppression', 'canReduceDamageTaken', false, 4, 'all-enemies', ['soul-charge-suppression']),
-        modifierEffect('Soul Charge Suppression', 'canGainInvulnerable', false, 4, 'all-enemies', ['soul-charge-suppression']),
+        modifierEffect('Soul Charge Guard', 'damageTaken', -10, 4, 'self', ['soul-charge'], { intent: 'helpful' }),
+        modifierEffect('Soul Charge Suppression', 'canReduceDamageTaken', false, 4, 'all-enemies', ['soul-charge-suppression'], { intent: 'harmful' }),
+        modifierEffect('Soul Charge Suppression', 'canGainInvulnerable', false, 4, 'all-enemies', ['soul-charge-suppression'], { intent: 'harmful' }),
         {
           type: 'reaction',
           target: 'self',
@@ -118,7 +119,7 @@ export const yuji = fighter({
   ultimate: defendSkill({
     id: 'yuji-indomitable-spirit',
     name: 'Indomitable Spirit',
-    description: 'This skill makes Yuji Itadori invulnerable for 1 turn.',
+    description: 'Yuji becomes invulnerable for 1 turn.',
     targetRule: 'self',
     classes: ['Strategic', 'Instant', 'Ultimate'],
     cooldown: 4,

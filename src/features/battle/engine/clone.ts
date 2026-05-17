@@ -18,7 +18,18 @@ import type {
 export function cloneAbilityStateDelta(delta: BattleAbilityStateDelta): BattleAbilityStateDelta {
   switch (delta.mode) {
     case 'replace':
-      return { ...delta, replacement: cloneAbilityTemplate(delta.replacement) }
+      return {
+        ...delta,
+        replacement: cloneAbilityTemplate(delta.replacement),
+        replacementsByRemainingTurns: delta.replacementsByRemainingTurns
+          ? Object.fromEntries(
+              Object.entries(delta.replacementsByRemainingTurns).map(([remaining, ability]) => [
+                remaining,
+                cloneAbilityTemplate(ability),
+              ]),
+            )
+          : undefined,
+      }
     case 'grant':
       return { ...delta, grantedAbility: cloneAbilityTemplate(delta.grantedAbility) }
     case 'lock':

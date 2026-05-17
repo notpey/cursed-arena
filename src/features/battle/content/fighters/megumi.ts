@@ -13,7 +13,7 @@ export const megumi = fighter({
     definePassive({
       id: 'megumi-ten-shadows-strategist',
       trigger: 'onTakeDamage',
-      effects: [modifierEffect('Ten Shadows Counterpressure', 'damageDealt', 10, 1, 'self', ['ten-shadows-counterpressure'])],
+      effects: [modifierEffect('Ten Shadows Counterpressure', 'damageDealt', 10, 1, 'self', ['ten-shadows-counterpressure'], { intent: 'helpful' })],
       label: 'Ten Shadows Strategist',
       description: 'When Megumi takes damage, his skills deal 10 additional damage for 1 turn.',
       icon: { label: 'TS', tone: 'teal' },
@@ -32,8 +32,8 @@ export const megumi = fighter({
       power: 20,
       effects: [
         { type: 'damage', power: 20, target: 'inherit' },
-        modifierEffect('Demon Dogs: Hunt', 'canReduceDamageTaken', false, 1, 'inherit', ['demon-dogs-hunt']),
-        modifierEffect('Demon Dogs: Hunt', 'canGainInvulnerable', false, 1, 'inherit', ['demon-dogs-hunt']),
+        modifierEffect('Demon Dogs: Hunt', 'canReduceDamageTaken', false, 1, 'inherit', ['demon-dogs-hunt'], { intent: 'harmful' }),
+        modifierEffect('Demon Dogs: Hunt', 'canGainInvulnerable', false, 1, 'inherit', ['demon-dogs-hunt'], { intent: 'harmful' }),
         { type: 'adjustCounter', key: 'shikigami', amount: 1, target: 'self' },
       ],
     }),

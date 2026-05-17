@@ -33,14 +33,14 @@ export const shoko = fighter({
     skill({
       id: 'shoko-preserve-the-body',
       name: 'Preserve the Body',
-      description: 'One ally cannot be defeated by affliction damage for 2 turns and will be healed when the effect ends.',
+      description: 'One ally cannot be defeated by damage for 2 turns. At the end of that duration, they heal 15 health.',
       kind: 'utility',
       targetRule: 'ally-single',
       classes: ['Strategic', 'Instant'],
       cooldown: 4,
       energyCost: { random: 1 },
       effects: [
-        modifierEffect('Preserve the Body', 'isUndying', true, 2, 'inherit', ['preserve-the-body']),
+        modifierEffect('Preserve the Body', 'isUndying', true, 2, 'inherit', ['preserve-the-body'], { intent: 'helpful' }),
         { type: 'schedule', delay: 2, phase: 'roundEnd', target: 'inherit', effects: [{ type: 'heal', power: 15, target: 'inherit' }] },
       ],
     }),
@@ -54,8 +54,9 @@ export const shoko = fighter({
       cooldown: 2,
       energyCost: { technique: 2 },
       effects: [
-        markerEffect('Autopsy Report', 2, 'inherit', ['autopsy-report']),
-        modifierEffect('Autopsy Report', 'damageTaken', 10, 2, 'inherit', ['autopsy-report']),
+        markerEffect('Autopsy Report', 2, 'inherit', ['autopsy-report'], { intent: 'harmful' }),
+        modifierEffect('Autopsy Report', 'damageTaken', 10, 2, 'inherit', ['autopsy-report'], { damageClass: 'Affliction', intent: 'harmful' }),
+        modifierEffect('Autopsy Report', 'damageTaken', 10, 2, 'inherit', ['autopsy-report'], { damageClass: 'Mental', intent: 'harmful' }),
       ],
     }),
   ],

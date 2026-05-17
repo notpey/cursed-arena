@@ -1,7 +1,7 @@
 import { definePassive } from '@/features/battle/content.ts'
 import { fighter, skill, markerEffect } from './_helpers.ts'
 
-const rotDescription = 'If an enemy affected by Rot uses a new harmful skill, they will deal 5 less non-affliction damage for 1 turn. This skill stacks.'
+const rotDescription = 'If an enemy affected by Rot uses a new harmful skill, they will deal 5 less non-affliction damage for 1 turn. Rot stacks.'
 
 const acidicSpitTick = [
   {
@@ -10,7 +10,7 @@ const acidicSpitTick = [
     conditions: [{ type: 'targetCounterAtLeast' as const, key: 'rot', value: 1 }],
     effects: [{ type: 'burn' as const, damage: 5, duration: 2, target: 'inherit' as const }],
   },
-  { type: 'adjustCounter' as const, key: 'rot', amount: 1, min: 0, target: 'inherit' as const },
+  { type: 'adjustCounter' as const, key: 'rot', amount: 1, min: 0, target: 'inherit' as const, intent: 'harmful' as const },
 ]
 
 const acidicSpitInitial = acidicSpitTick.map((effect) => ({ ...effect, target: 'all-enemies' as const }))
@@ -72,7 +72,7 @@ export const kechizu = fighter({
           target: 'inherit',
           effects: [
             { type: 'invulnerable', duration: 1, target: 'inherit' },
-            { type: 'adjustCounter', key: 'rot', amount: 2, min: 0, target: 'attacker' },
+            { type: 'adjustCounter', key: 'rot', amount: 2, min: 0, target: 'attacker', intent: 'harmful' },
             { type: 'damage', power: 10, piercing: true, target: 'self' },
           ],
         },
@@ -81,7 +81,7 @@ export const kechizu = fighter({
     skill({
       id: 'kechizu-chomp',
       name: 'Chomp',
-      description: 'This skill targets one enemy, stunning their helpful skills for 1 turn. The following turn, they will receive 15 damage. During this time, each time a helpful skill is used on the target, the user will gain 1 stack of Rot.',
+      description: 'This skill targets one enemy, preventing them from using helpful skills for 1 turn. The following turn, they take 15 damage. While the restriction is active, each time a helpful skill is used on the target, the caster gains 1 Rot stack.',
       kind: 'debuff',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Melee', 'Instant'],
@@ -99,7 +99,7 @@ export const kechizu = fighter({
           helpfulOnly: true,
           consumeOnTrigger: false,
           target: 'inherit',
-          effects: [{ type: 'adjustCounter', key: 'rot', amount: 1, min: 0, target: 'attacker' }],
+          effects: [{ type: 'adjustCounter', key: 'rot', amount: 1, min: 0, target: 'attacker', intent: 'harmful' }],
         },
       ],
     }),

@@ -27,7 +27,7 @@ function logLabel(event: BattleEvent) {
   if (event.kind === 'damage') return 'DAMAGE'
   if (event.kind === 'heal') return 'HEAL'
   if (event.kind === 'defeat') return 'DEFEATED'
-  if (message.includes('shield')) return 'SHIELD'
+  if (message.includes('destructible defense')) return 'DEF'
   if (message.includes('countered')) return 'COUNTER'
   if (message.includes('reflected')) return 'REFLECT'
   if (message.includes('stunned') || message.includes('sealed')) return 'STUN'

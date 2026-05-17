@@ -37,7 +37,18 @@ export function cloneAbilityTemplate(ability: BattleAbilityTemplate): BattleAbil
 function cloneAbilityStateDelta(delta: BattleAbilityStateDelta): BattleAbilityStateDelta {
   switch (delta.mode) {
     case 'replace':
-      return { ...delta, replacement: cloneAbilityTemplate(delta.replacement) }
+      return {
+        ...delta,
+        replacement: cloneAbilityTemplate(delta.replacement),
+        replacementsByRemainingTurns: delta.replacementsByRemainingTurns
+          ? Object.fromEntries(
+              Object.entries(delta.replacementsByRemainingTurns).map(([remaining, ability]) => [
+                remaining,
+                cloneAbilityTemplate(ability),
+              ]),
+            )
+          : undefined,
+      }
     case 'grant':
       return { ...delta, grantedAbility: cloneAbilityTemplate(delta.grantedAbility) }
     case 'lock':
@@ -97,6 +108,7 @@ export function cloneScheduledEffect(effect: BattleScheduledEffect): BattleSched
   return {
     ...effect,
     targetIds: [...effect.targetIds],
+    abilityClasses: effect.abilityClasses ? [...effect.abilityClasses] : undefined,
     effects: effect.effects.map(cloneSkillEffect),
   }
 }

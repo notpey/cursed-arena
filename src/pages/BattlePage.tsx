@@ -7,6 +7,7 @@ import { BattleBoard } from '@/components/battle/BattleBoard'
 import { BattleInfoPanel } from '@/components/battle/BattleInfoPanel'
 import { NarutoQueueCommitModal } from '@/components/battle/NarutoQueueCommitModal'
 import { BattleTopBar } from '@/components/battle/BattleTopBar'
+import { BattlePhaseBar } from '@/components/battle/BattlePhaseBar'
 import { normalizeBattleAssetSrc } from '@/features/battle/assets'
 import { battleBoardProfiles, battlefieldEffect, PASS_ABILITY_ID } from '@/features/battle/data'
 import {
@@ -510,13 +511,6 @@ function UtilityRail({
         className="rounded-[0.15rem] border border-white/15 bg-[rgba(255,255,255,0.08)] px-2.5 py-2 text-left ca-display text-[0.78rem] leading-none text-ca-text transition hover:bg-[rgba(255,255,255,0.14)]"
       >
         SURRENDER
-      </button>
-
-      <button
-        type="button"
-        className="rounded-[0.15rem] border border-white/10 bg-[rgba(255,255,255,0.04)] px-2.5 py-2 text-left ca-display text-[0.72rem] leading-none text-ca-text-2 transition hover:bg-[rgba(255,255,255,0.1)]"
-      >
-        OPEN CHAT
       </button>
 
       <div className="rounded-[0.15rem] border border-white/8 bg-black/25 px-2.5 py-1.5">
@@ -1561,6 +1555,15 @@ export function BattlePage() {
             onExchangeEnergy={handleExchangeEnergy}
           />
 
+          <BattlePhaseBar
+            phase={battle.state.phase}
+            round={battle.state.round}
+            resolving={timelineLocked}
+            playerCanAct={playerIsActiveSide}
+            isOnline={Boolean(multiplayer)}
+            waitingForOpponent={Boolean(multiplayer && !multiplayerIsMyTurn && !timelineLocked && battle.state.phase !== 'finished')}
+          />
+
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
             <BattleBoard
               key={boardRevealKey}
@@ -1662,7 +1665,10 @@ export function BattlePage() {
         {battle.state.phase === 'finished' ? (
           <BattleResultOverlay
             winner={battle.state.winner}
+            playerTeam={battle.state.playerTeam}
+            enemyTeam={battle.state.enemyTeam}
             recordedResult={recordedResult}
+            isPractice={isPracticeBattle}
             onViewResults={() => navigate('/battle/results')}
             onPlayAgain={() => navigate('/battle/prep')}
             onReturnHome={() => navigate('/')}
@@ -1673,15 +1679,40 @@ export function BattlePage() {
   )
 }
 
+function FighterResultRow({ name, hp, maxHp, survived }: { name: string; hp: number; maxHp: number; survived: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={[
+        'inline-grid h-[0.9rem] w-[1.4rem] place-items-center rounded-[0.16rem] border text-[0.42rem] ca-mono-label',
+        survived
+          ? 'border-ca-teal/30 bg-ca-teal/10 text-ca-teal'
+          : 'border-ca-red/30 bg-ca-red/10 text-ca-red',
+      ].join(' ')}>
+        {survived ? 'LIVE' : 'KO'}
+      </span>
+      <span className="text-[0.75rem] text-ca-text-2">{name}</span>
+      {survived ? (
+        <span className="ml-auto ca-mono-label text-[0.52rem] text-ca-text-3">{hp}/{maxHp} HP</span>
+      ) : null}
+    </div>
+  )
+}
+
 function BattleResultOverlay({
   winner,
+  playerTeam,
+  enemyTeam,
   recordedResult,
+  isPractice = false,
   onViewResults,
   onPlayAgain,
   onReturnHome,
 }: {
   winner: BattleState['winner']
+  playerTeam: BattleState['playerTeam']
+  enemyTeam: BattleState['enemyTeam']
   recordedResult: LastBattleResult | null
+  isPractice?: boolean
   onViewResults: () => void
   onPlayAgain: () => void
   onReturnHome: () => void
@@ -1693,10 +1724,10 @@ function BattleResultOverlay({
   return (
     <div className="absolute inset-0 z-20 grid place-items-center bg-[rgba(5,6,10,0.72)] backdrop-blur-sm">
       <div className="w-full max-w-xl rounded-[14px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,26,0.96),rgba(10,10,16,0.98))] p-6 shadow-[0_22px_54px_rgba(0,0,0,0.4)]">
-        <p className="ca-mono-label text-[0.52rem] text-ca-text-3">Match Concluded</p>
+        <p className="ca-mono-label text-[0.52rem] text-ca-text-3">{isPractice ? 'Practice Match' : 'Match Concluded'}</p>
         <h2 className={['ca-display mt-3 text-5xl', draw ? 'text-ca-gold' : win ? 'text-ca-teal' : 'text-ca-red'].join(' ')}>{title}</h2>
         <p className="mt-3 text-sm text-ca-text-2">
-          {recordedResult ? getModeLabel(recordedResult.mode) + ' vs ' + recordedResult.opponentName : 'Battle result recorded.'}
+          {isPractice ? 'Practice results are not recorded.' : recordedResult ? getModeLabel(recordedResult.mode) + ' vs ' + recordedResult.opponentName : 'Battle result recorded.'}
         </p>
         {recordedResult ? (
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1716,14 +1747,49 @@ function BattleResultOverlay({
             </span>
           </div>
         ) : null}
+
+        {/* Fighter survival summary */}
+        <div className="mt-5 grid grid-cols-2 gap-4">
+          <div>
+            <p className="ca-mono-label mb-2 text-[0.48rem] text-ca-teal">YOUR TEAM</p>
+            <div className="space-y-1.5">
+              {playerTeam.map((f) => (
+                <FighterResultRow
+                  key={f.instanceId}
+                  name={f.shortName}
+                  hp={f.hp}
+                  maxHp={f.maxHp}
+                  survived={f.hp > 0}
+                />
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="ca-mono-label mb-2 text-[0.48rem] text-ca-red">ENEMY TEAM</p>
+            <div className="space-y-1.5">
+              {enemyTeam.map((f) => (
+                <FighterResultRow
+                  key={f.instanceId}
+                  name={f.shortName}
+                  hp={f.hp}
+                  maxHp={f.maxHp}
+                  survived={f.hp > 0}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
         <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onViewResults}
-            className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2 text-[1.1rem] text-white"
-          >
-            View Results
-          </button>
+          {!isPractice ? (
+            <button
+              type="button"
+              onClick={onViewResults}
+              className="ca-display rounded-lg border border-ca-red/35 bg-[linear-gradient(180deg,rgba(250,39,66,0.9),rgba(190,19,43,0.92))] px-4 py-2 text-[1.1rem] text-white"
+            >
+              View Results
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onPlayAgain}

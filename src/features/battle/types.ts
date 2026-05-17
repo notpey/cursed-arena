@@ -128,6 +128,7 @@ export type BattleEffectImmunityState = {
   label: string
   blocks: BattleEffectImmunityBlock[]
   remainingRounds: number
+  appliedInRound?: number
   tags?: string[]
   sourceActorId?: string
   sourceAbilityId?: string
@@ -195,6 +196,7 @@ export type BattleModifierStat =
   | 'isUndying'
   | 'canGainInvulnerable'
   | 'canReduceDamageTaken'
+  | 'canReceiveHelpfulEffects'
 
 // percentAdd values are decimal fractions: 0.25 = +25%, -0.25 = -25%.
 export type BattleModifierMode = 'flat' | 'percentAdd' | 'multiplier' | 'set'
@@ -221,6 +223,7 @@ export type BattleModifierTemplate = {
   value: BattleModifierValue
   duration: BattleModifierDurationTemplate
   tags: string[]
+  onExpireEffects?: SkillEffect[]
   visible?: boolean
   stacking?: BattleModifierStacking
   statusKind?: BattleStatusKind
@@ -252,6 +255,7 @@ export type BattleModifierInstance = {
   value: BattleModifierValue
   duration: BattleModifierDuration
   tags: string[]
+  onExpireEffects?: SkillEffect[]
   visible: boolean
   stacking: BattleModifierStacking
   statusKind?: BattleStatusKind
@@ -310,6 +314,7 @@ export type BattleReactionGuardState = {
   visible?: boolean
   oncePerRound?: boolean
   triggeredRounds?: number[]
+  deferEffectsUntilAfterTrigger?: boolean
   effects?: SkillEffect[]
   sourceActorId?: string
   sourceAbilityId?: string
@@ -352,7 +357,15 @@ export type BattleReactionCondition =
 export type BattleScheduledPhase = 'roundStart' | 'roundEnd'
 
 export type BattleAbilityStateDelta =
-  | { mode: 'replace'; slotAbilityId: string; replacement: BattleAbilityTemplate; duration: number }
+  | {
+      mode: 'replace'
+      slotAbilityId: string
+      replacement: BattleAbilityTemplate
+      // Optional turn-indexed variants. Keys are remaining duration values.
+      // When a key is missing, the fixed replacement is used.
+      replacementsByRemainingTurns?: Record<number, BattleAbilityTemplate>
+      duration: number
+    }
   | { mode: 'grant'; grantedAbility: BattleAbilityTemplate; duration: number }
   | { mode: 'lock'; slotAbilityId: string; duration: number }
 
@@ -361,6 +374,7 @@ export type BattleScheduledEffect = {
   actorId: string
   targetIds: string[]
   abilityId?: string
+  abilityClasses?: BattleAbilityTemplate['classes']
   dueRound: number
   phase: BattleScheduledPhase
   effects: SkillEffect[]
@@ -605,16 +619,16 @@ export type SkillEffect =
   | { type: 'modifyAbilityCost'; modifier: BattleCostModifierTemplate; target: EffectTarget }
   | { type: 'effectImmunity'; label: string; blocks: BattleEffectImmunityBlock[]; duration: number; tags?: string[]; target: EffectTarget }
   | { type: 'removeEffectImmunity'; filter: { label?: string; tag?: string }; target: EffectTarget }
-  | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget }
-  | { type: 'setMode'; key: string; value: string; duration?: number; target: EffectTarget }
-  | { type: 'clearMode'; key: string; target: EffectTarget }
-  | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; min?: number; max?: number; target: EffectTarget }
-  | { type: 'setCounter'; key: string; value: number; target: EffectTarget }
-  | { type: 'adjustSourceCounter'; key: string; amount: number; target: EffectTarget }
-  | { type: 'adjustCounterByTriggerAmount'; key: string; target: EffectTarget }
-  | { type: 'resetCounter'; key: string; target: EffectTarget }
-  | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget }
-  | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget }
+  | { type: 'setFlag'; key: string; value: boolean; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'setMode'; key: string; value: string; duration?: number; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'clearMode'; key: string; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'adjustCounter'; key: string; amount: number; requiresTag?: string; min?: number; max?: number; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'setCounter'; key: string; value: number; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'adjustSourceCounter'; key: string; amount: number; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'adjustCounterByTriggerAmount'; key: string; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'resetCounter'; key: string; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'addModifier'; modifier: BattleModifierTemplate; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
+  | { type: 'removeModifier'; filter: BattleModifierFilter; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
   | { type: 'modifyAbilityState'; delta: BattleAbilityStateDelta; target: EffectTarget }
   | { type: 'replaceAbilities'; replacements: Array<{ slotAbilityId: string; ability: BattleAbilityTemplate; duration: number }>; target: EffectTarget }
   | { type: 'schedule'; delay: number; phase: BattleScheduledPhase; effects: SkillEffect[]; target: EffectTarget }
@@ -625,7 +639,7 @@ export type SkillEffect =
   | { type: 'breakShield'; tag?: string; target: EffectTarget }
   | { type: 'counter'; duration: number; counterDamage: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
   | { type: 'reflect'; duration: number; abilityClasses?: BattleSkillClass[]; consumeOnTrigger?: boolean; target: EffectTarget }
-  | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; helpfulOnly?: boolean; newSkillOnly?: boolean; visible?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; target: EffectTarget }
+  | { type: 'reaction'; label: string; trigger: BattleReactionTrigger; duration: number; effects: SkillEffect[]; abilityClasses?: BattleSkillClass[]; harmfulOnly?: boolean; helpfulOnly?: boolean; newSkillOnly?: boolean; visible?: boolean; consumeOnTrigger?: boolean; oncePerRound?: boolean; deferEffectsUntilAfterTrigger?: boolean; target: EffectTarget; intent?: 'helpful' | 'harmful' | 'neutral' }
   | { type: 'overhealToShield'; power: number; shieldLabel?: string; shieldTags?: string[]; target: EffectTarget }
   | { type: 'damageEqualToActorShield'; shieldTag?: string; piercing?: boolean; ignoresInvulnerability?: boolean; ignoresShield?: boolean; damageType?: BattleDamagePacket['damageType']; cannotBeCountered?: boolean; cannotBeReflected?: boolean; target: EffectTarget }
 
@@ -702,5 +716,13 @@ export type BattleState = {
 export type ResolutionContext = {
   events: BattleEvent[]
   runtimeEvents: BattleRuntimeEvent[]
+  deferredReactionEffects?: Array<{
+    actorId: string
+    observedId: string
+    effects: SkillEffect[]
+    abilityId?: string
+    abilityClasses?: BattleAbilityTemplate['classes']
+    linkedTargetId?: string
+  }>
 }
 

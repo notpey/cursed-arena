@@ -29,8 +29,8 @@ describe('BattleInfoPanel enemy inspection', () => {
     )
 
     expect(html).toContain('COOLDOWN')
-    expect(html).toContain('>2<')
-    expect(html).not.toContain('>9<')
+    expect(html).toContain('2 BASE')
+    expect(html).not.toContain('9 BASE')
     expect(html).not.toContain('Cooldown 9')
   })
 })

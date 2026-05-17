@@ -32,7 +32,9 @@ function mergeIntent(left: BattleAbilityIntent, right: BattleAbilityIntent): Bat
   return 'mixed'
 }
 
-function getEffectIntent(effect: SkillEffect): BattleAbilityIntent {
+export function getEffectIntent(effect: SkillEffect): BattleAbilityIntent {
+  const declared = (effect as { intent?: string }).intent
+  if (declared === 'helpful' || declared === 'harmful' || declared === 'neutral') return declared
   switch (effect.type) {
     case 'damage':
     case 'damageScaledByCounter':

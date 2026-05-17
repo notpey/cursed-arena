@@ -15,7 +15,7 @@ export const hanami = fighter({
       trigger: 'onRoundStart',
       effects: [
         { type: 'shield', amount: 10, label: 'Natural Body', tags: ['natural-body'], target: 'self' },
-        modifierEffect('Natural Body Defense', 'damageTaken', -5, 1, 'self', ['natural-body-defense']),
+        modifierEffect('Natural Body Defense', 'damageTaken', -5, 1, 'self', ['natural-body-defense'], { intent: 'helpful' }),
       ],
       label: 'Natural Body',
       description: 'At round start, Hanami gains 10 destructible defense that refreshes. While this defense is active, Hanami takes 5 less damage from all sources.',
@@ -26,7 +26,7 @@ export const hanami = fighter({
     skill({
       id: 'hanami-root-snare',
       name: 'Root Snare',
-      description: 'This skill targets one enemy, dealing 15 damage to them. For 1 turn, the target will deal 15 less damage and cannot reduce or prevent damage.',
+      description: 'This skill targets one enemy, dealing 15 damage to them. For 1 turn, the target deals 15 less damage and cannot reduce damage or become invulnerable.',
       kind: 'attack',
       targetRule: 'enemy-single',
       classes: ['Physical', 'Ranged', 'Instant'],
@@ -35,9 +35,9 @@ export const hanami = fighter({
       power: 15,
       effects: [
         { type: 'damage', power: 15, target: 'inherit' },
-        modifierEffect('Root Snare', 'damageDealt', -15, 1, 'inherit', ['root-snare']),
-        modifierEffect('Root Snare', 'canReduceDamageTaken', false, 1, 'inherit', ['root-snare']),
-        modifierEffect('Root Snare', 'canGainInvulnerable', false, 1, 'inherit', ['root-snare']),
+        modifierEffect('Root Snare', 'damageDealt', -15, 1, 'inherit', ['root-snare'], { intent: 'harmful' }),
+        modifierEffect('Root Snare', 'canReduceDamageTaken', false, 1, 'inherit', ['root-snare'], { intent: 'harmful' }),
+        modifierEffect('Root Snare', 'canGainInvulnerable', false, 1, 'inherit', ['root-snare'], { intent: 'harmful' }),
       ],
     }),
     skill({
@@ -57,6 +57,7 @@ export const hanami = fighter({
           label: 'Cursed Bud Growth',
           trigger: 'onAbilityUse',
           duration: 1,
+          intent: 'harmful',
           harmfulOnly: false,
           consumeOnTrigger: true,
           target: 'inherit',
@@ -79,8 +80,8 @@ export const hanami = fighter({
       power: 15,
       effects: [
         { type: 'damage', power: 15, target: 'all-enemies' },
-        modifierEffect('Forest Expansion', 'damageTaken', 5, 2, 'all-enemies', ['forest-expansion']),
-        modifierEffect('Forest Expansion', 'damageDealt', -5, 2, 'all-enemies', ['forest-expansion']),
+        modifierEffect('Forest Expansion', 'damageTaken', 5, 2, 'all-enemies', ['forest-expansion'], { intent: 'harmful' }),
+        modifierEffect('Forest Expansion', 'damageDealt', -5, 2, 'all-enemies', ['forest-expansion'], { intent: 'harmful' }),
       ],
     }),
   ],

@@ -8,6 +8,7 @@ const applyScorched = (target: 'inherit' | 'all-enemies' | 'attacker') => ({
   key: SCORCHED_COUNTER,
   amount: 1,
   target,
+  intent: 'harmful' as const,
 })
 
 export const jogo = fighter({
@@ -25,7 +26,7 @@ export const jogo = fighter({
       trigger: 'onRoundStart',
       effects: [{ type: 'damageScaledByCounter', counterKey: SCORCHED_COUNTER, powerPerStack: 5, consumeStacks: false, target: 'all-enemies' }],
       label: 'Disaster Heat',
-      description: 'At round start, enemies take 5 damage per persistent Scorched stack they have. When Jogo accumulates 25 damage taken, all enemies gain 1 Scorched stack; excess damage carries toward the next threshold.',
+      description: 'At round start, enemies take 5 damage per Scorched stack they have. When Jogo accumulates 25 damage taken, all enemies gain 1 Scorched stack; excess damage carries toward the next threshold.',
       icon: { label: 'DH', tone: 'red' },
     }),
     definePassive({
@@ -51,7 +52,7 @@ export const jogo = fighter({
     skill({
       id: 'jogo-ember-insects',
       name: 'Ember Insects',
-      description: 'This skill grants Jogo 10 destructible defense and applies 1 persistent Scorched stack to one enemy. If this defense is broken this round, the attacker gains 1 Scorched stack.',
+      description: 'This skill grants Jogo 10 destructible defense and applies 1 Scorched stack to one enemy. If this defense is broken this round, the attacker gains 1 Scorched stack.',
       kind: 'utility',
       targetRule: 'enemy-single',
       classes: ['Affliction', 'Ranged', 'Instant'],
@@ -76,7 +77,7 @@ export const jogo = fighter({
     skill({
       id: 'jogo-volcanic-infestation',
       name: 'Volcanic Infestation',
-      description: 'This skill targets all enemies. For 1 round, each enemy that uses a new harmful skill gains 1 persistent Scorched stack. This trap is visible for readability.',
+      description: 'This skill targets all enemies. For 1 round, each enemy that uses a new harmful skill gains 1 Scorched stack.',
       kind: 'utility',
       targetRule: 'enemy-all',
       classes: ['Affliction', 'Ranged', 'Instant'],
