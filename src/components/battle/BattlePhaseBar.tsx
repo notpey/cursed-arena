@@ -11,6 +11,8 @@ export type BattlePhaseBarProps = {
   isOnline: boolean
   /** True when the online match is waiting on the opponent's command. */
   waitingForOpponent: boolean
+  /** True during the AI thinking delay in practice mode (before the enemy turn resolves). */
+  aiThinking?: boolean
 }
 
 type PhaseInfo = {
@@ -20,7 +22,7 @@ type PhaseInfo = {
 }
 
 function derivePhaseInfo(props: BattlePhaseBarProps): PhaseInfo {
-  const { phase, resolving, playerCanAct, waitingForOpponent } = props
+  const { phase, resolving, playerCanAct, waitingForOpponent, aiThinking } = props
 
   if (phase === 'finished') {
     return { label: 'Match Concluded', sub: null, accent: 'gold' }
@@ -32,6 +34,10 @@ function derivePhaseInfo(props: BattlePhaseBarProps): PhaseInfo {
 
   if (waitingForOpponent) {
     return { label: 'Waiting for Opponent', sub: 'Enemy command in progress…', accent: 'red' }
+  }
+
+  if (aiThinking) {
+    return { label: 'Enemy Command', sub: 'Enemy is choosing actions…', accent: 'red' }
   }
 
   if (playerCanAct) {

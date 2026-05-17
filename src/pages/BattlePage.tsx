@@ -48,6 +48,7 @@ import {
   endRoundTimeline,
   transitionToSecondPlayer,
 } from '@/features/battle/engine'
+import { calcAiTurnDelay } from '@/features/battle/engine/ai'
 import type {
   BattleEvent,
   BattleFighterState,
@@ -695,6 +696,7 @@ export function BattlePage() {
   const [surrenderPending, setSurrenderPending] = useState(false)
   const [surrenderError, setSurrenderError] = useState<string | null>(null)
   const [timelineLocked, setTimelineLocked] = useState(false)
+  const [aiThinking, setAiThinking] = useState(false)
   const [timelineFocus, setTimelineFocus] = useState<BattleTimelineFocus | null>(null)
   const [boardRevealKey, setBoardRevealKey] = useState(0)
   const [presentationMode, setPresentationMode] = useState<BattlePresentationMode>(() => readPresentationMode())
@@ -1337,6 +1339,15 @@ export function BattlePage() {
       currentState = transitionToSecondPlayer(currentState)
       if (aiEnabled) {
         const enemyCommands = buildEnemyCommands(currentState)
+        const nonPassCount = Object.values(enemyCommands).filter((cmd) => cmd.abilityId !== PASS_ABILITY_ID).length
+        const runIdBeforeDelay = timelineRunRef.current
+        setAiThinking(true)
+        await wait(calcAiTurnDelay(nonPassCount))
+        setAiThinking(false)
+        if (timelineRunRef.current !== runIdBeforeDelay) {
+          setTimelineLocked(false)
+          return
+        }
         const enemyTimeline = resolveTeamTurnTimeline(currentState, enemyCommands, 'enemy')
         currentState = enemyTimeline.state
         timelineSteps.push(...enemyTimeline.steps)
@@ -1562,6 +1573,7 @@ export function BattlePage() {
             playerCanAct={playerIsActiveSide}
             isOnline={Boolean(multiplayer)}
             waitingForOpponent={Boolean(multiplayer && !multiplayerIsMyTurn && !timelineLocked && battle.state.phase !== 'finished')}
+            aiThinking={aiThinking}
           />
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">

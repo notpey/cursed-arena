@@ -111,7 +111,7 @@ These are known gaps that do not block first playtest but should be noted.
 |-----------|--------|-------|
 | Sound volume slider in utility rail is decorative | Low | Slider bar does not respond to drag; use system audio or Settings page |
 | Queue commit modal requires "random energy" allocation for skills with `random` cost | Medium | New players may be surprised by the allocation step; the modal explains it |
-| AI (practice mode) plays a fixed greedy strategy | Low | Enemy team will not use complex setup/payoff combos well; testers should notice this is a dummy AI |
+| AI (practice mode) uses an improved greedy strategy | Low | AI now avoids invulnerable targets, prefers lethal and low-HP targets, avoids wasting heals on full-health allies, and skips payoff skills when required setup is absent. It does not plan ahead or play strategically — it is a training-dummy AI for mechanic testing, not a competitive opponent. |
 | Online / ranked / private match modes require authentication | Out of scope | Playtest uses practice mode only |
 | Fighter portraits are not all final art | Low | Placeholder initials appear for fighters without a portrait asset; functionality is unaffected |
 | `BattleResultsPage` (full results page) will show "No Match Recorded" if visited directly after a practice match | Low | Fixed in Phase 8: "View Results" button is now hidden for practice matches; only accessible from non-practice matches |
@@ -194,3 +194,25 @@ Testers do **not** need to report:
 | `docs/playtesting/01-internal-playtest-readiness.md` | Created this document |
 
 No engine, kit, or test changes were made.
+
+---
+
+## Phase 8.5 Files Changed
+
+| File | Change |
+|------|--------|
+| `src/features/battle/engine/ai.ts` | Added `calcAiTurnDelay()` pacing helper; improved `buildEnemyCommands()` targeting and skill scoring |
+| `src/features/battle/engine/ai.test.ts` | New — 10 tests covering pacing helper and AI targeting sanity |
+| `src/pages/BattlePage.tsx` | Added `aiThinking` state; applies pacing delay before AI resolves; passes `aiThinking` to `BattlePhaseBar` |
+| `src/components/battle/BattlePhaseBar.tsx` | Added `aiThinking` prop; shows "Enemy is choosing actions…" during AI delay |
+
+**AI behavior summary (Phase 8.5):**
+- Enemy turn now has a 750–1800ms delay before resolving, scaling with the number of actions queued
+- Phase bar shows "ENEMY COMMAND — Enemy is choosing actions…" during the delay
+- AI skips harmful skills against invulnerable targets when better targets exist
+- AI prefers lethal and lower-HP targets over random selection
+- AI skips heals when no ally needs healing (penalises redundant heals at full HP)
+- AI skips payoff skills when their required target marker/tag is absent
+- AI avoids targeting allies blocked from receiving helpful effects
+
+**This is a practice training-dummy AI, not a competitive opponent.** It does not look ahead, plan team strategy, or demonstrate full combo potential. It is improved enough for internal playtest mechanic testing.
